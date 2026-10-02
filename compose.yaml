@@ -1,0 +1,8 @@
+services:
+  pdf:
+    image: dxjoke/tectonic-docker:latest
+    script:
+      - tectonic main.tex
+    artifacts:
+      paths:
+        - main.pdf
