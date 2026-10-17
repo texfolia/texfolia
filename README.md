@@ -1,38 +1,21 @@
 # Texfolia
 
-Blazingly fast LaTeX editor
+Blazingly fast LaTeX editor, built with [gpui](https://gpui.rs) and [Tectonic](https://tectonic-typesetting.github.io)
 
-## Workspace
+## Getting Started
 
-Run the desktop app with `cargo run`. The `gpui-kit` workspace includes:
-
-- A native title bar with a searchable command palette.
-- A resizable project sidebar and a document-outline sidebar.
-- A central dock with LaTeX source and PDF-preview panels. Drag tabs to rearrange
-  the layout or use a panel's zoom control to expand it.
-- A status bar with live source line/word counts and buffer state.
-
-The initial `Untitled.tex` buffer is in memory; opening and saving project files
-are not implemented yet. The PDF panel is an empty state, not a compiled preview.
-The outline recognizes section declarations at the start of a source line,
-including starred commands and optional short titles; it does not evaluate TeX.
-Click an outline entry to navigate to that source line.
-
-| Command                | macOS         | Windows / Linux |
-| ---------------------- | ------------- | --------------- |
-| Command palette        | `Cmd+Shift+P` | `Ctrl+Shift+P`  |
-| Toggle project sidebar | `Cmd+B`       | `Ctrl+B`        |
-| Toggle outline sidebar | `Cmd+Alt+B`   | `Ctrl+Alt+B`    |
-| Focus source           | `Cmd+1`       | `Ctrl+1`        |
-| Focus preview          | `Cmd+2`       | `Ctrl+2`        |
-
-## Validation
-
-```sh
-cargo check
-cargo test
-
+```bash
+git clone https://github.com/natebabyak/texfolia.git
+cd texfolia
 ```
+
+```bash
+cargo run
+```
+
+The first build downloads a platform [Pdfium](https://github.com/bblanchon/pdfium-binaries) dynamic library into `target/debug/` (or `release/`) next to the binary. PDF preview loads that library at runtime (`pdfium-render`); for a macOS `.app`, place it in `Contents/Frameworks/` (or next to the executable). Override with `PDFIUM_LIB_PATH`, or skip the fetch with `PDFIUM_SKIP_DOWNLOAD=1`.
+
+Compile with **⌘⏎** / **Ctrl+Enter**, or **⌘S** / **Ctrl+S** to save and compile. If Tectonic is missing, Texfolia offers to install it (Homebrew) or run it via Docker. Logs appear in the bottom Compilation panel.
 
 ## License
 

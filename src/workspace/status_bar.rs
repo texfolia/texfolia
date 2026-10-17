@@ -1,11 +1,17 @@
 use gpui_kit::component::{ActiveTheme, h_flex, status_bar::StatusBar};
 use gpui_kit::{App, IntoElement, ParentElement, Styled, div, px};
 
-pub fn render(stats: super::DocumentStats, cx: &App) -> impl IntoElement + use<> {
+use crate::preview::CompileStatus;
+
+pub fn render(
+    stats: super::DocumentStats,
+    compile: CompileStatus,
+    cx: &App,
+) -> impl IntoElement + use<> {
     let buffer_state = if stats.modified {
         "Modified"
     } else {
-        "New buffer"
+        "Saved"
     };
     let state_color = if stats.modified {
         cx.theme().foreground
@@ -14,6 +20,12 @@ pub fn render(stats: super::DocumentStats, cx: &App) -> impl IntoElement + use<>
     };
     let line_label = if stats.lines == 1 { "line" } else { "lines" };
     let word_label = if stats.words == 1 { "word" } else { "words" };
+    let (compile_label, compile_color) = match compile {
+        CompileStatus::Idle => ("Idle", cx.theme().muted_foreground),
+        CompileStatus::Compiling => ("Compiling", cx.theme().foreground),
+        CompileStatus::Succeeded => ("PDF ready", cx.theme().foreground),
+        CompileStatus::Failed => ("Compile failed", cx.theme().danger),
+    };
 
     StatusBar::new()
         .w_full()
@@ -33,7 +45,8 @@ pub fn render(stats: super::DocumentStats, cx: &App) -> impl IntoElement + use<>
                 .min_w_0()
                 .gap_3()
                 .child(format!("{} {line_label}", stats.lines))
-                .child(format!("{} {word_label}", stats.words)),
+                .child(format!("{} {word_label}", stats.words))
+                .child(div().text_color(compile_color).child(compile_label)),
         )
         .right("LaTeX")
         .right("UTF-8")

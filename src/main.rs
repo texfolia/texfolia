@@ -1,4 +1,6 @@
 pub mod editor;
+pub mod preview;
+pub mod terminal;
 pub mod workspace;
 
 use gpui_kit::component::TitleBar;

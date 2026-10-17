@@ -7,7 +7,7 @@ use gpui_kit::{AppContext, Context, InteractiveElement, ParentElement, Styled, W
 
 use super::{ToggleCommandPalette, Workspace, WorkspaceCommand};
 
-const COMMANDS: [(WorkspaceCommand, &str, IconName, &str); 4] = [
+const COMMANDS: [(WorkspaceCommand, &str, IconName, &str); 7] = [
     (
         WorkspaceCommand::ToggleLeftSidebar,
         "Toggle project sidebar",
@@ -31,6 +31,24 @@ const COMMANDS: [(WorkspaceCommand, &str, IconName, &str); 4] = [
         "Focus PDF preview",
         IconName::Eye,
         "document output",
+    ),
+    (
+        WorkspaceCommand::FocusTerminal,
+        "Focus compilation log",
+        IconName::SquareTerminal,
+        "terminal build output logs",
+    ),
+    (
+        WorkspaceCommand::SaveDocument,
+        "Save document",
+        IconName::FileText,
+        "save checkpoint compile",
+    ),
+    (
+        WorkspaceCommand::CompileDocument,
+        "Compile with Tectonic",
+        IconName::Play,
+        "build pdf latex tectonic",
     ),
 ];
 

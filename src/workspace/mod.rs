@@ -23,6 +23,22 @@ use dock::DocumentDock;
 
 const DOCUMENT_TITLE: &str = "Untitled.tex";
 
+const STARTER_SOURCE: &str = "\
+\\documentclass{article}
+\\usepackage[utf8]{inputenc}
+
+\\title{Untitled Document}
+\\author{Author}
+
+\\begin{document}
+
+\\maketitle
+
+\\section{Introduction}
+
+\\end{document}
+";
+
 // The palette binding is global so it also works while a dialog owns focus.
 #[cfg(target_os = "macos")]
 const PALETTE_SHORTCUT: &str = "cmd-shift-p";
@@ -30,9 +46,25 @@ const PALETTE_SHORTCUT: &str = "cmd-shift-p";
 const PALETTE_SHORTCUT: &str = "ctrl-shift-p";
 
 #[cfg(target_os = "macos")]
-const WORKSPACE_SHORTCUTS: [&str; 4] = ["cmd-b", "cmd-alt-b", "cmd-1", "cmd-2"];
+const WORKSPACE_SHORTCUTS: [&str; 7] = [
+    "cmd-b",
+    "cmd-alt-b",
+    "cmd-1",
+    "cmd-2",
+    "cmd-3",
+    "cmd-s",
+    "cmd-enter",
+];
 #[cfg(not(target_os = "macos"))]
-const WORKSPACE_SHORTCUTS: [&str; 4] = ["ctrl-b", "ctrl-alt-b", "ctrl-1", "ctrl-2"];
+const WORKSPACE_SHORTCUTS: [&str; 7] = [
+    "ctrl-b",
+    "ctrl-alt-b",
+    "ctrl-1",
+    "ctrl-2",
+    "ctrl-3",
+    "ctrl-s",
+    "ctrl-enter",
+];
 
 actions!(
     workspace,
@@ -42,6 +74,9 @@ actions!(
         ToggleRightSidebar,
         FocusEditor,
         FocusPreview,
+        FocusTerminal,
+        SaveDocument,
+        CompileDocument,
     ]
 );
 
@@ -56,6 +91,9 @@ pub fn init(cx: &mut App) {
         ),
         KeyBinding::new(WORKSPACE_SHORTCUTS[2], FocusEditor, Some("Workspace")),
         KeyBinding::new(WORKSPACE_SHORTCUTS[3], FocusPreview, Some("Workspace")),
+        KeyBinding::new(WORKSPACE_SHORTCUTS[4], FocusTerminal, Some("Workspace")),
+        KeyBinding::new(WORKSPACE_SHORTCUTS[5], SaveDocument, Some("Workspace")),
+        KeyBinding::new(WORKSPACE_SHORTCUTS[6], CompileDocument, Some("Workspace")),
     ]);
 }
 
@@ -65,6 +103,9 @@ enum WorkspaceCommand {
     ToggleRightSidebar,
     FocusEditor,
     FocusPreview,
+    FocusTerminal,
+    SaveDocument,
+    CompileDocument,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,8 +127,13 @@ impl DocumentStats {
         Self {
             lines: source.bytes().filter(|byte| *byte == b'\n').count() + 1,
             words: source.split_whitespace().count(),
-            modified: !source.is_empty(),
+            modified: false,
         }
+    }
+
+    fn refresh_counts(&mut self, source: &str) {
+        self.lines = source.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        self.words = source.split_whitespace().count();
     }
 }
 
@@ -101,22 +147,25 @@ pub struct Workspace {
     stats: DocumentStats,
     column_states: [Entity<ResizableState>; 4],
     _editor_subscription: Subscription,
+    _preview_observation: Subscription,
     _focus_lost_subscription: Subscription,
 }
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let editor = cx.new(|cx| LatexEditor::new("", window, cx));
+        let editor = cx.new(|cx| LatexEditor::new(STARTER_SOURCE, window, cx));
         let state = editor.read(cx).state().clone();
         let dock = DocumentDock::new(editor.clone(), window, cx);
         let subscription = cx.subscribe(&state, |this, state, event, cx| {
             if matches!(event, InputEvent::Change) {
                 let source = state.read(cx).value();
                 this.sections = document_outline(&source);
-                this.stats = DocumentStats::from_source(&source);
+                this.stats.refresh_counts(&source);
+                this.stats.modified = true;
                 cx.notify();
             }
         });
+        let preview_observation = cx.observe(dock.preview(), |_, _, cx| cx.notify());
         let column_states = std::array::from_fn(|_| cx.new(|_| ResizableState::default()));
         let focus_lost_subscription = cx.on_focus_lost(window, |this, window, cx| {
             if let Some(target) = window.focus_lost_restore_target(cx)
@@ -134,10 +183,11 @@ impl Workspace {
             dock,
             left_open: true,
             right_open: true,
-            sections: Vec::new(),
-            stats: DocumentStats::from_source(""),
+            sections: document_outline(STARTER_SOURCE),
+            stats: DocumentStats::from_source(STARTER_SOURCE),
             column_states,
             _editor_subscription: subscription,
+            _preview_observation: preview_observation,
             _focus_lost_subscription: focus_lost_subscription,
         }
     }
@@ -153,8 +203,27 @@ impl Workspace {
             WorkspaceCommand::ToggleRightSidebar => self.right_open = !self.right_open,
             WorkspaceCommand::FocusEditor => self.dock.focus_editor(window, cx),
             WorkspaceCommand::FocusPreview => self.dock.focus_preview(window, cx),
+            WorkspaceCommand::FocusTerminal => self.dock.focus_terminal(window, cx),
+            WorkspaceCommand::SaveDocument => self.save_document(window, cx),
+            WorkspaceCommand::CompileDocument => self.compile_document(window, cx),
         }
         cx.notify();
+    }
+
+    fn editor_source(&self, cx: &App) -> String {
+        self.editor.read(cx).state().read(cx).value().to_string()
+    }
+
+    /// In-memory checkpoint for now; disk I/O can plug in here later.
+    fn save_document(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.stats.modified = false;
+        let source = self.editor_source(cx);
+        self.dock.compile_on_save(source, window, cx);
+    }
+
+    fn compile_document(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let source = self.editor_source(cx);
+        self.dock.compile(source, window, cx);
     }
 
     fn go_to_line(&mut self, line: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -178,7 +247,7 @@ impl Render for Workspace {
         let title = title_bar::render(self.left_open, self.right_open, cx);
         let left = sidebar_left::render(cx);
         let right = sidebar_right::render(&self.sections, cx);
-        let status = status_bar::render(self.stats, cx);
+        let status = status_bar::render(self.stats, self.dock.compile_status(cx), cx);
         // Each visibility layout has stable panel indices and independent resize state.
         let layout = usize::from(self.left_open) | (usize::from(self.right_open) << 1);
         let columns = h_resizable(("workspace-columns", layout))
@@ -235,6 +304,15 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &FocusPreview, window, cx| {
                 this.run_command(WorkspaceCommand::FocusPreview, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &FocusTerminal, window, cx| {
+                this.run_command(WorkspaceCommand::FocusTerminal, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SaveDocument, window, cx| {
+                this.run_command(WorkspaceCommand::SaveDocument, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &CompileDocument, window, cx| {
+                this.run_command(WorkspaceCommand::CompileDocument, window, cx);
             }))
             .child(title)
             .child(
@@ -350,7 +428,7 @@ mod tests {
             DocumentStats {
                 lines: 3,
                 words: 2,
-                modified: true,
+                modified: false,
             }
         );
     }
