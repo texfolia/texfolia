@@ -12,6 +12,8 @@ import {
 
 import { user } from "./auth-schema";
 
+const NIL_UUID = sql`'00000000-0000-0000-0000-000000000000'::uuid`;
+
 export const projectCollaboratorRole = pgEnum("project_collaborator_role", [
   "editor",
   "viewer",
@@ -81,23 +83,19 @@ export const projectNode = pgTable(
       .$onUpdate(() => new Date()),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (table) => [
-    uniqueIndex("project_node_project_id_parent_id_name_idx").on(
-      table.projectId,
-      table.parentId,
-      table.name,
-    ),
+  (t) => [
+    uniqueIndex("nodes_sibling_name_unique")
+      .on(
+        t.projectId,
+        sql`coalesce(${t.parentId}, ${NIL_UUID})`,
+        sql`lower(${t.name})`,
+      )
+      .where(sql`${t.deletedAt} IS NULL`),
     check(
-      "folder_content_and_object_key_null",
-      sql`${table.kind} = 'folder' AND ${table.content} IS NULL AND ${table.objectKey} IS NULL`,
-    ),
-    check(
-      "text_content_not_null_and_object_key_null",
-      sql`${table.kind} = 'text' AND ${table.content} IS NOT NULL AND ${table.objectKey} IS NULL`,
-    ),
-    check(
-      "binary_content_null_and_object_key_not_null",
-      sql`${table.kind} = 'binary' AND ${table.content} IS NULL AND ${table.objectKey} IS NOT NULL'`,
+      "nodes_kind_payload_check",
+      sql`(${t.kind} = 'folder' AND ${t.content} IS NULL AND ${t.objectKey} IS NULL)
+        OR (${t.kind} = 'text' AND ${t.content} IS NOT NULL AND ${t.objectKey} IS NULL)
+        OR (${t.kind} = 'binary' AND ${t.content} IS NULL AND ${t.objectKey} IS NOT NULL)`,
     ),
   ],
 );
