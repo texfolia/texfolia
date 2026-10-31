@@ -11,10 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
+import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as PrivacyIndexRouteImport } from './routes/privacy/index'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as TermsIndexRouteImport } from './routes/terms/index'
-import { Route as UpgradeIndexRouteImport } from './routes/upgrade/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
 
@@ -26,6 +26,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthIndexRoute = AuthIndexRouteImport.update({
   id: '/auth/',
   path: '/auth/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingIndexRoute = PricingIndexRouteImport.update({
+  id: '/pricing/',
+  path: '/pricing/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyIndexRoute = PrivacyIndexRouteImport.update({
@@ -43,11 +48,6 @@ const TermsIndexRoute = TermsIndexRouteImport.update({
   path: '/terms/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const UpgradeIndexRoute = UpgradeIndexRouteImport.update({
-  id: '/upgrade/',
-  path: '/upgrade/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -62,20 +62,20 @@ const ProjectsProjectIdIndexRoute = ProjectsProjectIdIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth/': typeof AuthIndexRoute
+  '/pricing/': typeof PricingIndexRoute
   '/privacy/': typeof PrivacyIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/terms/': typeof TermsIndexRoute
-  '/upgrade/': typeof UpgradeIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthIndexRoute
+  '/pricing': typeof PricingIndexRoute
   '/privacy': typeof PrivacyIndexRoute
   '/projects': typeof ProjectsIndexRoute
   '/terms': typeof TermsIndexRoute
-  '/upgrade': typeof UpgradeIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
 }
@@ -83,10 +83,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth/': typeof AuthIndexRoute
+  '/pricing/': typeof PricingIndexRoute
   '/privacy/': typeof PrivacyIndexRoute
   '/projects/': typeof ProjectsIndexRoute
   '/terms/': typeof TermsIndexRoute
-  '/upgrade/': typeof UpgradeIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
@@ -95,30 +95,30 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth/'
+    | '/pricing/'
     | '/privacy/'
     | '/projects/'
     | '/terms/'
-    | '/upgrade/'
     | '/api/auth/$'
     | '/projects/$projectId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/pricing'
     | '/privacy'
     | '/projects'
     | '/terms'
-    | '/upgrade'
     | '/api/auth/$'
     | '/projects/$projectId'
   id:
     | '__root__'
     | '/'
     | '/auth/'
+    | '/pricing/'
     | '/privacy/'
     | '/projects/'
     | '/terms/'
-    | '/upgrade/'
     | '/api/auth/$'
     | '/projects/$projectId/'
   fileRoutesById: FileRoutesById
@@ -126,10 +126,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthIndexRoute: typeof AuthIndexRoute
+  PricingIndexRoute: typeof PricingIndexRoute
   PrivacyIndexRoute: typeof PrivacyIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
   TermsIndexRoute: typeof TermsIndexRoute
-  UpgradeIndexRoute: typeof UpgradeIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
 }
@@ -148,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth/'
       preLoaderRoute: typeof AuthIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing/': {
+      id: '/pricing/'
+      path: '/pricing'
+      fullPath: '/pricing/'
+      preLoaderRoute: typeof PricingIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/': {
@@ -171,13 +178,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/upgrade/': {
-      id: '/upgrade/'
-      path: '/upgrade'
-      fullPath: '/upgrade/'
-      preLoaderRoute: typeof UpgradeIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -198,10 +198,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthIndexRoute: AuthIndexRoute,
+  PricingIndexRoute: PricingIndexRoute,
   PrivacyIndexRoute: PrivacyIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
   TermsIndexRoute: TermsIndexRoute,
-  UpgradeIndexRoute: UpgradeIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,
 }
