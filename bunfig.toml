@@ -1,0 +1,4 @@
+[fmt]
+sortPackageJson = { sortScripts = true }
+sortImports = true
+sortTailwindcss = true

@@ -1,13 +1,9 @@
 {
   "name": "texfolia",
   "version": "0.0.1",
+  "private": true,
   "workspaces": [
     "apps/*",
     "packages/*"
-  ],
-  "scripts": {
-    "lint": "bun lint --deny-warnings",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check"
-  }
+  ]
 }
