@@ -1,11 +1,14 @@
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { db } from "@texfolia/db";
+import * as schema from "@texfolia/db";
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
+import { tanstackStartCookies } from "better-auth/tanstack-start";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
+    schema,
   }),
   emailAndPassword: {
     enabled: true,
@@ -23,6 +26,10 @@ export const auth = betterAuth({
       clientId: process.env.GITLAB_CLIENT_ID!,
       clientSecret: process.env.GITLAB_CLIENT_SECRET!,
     },
+    microsoft: {
+      clientId: process.env.MICROSOFT_CLIENT_ID!,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+    },
   },
   plugins: [
     emailOTP({
@@ -36,5 +43,11 @@ export const auth = betterAuth({
         }
       },
     }),
+    tanstackStartCookies(),
   ],
+  advanced: {
+    database: {
+      joins: true,
+    },
+  },
 });
