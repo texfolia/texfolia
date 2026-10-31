@@ -1,0 +1,30 @@
+services:
+  compiler:
+    build: ./apps/compiler
+    platform: linux/amd64
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./apps/compiler/src:/app/src:ro
+    command: ["bun", "--watch", "src/index.ts"]
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+
+  db:
+    image: postgres:18-alpine
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:

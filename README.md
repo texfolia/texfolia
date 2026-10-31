@@ -4,10 +4,23 @@ The AI-native LaTeX workspace, available at [www.texfolia.com](https://www.texfo
 
 ## Local Development
 
+### Prerequisites
+
+- [Bun](https://bun.sh)
+- [Docker](https://www.docker.com)
+
+### Installation
+
+**Clone the repository**
+
 ```bash
 git clone https://github.com/natebabyak/texfolia.git
 cd texfolia
+```
 
+**Install dependencies**
+
+```bash
 bun install
 ```
 
