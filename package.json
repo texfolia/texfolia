@@ -1,15 +1,13 @@
 {
   "name": "texfolia",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "typecheck": "bun check"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^7"
+    "lint": "bun lint --deny-warnings",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check"
   }
 }
