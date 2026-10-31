@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { getProjects } from "#/lib/projects.functions";
+
 export const Route = createFileRoute("/projects/")({
   head: () => ({
     meta: [
@@ -8,6 +10,9 @@ export const Route = createFileRoute("/projects/")({
       },
     ],
   }),
+  loader: async () => {
+    return { projects: await getProjects() };
+  },
   component: RouteComponent,
 });
 

@@ -5,5 +5,12 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "dev": "docker compose up -d --wait && bun run --cwd apps/web dev",
+    "lint": "bun lint",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check"
+  },
+  "description": "The Texfolia monorepo"
 }

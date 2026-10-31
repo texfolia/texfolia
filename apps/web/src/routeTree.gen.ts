@@ -10,128 +10,137 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthIndexRouteImport } from './routes/auth/index'
-import { Route as PricingIndexRouteImport } from './routes/pricing/index'
-import { Route as PrivacyIndexRouteImport } from './routes/privacy/index'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
-import { Route as TermsIndexRouteImport } from './routes/terms/index'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
-import { Route as ProjectsProjectIdIndexRouteImport } from './routes/projects/$projectId/index'
+import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
+import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthIndexRoute = AuthIndexRouteImport.update({
-  id: '/auth/',
-  path: '/auth/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PricingIndexRoute = PricingIndexRouteImport.update({
-  id: '/pricing/',
-  path: '/pricing/',
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PrivacyIndexRoute = PrivacyIndexRouteImport.update({
-  id: '/privacy/',
-  path: '/privacy/',
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
-  id: '/projects/',
-  path: '/projects/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProjectsRoute,
 } as any)
-const TermsIndexRoute = TermsIndexRouteImport.update({
-  id: '/terms/',
-  path: '/terms/',
-  getParentRoute: () => rootRouteImport,
+const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
+  id: '/$projectId',
+  path: '/$projectId',
+  getParentRoute: () => ProjectsRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsProjectIdIndexRoute = ProjectsProjectIdIndexRouteImport.update({
-  id: '/projects/$projectId/',
-  path: '/projects/$projectId/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth/': typeof AuthIndexRoute
-  '/pricing/': typeof PricingIndexRoute
-  '/privacy/': typeof PrivacyIndexRoute
+  '/auth': typeof AuthRoute
+  '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/projects': typeof ProjectsRouteWithChildren
+  '/terms': typeof TermsRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
-  '/terms/': typeof TermsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthIndexRoute
-  '/pricing': typeof PricingIndexRoute
-  '/privacy': typeof PrivacyIndexRoute
+  '/auth': typeof AuthRoute
+  '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects': typeof ProjectsIndexRoute
-  '/terms': typeof TermsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/projects/$projectId': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/auth/': typeof AuthIndexRoute
-  '/pricing/': typeof PricingIndexRoute
-  '/privacy/': typeof PrivacyIndexRoute
+  '/auth': typeof AuthRoute
+  '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/projects': typeof ProjectsRouteWithChildren
+  '/terms': typeof TermsRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRoute
   '/projects/': typeof ProjectsIndexRoute
-  '/terms/': typeof TermsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
-  '/projects/$projectId/': typeof ProjectsProjectIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
-    | '/auth/'
-    | '/pricing/'
-    | '/privacy/'
-    | '/projects/'
-    | '/terms/'
-    | '/api/auth/$'
-    | '/projects/$projectId/'
-  fileRoutesByTo: FileRoutesByTo
-  to:
     | '/'
     | '/auth'
     | '/pricing'
     | '/privacy'
     | '/projects'
     | '/terms'
-    | '/api/auth/$'
     | '/projects/$projectId'
+    | '/projects/'
+    | '/api/auth/$'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/auth'
+    | '/pricing'
+    | '/privacy'
+    | '/terms'
+    | '/projects/$projectId'
+    | '/projects'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
-    | '/auth/'
-    | '/pricing/'
-    | '/privacy/'
+    | '/auth'
+    | '/pricing'
+    | '/privacy'
+    | '/projects'
+    | '/terms'
+    | '/projects/$projectId'
     | '/projects/'
-    | '/terms/'
     | '/api/auth/$'
-    | '/projects/$projectId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthIndexRoute: typeof AuthIndexRoute
-  PricingIndexRoute: typeof PricingIndexRoute
-  PrivacyIndexRoute: typeof PrivacyIndexRoute
-  ProjectsIndexRoute: typeof ProjectsIndexRoute
-  TermsIndexRoute: typeof TermsIndexRoute
+  AuthRoute: typeof AuthRoute
+  PricingRoute: typeof PricingRoute
+  PrivacyRoute: typeof PrivacyRoute
+  ProjectsRoute: typeof ProjectsRouteWithChildren
+  TermsRoute: typeof TermsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ProjectsProjectIdIndexRoute: typeof ProjectsProjectIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -143,40 +152,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/': {
-      id: '/auth/'
+    '/auth': {
+      id: '/auth'
       path: '/auth'
-      fullPath: '/auth/'
-      preLoaderRoute: typeof AuthIndexRouteImport
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/pricing/': {
-      id: '/pricing/'
+    '/pricing': {
+      id: '/pricing'
       path: '/pricing'
-      fullPath: '/pricing/'
-      preLoaderRoute: typeof PricingIndexRouteImport
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/privacy/': {
-      id: '/privacy/'
+    '/privacy': {
+      id: '/privacy'
       path: '/privacy'
-      fullPath: '/privacy/'
-      preLoaderRoute: typeof PrivacyIndexRouteImport
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/': {
       id: '/projects/'
-      path: '/projects'
+      path: '/'
       fullPath: '/projects/'
       preLoaderRoute: typeof ProjectsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ProjectsRoute
     }
-    '/terms/': {
-      id: '/terms/'
-      path: '/terms'
-      fullPath: '/terms/'
-      preLoaderRoute: typeof TermsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+    '/projects/$projectId': {
+      id: '/projects/$projectId'
+      path: '/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof ProjectsRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -185,25 +208,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects/$projectId/': {
-      id: '/projects/$projectId/'
-      path: '/projects/$projectId'
-      fullPath: '/projects/$projectId/'
-      preLoaderRoute: typeof ProjectsProjectIdIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
+interface ProjectsRouteChildren {
+  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
+}
+
+const ProjectsRouteChildren: ProjectsRouteChildren = {
+  ProjectsProjectIdRoute: ProjectsProjectIdRoute,
+  ProjectsIndexRoute: ProjectsIndexRoute,
+}
+
+const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
+  ProjectsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuthIndexRoute: AuthIndexRoute,
-  PricingIndexRoute: PricingIndexRoute,
-  PrivacyIndexRoute: PrivacyIndexRoute,
-  ProjectsIndexRoute: ProjectsIndexRoute,
-  TermsIndexRoute: TermsIndexRoute,
+  AuthRoute: AuthRoute,
+  PricingRoute: PricingRoute,
+  PrivacyRoute: PrivacyRoute,
+  ProjectsRoute: ProjectsRouteWithChildren,
+  TermsRoute: TermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
-  ProjectsProjectIdIndexRoute: ProjectsProjectIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
