@@ -1,9 +1,15 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import { stripe } from "@better-auth/stripe";
 import { db } from "@texfolia/db";
 import * as schema from "@texfolia/db";
 import { betterAuth } from "better-auth";
 import { emailOTP } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+import Stripe from "stripe";
+
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2026-10-28.endive",
+});
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -42,6 +48,11 @@ export const auth = betterAuth({
           // Send the OTP for password reset
         }
       },
+    }),
+    stripe({
+      stripeClient,
+      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+      createCustomerOnSignUp: true,
     }),
     tanstackStartCookies(),
   ],

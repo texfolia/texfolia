@@ -1,7 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
 
-import { Button } from "#/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
+} from "#/components/ui/dialog";
 import {
   Empty,
   EmptyContent,
@@ -93,7 +103,21 @@ function RouteComponent() {
                         <EmptyDescription>No data found</EmptyDescription>
                       </EmptyHeader>
                       <EmptyContent>
-                        <Button>Create Project</Button>
+                        <Dialog>
+                          <DialogTrigger>Create Project</DialogTrigger>
+                          <DialogPopup>
+                            <DialogHeader>
+                              <DialogTitle>Dialog Title</DialogTitle>
+                              <DialogDescription>
+                                Dialog Description
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DialogPanel>Content</DialogPanel>
+                            <DialogFooter>
+                              <DialogClose>Close</DialogClose>
+                            </DialogFooter>
+                          </DialogPopup>
+                        </Dialog>
                       </EmptyContent>
                     </Empty>
                   </TableCell>
