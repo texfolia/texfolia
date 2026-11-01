@@ -1,22 +1,38 @@
 # Texfolia
 
-Blazingly fast LaTeX editor, built with [gpui](https://gpui.rs) and [Tectonic](https://tectonic-typesetting.github.io)
+The AI-native LaTeX workspace, available at [www.texfolia.com](https://www.texfolia.com).
 
-## Getting Started
+## Local Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh)
+- [Docker](https://www.docker.com)
+
+### Installation
+
+**Clone the repository**
 
 ```bash
 git clone https://github.com/natebabyak/texfolia.git
 cd texfolia
 ```
 
+**Install dependencies**
+
 ```bash
-cargo run
+bun install
 ```
-
-The first build downloads a platform [Pdfium](https://github.com/bblanchon/pdfium-binaries) dynamic library into `target/debug/` (or `release/`) next to the binary. PDF preview loads that library at runtime (`pdfium-render`); for a macOS `.app`, place it in `Contents/Frameworks/` (or next to the executable). Override with `PDFIUM_LIB_PATH`, or skip the fetch with `PDFIUM_SKIP_DOWNLOAD=1`.
-
-Compile with **⌘⏎** / **Ctrl+Enter**, or **⌘S** / **Ctrl+S** to save and compile. If Tectonic is missing, Texfolia offers to install it (Homebrew) or run it via Docker. Logs appear in the bottom Compilation panel.
 
 ## License
 
-MIT
+GPL
+
+## Open-Source Acknowledgments
+
+- [Better Auth](https://better-auth.com)
+- [Bun](https://bun.sh)
+- [Docker](https://www.docker.com)
+- [Drizzle ORM](https://orm.drizzle.team)
+- [Tailwind CSS](https://tailwindcss.com)
+- [TanStack Start](https://tanstack.com/start/latest)

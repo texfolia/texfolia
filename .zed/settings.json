@@ -4,4 +4,32 @@
 // see the documentation: https://zed.dev/docs/configuring-zed#settings-files
 {
   "format_on_save": "on",
+  "languages": {
+    "TSX": {
+      "formatter": {
+        "external": {
+          "command": "bun",
+          "arguments": [
+            "fmt",
+            "--no-script",
+            "--stdin-filepath",
+            "{buffer_path}",
+          ],
+        },
+      },
+    },
+    "TypeScript": {
+      "formatter": {
+        "external": {
+          "command": "bun",
+          "arguments": [
+            "fmt",
+            "--no-script",
+            "--stdin-filepath",
+            "{buffer_path}",
+          ],
+        },
+      },
+    },
+  },
 }

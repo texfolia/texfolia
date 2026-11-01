@@ -1,0 +1,26 @@
+{
+  "name": "@texfolia/db",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "push": "bunx drizzle-kit push"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^1.0.0-rc.5"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@better-auth/stripe": "^1.7.14",
+    "better-auth": "^1.7.14",
+    "drizzle-orm": "^1.0.0-rc.5",
+    "pg": "^8.23.1"
+  }
+}
