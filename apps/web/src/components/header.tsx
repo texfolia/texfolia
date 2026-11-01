@@ -44,7 +44,7 @@ export function Header() {
           </NavigationMenuList>
         </NavigationMenu>
         <Link
-          to="/auth"
+          to="/login"
           className={cn("ml-auto", buttonVariants({ size: "lg" }))}
         >
           Get Started

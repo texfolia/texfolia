@@ -1,8 +1,3 @@
-import {
-  IconBrandGithubFilled,
-  IconBrandGitlab,
-  IconBrandGoogleFilled,
-} from "@tabler/icons-react";
 import { useForm } from "@tanstack/react-form-start";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -60,7 +55,6 @@ function RouteComponent() {
               variant="outline"
               className="rounded-full px-5 py-5"
             >
-              <IconBrandGithubFilled />
               Continue with GitHub
             </Button>
           </Field>
@@ -74,7 +68,6 @@ function RouteComponent() {
               variant="outline"
               className="rounded-full px-5 py-5"
             >
-              <IconBrandGitlab fill="curentColor" />
               Continue with GitLab
             </Button>
           </Field>
@@ -88,7 +81,6 @@ function RouteComponent() {
               variant="outline"
               className="rounded-full px-5 py-5"
             >
-              <IconBrandGoogleFilled />
               Continue with Google
             </Button>
           </Field>
@@ -97,7 +89,7 @@ function RouteComponent() {
             onSubmit={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              emailForm.handleSubmit();
+              form.handleSubmit();
             }}
           >
             <Field>

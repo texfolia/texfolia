@@ -1,4 +1,3 @@
-import { IconFolderOpen } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
 
@@ -89,9 +88,7 @@ function RouteComponent() {
                   <TableCell colSpan={columns.length}>
                     <Empty>
                       <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <IconFolderOpen />
-                        </EmptyMedia>
+                        <EmptyMedia variant="icon"></EmptyMedia>
                         <EmptyTitle>No Projects Yet</EmptyTitle>
                         <EmptyDescription>No data found</EmptyDescription>
                       </EmptyHeader>

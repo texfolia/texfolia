@@ -34,7 +34,7 @@ function RouteComponent() {
             </p>
             <div className="flex gap-2">
               <Link
-                to="/auth"
+                to="/login"
                 className={cn(
                   buttonVariants(),
                   "rounded-full px-6 py-6 text-lg",
