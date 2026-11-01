@@ -142,3 +142,10 @@ export const relations = defineRelations(
     },
   }),
 );
+
+export type SelectProject = typeof project.$inferSelect;
+export type InsertProject = typeof project.$inferInsert;
+export type SelectProjectCollaborator = typeof projectCollaborator.$inferSelect;
+export type InsertProjectCollaborator = typeof projectCollaborator.$inferInsert;
+export type SelectProjectNode = typeof projectNode.$inferSelect;
+export type InsertProjectNode = typeof projectNode.$inferInsert;

@@ -1,5 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import {
+  Sidebar,
+  SidebarInset,
+  SidebarProvider,
+} from "#/components/ui/sidebar";
 import { getProjects } from "#/lib/projects.functions";
 
 export const Route = createFileRoute("/projects/")({
@@ -17,5 +22,12 @@ export const Route = createFileRoute("/projects/")({
 });
 
 function RouteComponent() {
-  return <div>Hello "/projects/"!</div>;
+  return (
+    <SidebarProvider>
+      <Sidebar variant="inset" />
+      <SidebarInset>
+        <main></main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
 }

@@ -8,7 +8,7 @@ export const Route = createFileRoute("/projects")({
 
     if (!session) {
       throw redirect({
-        to: "/auth",
+        to: "/login",
         search: { redirectTo: location.href },
       });
     }
