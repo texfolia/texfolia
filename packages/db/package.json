@@ -7,15 +7,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "push": "bunx drizzle-kit push"
+    "push": "bunx drizzle-kit push",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "@types/pg": "^8.23.1",
-    "drizzle-kit": "^1.0.0-rc.5"
-  },
-  "peerDependencies": {
-    "typescript": "^7"
+    "drizzle-kit": "^1.0.0-rc.5",
+    "@texfolia/typescript-config": "workspace:*",
+    "typescript": "^6.0.2"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.7.14",

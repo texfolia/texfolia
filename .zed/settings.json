@@ -5,6 +5,19 @@
 {
   "format_on_save": "on",
   "languages": {
+    "JSON": {
+      "formatter": {
+        "external": {
+          "command": "bun",
+          "arguments": [
+            "fmt",
+            "--no-script",
+            "--stdin-filepath",
+            "{buffer_path}",
+          ],
+        },
+      },
+    },
     "TSX": {
       "formatter": {
         "external": {

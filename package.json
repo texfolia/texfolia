@@ -7,10 +7,21 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "docker compose up -d --wait && bun run --cwd apps/web dev",
-    "lint": "bun lint",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check"
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "format": "turbo run format",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
   },
-  "description": "The Texfolia monorepo"
+  "devDependencies": {
+    "@texfolia/typescript-config": "workspace:*",
+    "turbo": "latest"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.4.4"
+    }
+  }
 }
