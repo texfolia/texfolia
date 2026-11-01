@@ -9,14 +9,7 @@ export const getProjects = createServerFn({ method: "GET" }).handler(
 
     return db.query.project.findMany({
       where: {
-        AND: [
-          {
-            deletedAt: undefined,
-          },
-          {
-            ownerId: session.user.id,
-          },
-        ],
+        ownerId: session.user.id,
       },
     });
   },
