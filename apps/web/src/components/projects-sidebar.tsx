@@ -3,6 +3,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupContent,
   SidebarHeader,
 } from "#/components/ui/sidebar";
 
@@ -11,7 +12,9 @@ export function ProjectsSidebar() {
     <Sidebar>
       <SidebarHeader></SidebarHeader>
       <SidebarContent>
-        <SidebarGroup></SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupContent></SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter></SidebarFooter>
     </Sidebar>

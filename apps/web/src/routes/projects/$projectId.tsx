@@ -4,6 +4,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { ProjectSidebar } from "#/components/project-sidebar";
 import { Button } from "#/components/ui/button";
 import { SidebarInset, SidebarProvider } from "#/components/ui/sidebar";
+
 export const Route = createFileRoute("/projects/$projectId")({
   component: RouteComponent,
 });
