@@ -1,5 +1,6 @@
 import "dockview-react/dist/styles/dockview.css";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 
 import { Button } from "#/components/ui/button";
 import { Collapsible } from "#/components/ui/collapsible";
@@ -13,6 +14,8 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarProvider,
 } from "#/components/ui/sidebar";
 import { Toolbar, ToolbarButton } from "#/components/ui/toolbar";
@@ -25,7 +28,20 @@ function RouteComponent() {
   return (
     <SidebarProvider>
       <Sidebar variant="inset">
-        <SidebarHeader></SidebarHeader>
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <Link to="/projects">
+                <SidebarMenuButton
+                  render={<Button variant="ghost" className="justify-start" />}
+                >
+                  <ArrowLeft />
+                  Back to Projects
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Project</SidebarGroupLabel>

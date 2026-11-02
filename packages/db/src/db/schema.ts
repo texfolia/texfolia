@@ -1,11 +1,15 @@
 import { defineRelations, sql } from "drizzle-orm";
 import {
+  bytea,
   check,
+  foreignKey,
+  index,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -23,6 +27,13 @@ export const projectNodeKind = pgEnum("project_node_kind", [
   "folder",
   "text",
   "binary",
+]);
+
+export const projectJobStatus = pgEnum("project_job_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
 ]);
 
 export const project = pgTable(
@@ -54,12 +65,45 @@ export const projectCollaborator = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: projectCollaboratorRole("role").notNull(),
+    role: projectCollaboratorRole("role").notNull().default("viewer"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
-  (table) => [primaryKey({ columns: [table.projectId, table.userId] })],
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.userId] }),
+    index("project_collaborator_user_id_idx").on(table.userId),
+  ],
+);
+
+export const projectJob = pgTable(
+  "project_job",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    status: projectJobStatus("status").notNull().default("queued"),
+    objectKey: text("object_key"),
+    log: text("log"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("project_job_project_id_created_at_idx").on(t.projectId, t.createdAt),
+  ],
 );
 
 export const projectNode = pgTable(
@@ -72,7 +116,6 @@ export const projectNode = pgTable(
     parentId: uuid("parent_id"),
     name: text("name").notNull(),
     kind: projectNodeKind("kind").notNull(),
-    content: text("content"),
     objectKey: text("object_key"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -84,6 +127,7 @@ export const projectNode = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
+    unique("project_node_id_kind_unique").on(t.id, t.kind),
     uniqueIndex("nodes_sibling_name_unique")
       .on(
         t.projectId,
@@ -93,10 +137,34 @@ export const projectNode = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
     check(
       "nodes_kind_payload_check",
-      sql`(${t.kind} = 'folder' AND ${t.content} IS NULL AND ${t.objectKey} IS NULL)
-        OR (${t.kind} = 'text' AND ${t.content} IS NOT NULL AND ${t.objectKey} IS NULL)
-        OR (${t.kind} = 'binary' AND ${t.content} IS NULL AND ${t.objectKey} IS NOT NULL)`,
+      sql`(${t.kind} IN ('folder', 'text') AND ${t.objectKey} IS NULL)
+        OR (${t.kind} = 'binary' AND ${t.objectKey} IS NOT NULL)`,
     ),
+  ],
+);
+
+export const projectNodeText = pgTable(
+  "project_node_text",
+  {
+    nodeId: uuid("node_id").primaryKey(),
+    // The discriminator keeps Yjs state attached only to text nodes.
+    kind: projectNodeKind("kind").$type<"text">().notNull().default("text"),
+    // Full document state: Buffer.from(Y.encodeStateAsUpdate(doc)).
+    yjsState: bytea("yjs_state").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    check("project_node_text_kind_check", sql`${t.kind} = 'text'`),
+    foreignKey({
+      columns: [t.nodeId, t.kind],
+      foreignColumns: [projectNode.id, projectNode.kind],
+    }).onDelete("cascade"),
   ],
 );
 
@@ -104,12 +172,15 @@ export const relations = defineRelations(
   {
     project,
     projectCollaborator,
+    projectJob,
     projectNode,
+    projectNodeText,
     user,
   },
   (r) => ({
     project: {
       collaborators: r.many.projectCollaborator(),
+      jobs: r.many.projectJob(),
       nodes: r.many.projectNode(),
       owner: r.one.user({
         from: r.project.ownerId,
@@ -126,7 +197,17 @@ export const relations = defineRelations(
         to: r.user.id,
       }),
     },
+    projectJob: {
+      project: r.one.project({
+        from: r.projectJob.projectId,
+        to: r.project.id,
+      }),
+    },
     projectNode: {
+      text: r.one.projectNodeText({
+        from: r.projectNode.id,
+        to: r.projectNodeText.nodeId,
+      }),
       children: r.many.projectNode({
         from: r.projectNode.id,
         to: r.projectNode.parentId,
@@ -140,12 +221,22 @@ export const relations = defineRelations(
         to: r.project.id,
       }),
     },
+    projectNodeText: {
+      node: r.one.projectNode({
+        from: r.projectNodeText.nodeId,
+        to: r.projectNode.id,
+        optional: false,
+      }),
+    },
+    user: {
+      ownedProjects: r.many.project({
+        from: r.user.id,
+        to: r.project.ownerId,
+      }),
+      projectCollaborations: r.many.projectCollaborator({
+        from: r.user.id,
+        to: r.projectCollaborator.userId,
+      }),
+    },
   }),
 );
-
-export type SelectProject = typeof project.$inferSelect;
-export type InsertProject = typeof project.$inferInsert;
-export type SelectProjectCollaborator = typeof projectCollaborator.$inferSelect;
-export type InsertProjectCollaborator = typeof projectCollaborator.$inferInsert;
-export type SelectProjectNode = typeof projectNode.$inferSelect;
-export type InsertProjectNode = typeof projectNode.$inferInsert;

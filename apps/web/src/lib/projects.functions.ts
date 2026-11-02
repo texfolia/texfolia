@@ -27,9 +27,18 @@ export const getProjects = createServerFn({ method: "GET" }).handler(
     const session = await ensureSession();
 
     return db.query.project.findMany({
+      with: {
+        collaborators: {
+          with: {
+            user: true,
+          },
+        },
+      },
       where: {
         ownerId: session.user.id,
       },
     });
   },
 );
+
+export type GetProjectsResult = Awaited<ReturnType<typeof getProjects>>;

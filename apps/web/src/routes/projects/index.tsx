@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
-import { FolderOpenIcon } from "lucide-react";
+import { FolderOpenIcon, Search } from "lucide-react";
 
 import { ProjectForm } from "#/components/project-form";
 import { Button } from "#/components/ui/button";
@@ -24,6 +24,12 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#/components/ui/empty";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group";
+import { Kbd } from "#/components/ui/kbd";
 import {
   Sidebar,
   SidebarContent,
@@ -81,7 +87,16 @@ function RouteComponent() {
       </Sidebar>
       <SidebarInset>
         <main className="flex flex-col gap-4 p-4">
-          <h1>Your Projects</h1>
+          <h1>Projects</h1>
+          <InputGroup className="max-w-sm">
+            <InputGroupInput placeholder="Search projects..." />
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupAddon align="inline-end">
+              <Kbd>&#x2318;K</Kbd>
+            </InputGroupAddon>
+          </InputGroup>
           <CardFrame>
             <Table variant="card">
               <TableHeader>
