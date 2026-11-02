@@ -11,8 +11,11 @@ import {
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from "#/components/ui/navigation-menu";
+import { authClient } from "#/lib/auth-client";
 
 export function Header() {
+  const { data: session } = authClient.useSession();
+
   return (
     <header className="bg-background/75 sticky top-0 z-50 w-full p-4 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center justify-center">
@@ -43,12 +46,21 @@ export function Header() {
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
-        <Link
-          to="/login"
-          className={cn("ml-auto", buttonVariants({ size: "lg" }))}
-        >
-          Get Started
-        </Link>
+        {session ? (
+          <Link
+            to="/projects"
+            className={cn("ml-auto", buttonVariants({ size: "lg" }))}
+          >
+            Projects
+          </Link>
+        ) : (
+          <Link
+            to="/login"
+            className={cn("ml-auto", buttonVariants({ size: "lg" }))}
+          >
+            Get Started
+          </Link>
+        )}
       </div>
     </header>
   );

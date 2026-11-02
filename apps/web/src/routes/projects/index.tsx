@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
+import { FolderOpenIcon } from "lucide-react";
 
+import { ProjectForm } from "#/components/project-form";
+import { Button } from "#/components/ui/button";
+import { CardFrame } from "#/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -22,7 +26,11 @@ import {
 } from "#/components/ui/empty";
 import {
   Sidebar,
+  SidebarContent,
+  SidebarHeader,
   SidebarInset,
+  SidebarMenu,
+  SidebarMenuItem,
   SidebarProvider,
 } from "#/components/ui/sidebar";
 import {
@@ -63,68 +71,83 @@ function RouteComponent() {
 
   return (
     <SidebarProvider>
-      <Sidebar variant="inset" />
+      <Sidebar variant="inset">
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>Texfolia</SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent></SidebarContent>
+      </Sidebar>
       <SidebarInset>
-        <main>
+        <main className="flex flex-col gap-4 p-4">
           <h1>Your Projects</h1>
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      <table.FlexRender header={header} />
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
-                  >
-                    {row.getAllCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        <table.FlexRender cell={cell} />
-                      </TableCell>
+          <CardFrame>
+            <Table variant="card">
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        <table.FlexRender header={header} />
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={columns.length}>
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon"></EmptyMedia>
-                        <EmptyTitle>No Projects Yet</EmptyTitle>
-                        <EmptyDescription>No data found</EmptyDescription>
-                      </EmptyHeader>
-                      <EmptyContent>
-                        <Dialog>
-                          <DialogTrigger>Create Project</DialogTrigger>
-                          <DialogPopup>
-                            <DialogHeader>
-                              <DialogTitle>Dialog Title</DialogTitle>
-                              <DialogDescription>
-                                Dialog Description
-                              </DialogDescription>
-                            </DialogHeader>
-                            <DialogPanel>Content</DialogPanel>
-                            <DialogFooter>
-                              <DialogClose>Close</DialogClose>
-                            </DialogFooter>
-                          </DialogPopup>
-                        </Dialog>
-                      </EmptyContent>
-                    </Empty>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && "selected"}
+                    >
+                      {row.getAllCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          <table.FlexRender cell={cell} />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length}>
+                      <Empty>
+                        <EmptyHeader>
+                          <EmptyMedia variant="icon">
+                            <FolderOpenIcon />
+                          </EmptyMedia>
+                          <EmptyTitle>No Projects Yet</EmptyTitle>
+                          <EmptyDescription>No data found</EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Dialog>
+                            <DialogTrigger render={<Button />}>
+                              Create Project
+                            </DialogTrigger>
+                            <DialogPopup>
+                              <DialogHeader>
+                                <DialogTitle>New Project</DialogTitle>
+                                <DialogDescription>
+                                  Dialog Description
+                                </DialogDescription>
+                              </DialogHeader>
+                              <DialogPanel>
+                                <ProjectForm />
+                              </DialogPanel>
+                              <DialogFooter>
+                                <DialogClose>Close</DialogClose>
+                              </DialogFooter>
+                            </DialogPopup>
+                          </Dialog>
+                        </EmptyContent>
+                      </Empty>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardFrame>
         </main>
       </SidebarInset>
     </SidebarProvider>
