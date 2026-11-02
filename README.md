@@ -1,6 +1,8 @@
 # Texfolia
 
-The AI-native LaTeX workspace, available at [www.texfolia.com](https://www.texfolia.com).
+_Where great minds work together_
+
+Texfolia is a collaborative LaTeX workspace for humans and agents. Get started for free at [www.texfolia.com](https://www.texfolia.com).
 
 ## Local Development
 

@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
-import { FolderOpenIcon, Search } from "lucide-react";
+import { FolderOpenIcon, Search, Settings } from "lucide-react";
 
 import { ProjectForm } from "#/components/project-form";
 import { Button } from "#/components/ui/button";
@@ -33,6 +33,8 @@ import { Kbd } from "#/components/ui/kbd";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -80,16 +82,34 @@ function RouteComponent() {
       <Sidebar variant="inset">
         <SidebarHeader>
           <SidebarMenu>
-            <SidebarMenuItem>Texfolia</SidebarMenuItem>
+            <SidebarMenuItem>
+              <Link to="/">Texfolia</Link>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
-        <SidebarContent></SidebarContent>
+        <SidebarContent>
+          <SidebarGroup></SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <Button variant="outline" className="w-full">
+                <Settings />
+                Settings
+              </Button>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         <main className="flex flex-col gap-4 p-4">
           <h1>Projects</h1>
           <InputGroup className="max-w-sm">
-            <InputGroupInput placeholder="Search projects..." />
+            <InputGroupInput
+              placeholder="Search projects..."
+              value={table.state.globalFilter || ""}
+              onChange={(e) => table.setGlobalFilter(e.target.value)}
+            />
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>

@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { db, project } from "@texfolia/db";
+import { db, project, projectNode } from "@texfolia/db";
 import z from "zod";
 
 import { ensureSession } from "./auth.functions";
@@ -13,13 +13,41 @@ export const createProject = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const session = await ensureSession();
 
-    return db
-      .insert(project)
-      .values({
-        ownerId: session.user.id,
-        name: data.name,
-      })
-      .returning();
+    await db.transaction(async (tx) => {
+      const [newProject] = await tx
+        .insert(project)
+        .values({
+          ownerId: session.user.id,
+          name: data.name,
+        })
+        .returning();
+
+      if (!newProject) {
+        tx.rollback();
+        throw new Error("Failed to create project");
+      }
+
+      const [newNode] = await tx
+        .insert(projectNode)
+        .values({
+          projectId: newProject.id,
+          name: data.name,
+          kind: "folder",
+        })
+        .returning();
+
+      if (!newNode) {
+        tx.rollback();
+        throw new Error("Failed to create node");
+      }
+
+      await tx.insert(projectNode).values({
+        projectId: newProject.id,
+        parentId: newNode.id,
+        name: "main.tex",
+        kind: "text",
+      });
+    });
   });
 
 export const getProjects = createServerFn({ method: "GET" }).handler(
