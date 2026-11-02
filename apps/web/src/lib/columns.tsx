@@ -1,5 +1,6 @@
+import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
-import { Copy } from "lucide-react";
+import { Copy, Download, Edit, Trash, UserPlus } from "lucide-react";
 
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -21,7 +22,12 @@ export const columns = columnHelper.columns([
     ),
   }),
   columnHelper.accessor("name", {
-    header: "Project",
+    header: "Name",
+    cell: ({ getValue, row }) => (
+      <Link to="/projects/$projectId" params={{ projectId: row.original.id }}>
+        {getValue()}
+      </Link>
+    ),
   }),
   columnHelper.accessor("ownerId", {
     header: "Collaborators",
@@ -36,11 +42,25 @@ export const columns = columnHelper.columns([
     header: "Actions",
     cell: ({ row }) => (
       <Group>
-        <Button size="icon-lg">
+        <Button size="icon-lg" variant="outline">
           <Copy />
         </Button>
         <GroupSeparator />
-        <Button>Button</Button>
+        <Button size="icon-lg" variant="outline">
+          <Download />
+        </Button>
+        <GroupSeparator />
+        <Button size="icon-lg" variant="outline">
+          <UserPlus />
+        </Button>
+        <GroupSeparator />
+        <Button size="icon-lg" variant="outline">
+          <Edit />
+        </Button>
+        <GroupSeparator />
+        <Button size="icon-lg" variant="outline">
+          <Trash />
+        </Button>
       </Group>
     ),
   }),
