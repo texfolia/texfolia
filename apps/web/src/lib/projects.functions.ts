@@ -7,13 +7,13 @@ import { ensureSession } from "./auth.functions";
 export const createProject = createServerFn({ method: "POST" })
   .validator(
     z.object({
-      name: z.string().min(1),
+      name: z.string().trim().min(1),
     }),
   )
   .handler(async ({ data }) => {
     const session = await ensureSession();
 
-    await db.transaction(async (tx) => {
+    return db.transaction(async (tx) => {
       const [newProject] = await tx
         .insert(project)
         .values({
@@ -47,6 +47,8 @@ export const createProject = createServerFn({ method: "POST" })
         name: "main.tex",
         kind: "text",
       });
+
+      return newProject.id;
     });
   });
 
