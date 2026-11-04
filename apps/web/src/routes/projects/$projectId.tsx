@@ -34,7 +34,7 @@ export const Route = createFileRoute("/projects/$projectId")({
 const PdfViewer = lazy(() => import("#/components/pdf"));
 
 const components = {
-  editor: Editor,
+  editor: () => <Editor />,
   pdf: () => (
     <div className="h-full overflow-auto">
       <Suspense fallback={<p className="p-4">Loading PDF viewer…</p>}>
