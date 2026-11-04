@@ -72,3 +72,24 @@ export const getProjects = createServerFn({ method: "GET" }).handler(
 );
 
 export type GetProjectsResult = Awaited<ReturnType<typeof getProjects>>;
+
+export const getProject = createServerFn({ method: "GET" })
+  .validator(z.object({ projectId: z.uuid() }))
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+    const result = await db.query.project.findFirst({
+      where: {
+        id: data.projectId,
+        ownerId: session.user.id,
+        deletedAt: { isNull: true },
+      },
+      with: {
+        nodes: {
+          where: { deletedAt: { isNull: true } },
+          columns: { id: true, parentId: true, name: true, kind: true },
+        },
+      },
+    });
+    if (!result) throw new Error("Project not found");
+    return result;
+  });

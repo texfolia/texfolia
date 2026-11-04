@@ -43,21 +43,27 @@ const editorTheme = EditorView.theme({
 
 type EditorProps = {
   defaultValue?: string;
+  defaultSavedValue?: string;
   filename?: string;
   onChange?: (value: string) => void;
+  onSave?: (value: string) => void;
+  allowOpenFile?: boolean;
 };
 
 export function Editor({
   defaultValue = "",
+  defaultSavedValue = defaultValue,
   filename = "main.tex",
   onChange,
+  onSave,
+  allowOpenFile = true,
 }: EditorProps) {
   const editor = useRef<ReactCodeMirrorRef>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const openRequest = useRef(0);
   const [value, setValue] = useState(defaultValue);
   const [name, setName] = useState(filename);
-  const [savedValue, setSavedValue] = useState(defaultValue);
+  const [savedValue, setSavedValue] = useState(defaultSavedValue);
   const [wrap, setWrap] = useState(true);
   const [error, setError] = useState("");
   const [status, setStatus] = useState({
@@ -91,12 +97,13 @@ export function Editor({
               name,
             );
             setSavedValue(content);
+            onSave?.(content);
             return true;
           },
         },
       ]),
     ],
-    [name, wrap],
+    [name, wrap, onSave],
   );
 
   async function openFile(file: File) {
@@ -138,12 +145,14 @@ export function Editor({
     >
       <PanelHeader title={name}>
         <PanelActions label="Editor actions">
-          <PanelAction
-            label="Open source file"
-            onClick={() => fileInput.current?.click()}
-          >
-            <FolderOpen />
-          </PanelAction>
+          {allowOpenFile && (
+            <PanelAction
+              label="Open source file"
+              onClick={() => fileInput.current?.click()}
+            >
+              <FolderOpen />
+            </PanelAction>
+          )}
           <PanelAction
             label="Download source (⌘/Ctrl+S)"
             onClick={() => {
@@ -152,6 +161,7 @@ export function Editor({
                 name,
               );
               setSavedValue(value);
+              onSave?.(value);
             }}
           >
             <Download />
