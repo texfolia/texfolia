@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
+
 import { killGroup, messageOf } from "./run.ts";
 
 const USAGE = `Usage: statechart SPEC.tla [--config FILE] [--view FILE] [--out DIR]
@@ -36,7 +37,11 @@ let specFile;
 try {
   const args = parseArgs({
     allowPositionals: true,
-    options: { config: { type: "string" }, view: { type: "string" }, out: { type: "string" } },
+    options: {
+      config: { type: "string" },
+      view: { type: "string" },
+      out: { type: "string" },
+    },
   });
   flags = args.values;
   [specFile] = args.positionals;
@@ -52,7 +57,9 @@ const codeOf = (error: unknown) =>
 try {
   const configFile = flags.config ?? specFile.replace(/\.tla$/, ".cfg");
   if (!fs.existsSync(configFile))
-    throw new Error(`Cannot find the TLC config ${configFile}. Pass --config FILE.`);
+    throw new Error(
+      `Cannot find the TLC config ${configFile}. Pass --config FILE.`,
+    );
   const out = flags.out ?? specFile.replace(/\.tla$/, "-chart");
   let entries: string[] = [];
   let dest: string;
@@ -79,7 +86,9 @@ try {
 
   let base = path.dirname(dest);
   while (!fs.existsSync(base)) base = path.dirname(base);
-  const stage = fs.mkdtempSync(path.join(base, `.${path.basename(dest)}.statechart-`));
+  const stage = fs.mkdtempSync(
+    path.join(base, `.${path.basename(dest)}.statechart-`),
+  );
   const done = path.join(stage, "done");
   let tmp: string | undefined;
   let janitor: ChildProcess | undefined;
@@ -135,14 +144,17 @@ try {
       console.error(`${stop} stopped the check, so the command wrote nothing.`);
       exitCode = 128 + os.constants.signals[stop];
     } else if (worker.signalCode) {
-      console.error(`${worker.signalCode} killed the check, so the command wrote nothing.`);
+      console.error(
+        `${worker.signalCode} killed the check, so the command wrote nothing.`,
+      );
       exitCode = 2;
     } else if ((verdict === 0 || verdict === 1) && fs.existsSync(done)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       try {
         fs.renameSync(done, dest);
       } catch (error) {
-        if (codeOf(error) !== "ENOTEMPTY" && codeOf(error) !== "EEXIST") throw error;
+        if (codeOf(error) !== "ENOTEMPTY" && codeOf(error) !== "EEXIST")
+          throw error;
         throw new Error(
           `${path.join(out, fs.readdirSync(dest).sort()[0])} appeared while the check ran, so the command wrote nothing. Pass --out with a new folder.`,
           { cause: error },

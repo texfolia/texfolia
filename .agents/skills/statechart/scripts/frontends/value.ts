@@ -13,11 +13,14 @@ const PUNCT = new Map([
 ]);
 const SPACE = /\s/;
 export const isSpace = (c: number) =>
-  c === 32 || (c >= 9 && c <= 13) || (c > 127 && SPACE.test(String.fromCharCode(c)));
+  c === 32 ||
+  (c >= 9 && c <= 13) ||
+  (c > 127 && SPACE.test(String.fromCharCode(c)));
 const isDigit = (c: number) => c >= 48 && c <= 57;
 const isWord = (c: number) =>
   isDigit(c) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
-const isLineEnd = (c: number) => c === 10 || c === 13 || c === 0x2028 || c === 0x2029;
+const isLineEnd = (c: number) =>
+  c === 10 || c === 13 || c === 0x2028 || c === 0x2029;
 
 export const tokenEnd = (s: string, i: number) => {
   const c = s.charCodeAt(i);
@@ -25,7 +28,8 @@ export const tokenEnd = (s: string, i: number) => {
     for (let j = i + 1; j < s.length; j++) {
       const d = s.charCodeAt(j);
       if (d === 34) return j + 1;
-      if (d === 92 && (++j >= s.length || isLineEnd(s.charCodeAt(j)))) return -1;
+      if (d === 92 && (++j >= s.length || isLineEnd(s.charCodeAt(j))))
+        return -1;
     }
     return -1;
   }
@@ -77,7 +81,10 @@ export function parseValue(text: string): Value {
   }
   let i = 0;
   const fail = (): never => {
-    throw unreadable(text, i < starts.length ? starts[Math.max(i - 1, 0)] : text.length);
+    throw unreadable(
+      text,
+      i < starts.length ? starts[Math.max(i - 1, 0)] : text.length,
+    );
   };
   const next = () => (i < tokens.length ? tokens[i++] : fail());
   const eat = (t: string) => {

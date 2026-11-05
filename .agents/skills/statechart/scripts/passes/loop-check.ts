@@ -48,7 +48,8 @@ export function loopCheck(
         const takes = (a: Arrow) => {
           for (const s of twins)
             for (const j of stepsFrom.get(s) ?? [])
-              if (drawnLabels[j] === a.label && keys[r][to[j]] === a.to) return true;
+              if (drawnLabels[j] === a.label && keys[r][to[j]] === a.to)
+                return true;
           return false;
         };
         const rest: string[] = [];

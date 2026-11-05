@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { db, project, projectNode } from "@texfolia/db";
+import { and, eq, isNull } from "drizzle-orm";
 import z from "zod";
 
 import { ensureSession } from "./auth.functions";
@@ -33,6 +34,7 @@ export const createProject = createServerFn({ method: "POST" })
           projectId: newProject.id,
           name: data.name,
           kind: "folder",
+          sizeBytes: 0n,
         })
         .returning();
 
@@ -46,6 +48,7 @@ export const createProject = createServerFn({ method: "POST" })
         parentId: newNode.id,
         name: "main.tex",
         kind: "text",
+        sizeBytes: 0n,
       });
 
       return newProject.id;
@@ -66,12 +69,33 @@ export const getProjects = createServerFn({ method: "GET" }).handler(
       },
       where: {
         ownerId: session.user.id,
+        deletedAt: { isNull: true },
       },
     });
   },
 );
 
 export type GetProjectsResult = Awaited<ReturnType<typeof getProjects>>;
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .validator(z.object({ projectId: z.uuid() }))
+  .handler(async ({ data }) => {
+    const session = await ensureSession();
+    const [deletedProject] = await db
+      .update(project)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(project.id, data.projectId),
+          eq(project.ownerId, session.user.id),
+          isNull(project.deletedAt),
+        ),
+      )
+      .returning({ id: project.id });
+
+    if (!deletedProject) throw new Error("Project not found");
+    return deletedProject.id;
+  });
 
 export const getProject = createServerFn({ method: "GET" })
   .validator(z.object({ projectId: z.uuid() }))

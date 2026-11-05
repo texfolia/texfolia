@@ -3,7 +3,7 @@ import { useMemo } from "react";
 
 import {
   Collapsible,
-  CollapsiblePanel,
+  CollapsibleContent,
   CollapsibleTrigger,
 } from "#/components/ui/collapsible";
 import {
@@ -59,9 +59,9 @@ export function ProjectFileTree({
                   <FolderOpen className="hidden in-aria-expanded:block" />
                   <span>{node.name}</span>
                 </CollapsibleTrigger>
-                <CollapsiblePanel>
+                <CollapsibleContent>
                   {branch(node.id, depth + 1)}
-                </CollapsiblePanel>
+                </CollapsibleContent>
               </Collapsible>
             ) : (
               <SidebarMenuButton
@@ -91,7 +91,7 @@ export function ProjectFileTree({
   return nodes.length ? (
     branch(null)
   ) : (
-    <p className="px-2 py-3 text-xs text-muted-foreground">
+    <p className="text-muted-foreground px-2 py-3 text-xs">
       No files in this project.
     </p>
   );

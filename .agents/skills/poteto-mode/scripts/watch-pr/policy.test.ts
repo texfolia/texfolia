@@ -1,4 +1,11 @@
 import { describe, expect, it } from "bun:test";
+
+import {
+  failedCheck,
+  fakeReader,
+  passingCheck,
+  pendingCheck,
+} from "./fakes.test-helper.ts";
 import { WatcherQueryError } from "./github.ts";
 import {
   applyQueueSnapshot,
@@ -13,12 +20,6 @@ import {
   runSimple,
   selectTierMajorStackDecision,
 } from "./policy.ts";
-import {
-  fakeReader,
-  failedCheck,
-  passingCheck,
-  pendingCheck,
-} from "./fakes.test-helper.ts";
 import type {
   GitHubReader,
   NonEmpty,
@@ -64,7 +65,7 @@ describe("readiness truth table", () => {
     ];
     for (const [mergeStateStatus, headRollupState, expected] of cases) {
       expect(
-        assessGitHubMerge({ mergeStateStatus, headRollupState }).kind
+        assessGitHubMerge({ mergeStateStatus, headRollupState }).kind,
       ).toBe(expected);
     }
   });
@@ -146,7 +147,7 @@ describe("snapshot query planning", () => {
           pendingHistory: "include",
           allowDraft: false,
         })
-      ).kind
+      ).kind,
     ).toBe("merged");
     expect(reader.calls).toEqual(["pullRequest"]);
   });
@@ -319,7 +320,7 @@ describe("queued-stack cadence", () => {
       state,
       await openSnapshot(queue[0]),
       0,
-      options
+      options,
     );
     expect(first.completedSweepRows).toBeNull();
     state = first.state;
@@ -327,10 +328,10 @@ describe("queued-stack cadence", () => {
       state,
       await openSnapshot(queue[1]),
       5,
-      options
+      options,
     );
     expect(
-      second.completedSweepRows?.map((row) => Number(row.context.number))
+      second.completedSweepRows?.map((row) => Number(row.context.number)),
     ).toEqual([30, 31]);
     expect(second.state.nextSweepAt).toBe(305);
   });
@@ -400,7 +401,7 @@ describe("queued-stack cadence", () => {
       state,
       await openSnapshot(queue[0]),
       0,
-      options
+      options,
     ).state;
     const first = evaluateQueue(state, 0, options);
     expect(first.kind).toBe("waiting");
@@ -420,31 +421,55 @@ it("uses the specified retry floor and cap", () => {
   expect(queryBackoffSeconds(60, 4)).toBe(300);
 });
 
-
 describe("polling deadline sleeps", () => {
   for (const mode of ["single", "queued-stack", "query-retry"] as const) {
     it(`caps ${mode} sleeps at the configured deadline`, async () => {
       let now = 0;
       const sleeps: number[] = [];
-      const pending = fakeReader({ fastPath: { kind: "checks", checks: [pendingCheck()] } });
-      const reader = mode === "query-retry"
-        ? { ...pending, async pullRequest(): Promise<PullRequestFacts> {
-          throw new WatcherQueryError({ kind: "command-exit", retryable: true, code: 1, detail: "temporary failure" });
-        } }
-        : pending;
+      const pending = fakeReader({
+        fastPath: { kind: "checks", checks: [pendingCheck()] },
+      });
+      const reader =
+        mode === "query-retry"
+          ? {
+              ...pending,
+              async pullRequest(): Promise<PullRequestFacts> {
+                throw new WatcherQueryError({
+                  kind: "command-exit",
+                  retryable: true,
+                  code: 1,
+                  detail: "temporary failure",
+                });
+              },
+            }
+          : pending;
       const dependencies = {
         reader,
         clock: {
           now: () => now,
           observedAt: () => "2026-07-26T00:00:00.000Z",
-          async sleep(seconds: number) { sleeps.push(seconds); now += seconds; },
+          async sleep(seconds: number) {
+            sleeps.push(seconds);
+            now += seconds;
+          },
         },
         emit() {},
       };
       const polling = { ...options, interval: 60, timeout: 5 };
-      const result = mode === "queued-stack"
-        ? await runQueued({ dependencies, contexts: [context(1)], options: polling })
-        : await runSimple({ dependencies, contexts: [context(1)], mode: "single", statusOnly: false, options: polling });
+      const result =
+        mode === "queued-stack"
+          ? await runQueued({
+              dependencies,
+              contexts: [context(1)],
+              options: polling,
+            })
+          : await runSimple({
+              dependencies,
+              contexts: [context(1)],
+              mode: "single",
+              statusOnly: false,
+              options: polling,
+            });
       expect(result.kind).toBe("TIMEOUT");
       expect(sleeps).toEqual([5]);
       expect(now).toBe(5);
@@ -454,29 +479,39 @@ describe("polling deadline sleeps", () => {
     let now = 0;
     let reads = 0;
     const sleeps: number[] = [];
-    const pending = fakeReader({ fastPath: { kind: "checks", checks: [pendingCheck()] } });
-    const passed = fakeReader({ fastPath: { kind: "checks", checks: [passingCheck()] } });
+    const pending = fakeReader({
+      fastPath: { kind: "checks", checks: [pendingCheck()] },
+    });
+    const passed = fakeReader({
+      fastPath: { kind: "checks", checks: [passingCheck()] },
+    });
     const result = await runSimple({
       dependencies: {
         reader: {
           ...pending,
           async checksFastPath(pr) {
             reads += 1;
-            return reads === 1 ? pending.checksFastPath(pr) : passed.checksFastPath(pr);
+            return reads === 1
+              ? pending.checksFastPath(pr)
+              : passed.checksFastPath(pr);
           },
         },
         clock: {
           now: () => now,
           observedAt: () => "2026-07-26T00:00:00.000Z",
-          async sleep(seconds) { sleeps.push(seconds); now += seconds; },
+          async sleep(seconds) {
+            sleeps.push(seconds);
+            now += seconds;
+          },
         },
         emit() {},
       },
-      contexts: [context(1)], mode: "single", statusOnly: false,
+      contexts: [context(1)],
+      mode: "single",
+      statusOnly: false,
       options: { ...options, interval: 60, timeout: 0 },
     });
     expect(result.kind).toBe("READY");
     expect(sleeps).toEqual([60]);
   });
-
 });

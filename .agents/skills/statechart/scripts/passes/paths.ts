@@ -48,13 +48,16 @@ export function pathGraph(names: string[]) {
   return {
     graph,
     bug: (rule: Rule, trace: TraceState[]): Bug => {
-      if (!trace.length) throw new Error(`TLC's trace for ${rule.name} has no states.`);
+      if (!trace.length)
+        throw new Error(`TLC's trace for ${rule.name} has no states.`);
       const bug = { rule, ...route(trace) };
       const end = must(graph.states, bug.path.at(-1)?.state ?? bug.start);
       if (!hasRule(end.breaks, rule)) end.breaks.push(rule);
       return bug;
     },
     lasso: ({ seq, loop }: Trace): Lasso | undefined =>
-      seq.length ? { ...route(seq), loop, stutters: loop === seq.length - 1 } : undefined,
+      seq.length
+        ? { ...route(seq), loop, stutters: loop === seq.length - 1 }
+        : undefined,
   };
 }

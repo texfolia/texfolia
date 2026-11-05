@@ -7,7 +7,6 @@ import { z } from "zod";
 
 import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
-import { Form } from "#/components/ui/form";
 import { Input } from "#/components/ui/input";
 import { createProject } from "#/lib/projects.functions";
 
@@ -43,7 +42,7 @@ export function ProjectForm() {
   const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
 
   return (
-    <Form
+    <form
       className="flex w-full flex-col gap-4"
       noValidate
       onSubmit={(event) => {
@@ -79,9 +78,9 @@ export function ProjectForm() {
         }}
       </form.Field>
       {submitError && <FieldError>{submitError}</FieldError>}
-      <Button loading={isSubmitting} type="submit">
-        Create Project
+      <Button disabled={isSubmitting} type="submit">
+        {isSubmitting ? "Creating…" : "Create Project"}
       </Button>
-    </Form>
+    </form>
   );
 }

@@ -5,12 +5,21 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
 import fc from "fast-check";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const skip = !process.env.TLA2TOOLS && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
+const skip =
+  !process.env.TLA2TOOLS &&
+  "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
 
-const PROTOTYPE_KEYS = ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"];
+const PROTOTYPE_KEYS = [
+  "constructor",
+  "__proto__",
+  "toString",
+  "valueOf",
+  "hasOwnProperty",
+];
 const NAMES = [
   ...PROTOTYPE_KEYS,
   "x",
@@ -36,7 +45,11 @@ const NAMES = [
   "done",
 ];
 const LABELS = ["a b", ...PROTOTYPE_KEYS, "Lease held, write pending", "Ünï ✓"];
-const STEPS = ["you press play", ...PROTOTYPE_KEYS, "the connect fails [while offline]"];
+const STEPS = [
+  "you press play",
+  ...PROTOTYPE_KEYS,
+  "the connect fails [while offline]",
+];
 const GROUPS = ["paying", "a b", ...PROTOTYPE_KEYS];
 const COLORS = ["blue", "orange", "purple", "yellow"];
 
@@ -60,7 +73,11 @@ const DOMAIN: fc.Arbitrary<Domain> = fc.oneof(
   values(STRING),
   values(fc.constantFrom("TRUE", "FALSE"), 2),
   fc.integer({ min: 1, max: 4 }).map((modelValues) => ({ modelValues })),
-  values(fc.tuple(INT, STRING).map(([i, s]) => `[constructor |-> ${i}, __proto__ |-> ${s}]`)),
+  values(
+    fc
+      .tuple(INT, STRING)
+      .map(([i, s]) => `[constructor |-> ${i}, __proto__ |-> ${s}]`),
+  ),
   values(
     fc
       .uniqueArray(fc.tuple(INT, STRING), { maxLength: 2 })
@@ -76,44 +93,67 @@ const MODEL = fc.record({
   module: fc.constantFrom("Model", "prototype"),
   names: fc.shuffledSubarray(NAMES, { minLength: NAMES.length }),
   vars: fc.array(
-    fc.record({ domain: DOMAIN, init: fc.array(fc.nat(3), { minLength: 1, maxLength: 2 }) }),
+    fc.record({
+      domain: DOMAIN,
+      init: fc.array(fc.nat(3), { minLength: 1, maxLength: 2 }),
+    }),
     { minLength: 1, maxLength: 3 },
   ),
   actions: fc.array(
     fc.record({
       guard: fc.array(ATOM, { maxLength: 2 }),
       set: fc.array(
-        fc.record({ v: fc.nat(2), to: fc.array(fc.nat(3), { minLength: 1, maxLength: 2 }) }),
+        fc.record({
+          v: fc.nat(2),
+          to: fc.array(fc.nat(3), { minLength: 1, maxLength: 2 }),
+        }),
         { minLength: 1, maxLength: 2 },
       ),
     }),
     { minLength: 1, maxLength: 6 },
   ),
-  invariants: fc.array(fc.array(ATOM, { minLength: 1, maxLength: 2 }), { maxLength: 2 }),
+  invariants: fc.array(fc.array(ATOM, { minLength: 1, maxLength: 2 }), {
+    maxLength: 2,
+  }),
   deadlock: fc.boolean(),
   initNext: fc.boolean(),
   constraint: fc.option(ATOM, { freq: 2 }),
-  actionConstraint: fc.option(fc.record({ v: fc.nat(2), from: fc.nat(3), to: fc.nat(3) }), {
-    freq: 2,
-  }),
+  actionConstraint: fc.option(
+    fc.record({ v: fc.nat(2), from: fc.nat(3), to: fc.nat(3) }),
+    {
+      freq: 2,
+    },
+  ),
   property: fc.option(
     fc.record({
       form: fc.nat(3),
       atoms: fc.tuple(ATOM, ATOM),
-      fairness: fc.option(fc.record({ strong: fc.boolean(), on: fc.option(fc.nat(5)) })),
+      fairness: fc.option(
+        fc.record({ strong: fc.boolean(), on: fc.option(fc.nat(5)) }),
+      ),
     }),
   ),
   view: fc.option(
     fc.record({
       form: fc.constantFrom("string", "parents", "regions"),
-      labels: fc.uniqueArray(fc.constantFrom(...LABELS), { minLength: 1, maxLength: 4 }),
+      labels: fc.uniqueArray(fc.constantFrom(...LABELS), {
+        minLength: 1,
+        maxLength: 4,
+      }),
       regions: fc.uniqueArray(fc.constantFrom("Session", ...LABELS), {
         minLength: 1,
         maxLength: 3,
       }),
-      steps: fc.option(fc.array(fc.option(fc.constantFrom(...STEPS)), { maxLength: 6 })),
+      steps: fc.option(
+        fc.array(fc.option(fc.constantFrom(...STEPS)), { maxLength: 6 }),
+      ),
       title: fc.option(fc.constantFrom("A b c", "constructor")),
-      groups: fc.option(fc.uniqueArray(fc.constantFrom(...GROUPS), { minLength: 1, maxLength: 3 })),
+      groups: fc.option(
+        fc.uniqueArray(fc.constantFrom(...GROUPS), {
+          minLength: 1,
+          maxLength: 3,
+        }),
+      ),
     }),
   ),
 });
@@ -141,9 +181,13 @@ function caseOf(m: Model): Case {
   const name = () => m.names[next++];
   const vars = m.vars.map(name);
   const domains = m.vars.map(({ domain }) =>
-    Array.isArray(domain) ? domain : Array.from({ length: domain.modelValues }, name),
+    Array.isArray(domain)
+      ? domain
+      : Array.from({ length: domain.modelValues }, name),
   );
-  const modelValues = m.vars.flatMap(({ domain }, k) => (Array.isArray(domain) ? [] : domains[k]));
+  const modelValues = m.vars.flatMap(({ domain }, k) =>
+    Array.isArray(domain) ? [] : domains[k],
+  );
   const value = (v: number, i: number) =>
     domains[v % vars.length][i % domains[v % vars.length].length];
   const atom = ({ v, i, not }: Atom) =>
@@ -151,7 +195,9 @@ function caseOf(m: Model): Case {
   const set = (v: number, is: number[]) =>
     `{${[...new Set(is.map((i) => value(v, i)))].join(", ")}}`;
   const defs = [`vars == <<${vars.join(", ")}>>`];
-  defs.push(`Init == ${vars.map((x, k) => `${x} \\in ${set(k, m.vars[k].init)}`).join(" /\\ ")}`);
+  defs.push(
+    `Init == ${vars.map((x, k) => `${x} \\in ${set(k, m.vars[k].init)}`).join(" /\\ ")}`,
+  );
   const actions = m.actions.map((a) => {
     const changed = new Map<number, number[]>();
     for (const s of a.set)
@@ -189,7 +235,9 @@ function caseOf(m: Model): Case {
     const { v, from, to } = m.actionConstraint;
     const x = vars[v % vars.length];
     const bound = name();
-    defs.push(`${bound} == ~(${x} = ${value(v, from)} /\\ ${x}' = ${value(v, to)})`);
+    defs.push(
+      `${bound} == ~(${x} = ${value(v, from)} /\\ ${x}' = ${value(v, to)})`,
+    );
     base.push(`ACTION_CONSTRAINT ${bound}`);
   }
   let property: string | undefined;
@@ -220,7 +268,11 @@ function caseOf(m: Model): Case {
   };
 }
 
-function viewOf(v: NonNullable<Model["view"]>, vars: string[], actions: string[]) {
+function viewOf(
+  v: NonNullable<Model["view"]>,
+  vars: string[],
+  actions: string[],
+) {
   const json = JSON.stringify;
   const state = {
     string: `pick(VARS.map((n) => v[n]), 0)`,
@@ -280,7 +332,10 @@ const run = (command: string, args: string[], cwd: string) =>
   });
 
 const plainTlc = (dir: string, c: Case, name: string, lines: string[]) => {
-  fs.writeFileSync(path.join(dir, `${name}.cfg`), `${[...c.base, ...lines].join("\n")}\n`);
+  fs.writeFileSync(
+    path.join(dir, `${name}.cfg`),
+    `${[...c.base, ...lines].join("\n")}\n`,
+  );
   fs.mkdirSync(path.join(dir, `tmp-${name}`));
   return run(
     process.env.JAVA || "java",
@@ -318,9 +373,10 @@ async function plainAnswers(dir: string, c: Case) {
   for (const name of c.invariants)
     rules.set(
       name,
-      plainTlc(dir, c, `inv-${name}`, [`INVARIANT ${name}`, "CHECK_DEADLOCK FALSE"]).then((r) =>
-        claimOf(r, [12], true),
-      ),
+      plainTlc(dir, c, `inv-${name}`, [
+        `INVARIANT ${name}`,
+        "CHECK_DEADLOCK FALSE",
+      ]).then((r) => claimOf(r, [12], true)),
     );
   if (c.deadlock)
     rules.set(
@@ -330,16 +386,21 @@ async function plainAnswers(dir: string, c: Case) {
   if (c.property)
     rules.set(
       c.property,
-      plainTlc(dir, c, "property", [`PROPERTY ${c.property}`, "CHECK_DEADLOCK FALSE"]).then((r) =>
-        claimOf(r, [12, 13], false),
-      ),
+      plainTlc(dir, c, "property", [
+        `PROPERTY ${c.property}`,
+        "CHECK_DEADLOCK FALSE",
+      ]).then((r) => claimOf(r, [12, 13], false)),
     );
-  const states = plainTlc(dir, c, "states", ["CHECK_DEADLOCK FALSE"]).then((r) => {
-    const found = /([\d,]+) distinct states found/.exec(r.stdout);
-    if (r.status !== 0 || !found)
-      throw new Error(`plain TLC exited ${r.status}:\n${r.stdout}${r.stderr}`);
-    return Number(found[1].replaceAll(",", ""));
-  });
+  const states = plainTlc(dir, c, "states", ["CHECK_DEADLOCK FALSE"]).then(
+    (r) => {
+      const found = /([\d,]+) distinct states found/.exec(r.stdout);
+      if (r.status !== 0 || !found)
+        throw new Error(
+          `plain TLC exited ${r.status}:\n${r.stdout}${r.stderr}`,
+        );
+      return Number(found[1].replaceAll(",", ""));
+    },
+  );
   const answers = new Map<string, Claim>();
   for (const [name, claim] of rules) answers.set(name, await claim);
   const broke = [...answers.values()].some((a) => a.breaks);
@@ -352,7 +413,9 @@ function compilerAnswers(r: Run, c: Case) {
   for (const [i, line] of lines.entries()) {
     const broken = /^## (\S+) breaks$/.exec(line);
     if (broken) {
-      const shortest = /^The shortest path has (\d+) steps?:$/.exec(lines[i + 1]);
+      const shortest = /^The shortest path has (\d+) steps?:$/.exec(
+        lines[i + 1],
+      );
       rules.set(
         broken[1],
         broken[1] === c.property
@@ -361,22 +424,36 @@ function compilerAnswers(r: Run, c: Case) {
       );
     }
     if (line === "## Rules that hold")
-      for (const name of lines[i + 1].split(", ")) rules.set(name, { breaks: false });
+      for (const name of lines[i + 1].split(", "))
+        rules.set(name, { breaks: false });
   }
   const states = /^TLC reached (\d+) states/m.exec(r.stdout);
-  return { status: r.status, states: states ? Number(states[1]) : r.stderr, rules };
+  return {
+    status: r.status,
+    states: states ? Number(states[1]) : r.stderr,
+    rules,
+  };
 }
 
 async function answer(c: Case) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-differential-"));
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "statechart-differential-"),
+  );
   try {
     fs.writeFileSync(path.join(dir, `${c.module}.tla`), c.tla);
     fs.writeFileSync(path.join(dir, `${c.module}.cfg`), configOf(c));
-    if (c.view !== undefined) fs.writeFileSync(path.join(dir, "view.mjs"), c.view);
+    if (c.view !== undefined)
+      fs.writeFileSync(path.join(dir, "view.mjs"), c.view);
     const compile = (view: string[]) =>
       run(
         process.execPath,
-        [path.join(here, "../statechart.ts"), `${c.module}.tla`, ...view, "--out", "out"],
+        [
+          path.join(here, "../statechart.ts"),
+          `${c.module}.tla`,
+          ...view,
+          "--out",
+          "out",
+        ],
         dir,
       );
     const [viewed, plain] = await Promise.all([
@@ -561,5 +638,6 @@ for (const [what, c, says] of [
 ] satisfies [string, Case, string[]][])
   test(`${what}, as plain TLC answers`, { skip }, async () => {
     const report = await answer(c);
-    for (const said of says) assert.ok(report.includes(said), `${said}\nis not in\n${report}`);
+    for (const said of says)
+      assert.ok(report.includes(said), `${said}\nis not in\n${report}`);
   });

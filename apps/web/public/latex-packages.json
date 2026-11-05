@@ -1,0 +1,40 @@
+{
+  "amsmath": [
+    "\\text",
+    "\\dfrac",
+    "\\tfrac",
+    "\\operatorname",
+    "\\substack",
+    "\\numberwithin",
+    "\\tag",
+    "\\binom"
+  ],
+  "amssymb": [
+    "\\mathbb",
+    "\\varnothing",
+    "\\leqslant",
+    "\\geqslant",
+    "\\blacksquare"
+  ],
+  "biblatex": [
+    "\\addbibresource",
+    "\\printbibliography",
+    "\\parencite",
+    "\\textcite",
+    "\\autocite"
+  ],
+  "booktabs": ["\\toprule", "\\midrule", "\\bottomrule", "\\cmidrule"],
+  "cleveref": ["\\cref", "\\Cref", "\\crefrange", "\\crefname"],
+  "geometry": ["\\geometry", "\\newgeometry", "\\restoregeometry"],
+  "graphicx": [
+    "\\includegraphics",
+    "\\graphicspath",
+    "\\resizebox",
+    "\\rotatebox"
+  ],
+  "hyperref": ["\\href", "\\url", "\\autoref", "\\hypersetup", "\\hypertarget"],
+  "natbib": ["\\citep", "\\citet", "\\citeauthor", "\\citeyear"],
+  "siunitx": ["\\num", "\\unit", "\\qty", "\\qtyrange", "\\sisetup"],
+  "tikz": ["\\draw", "\\path", "\\node", "\\fill", "\\usetikzlibrary"],
+  "xcolor": ["\\definecolor", "\\textcolor", "\\colorbox", "\\color"]
+}

@@ -1,7 +1,7 @@
+import { Toolbar } from "@base-ui/react/toolbar";
 import type { ComponentProps, ReactNode } from "react";
 
 import { Button } from "#/components/ui/button";
-import { Toolbar, ToolbarButton } from "#/components/ui/toolbar";
 
 export function PanelHeader({
   title,
@@ -33,12 +33,12 @@ export function PanelActions({
   label: string;
 }) {
   return (
-    <Toolbar
+    <Toolbar.Root
       aria-label={label}
-      className="flex-wrap rounded-none border-0 bg-transparent p-0"
+      className="flex flex-wrap items-center gap-1"
     >
       {children}
-    </Toolbar>
+    </Toolbar.Root>
   );
 }
 
@@ -46,15 +46,15 @@ export function PanelAction({
   label,
   children,
   ...props
-}: Omit<ComponentProps<typeof ToolbarButton>, "render"> & { label: string }) {
+}: Omit<ComponentProps<typeof Toolbar.Button>, "render"> & { label: string }) {
   return (
-    <ToolbarButton
+    <Toolbar.Button
       {...props}
       aria-label={label}
       title={label}
       render={<Button variant="ghost" size="icon-sm" />}
     >
       {children}
-    </ToolbarButton>
+    </Toolbar.Button>
   );
 }

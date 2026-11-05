@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+
 import type * as T from "./types.ts";
 import { nonEmpty, parsePrNumber } from "./types.ts";
 export const REVIEW_THREADS_QUERY =
@@ -118,7 +119,7 @@ const optionalString = (value: unknown, path: string): string | null =>
 function enumValue<const V extends readonly string[]>(
   value: unknown,
   values: V,
-  path: string
+  path: string,
 ): V[number] {
   if (typeof value === "string")
     for (const candidate of values) if (candidate === value) return candidate;
@@ -127,7 +128,7 @@ function enumValue<const V extends readonly string[]>(
 const nullableEnum = <const V extends readonly string[]>(
   value: unknown,
   values: V,
-  path: string
+  path: string,
 ): V[number] | null => (value === null ? null : enumValue(value, values, path));
 const MERGE_STATES = [
   "BEHIND",
@@ -159,7 +160,7 @@ const reviewDecision = (value: unknown): T.ReviewDecision =>
   nullableEnum(
     value === "" ? null : value,
     REVIEW_DECISIONS,
-    "pull request.reviewDecision"
+    "pull request.reviewDecision",
   );
 function parseRemote(value: string): T.Repository | null {
   let normalized = value.trim();
@@ -258,7 +259,7 @@ function gateOr(
     readonly link: string;
     readonly workflow: string;
   },
-  reportedState: string
+  reportedState: string,
 ): T.Check {
   return details.name === "Code Review Gate"
     ? {
@@ -275,7 +276,7 @@ export function mapRollupNode(value: unknown): T.Check | null {
   if (typename !== "CheckRun" && typename !== "StatusContext") return null;
   const details = checkDetails(
     object,
-    typename === "CheckRun" ? "name" : "context"
+    typename === "CheckRun" ? "name" : "context",
   );
   const link =
     typeof object.targetUrl === "string" ? object.targetUrl : details.link;
@@ -356,7 +357,7 @@ function passKey(comment: T.ReviewComment | null): string | null {
 export function parseReviewThreadPage(value: unknown): T.ReviewThreadPage {
   const reviewThreads = record(
     at(value, ["data", "repository", "pullRequest", "reviewThreads"]),
-    "reviewThreads"
+    "reviewThreads",
   );
   const nodes = list(reviewThreads.nodes, "reviewThreads.nodes");
   const threads: T.RawReviewThread[] = [];
@@ -366,7 +367,7 @@ export function parseReviewThreadPage(value: unknown): T.ReviewThreadPage {
       missing("review thread.isResolved", thread.isResolved);
     const comments = list(
       at(thread, ["comments", "nodes"]),
-      "review thread.comments.nodes"
+      "review thread.comments.nodes",
     );
     threads.push({
       id: string(thread.id, "review thread.id"),
@@ -379,12 +380,12 @@ export function parseReviewThreadPage(value: unknown): T.ReviewThreadPage {
     missing("reviewThreads.pageInfo.hasNextPage", page.hasNextPage);
   const cursor = optionalString(
     page.endCursor,
-    "reviewThreads.pageInfo.endCursor"
+    "reviewThreads.pageInfo.endCursor",
   );
   return { threads, endCursor: page.hasNextPage && cursor ? cursor : null };
 }
 export function buildReviewThreads(
-  threads: readonly T.RawReviewThread[]
+  threads: readonly T.RawReviewThread[],
 ): readonly T.ReviewThread[] {
   const keys = new Set<string>();
   let keyless = false;
@@ -406,7 +407,7 @@ export function buildReviewThreads(
 }
 export function parsePullRequest(
   value: unknown,
-  context: T.PrContext
+  context: T.PrContext,
 ): T.PullRequestFacts {
   const object = record(value, "pull request");
   if (typeof object.isDraft !== "boolean")
@@ -416,12 +417,12 @@ export function parsePullRequest(
     mergeable: enumValue(
       object.mergeable,
       ["MERGEABLE", "CONFLICTING", "UNKNOWN"] as const,
-      "pull request.mergeable"
+      "pull request.mergeable",
     ),
     mergeStateStatus: enumValue(
       object.mergeStateStatus,
       MERGE_STATES,
-      "pull request.mergeStateStatus"
+      "pull request.mergeStateStatus",
     ),
     reviewDecision: reviewDecision(object.reviewDecision),
     headRefOid: optionalString(object.headRefOid, "pull request.headRefOid"),
@@ -430,7 +431,7 @@ export function parsePullRequest(
     state: enumValue(
       object.state,
       ["OPEN", "CLOSED", "MERGED"] as const,
-      "pull request.state"
+      "pull request.state",
     ),
     mergedAt: optionalString(object.mergedAt, "pull request.mergedAt"),
     isDraft: object.isDraft,
@@ -438,7 +439,7 @@ export function parsePullRequest(
 }
 function graphqlArgs(
   query: string,
-  context: T.PrContext
+  context: T.PrContext,
 ): [string, ...string[]] {
   return [
     "gh",
@@ -483,11 +484,11 @@ export class GhGitHubReader implements T.GitHubReader {
         "--json",
         "mergeable,mergeStateStatus,reviewDecision,headRefOid,headRefName,baseRefName,state,mergedAt,isDraft",
       ]),
-      context
+      context,
     );
   }
   async openPullRequests(
-    repository: T.Repository
+    repository: T.Repository,
   ): Promise<readonly T.OpenPullRequest[]> {
     const value = await runJson([
       "gh",
@@ -505,17 +506,20 @@ export class GhGitHubReader implements T.GitHubReader {
     return list(value, "open PRs").map((item, index) => {
       const object = record(item, `open PRs[${index}]`);
       if (typeof object.isCrossRepository !== "boolean")
-        missing(`open PRs[${index}].isCrossRepository`, object.isCrossRepository);
+        missing(
+          `open PRs[${index}].isCrossRepository`,
+          object.isCrossRepository,
+        );
       return {
         isCrossRepository: object.isCrossRepository,
         number: parsePrNumber(object.number, `open PRs[${index}].number`),
         headRefName: string(
           object.headRefName,
-          `open PRs[${index}].headRefName`
+          `open PRs[${index}].headRefName`,
         ),
         baseRefName: string(
           object.baseRefName,
-          `open PRs[${index}].baseRefName`
+          `open PRs[${index}].baseRefName`,
         ),
       };
     });
@@ -544,25 +548,25 @@ export class GhGitHubReader implements T.GitHubReader {
   }
   async checkRollupPage(
     context: T.PrContext,
-    after: string | null
+    after: string | null,
   ): Promise<T.RollupPage> {
     const argv = graphqlArgs(PR_CHECK_ROLLUP_QUERY, context);
     if (after !== null) argv.push("-f", `after=${after}`);
     const value = await runJson(argv);
     const commits = list(
       at(value, ["data", "repository", "pullRequest", "commits", "nodes"]),
-      "commits.nodes"
+      "commits.nodes",
     );
     if (commits.length === 0) return { checks: [], endCursor: null };
     const commit = record(
       at(commits[commits.length - 1], ["commit"]),
-      "commit"
+      "commit",
     );
     if (commit.statusCheckRollup === null)
       return { checks: [], endCursor: null };
     const contexts = record(
       at(commit, ["statusCheckRollup", "contexts"]),
-      "contexts"
+      "contexts",
     );
     const checks = list(contexts.nodes, "contexts.nodes")
       .map(mapRollupNode)
@@ -572,25 +576,25 @@ export class GhGitHubReader implements T.GitHubReader {
       missing("contexts.pageInfo.hasNextPage", page.hasNextPage);
     const cursor = optionalString(
       page.endCursor,
-      "contexts.pageInfo.endCursor"
+      "contexts.pageInfo.endCursor",
     );
     return { checks, endCursor: page.hasNextPage && cursor ? cursor : null };
   }
   async reviewThreadPage(
     context: T.PrContext,
-    after: string | null
+    after: string | null,
   ): Promise<T.ReviewThreadPage> {
     const argv = graphqlArgs(REVIEW_THREADS_QUERY, context);
     if (after !== null) argv.push("-f", `after=${after}`);
     return parseReviewThreadPage(await runJson(argv));
   }
   async commitRollups(
-    context: T.PrContext
+    context: T.PrContext,
   ): Promise<readonly T.CommitRollup[]> {
     const value = await runJson(graphqlArgs(PR_COMMIT_STATUS_QUERY, context));
     const commits = list(
       at(value, ["data", "repository", "pullRequest", "commits", "nodes"]),
-      "commits.nodes"
+      "commits.nodes",
     );
     return commits.map((item, index) => {
       const commit = record(at(item, ["commit"]), `commits[${index}].commit`);
@@ -603,7 +607,7 @@ export class GhGitHubReader implements T.GitHubReader {
             : nullableEnum(
                 at(rollup, ["state"]),
                 ROLLUP_STATES,
-                `commits[${index}].statusCheckRollup.state`
+                `commits[${index}].statusCheckRollup.state`,
               ),
       };
     });
@@ -612,7 +616,7 @@ export class GhGitHubReader implements T.GitHubReader {
 
 export async function resolveChecks(
   reader: T.GitHubReader,
-  context: T.PrContext
+  context: T.PrContext,
 ): Promise<T.CheckRead> {
   const fast = await reader.checksFastPath(context);
   const direct = fast.kind === "checks" ? nonEmpty(fast.checks) : null;
@@ -634,7 +638,7 @@ export async function resolveChecks(
 }
 export async function resolveReviewThreads(
   reader: T.GitHubReader,
-  context: T.PrContext
+  context: T.PrContext,
 ): Promise<readonly T.ReviewThread[]> {
   const threads: T.RawReviewThread[] = [];
   let after: string | null = null;
@@ -671,13 +675,15 @@ export async function resolveContext(args: {
 }
 export function orderStack(
   context: T.PrContext,
-  open: readonly T.OpenPullRequest[]
+  open: readonly T.OpenPullRequest[],
 ): T.NonEmpty<T.PrContext> {
   const byNumber = new Map(open.map((pr) => [pr.number, pr]));
   // A base ref belongs to this repository. A fork head with the same name
   // cannot be its parent, even when that name is the default branch.
   const byHead = new Map(
-    open.filter((pr) => !pr.isCrossRepository).map((pr) => [pr.headRefName, pr])
+    open
+      .filter((pr) => !pr.isCrossRepository)
+      .map((pr) => [pr.headRefName, pr]),
   );
   const children = new Map<string, T.OpenPullRequest[]>();
   for (const pr of open)
@@ -714,13 +720,13 @@ export function orderStack(
       [...down.reverse(), start, ...up].map((pr) => ({
         ...context,
         number: pr.number,
-      }))
+      })),
     ) ?? [context]
   );
 }
 export async function discoverStack(
   reader: T.GitHubReader,
-  context: T.PrContext
+  context: T.PrContext,
 ): Promise<T.NonEmpty<T.PrContext>> {
   return orderStack(context, await reader.openPullRequests(context));
 }

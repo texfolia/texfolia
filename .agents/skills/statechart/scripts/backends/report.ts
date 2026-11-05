@@ -1,7 +1,7 @@
 import {
   type Bug,
-  CHART_STATES,
   type Chart,
+  CHART_STATES,
   type Graph,
   hasSection,
   list,
@@ -56,7 +56,12 @@ export function report(
     properties: Property[];
     stop: Stop | undefined;
     drawing: { status: number | null } | undefined;
-    states: { distinct: number; initial: number; complete: boolean; cut: boolean };
+    states: {
+      distinct: number;
+      initial: number;
+      complete: boolean;
+      cut: boolean;
+    };
   },
   found: Bug[],
   chart: Chart | undefined,
@@ -104,9 +109,13 @@ export function report(
       `${excluded === 1 ? "1 step that the constraints exclude ends" : `${excluded} steps that the constraints exclude each end`} a rule's path${includes(excluded)}. TLC checks the rules after such a step, but it does not take the step.`,
     );
   if (chart?.inside)
-    out.push(`The chart does not draw ${chart.inside} steps that stay in one chart state.`);
+    out.push(
+      `The chart does not draw ${chart.inside} steps that stay in one chart state.`,
+    );
   if (chart?.quiet)
-    out.push(`The view hides ${chart.quiet} steps, so the chart does not draw them.`);
+    out.push(
+      `The view hides ${chart.quiet} steps, so the chart does not draw them.`,
+    );
   for (const { rule, outcome } of rules)
     if (
       !paths &&
@@ -119,7 +128,10 @@ export function report(
           ? "The chart marks only the deadlock that TLC reports, because the drawing run stopped before it reached every state."
           : "The chart marks only the deadlock that TLC reports. Under a CONSTRAINT or an ACTION_CONSTRAINT, a state with no step in the chart can still have steps that the constraints leave out, and TLC does not count it as a deadlock.",
       );
-  if (chart?.lie) out.push(`${chart.lie} So the chart draws parent states in place of regions.`);
+  if (chart?.lie)
+    out.push(
+      `${chart.lie} So the chart draws parent states in place of regions.`,
+    );
   out.push(...(chart?.notes ?? []));
   const merged: string[] = [];
   for (const k of ["VIEW", "SYMMETRY"]) if (hasSection(spec, k)) merged.push(k);
@@ -136,8 +148,10 @@ export function report(
         : `The shortest path has ${steps}:`,
     );
     const path = stepsOf(must(stories, bug));
-    for (const [i, p] of path.entries()) out.push(`${i}. ${p.step ? `${p.step}: ` : ""}${p.state}`);
-    if (bug.loop !== undefined) out.push(forever(path.slice(bug.loop), bug.stutters));
+    for (const [i, p] of path.entries())
+      out.push(`${i}. ${p.step ? `${p.step}: ` : ""}${p.state}`);
+    if (bug.loop !== undefined)
+      out.push(forever(path.slice(bug.loop), bug.stutters));
   }
   const drawn = new Set<string>();
   for (const b of found) drawn.add(ruleKey(b.rule));
@@ -154,7 +168,8 @@ export function report(
       );
   }
   if (holds.length) out.push("", "## Rules that hold", holds.join(", "));
-  if (unchecked.length) out.push("", "## Rules not checked", unchecked.join(", "));
+  if (unchecked.length)
+    out.push("", "## Rules not checked", unchecked.join(", "));
   if (unchecked.length && states.cut)
     out.push(
       `After the first break, each TLC run stops at ${RERUN_STATES.toLocaleString("en-US")} distinct states. A run reached that bound before it checked ${unchecked.length === 1 ? "this rule" : "these rules"} in every state.`,

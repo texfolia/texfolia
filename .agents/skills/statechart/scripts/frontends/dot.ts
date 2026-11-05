@@ -1,4 +1,10 @@
-import { type Graph, type State, type Step, type Value, type Vars } from "../ir.ts";
+import {
+  type Graph,
+  type State,
+  type Step,
+  type Value,
+  type Vars,
+} from "../ir.ts";
 import { parseValue } from "./value.ts";
 
 const unescapeDot = (s: string) => {
@@ -19,9 +25,14 @@ const unescapeDot = (s: string) => {
   return out + s.slice(from);
 };
 
-export const parseState = (label: string, parsed = new Map<string, [string, Value]>()): Vars => {
+export const parseState = (
+  label: string,
+  parsed = new Map<string, [string, Value]>(),
+): Vars => {
   const pairs: [string, Value][] = [];
-  for (const part of (label.startsWith("/\\ ") ? label.slice(3) : label).split("\n/\\ ")) {
+  for (const part of (label.startsWith("/\\ ") ? label.slice(3) : label).split(
+    "\n/\\ ",
+  )) {
     let pair = parsed.get(part);
     if (!pair) {
       const [, name, value] = /^(\w+)\s*=\s*([\s\S]*)$/.exec(part) ?? [];
@@ -35,7 +46,8 @@ export const parseState = (label: string, parsed = new Map<string, [string, Valu
 
 export type Lines = string | Iterable<string>;
 
-export const linesOf = (input: Lines) => (typeof input === "string" ? input.split("\n") : input);
+export const linesOf = (input: Lines) =>
+  typeof input === "string" ? input.split("\n") : input;
 
 export function parseDot(input: Lines): Graph {
   const states = new Map<string, State>();
@@ -44,7 +56,8 @@ export function parseDot(input: Lines): Graph {
   const owned = new Map<string, string>();
   const own = (s: string) => {
     let copy = owned.get(s);
-    if (copy === undefined) owned.set((copy = String(JSON.parse(JSON.stringify(s)))), copy);
+    if (copy === undefined)
+      owned.set((copy = String(JSON.parse(JSON.stringify(s)))), copy);
     return copy;
   };
   for (const line of linesOf(input)) {
@@ -57,7 +70,9 @@ export function parseDot(input: Lines): Graph {
       });
       continue;
     }
-    const node = /^(-?\d+) \[label="((?:[^"\\]|\\.)*)"(,style = filled)?/.exec(line);
+    const node = /^(-?\d+) \[label="((?:[^"\\]|\\.)*)"(,style = filled)?/.exec(
+      line,
+    );
     if (node)
       states.set(own(node[1]), {
         vars: parseState(unescapeDot(node[2]), parsed),

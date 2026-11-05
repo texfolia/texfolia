@@ -14,7 +14,11 @@ const pad = (n: number) => String(n).padStart(2, "0");
 
 export function runtime(ms: number) {
   const t = new Date(ms > DAY ? ms - DAY : ms);
-  const [hh, mm, ss] = [t.getUTCHours(), t.getUTCMinutes(), t.getUTCSeconds()].map(pad);
+  const [hh, mm, ss] = [
+    t.getUTCHours(),
+    t.getUTCMinutes(),
+    t.getUTCSeconds(),
+  ].map(pad);
   if (ms > DAY)
     return `${Math.floor((t.getTime() - Date.UTC(t.getUTCFullYear(), 0, 1)) / DAY) + 1}d ${hh}h`;
   if (ms > HOUR) return `${hh}h ${mm}min`;
@@ -35,20 +39,29 @@ const firstLine = ({ code, level }: Message, line: string) => {
 
 const render = (m: Message): string =>
   (m.beforeMarker ?? "") +
-  firstLine(m, m.body.map((part) => (typeof part === "string" ? part : render(part))).join("\n"));
+  firstLine(
+    m,
+    m.body
+      .map((part) => (typeof part === "string" ? part : render(part)))
+      .join("\n"),
+  );
 
 function* printed(parts: Iterable<Part>): Generator<string> {
   let warned = false;
   let progress: Message | undefined;
   for (const part of parts) {
-    if (progress?.body.length && (typeof part === "string" || part.code !== EC.TLC_STATS))
+    if (
+      progress?.body.length &&
+      (typeof part === "string" || part.code !== EC.TLC_STATS)
+    )
       yield render(progress);
     progress = undefined;
     if (typeof part === "string") {
       yield part;
       continue;
     }
-    if (part.code === EC.TLC_SANY_START || part.code === EC.TLC_SANY_END) continue;
+    if (part.code === EC.TLC_SANY_START || part.code === EC.TLC_SANY_END)
+      continue;
     if (part.code === EC.TLC_PROGRESS_STATS) progress = part;
     else if (part.body.length) yield render(part);
     if (part.level === LEVEL.WARNING && !warned) {

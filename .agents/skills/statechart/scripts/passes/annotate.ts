@@ -48,7 +48,11 @@ export function mark(
     for (const name of broken) {
       const rule = must(byName, name);
       if (state) state.breaks.push(rule);
-      else past.set(stateKey(values), (past.get(stateKey(values)) ?? new Set()).add(rule));
+      else
+        past.set(
+          stateKey(values),
+          (past.get(stateKey(values)) ?? new Set()).add(rule),
+        );
     }
   }
   return past;
@@ -57,7 +61,8 @@ export function mark(
 export function deadEnds(graph: Graph, rule: Rule) {
   const from = new Set<string>();
   for (const t of graph.steps) from.add(t.from);
-  for (const [id, s] of graph.states) if (!s.past && !from.has(id)) s.breaks.push(rule);
+  for (const [id, s] of graph.states)
+    if (!s.past && !from.has(id)) s.breaks.push(rule);
 }
 
 export function addPast(
@@ -80,19 +85,23 @@ export function addPast(
   };
   let to = trace[end].id;
   const reached = to === undefined ? undefined : graph.states.get(to);
-  const excluded = excludes && reached !== undefined && end > 0 && !reached.past && !taken(to);
+  const excluded =
+    excludes && reached !== undefined && end > 0 && !reached.past && !taken(to);
   if (excluded) to = `past ${to} ${action} ${from}`;
   to ??= `past ${graph.states.size}`;
   let last = graph.states.get(to);
   if (!last) {
-    const marked = excluded ? reached.breaks : (past.get(stateKey(trace[end].values)) ?? []);
+    const marked = excluded
+      ? reached.breaks
+      : (past.get(stateKey(trace[end].values)) ?? []);
     last = pastState(trace[end].vars, end === 0, marked, excluded);
     graph.states.set(to, last);
     if (!excluded) find.add(to, trace[end].values);
   }
   if (!hasRule(last.breaks, rule)) last.breaks.push(rule);
   (last.ends ??= []).push(rule);
-  if (from !== undefined && last.past && !taken(to)) graph.steps.push({ from, to, action });
+  if (from !== undefined && last.past && !taken(to))
+    graph.steps.push({ from, to, action });
 }
 
 export function lasso(

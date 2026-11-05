@@ -51,7 +51,8 @@ export function walk(graph: Graph): Walk {
     action[j] = a;
   }
   const actionRank = new Int32Array(actions.size);
-  for (const [i, a] of [...actions.keys()].sort(byText).entries()) actionRank[must(actions, a)] = i;
+  for (const [i, a] of [...actions.keys()].sort(byText).entries())
+    actionRank[must(actions, a)] = i;
   const toName = new Int32Array(m);
   for (let j = 0; j < m; j++) {
     action[j] = actionRank[action[j]];
@@ -110,15 +111,20 @@ export function drawOrder({ depth, nameRank }: Walk) {
   return { order, rank };
 }
 
-export function bugs(graph: Graph, { ids, from, via, reached }: Walk = walk(graph)) {
+export function bugs(
+  graph: Graph,
+  { ids, from, via, reached }: Walk = walk(graph),
+) {
   const ends = new Map<string, string>();
-  for (const [id, s] of graph.states) for (const rule of s.ends ?? []) ends.set(ruleKey(rule), id);
+  for (const [id, s] of graph.states)
+    for (const rule of s.ends ?? []) ends.set(ruleKey(rule), id);
   const first = new Map<string, { rule: Rule; i: number }>();
   for (const i of reached) {
     const s = must(graph.states, ids[i]);
     for (const rule of s.past ? s.ends : s.breaks) {
       const k = ruleKey(rule);
-      if (!first.has(k) && (ends.get(k) ?? ids[i]) === ids[i]) first.set(k, { rule, i });
+      if (!first.has(k) && (ends.get(k) ?? ids[i]) === ids[i])
+        first.set(k, { rule, i });
     }
   }
   const found: Bug[] = [];

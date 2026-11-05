@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
-import { Copy, Download, Edit, Trash, UserPlus } from "lucide-react";
+import { Copy, Download, Edit, UserPlus } from "lucide-react";
 
+import { DeleteProjectButton } from "#/components/delete-project-button";
 import {
   Avatar,
   AvatarFallback,
@@ -10,8 +11,8 @@ import {
   AvatarImage,
 } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
+import { ButtonGroup } from "#/components/ui/button-group";
 import { Checkbox } from "#/components/ui/checkbox";
-import { Group, GroupSeparator } from "#/components/ui/group";
 
 import type { Features } from "./features";
 import type { GetProjectsResult } from "./projects.functions";
@@ -38,7 +39,7 @@ export const columns = columnHelper.columns([
   }),
   columnHelper.accessor("collaborators", {
     header: "Collaborators",
-    cell: ({ cell }) => (
+    cell: () => (
       <AvatarGroup>
         <Avatar>
           <AvatarImage
@@ -73,28 +74,22 @@ export const columns = columnHelper.columns([
   columnHelper.display({
     id: "actions",
     header: "Actions",
-    cell: () => (
-      <Group>
+    cell: ({ row }) => (
+      <ButtonGroup>
         <Button size="icon-lg" variant="outline">
           <Copy />
         </Button>
-        <GroupSeparator />
         <Button size="icon-lg" variant="outline">
           <Download />
         </Button>
-        <GroupSeparator />
         <Button size="icon-lg" variant="outline">
           <UserPlus />
         </Button>
-        <GroupSeparator />
         <Button size="icon-lg" variant="outline">
           <Edit />
         </Button>
-        <GroupSeparator />
-        <Button size="icon-lg" variant="outline">
-          <Trash />
-        </Button>
-      </Group>
+        <DeleteProjectButton project={row.original} />
+      </ButtonGroup>
     ),
   }),
 ]);

@@ -1,4 +1,11 @@
-import { append, byText, type Chart, type ChartState, type Region, tupleKey } from "../ir.ts";
+import {
+  append,
+  byText,
+  type Chart,
+  type ChartState,
+  type Region,
+  tupleKey,
+} from "../ir.ts";
 
 const BLANK = /\p{White_Space}/u;
 const SAFE = /^[\p{L}\p{N} !'()+,\-./=?[\]"_|@{}:\\^%<>]$/u;
@@ -87,7 +94,9 @@ const esc = (s: string, quoted = false) => {
   const out = quoted ? plain.replaceAll('"', "#34;") : plain;
   if (!out.trim()) return "#32;";
   const turned = out.replace(DIRECTION, "$1#32;");
-  const opened = turned.includes("[[") ? turned.replace(DOUBLE_BRACKET, "#91;") : turned;
+  const opened = turned.includes("[[")
+    ? turned.replace(DOUBLE_BRACKET, "#91;")
+    : turned;
   return opened.includes("C4") ? opened.replace(C4, "C#52;") : opened;
 };
 
@@ -143,7 +152,10 @@ export function mermaidLines(chart: Chart) {
           if (mark) for (const b of leaf.breaks) if (b.always) mark = "breaks";
           if (mark) for (const b of leaf.breaks) rules[mark].add(b.rule.name);
           const trail = [leaf.lead && "bugPath", leaf.repeats && "repeats"];
-          const color = leaf.group === undefined ? undefined : chart.colors[String(leaf.group)];
+          const color =
+            leaf.group === undefined
+              ? undefined
+              : chart.colors[String(leaf.group)];
           for (const cls of [color, mark, ...trail])
             if (cls) {
               used.add(cls);
@@ -153,7 +165,8 @@ export function mermaidLines(chart: Chart) {
       }
     };
     tree([], "  ", r.states);
-    for (const s of r.states) if (s.start) out.push(`  [*] --> ${idOf(s.path)}`);
+    for (const s of r.states)
+      if (s.start) out.push(`  [*] --> ${idOf(s.path)}`);
     for (const s of r.steps)
       out.push(
         `  ${idOf(s.from)} --> ${idOf(s.to)}: ${esc(s.label + (s.when ? ` [${s.when}]` : ""))}`,
@@ -181,15 +194,19 @@ export function mermaidLines(chart: Chart) {
   ])
     if (used.has(entry[1])) legend.push(entry);
   const lines: string[] = [];
-  const title = chart.title && code(chart.title, (n) => `ﬂ°°${n}¶ß`).replaceAll("<", "ﬂ°°60¶ß");
+  const title =
+    chart.title &&
+    code(chart.title, (n) => `ﬂ°°${n}¶ß`).replaceAll("<", "ﬂ°°60¶ß");
   if (title) lines.push("---", `title: ${JSON.stringify(title)}`, "---");
   lines.push("stateDiagram-v2");
   if (chart.regions.length > 1) lines.push("  direction LR");
   if (legend.length) {
     lines.push(`  state "Legend" as legend {`);
-    for (const [i, [text]] of legend.entries()) lines.push(`    lg${i}: ${esc(text)}`);
+    for (const [i, [text]] of legend.entries())
+      lines.push(`    lg${i}: ${esc(text)}`);
     lines.push("  }");
-    for (const [i, [, cls]] of legend.entries()) lines.push(`  class lg${i} ${cls}`);
+    for (const [i, [, cls]] of legend.entries())
+      lines.push(`  class lg${i} ${cls}`);
   }
   for (const line of body) lines.push(line);
   for (const [cls, style] of Object.entries(MARK_STYLES))

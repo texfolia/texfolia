@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { agrees, skip } from "./tlc.ts";
 
 const late = [
@@ -25,8 +26,16 @@ test(
   "a rule that breaks before another rule fails to evaluate breaks in either order",
   { skip },
   () => {
-    const first = agrees("Late", { Late: late }, lateCfg("none", "Below InDomain"));
-    const last = agrees("Late", { Late: late }, lateCfg("none", "InDomain Below"));
+    const first = agrees(
+      "Late",
+      { Late: late },
+      lateCfg("none", "Below InDomain"),
+    );
+    const last = agrees(
+      "Late",
+      { Late: late },
+      lateCfg("none", "InDomain Below"),
+    );
     assert.equal(first.status, 1);
     assert.deepEqual(first.breaks, new Map([["Below", 2]]));
     assert.deepEqual(first.holds, []);
@@ -35,14 +44,18 @@ test(
   },
 );
 
-test("a rule that breaks before a step fails to evaluate breaks", { skip }, () => {
-  for (const mode of ["div", "assert"]) {
-    const v = agrees("Late", { Late: late }, lateCfg(mode, "Small"));
-    assert.equal(v.status, 1);
-    assert.deepEqual(v.breaks, new Map([["Small", 1]]));
-    assert.deepEqual(v.unchecked, ["NoDeadlock"]);
-  }
-});
+test(
+  "a rule that breaks before a step fails to evaluate breaks",
+  { skip },
+  () => {
+    for (const mode of ["div", "assert"]) {
+      const v = agrees("Late", { Late: late }, lateCfg(mode, "Small"));
+      assert.equal(v.status, 1);
+      assert.deepEqual(v.breaks, new Map([["Small", 1]]));
+      assert.deepEqual(v.unchecked, ["NoDeadlock"]);
+    }
+  },
+);
 
 const warnPath = (next: string) => [
   "---- MODULE WarnPath ----",
@@ -67,43 +80,51 @@ test("a rule that breaks before it fails to evaluate breaks", { skip }, () => {
   assert.equal(v.breaks.get("Zero"), 1);
 });
 
-test("a rule that fails to evaluate before TLC reaches a break exits 2", { skip }, () => {
-  for (const deadlock of ["", "CHECK_DEADLOCK FALSE\n"]) {
-    const v = agrees(
-      "WarnPath",
-      { WarnPath: warnPath("Two \\/ One") },
-      `INIT Init\nNEXT Next\nINVARIANT Zero\n${deadlock}`,
-    );
-    assert.equal(v.status, 2);
-    assert.deepEqual(v.holds, []);
-  }
-});
+test(
+  "a rule that fails to evaluate before TLC reaches a break exits 2",
+  { skip },
+  () => {
+    for (const deadlock of ["", "CHECK_DEADLOCK FALSE\n"]) {
+      const v = agrees(
+        "WarnPath",
+        { WarnPath: warnPath("Two \\/ One") },
+        `INIT Init\nNEXT Next\nINVARIANT Zero\n${deadlock}`,
+      );
+      assert.equal(v.status, 2);
+      assert.deepEqual(v.holds, []);
+    }
+  },
+);
 
-test("a rule that no verdict run checks stays not checked under a SYMMETRY", { skip }, () => {
-  const v = agrees(
-    "Hide",
-    {
-      Hide: [
-        "---- MODULE Hide ----",
-        "EXTENDS Naturals, TLC",
-        "CONSTANTS a, b, S",
-        "VARIABLES x, n",
-        "Perms == Permutations(S)",
-        "Init == x \\in S /\\ n = 0",
-        "Next == n < 4 /\\ n' = n + 1 /\\ UNCHANGED x",
-        "Early == n # 1",
-        "Bad == x = a",
-        'Boom == n < 3 \\/ Assert(FALSE, "boom")',
-        "====",
-      ],
-    },
-    "CONSTANTS a = a b = b S = {a, b}\nSYMMETRY Perms\nINIT Init\nNEXT Next\nINVARIANTS Early Boom Bad\n",
-  );
-  assert.equal(v.status, 1);
-  assert.deepEqual(v.breaks, new Map([["Early", 1]]));
-  assert.deepEqual(v.holds, []);
-  assert.deepEqual(v.unchecked, ["Bad", "Boom", "NoDeadlock"]);
-});
+test(
+  "a rule that no verdict run checks stays not checked under a SYMMETRY",
+  { skip },
+  () => {
+    const v = agrees(
+      "Hide",
+      {
+        Hide: [
+          "---- MODULE Hide ----",
+          "EXTENDS Naturals, TLC",
+          "CONSTANTS a, b, S",
+          "VARIABLES x, n",
+          "Perms == Permutations(S)",
+          "Init == x \\in S /\\ n = 0",
+          "Next == n < 4 /\\ n' = n + 1 /\\ UNCHANGED x",
+          "Early == n # 1",
+          "Bad == x = a",
+          'Boom == n < 3 \\/ Assert(FALSE, "boom")',
+          "====",
+        ],
+      },
+      "CONSTANTS a = a b = b S = {a, b}\nSYMMETRY Perms\nINIT Init\nNEXT Next\nINVARIANTS Early Boom Bad\n",
+    );
+    assert.equal(v.status, 1);
+    assert.deepEqual(v.breaks, new Map([["Early", 1]]));
+    assert.deepEqual(v.holds, []);
+    assert.deepEqual(v.unchecked, ["Bad", "Boom", "NoDeadlock"]);
+  },
+);
 
 test("a deadlock breaks whatever shape the SPECIFICATION has", { skip }, () => {
   const live = agrees(
@@ -125,7 +146,10 @@ test("a deadlock breaks whatever shape the SPECIFICATION has", { skip }, () => {
   );
   assert.deepEqual(live.breaks, new Map([["NoDeadlock", 2]]));
   assert.deepEqual(live.holds, ["TypeOK"]);
-  for (const next of ["[][Next \\/ Tick]_vars", "[][\\E i \\in 1..2 : Step(i)]_vars"]) {
+  for (const next of [
+    "[][Next \\/ Tick]_vars",
+    "[][\\E i \\in 1..2 : Step(i)]_vars",
+  ]) {
     const v = agrees(
       "Shape",
       {
@@ -149,30 +173,34 @@ test("a deadlock breaks whatever shape the SPECIFICATION has", { skip }, () => {
   }
 });
 
-test("a SPECIFICATION from an INSTANCE checks deadlock and finds none", { skip }, () => {
-  const v = agrees(
-    "Outer",
-    {
-      Inner: [
-        "---- MODULE Inner ----",
-        "EXTENDS Naturals",
-        "VARIABLE x",
-        "Spec == x = 0 /\\ [][x' = (x + 1) % 3]_x",
-        "====",
-      ],
-      Outer: [
-        "---- MODULE Outer ----",
-        "VARIABLE x",
-        "I == INSTANCE Inner",
-        "Spec == I!Spec",
-        "====",
-      ],
-    },
-    "SPECIFICATION Spec\n",
-  );
-  assert.equal(v.status, 0);
-  assert.deepEqual(v.holds, ["NoDeadlock"]);
-});
+test(
+  "a SPECIFICATION from an INSTANCE checks deadlock and finds none",
+  { skip },
+  () => {
+    const v = agrees(
+      "Outer",
+      {
+        Inner: [
+          "---- MODULE Inner ----",
+          "EXTENDS Naturals",
+          "VARIABLE x",
+          "Spec == x = 0 /\\ [][x' = (x + 1) % 3]_x",
+          "====",
+        ],
+        Outer: [
+          "---- MODULE Outer ----",
+          "VARIABLE x",
+          "I == INSTANCE Inner",
+          "Spec == I!Spec",
+          "====",
+        ],
+      },
+      "SPECIFICATION Spec\n",
+    );
+    assert.equal(v.status, 0);
+    assert.deepEqual(v.holds, ["NoDeadlock"]);
+  },
+);
 
 test("a state at a CONSTRAINT bound is no deadlock", { skip }, () => {
   const v = agrees(

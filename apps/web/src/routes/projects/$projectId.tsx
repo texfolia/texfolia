@@ -13,6 +13,7 @@ function RouteComponent() {
   return (
     <ProjectWorkspace
       key={project.id}
+      projectId={project.id}
       name={project.name}
       nodes={project.nodes}
     />

@@ -4,15 +4,14 @@ import { FolderOpenIcon, Search, Settings } from "lucide-react";
 
 import { ProjectForm } from "#/components/project-form";
 import { Button } from "#/components/ui/button";
-import { CardFrame } from "#/components/ui/card";
+import { Card } from "#/components/ui/card";
 import {
   Dialog,
   DialogClose,
+  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogPanel,
-  DialogPopup,
   DialogTitle,
   DialogTrigger,
 } from "#/components/ui/dialog";
@@ -117,8 +116,8 @@ function RouteComponent() {
               <Kbd>&#x2318;K</Kbd>
             </InputGroupAddon>
           </InputGroup>
-          <CardFrame>
-            <Table variant="card">
+          <Card>
+            <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
@@ -160,20 +159,18 @@ function RouteComponent() {
                             <DialogTrigger render={<Button />}>
                               Create Project
                             </DialogTrigger>
-                            <DialogPopup>
+                            <DialogContent>
                               <DialogHeader>
                                 <DialogTitle>New Project</DialogTitle>
                                 <DialogDescription>
-                                  Dialog Description
+                                  Create a LaTeX workspace.
                                 </DialogDescription>
                               </DialogHeader>
-                              <DialogPanel>
-                                <ProjectForm />
-                              </DialogPanel>
+                              <ProjectForm />
                               <DialogFooter>
                                 <DialogClose>Close</DialogClose>
                               </DialogFooter>
-                            </DialogPopup>
+                            </DialogContent>
                           </Dialog>
                         </EmptyContent>
                       </Empty>
@@ -182,7 +179,7 @@ function RouteComponent() {
                 )}
               </TableBody>
             </Table>
-          </CardFrame>
+          </Card>
         </main>
       </SidebarInset>
     </SidebarProvider>

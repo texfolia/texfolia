@@ -1,3 +1,4 @@
+import { Toolbar } from "@base-ui/react/toolbar";
 import {
   ChevronLeft,
   ChevronRight,
@@ -19,7 +20,6 @@ import {
 } from "#/components/panel-header";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
-import { ToolbarGroup, ToolbarInput } from "#/components/ui/toolbar";
 import { downloadFile } from "#/lib/download-file";
 
 import "react-pdf/dist/Page/TextLayer.css";
@@ -156,7 +156,10 @@ function PdfPanel({
           >
             <FolderOpen />
           </PanelAction>
-          <ToolbarGroup aria-label="Page navigation">
+          <Toolbar.Group
+            className="flex items-center gap-1"
+            aria-label="Page navigation"
+          >
             <PanelAction
               label="Previous page"
               disabled={!ready || page <= 1}
@@ -164,7 +167,7 @@ function PdfPanel({
             >
               <ChevronLeft />
             </PanelAction>
-            <ToolbarInput
+            <Toolbar.Input
               render={<Input />}
               aria-label="Page number"
               type="number"
@@ -200,8 +203,11 @@ function PdfPanel({
             >
               <ChevronRight />
             </PanelAction>
-          </ToolbarGroup>
-          <ToolbarGroup aria-label="Zoom controls">
+          </Toolbar.Group>
+          <Toolbar.Group
+            className="flex items-center gap-1"
+            aria-label="Zoom controls"
+          >
             <PanelAction
               label="Zoom out"
               disabled={!ready || scale <= 0.25}
@@ -230,7 +236,7 @@ function PdfPanel({
             >
               <Maximize />
             </PanelAction>
-          </ToolbarGroup>
+          </Toolbar.Group>
           <PanelAction
             label="Rotate clockwise"
             disabled={!ready}

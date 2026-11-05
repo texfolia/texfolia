@@ -1,17 +1,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { plainText, runtime } from "../backends/plain-text.ts";
 import { readMessages } from "../frontends/messages.ts";
 
 const tool = (code: number, level: number, ...lines: string[]) =>
-  [`@!@!@STARTMSG ${code}:${level} @!@!@`, ...lines, `@!@!@ENDMSG ${code} @!@!@`].join("\n");
+  [
+    `@!@!@STARTMSG ${code}:${level} @!@!@`,
+    ...lines,
+    `@!@!@ENDMSG ${code} @!@!@`,
+  ].join("\n");
 
 const plain = (text: string) => [...plainText(readMessages(text))].join("");
 
 test("TLC's -tool output prints as plain TLC prints it", () => {
   const text = [
     tool(2262, 0, "TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)"),
-    tool(2401, 3, "Please run the Java VM with a throughput optimized garbage collector."),
+    tool(
+      2401,
+      3,
+      "Please run the Java VM with a throughput optimized garbage collector.",
+    ),
     tool(2220, 0, "Starting SANY..."),
     "Parsing file /tmp/Spec.tla",
     "<<",
@@ -22,8 +31,19 @@ test("TLC's -tool output prints as plain TLC prints it", () => {
     tool(2200, 0, "Progress(1) at 2026-10-25 12:58:36: 3 states generated."),
     tool(2116, 1, "Temporal properties were violated.", ""),
     tool(2217, 4, "1: <Initial predicate>", "/\\ x = 0", ""),
-    tool(2217, 4, "2: <Next line 5, col 9 to line 5, col 20 of module Spec>", "/\\ x = 1", ""),
-    tool(2122, 4, "1: Back to state: <Back line 6, col 9 to line 6, col 23 of module Spec>", ""),
+    tool(
+      2217,
+      4,
+      "2: <Next line 5, col 9 to line 5, col 20 of module Spec>",
+      "/\\ x = 1",
+      "",
+    ),
+    tool(
+      2122,
+      4,
+      "1: Back to state: <Back line 6, col 9 to line 6, col 23 of module Spec>",
+      "",
+    ),
     tool(2218, 4, "3: Stuttering"),
     tool(1000, 2, "This was a bug."),
     tool(2200, 0, "Progress(2) at 2026-10-25 12:58:37: 3 states generated."),
@@ -63,7 +83,8 @@ test("TLC's -tool output prints as plain TLC prints it", () => {
 });
 
 test("a message that TLC prints inside another prints as plain TLC prints it", () => {
-  const assertion = "The first argument of Assert evaluated to FALSE; the second argument was:";
+  const assertion =
+    "The first argument of Assert evaluated to FALSE; the second argument was:";
   const text = [
     tool(
       2111,
@@ -72,7 +93,11 @@ test("a message that TLC prints inside another prints as plain TLC prints it", (
       tool(2179, 0, "The second argument of \\div is 0."),
     ),
     tool(2121, 1, "The behavior up to this point is:"),
-    tool(1000, 1, tool(2132, 0, assertion, '"left @!@!@STARTMSG 9999:1 @!@!@ right"')),
+    tool(
+      1000,
+      1,
+      tool(2132, 0, assertion, '"left @!@!@STARTMSG 9999:1 @!@!@ right"'),
+    ),
     tool(1000, 1, tool(2132, 0, assertion, '"@!@!@ENDMSG 2103 @!@!@"')),
     "",
   ].join("\n");
@@ -164,7 +189,8 @@ test("a message that TLC starts at the end of a line of text prints on that line
 
 test("output that ends where TLC died prints as plain TLC's output cut at the same point", () => {
   const computing = tool(2189, 0, "Computing initial states...");
-  const assertion = "The first argument of Assert evaluated to FALSE; the second argument was:";
+  const assertion =
+    "The first argument of Assert evaluated to FALSE; the second argument was:";
   const insideEnd = [
     computing,
     "@!@!@STARTMSG 2111:1 @!@!@",
@@ -184,7 +210,12 @@ test("output that ends where TLC died prints as plain TLC's output cut at the sa
       "",
     ].join("\n"),
   );
-  const afterStarts = [computing, "@!@!@STARTMSG 1000:1 @!@!@", "@!@!@STARTMSG 2132:0 @!@!@", ""];
+  const afterStarts = [
+    computing,
+    "@!@!@STARTMSG 1000:1 @!@!@",
+    "@!@!@STARTMSG 2132:0 @!@!@",
+    "",
+  ];
   assert.equal(plain(afterStarts.join("\n")), "Computing initial states...\n");
 });
 

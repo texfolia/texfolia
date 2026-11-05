@@ -6,12 +6,15 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
 import { plainText } from "../backends/plain-text.ts";
 import { readMessages } from "../frontends/messages.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const corpus = path.join(here, "corpus");
-const skip = !process.env.TLA2TOOLS && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
+const skip =
+  !process.env.TLA2TOOLS &&
+  "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
 const read = (file: string) => fs.readFileSync(file, "utf8");
 const maybe = (file: string) => (fs.existsSync(file) ? read(file) : "");
 const plain = (text: string) => [...plainText(readMessages(text))].join("");
@@ -23,7 +26,10 @@ const steady = (text: string) =>
     .replace(/\[pid: \d+\]/g, "[pid: _]")
     .replace(/\d{4}-\d\d-\d\d \d\d:\d\d:\d\d/g, "_")
     .replace(/ \([\d,]+ d?s\/min\)/g, "")
-    .replace(/ in (?:\d+d \d\dh|\d\dh \d\dmin|\d\dmin \d\ds|\d\ds) at /g, " in _ at ");
+    .replace(
+      / in (?:\d+d \d\dh|\d\dh \d\dmin|\d\dmin \d\ds|\d\ds) at /g,
+      " in _ at ",
+    );
 
 test(
   "each corpus spec's TLC output reads as plain TLC prints it at -workers 1",
@@ -33,8 +39,12 @@ test(
       fs.readdirSync(corpus).map((name) =>
         t.test(name, async () => {
           const dir = path.join(corpus, name);
-          const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-plain-"));
-          const [tool, twin, out] = ["tool", "plain", "out"].map((f) => path.join(tmp, f));
+          const tmp = fs.mkdtempSync(
+            path.join(os.tmpdir(), "statechart-plain-"),
+          );
+          const [tool, twin, out] = ["tool", "plain", "out"].map((f) =>
+            path.join(tmp, f),
+          );
           fs.mkdirSync(tool);
           fs.mkdirSync(twin);
           const view = path.join(dir, "view.mjs");
@@ -63,10 +73,17 @@ test(
           await once(child, "close");
           assert.equal(stderr, "");
           const runs = fs.readdirSync(twin).filter((f) => f.endsWith(".out"));
-          assert.ok(runs.includes("ChartRun.out"), "the drawing run has a plain twin");
+          assert.ok(
+            runs.includes("ChartRun.out"),
+            "the drawing run has a plain twin",
+          );
           for (const run of runs) {
             const exit = run.replace(/\.out$/, ".exit");
-            assert.equal(maybe(path.join(tool, exit)), maybe(path.join(twin, exit)), exit);
+            assert.equal(
+              maybe(path.join(tool, exit)),
+              maybe(path.join(twin, exit)),
+              exit,
+            );
             assert.equal(
               steady(plain(read(path.join(tool, run)))),
               steady(read(path.join(twin, run))),
@@ -79,7 +96,8 @@ test(
           );
           const verdicts = new Set<string>();
           for (const run of runs)
-            if (run.startsWith("verdict-")) verdicts.add(steady(`${read(path.join(twin, run))}\n`));
+            if (run.startsWith("verdict-"))
+              verdicts.add(steady(`${read(path.join(twin, run))}\n`));
           for (const f of fs.readdirSync(out))
             if (/^tlc-\w+\.out$/.test(f))
               assert.ok(verdicts.has(steady(read(path.join(out, f)))), f);

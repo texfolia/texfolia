@@ -1,17 +1,32 @@
 import type { Config, ConfigSection, Spec } from "../ir.ts";
 import { NAME } from "./config.ts";
 
-export type Checks = Pick<Spec, "invariants" | "properties" | "deadlock" | "written">;
+export type Checks = Pick<
+  Spec,
+  "invariants" | "properties" | "deadlock" | "written"
+>;
 
-export function readChecks({ configFile, config }: { configFile: string; config: Config }): Checks {
-  const refuse = (words: string) => new Error(`TLC refuses the config ${configFile}. ${words}`);
+export function readChecks({
+  configFile,
+  config,
+}: {
+  configFile: string;
+  config: Config;
+}): Checks {
+  const refuse = (words: string) =>
+    new Error(`TLC refuses the config ${configFile}. ${words}`);
   if (config.spec && (config.init || config.next))
-    throw refuse("The configuration file cannot specify both INIT/NEXT and SPECIFICATION fields.");
+    throw refuse(
+      "The configuration file cannot specify both INIT/NEXT and SPECIFICATION fields.",
+    );
   if (!config.spec && !config.init)
-    throw refuse("The configuration file did not specify the initial state predicate.");
+    throw refuse(
+      "The configuration file did not specify the initial state predicate.",
+    );
   const written: ConfigSection[] = [];
   for (const s of config.sections)
-    if (!["INVARIANT", "PROPERTY", "CHECK_DEADLOCK"].includes(s.key)) written.push(s);
+    if (!["INVARIANT", "PROPERTY", "CHECK_DEADLOCK"].includes(s.key))
+      written.push(s);
   return {
     invariants: config.invariants,
     properties: config.properties,
@@ -22,13 +37,21 @@ export function readChecks({ configFile, config }: { configFile: string; config:
 
 type XmlNode = { tag: string; text: string; children: XmlNode[] };
 
-const ENTITIES: { [name: string]: string } = { amp: "&", apos: "'", gt: ">", lt: "<", quot: '"' };
+const ENTITIES: { [name: string]: string } = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  quot: '"',
+};
 
 const decode = (text: string) =>
-  text.replace(/&(#x?)?(\w+);/g, (_, number: string | undefined, name: string) =>
-    number
-      ? String.fromCodePoint(Number.parseInt(name, number === "#x" ? 16 : 10))
-      : ENTITIES[name],
+  text.replace(
+    /&(#x?)?(\w+);/g,
+    (_, number: string | undefined, name: string) =>
+      number
+        ? String.fromCodePoint(Number.parseInt(name, number === "#x" ? 16 : 10))
+        : ENTITIES[name],
   );
 
 function parseXml(xml: string) {
@@ -49,8 +72,10 @@ function parseXml(xml: string) {
   return document;
 }
 
-const child = (node: XmlNode | undefined, tag: string) => node?.children.find((c) => c.tag === tag);
-const textOf = (node: XmlNode | undefined, tag: string) => child(node, tag)?.text ?? "";
+const child = (node: XmlNode | undefined, tag: string) =>
+  node?.children.find((c) => c.tag === tag);
+const textOf = (node: XmlNode | undefined, tag: string) =>
+  child(node, tag)?.text ?? "";
 
 export type Sany = {
   variables: string[];
@@ -67,11 +92,13 @@ export function readSany(xml: string): Sany {
   const root = textOf(modules, "RootModule");
   let module: XmlNode | undefined;
   for (const node of symbols.values())
-    if (node.tag === "ModuleNode" && textOf(node, "uniquename") === root) module = node;
+    if (node.tag === "ModuleNode" && textOf(node, "uniquename") === root)
+      module = node;
   const definitions = new Map<string, XmlNode>();
   const variables: { uid: number; name: string }[] = [];
   for (const ref of module?.children ?? []) {
-    if (ref.tag !== "OpDeclNodeRef" && ref.tag !== "UserDefinedOpKindRef") continue;
+    if (ref.tag !== "OpDeclNodeRef" && ref.tag !== "UserDefinedOpKindRef")
+      continue;
     const uid = textOf(ref, "UID");
     const node = symbols.get(uid);
     if (!node) continue;
@@ -98,7 +125,10 @@ export function readSpec({
 
 const STATE_LEVEL = 1;
 
-export function initialOnlyProperties({ definitions }: Sany, { written, properties }: Spec) {
+export function initialOnlyProperties(
+  { definitions }: Sany,
+  { written, properties }: Spec,
+) {
   const replaced = new Map<string, string>();
   for (const s of written)
     if (s.key === "CONSTANT")
@@ -108,7 +138,8 @@ export function initialOnlyProperties({ definitions }: Sany, { written, properti
   const names = new Set<string>();
   for (const name of properties) {
     const definition = definitions.get(replaced.get(name) ?? name);
-    if (definition && Number(textOf(definition, "level")) <= STATE_LEVEL) names.add(name);
+    if (definition && Number(textOf(definition, "level")) <= STATE_LEVEL)
+      names.add(name);
   }
   return names;
 }

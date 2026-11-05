@@ -4,11 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { PINNED_FLAGS } from "../run.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const jar = process.env.TLA2TOOLS;
-export const skip = !jar && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
+export const skip =
+  !jar && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
 
 const RULES = /^(INVARIANTS?|PROPERTY|PROPERTIES|CHECK_DEADLOCK)$/;
 
@@ -25,7 +27,8 @@ function properties(cfg: string) {
   for (const line of cfg.split("\n")) {
     section = line.match(/^[A-Z_]+/)?.[0] ?? section;
     if (/^PROPERT(Y|IES)$/.test(section))
-      for (const word of line.trim().split(/\s+/)) if (word && word !== section) names.push(word);
+      for (const word of line.trim().split(/\s+/))
+        if (word && word !== section) names.push(word);
   }
   return names;
 }
@@ -55,9 +58,12 @@ function tlc(dir: string, module: string, cfg: string) {
   const out = r.stdout + r.stderr;
   const temporal = properties(cfg);
   const broke =
-    out.match(/^Error: (?:Invariant|Action property|Property) (\S+) is violated/m)?.[1] ??
+    out.match(
+      /^Error: (?:Invariant|Action property|Property) (\S+) is violated/m,
+    )?.[1] ??
     (/^Error: Deadlock reached\./m.test(out) ? "NoDeadlock" : undefined) ??
-    (/^Error: Temporal properties were violated\./m.test(out) && temporal.length === 1
+    (/^Error: Temporal properties were violated\./m.test(out) &&
+    temporal.length === 1
       ? temporal[0]
       : undefined);
   return { status: r.status, out, broke, steps: stepsIn(out) };
@@ -87,7 +93,11 @@ export type Verdict = {
   report: string;
 };
 
-export function agrees(module: string, files: { [name: string]: string[] }, cfg: string): Verdict {
+export function agrees(
+  module: string,
+  files: { [name: string]: string[] },
+  cfg: string,
+): Verdict {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-plain-"));
   try {
     for (const [name, lines] of Object.entries(files))
@@ -96,11 +106,18 @@ export function agrees(module: string, files: { [name: string]: string[] }, cfg:
     const out = path.join(dir, "out");
     const cli = spawnSync(
       process.execPath,
-      [path.join(here, "../statechart.ts"), path.join(dir, `${module}.tla`), "--out", out],
+      [
+        path.join(here, "../statechart.ts"),
+        path.join(dir, `${module}.tla`),
+        "--out",
+        out,
+      ],
       { encoding: "utf8" },
     );
     const plain = tlc(dir, module, cfg);
-    const report = fs.existsSync(out) ? fs.readFileSync(path.join(out, "report.md"), "utf8") : "";
+    const report = fs.existsSync(out)
+      ? fs.readFileSync(path.join(out, "report.md"), "utf8")
+      : "";
     const shown = `${cli.stderr}${report}`;
     assert.equal(
       cli.status,
@@ -129,7 +146,8 @@ export function agrees(module: string, files: { [name: string]: string[] }, cfg:
       }
       const text = fs.readFileSync(path.join(out, file), "utf8");
       if (said) assert.equal(Number(said), stepsIn(text), rule);
-      if (/^Semantic processing of module ChartBound$/m.test(text)) bounded.add(rule);
+      if (/^Semantic processing of module ChartBound$/m.test(text))
+        bounded.add(rule);
       breaks.set(rule, stepsIn(text));
     }
     const list = (title: string) =>
@@ -140,15 +158,25 @@ export function agrees(module: string, files: { [name: string]: string[] }, cfg:
     const holds = list("Rules that hold");
     const unchecked = list("Rules not checked");
     const chartFile = path.join(out, "chart.mmd");
-    const chart = fs.existsSync(chartFile) ? fs.readFileSync(chartFile, "utf8") : "";
+    const chart = fs.existsSync(chartFile)
+      ? fs.readFileSync(chartFile, "utf8")
+      : "";
     if (plain.broke) assert.equal(breaks.get(plain.broke), plain.steps, shown);
     for (const rule of holds) {
       const r = tlc(dir, module, alone(cfg, rule));
-      assert.equal(r.status, 0, `${rule} holds in the report, but TLC says:\n${r.out}`);
+      assert.equal(
+        r.status,
+        0,
+        `${rule} holds in the report, but TLC says:\n${r.out}`,
+      );
     }
     for (const [rule, steps] of breaks) {
       const r = tlc(dir, module, alone(cfg, rule));
-      assert.equal(r.broke, rule, `${rule} breaks in the report, but TLC says:\n${r.out}`);
+      assert.equal(
+        r.broke,
+        rule,
+        `${rule} breaks in the report, but TLC says:\n${r.out}`,
+      );
       if (!bounded.has(rule)) assert.equal(steps, r.steps, rule);
     }
     return { status: cli.status, breaks, holds, unchecked, chart, report };

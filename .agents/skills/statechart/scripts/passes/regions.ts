@@ -34,7 +34,18 @@ type RegionMove = {
 
 export function drawRegions(
   { states: tla, index, from, to }: Walk,
-  { names, shapes, drawnLabels, group, keys, kinds, sizes, sorted, pathSteps, notes }: Labels,
+  {
+    names,
+    shapes,
+    drawnLabels,
+    group,
+    keys,
+    kinds,
+    sizes,
+    sorted,
+    pathSteps,
+    notes,
+  }: Labels,
   order: Int32Array,
   found: Bug[],
   view: View,
@@ -50,7 +61,8 @@ export function drawRegions(
   }
   const loop = (j: number) => R === 1 && pathSteps[j] === 1;
   const stays = (j: number) => {
-    for (let r = 0; r < R; r++) if (kinds[r][from[j]] !== kinds[r][to[j]]) return false;
+    for (let r = 0; r < R; r++)
+      if (kinds[r][from[j]] !== kinds[r][to[j]]) return false;
     return true;
   };
   let inside = 0;
@@ -70,7 +82,8 @@ export function drawRegions(
       if (!dirty.has(c)) dirty.set(c, i);
     }
   const clean = new Uint8Array(n);
-  if (dirty.size) for (let i = 0; i < n; i++) clean[i] = dirty.has(comboOf(i)) ? 0 : 1;
+  if (dirty.size)
+    for (let i = 0; i < n; i++) clean[i] = dirty.has(comboOf(i)) ? 0 : 1;
   else clean.fill(1);
   const regions: Region[] = [];
   const objects: ChartState[][] = [];
@@ -108,14 +121,16 @@ export function drawRegions(
     }
     const parents = new Set<string>();
     for (const s of states.values())
-      for (let i = 1; i < s.path.length; i++) parents.add(tupleKey(s.path.slice(0, i)));
+      for (let i = 1; i < s.path.length; i++)
+        parents.add(tupleKey(s.path.slice(0, i)));
     for (const s of states.values()) {
       if (parents.size && parents.has(tupleKey(s.path)))
         throw new Error(
           `The view's state() returned ${s.path.join(" / ")} both as a state and as a parent state${name ? ` in ${name}` : ""}. Give that state a child name of its own.`,
         );
       const rules = new Map<string, Rule>();
-      for (const i of s.members) for (const rule of tla[i].breaks) rules.set(ruleKey(rule), rule);
+      for (const i of s.members)
+        for (const rule of tla[i].breaks) rules.set(ruleKey(rule), rule);
       s.breaks = [];
       for (const rule of [...rules.values()].sort(
         (a, b) => byText(a.name, b.name) || byText(a.kind, b.kind),
@@ -142,7 +157,9 @@ export function drawRegions(
       return texts.sort(byText).join(two ? " or " : ", ");
     };
     const is = (o: number, vs: Set<string>) =>
-      two ? `when ${words(vs)}` : `${names[o]} is ${vs.size > 1 ? "one of " : ""}${words(vs)}`;
+      two
+        ? `when ${words(vs)}`
+        : `${names[o]} is ${vs.size > 1 ? "one of " : ""}${words(vs)}`;
     const isNot = (o: number, vs: string[]) =>
       two
         ? `unless ${words(vs)}`
@@ -217,7 +234,8 @@ export function drawRegions(
         or.push(only);
       }
       const fits = (condition: Condition) => {
-        for (const t of seen) if (holds(condition, t) !== takes(t)) return false;
+        for (const t of seen)
+          if (holds(condition, t) !== takes(t)) return false;
         return true;
       };
       const andHolds: Condition = { kind: "and", otherKeys: and };
@@ -229,18 +247,27 @@ export function drawRegions(
           const no: string[] = [];
           for (const v of all[j]) if (!and[j].has(v)) no.push(v);
           if (no.length)
-            parts.push(and[j].size <= no.length ? is(others[j], and[j]) : isNot(others[j], no));
+            parts.push(
+              and[j].size <= no.length
+                ? is(others[j], and[j])
+                : isNot(others[j], no),
+            );
         }
         arrows.push({
           from: fromKey,
           to: toKey,
           label: text,
           condition: andHolds,
-          when: parts.length ? (two ? parts[0] : `when ${parts.join(" and ")}`) : undefined,
+          when: parts.length
+            ? two
+              ? parts[0]
+              : `when ${parts.join(" and ")}`
+            : undefined,
         });
       } else if (fits(orHolds)) {
         const parts: string[] = [];
-        for (let j = 0; j < others.length; j++) if (or[j].size) parts.push(is(others[j], or[j]));
+        for (let j = 0; j < others.length; j++)
+          if (or[j].size) parts.push(is(others[j], or[j]));
         arrows.push({
           from: fromKey,
           to: toKey,

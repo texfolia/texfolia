@@ -1,5 +1,6 @@
 import { defineRelations, sql } from "drizzle-orm";
 import {
+  bigint,
   bytea,
   check,
   foreignKey,
@@ -89,6 +90,7 @@ export const projectJob = pgTable(
       .references(() => project.id, { onDelete: "cascade" }),
     status: projectJobStatus("status").notNull().default("queued"),
     objectKey: text("object_key"),
+    sizeBytes: bigint("size_bytes", { mode: "bigint" }).notNull(),
     log: text("log"),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -103,6 +105,10 @@ export const projectJob = pgTable(
   },
   (t) => [
     index("project_job_project_id_created_at_idx").on(t.projectId, t.createdAt),
+    check(
+      "project_job_object_size_check",
+      sql`${t.sizeBytes} >= 0 AND (${t.objectKey} IS NOT NULL OR ${t.sizeBytes} = 0)`,
+    ),
   ],
 );
 
@@ -117,6 +123,7 @@ export const projectNode = pgTable(
     name: text("name").notNull(),
     kind: projectNodeKind("kind").notNull(),
     objectKey: text("object_key"),
+    sizeBytes: bigint("size_bytes", { mode: "bigint" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -127,6 +134,10 @@ export const projectNode = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
+    check(
+      "project_node_object_size_check",
+      sql`${t.sizeBytes} >= 0 AND (${t.objectKey} IS NOT NULL OR ${t.sizeBytes} = 0)`,
+    ),
     unique("project_node_id_kind_unique").on(t.id, t.kind),
     uniqueIndex("nodes_sibling_name_unique")
       .on(

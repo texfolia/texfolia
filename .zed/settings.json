@@ -13,10 +13,10 @@
             "fmt",
             "--no-script",
             "--stdin-filepath",
-            "{buffer_path}",
-          ],
-        },
-      },
+            "{buffer_path}"
+          ]
+        }
+      }
     },
     "TSX": {
       "formatter": {
@@ -26,10 +26,10 @@
             "fmt",
             "--no-script",
             "--stdin-filepath",
-            "{buffer_path}",
-          ],
-        },
-      },
+            "{buffer_path}"
+          ]
+        }
+      }
     },
     "TypeScript": {
       "formatter": {
@@ -39,10 +39,10 @@
             "fmt",
             "--no-script",
             "--stdin-filepath",
-            "{buffer_path}",
-          ],
-        },
-      },
-    },
-  },
+            "{buffer_path}"
+          ]
+        }
+      }
+    }
+  }
 }

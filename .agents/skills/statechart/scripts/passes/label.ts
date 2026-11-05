@@ -22,7 +22,9 @@ import {
 } from "../ir.ts";
 
 const isLabel = (l: unknown): l is string =>
-  typeof l === "string" && l !== "" && !/\bundefined\b|\bNaN\b|\[object Object\]/.test(l);
+  typeof l === "string" &&
+  l !== "" &&
+  !/\bundefined\b|\bNaN\b|\[object Object\]/.test(l);
 
 const shapeOf = (shape: unknown, vars: Vars): Shape => {
   function fail(): never {
@@ -39,7 +41,9 @@ const shapeOf = (shape: unknown, vars: Vars): Shape => {
     if (!labels.length) fail();
     return labels;
   };
-  const regions: [string, unknown][] = isRecord(shape) ? Object.entries(shape) : [["", shape]];
+  const regions: [string, unknown][] = isRecord(shape)
+    ? Object.entries(shape)
+    : [["", shape]];
   const pairs: [string, string[]][] = [];
   for (const [k, v] of regions) pairs.push([k, path(v)]);
   return pairs.length ? Object.fromEntries(pairs) : fail();
@@ -60,13 +64,18 @@ function unlabeled(
   bug: { rule: Rule; loop?: number },
 ): never {
   const changed: string[] = [];
-  for (const k of Object.keys(after)) if (key(before[k]) !== key(after[k])) changed.push(k);
+  for (const k of Object.keys(after))
+    if (key(before[k]) !== key(after[k])) changed.push(k);
   throw new Error(
     `The view's step() returned null for the step ${action} that changes ${changed.join(", ") || "nothing"}. It is on the path to the ${bug.rule.name} bug${bug.loop === undefined ? "" : " or leaves its loop"}, so label it.`,
   );
 }
 
-export function ask(graph: Graph, { states: tla, nameOf, from, to }: Walk, view: View): Answers {
+export function ask(
+  graph: Graph,
+  { states: tla, nameOf, from, to }: Walk,
+  view: View,
+): Answers {
   const n = nameOf.length;
   const m = from.length;
   const state = view.state;
@@ -163,12 +172,22 @@ export function labelGraph(
       const inLoop = loopOf(b, index);
       if (inLoop.size)
         for (let j = 0; j < m; j++)
-          if (inLoop.has(from[j]) && !inLoop.has(to[j]) && stepLabels[j] === null) {
+          if (
+            inLoop.has(from[j]) &&
+            !inLoop.has(to[j]) &&
+            stepLabels[j] === null
+          ) {
             t = graph.steps[j];
             break;
           }
     }
-    if (t) unlabeled(t.action, must(graph.states, t.from).vars, must(graph.states, t.to).vars, b);
+    if (t)
+      unlabeled(
+        t.action,
+        must(graph.states, t.from).vars,
+        must(graph.states, t.to).vars,
+        b,
+      );
   }
   const drawn: number[] = [];
   const drawnLabels = new Array<string>(m);
@@ -192,7 +211,10 @@ export function labelGraph(
     for (const j of sorted) {
       let entry = byLabel.get(drawnLabels[j]);
       if (!entry)
-        byLabel.set(drawnLabels[j], (entry = { changed: new Uint8Array(R), sets: new Set() }));
+        byLabel.set(
+          drawnLabels[j],
+          (entry = { changed: new Uint8Array(R), sets: new Set() }),
+        );
       const changed: string[] = [];
       for (let r = 0; r < R; r++)
         if (kinds[r][from[j]] !== kinds[r][to[j]]) {
@@ -209,7 +231,9 @@ export function labelGraph(
     for (let r = 0; r < R; r++) if (entry.changed[r]) changed.push(names[r]);
     if (changed.length < 2) continue;
     if (!together.has(text)) {
-      notes.push(`The step ${text} changes only one of ${list(changed)} at a time.`);
+      notes.push(
+        `The step ${text} changes only one of ${list(changed)} at a time.`,
+      );
       continue;
     }
     const sets = [...entry.sets];
@@ -231,7 +255,12 @@ export function labelGraph(
   };
 }
 
-type Told<Id> = { rule: Rule; start: Id; path: { action: string; state: Id }[]; loop?: number };
+type Told<Id> = {
+  rule: Rule;
+  start: Id;
+  path: { action: string; state: Id }[];
+  loop?: number;
+};
 
 function tell<Id, B extends Told<Id>>(
   states: ReadonlyMap<Id, { vars: Vars }>,

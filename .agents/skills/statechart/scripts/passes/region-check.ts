@@ -26,7 +26,8 @@ export function regionsLie(
   };
   const words = (c: string[]) => {
     const parts: string[] = [];
-    for (let i = 0; i < names.length; i++) parts.push(`${names[i]} ${unkey(c[i]).join(" / ")}`);
+    for (let i = 0; i < names.length; i++)
+      parts.push(`${names[i]} ${unkey(c[i]).join(" / ")}`);
     return parts.join(", ");
   };
   const addMove = (moves: Map<string, Move>, m: Move) =>
@@ -35,7 +36,8 @@ export function regionsLie(
   for (const r of regions) {
     const next: string[][] = [];
     for (const c of product)
-      for (const s of r.states) if (s.start) next.push([...c, tupleKey(s.path)]);
+      for (const s of r.states)
+        if (s.start) next.push([...c, tupleKey(s.path)]);
     product = next;
   }
   const realStarts = new Set<string>();
@@ -66,7 +68,8 @@ export function regionsLie(
       const rest: string[] = [];
       for (let k = 0; k < c.length; k++) if (k !== i) rest.push(c[k]);
       for (const a of r.arrows)
-        if (a.from === c[i] && holds(a.condition, rest)) append(enabled, a.label, { i, a });
+        if (a.from === c[i] && holds(a.condition, rest))
+          append(enabled, a.label, { i, a });
     }
     for (const [text, list] of enabled) {
       let groups: Enabled[][] = [];

@@ -1,7 +1,11 @@
-import { downloadFile } from "#/lib/download-file";
+import {
+  autocompletion,
+  type CompletionSource,
+} from "@codemirror/autocomplete";
 import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
+import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { openSearchPanel } from "@codemirror/search";
 import CodeMirror, {
   EditorView,
@@ -14,6 +18,7 @@ import {
   Redo2,
   Search,
   Undo2,
+  WandSparkles,
   WrapText,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +28,10 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+import { downloadFile } from "#/lib/download-file";
+import type { LatexProblem } from "#/lib/latex/analysis";
+import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 
 const latex = StreamLanguage.define(stex);
 const editorTheme = EditorView.theme({
@@ -48,6 +57,10 @@ type EditorProps = {
   onChange?: (value: string) => void;
   onSave?: (value: string) => void;
   allowOpenFile?: boolean;
+  completion?: CompletionSource;
+  problems?: LatexProblem[];
+  jump?: { line: number };
+  formatSettings?: FormatSettings;
 };
 
 export function Editor({
@@ -57,6 +70,10 @@ export function Editor({
   onChange,
   onSave,
   allowOpenFile = true,
+  completion,
+  problems,
+  jump,
+  formatSettings = defaultFormatSettings,
 }: EditorProps) {
   const editor = useRef<ReactCodeMirrorRef>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -74,6 +91,33 @@ export function Editor({
     redo: false,
   });
   const modified = value !== savedValue;
+  const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
+  const canFormat = isLatex || /\.bib$/i.test(name);
+  const { format, formatting, formatError } = useLatexFormatter(formatSettings);
+
+  useEffect(() => {
+    const view = editor.current?.view;
+    if (!view || !problems) return;
+    const diagnostics: Diagnostic[] = problems.flatMap(
+      ({ line, range, severity, message }) => {
+        const doc = view.state.doc;
+        if (range && range.from <= doc.length && range.to <= doc.length)
+          return [{ ...range, severity, message }];
+        if (range || line > doc.lines) return [];
+        const { from, to } = doc.line(line);
+        return [{ from, to, severity, message }];
+      },
+    );
+    view.dispatch(setDiagnostics(view.state, diagnostics));
+  }, [problems]);
+
+  useEffect(() => {
+    const view = editor.current?.view;
+    if (!jump || !view) return;
+    const line = view.state.doc.line(Math.min(jump.line, view.state.doc.lines));
+    view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+    view.focus();
+  }, [jump]);
 
   useEffect(() => {
     if (!modified) return;
@@ -84,10 +128,14 @@ export function Editor({
 
   const extensions = useMemo(
     () => [
-      latex,
+      ...(isLatex ? [latex] : []),
+      ...(isLatex && completion
+        ? [autocompletion({ override: [completion] })]
+        : []),
       editorTheme,
       ...(wrap ? [EditorView.lineWrapping] : []),
       keymap.of([
+        ...(canFormat ? [{ key: "Mod-Shift-f", run: format }] : []),
         {
           key: "Mod-s",
           run: (view) => {
@@ -103,7 +151,7 @@ export function Editor({
         },
       ]),
     ],
-    [name, wrap, onSave],
+    [name, wrap, onSave, isLatex, completion, canFormat, format],
   );
 
   async function openFile(file: File) {
@@ -141,7 +189,7 @@ export function Editor({
   return (
     <section
       aria-label="Source editor"
-      className="flex h-full min-h-0 min-w-0 flex-col bg-background"
+      className="bg-background flex h-full min-h-0 min-w-0 flex-col"
     >
       <PanelHeader title={name}>
         <PanelActions label="Editor actions">
@@ -201,6 +249,21 @@ export function Editor({
           >
             <Search />
           </PanelAction>
+          {canFormat && (
+            <PanelAction
+              label="Format document (⌘/Ctrl+Shift+F)"
+              disabled={formatting}
+              onClick={() => {
+                const view = editor.current?.view;
+                if (view) {
+                  format(view);
+                  view.focus();
+                }
+              }}
+            >
+              <WandSparkles />
+            </PanelAction>
+          )}
           <PanelAction
             label="Wrap lines"
             aria-pressed={wrap}
@@ -222,9 +285,9 @@ export function Editor({
           if (file) void openFile(file);
         }}
       />
-      {error && (
-        <p role="alert" className="border-b px-3 py-2 text-xs text-destructive">
-          {error}
+      {(error || formatError) && (
+        <p role="alert" className="text-destructive border-b px-3 py-2 text-xs">
+          {error || formatError}
         </p>
       )}
       <CodeMirror
@@ -261,7 +324,7 @@ export function Editor({
         aria-label="LaTeX source"
         className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
       />
-      <footer className="flex shrink-0 items-center justify-between gap-2 border-t px-3 py-1.5 text-xs text-muted-foreground">
+      <footer className="text-muted-foreground flex shrink-0 items-center justify-between gap-2 border-t px-3 py-1.5 text-xs">
         <span>
           LaTeX · {status.lines} {status.lines === 1 ? "line" : "lines"}
           {modified ? " · Modified" : ""}

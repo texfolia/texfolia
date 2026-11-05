@@ -1,4 +1,5 @@
 import { inspect } from "node:util";
+
 import { mermaid as chartText } from "../backends/mermaid.ts";
 import { checkView } from "../frontends/view.ts";
 import type { Chart, ChartState, State, Step, View } from "../ir.ts";
@@ -36,7 +37,19 @@ export type Html = (markup: string) => string;
 type Tools = { render: Render; mermaid: Mermaid; html: Html };
 
 const THEME = ["blue", "orange", "purple", "yellow", "teal", "tan", "pink"];
-const WORDS = ["Idle", "Run", "a", "b", "x1", "ok", "Done", "waiting", "on", "off", "p q"];
+const WORDS = [
+  "Idle",
+  "Run",
+  "a",
+  "b",
+  "x1",
+  "ok",
+  "Done",
+  "waiting",
+  "on",
+  "off",
+  "p q",
+];
 const SYNTAX = [
   "-->",
   "[*]",
@@ -242,14 +255,25 @@ const several = <T>(n: number, make: () => T) => {
 type Shape =
   | { mode: "flat"; leaf: number[] }
   | { mode: "parents"; leaf: number[]; parents: number[]; parentOf: number[] }
-  | { mode: "regions"; regions: number[]; pools: number[][]; values: number[][] };
+  | {
+      mode: "regions";
+      regions: number[];
+      pools: number[][];
+      values: number[][];
+    };
 
 type Groups =
   | { groups?: undefined; colors?: undefined; groupOf?: undefined }
   | { groups: number[]; colors: unknown[]; groupOf: number[] };
 
 type Case = Shape &
-  Groups & { n: number; labels: string[]; actions: number[]; steps: number[][]; title?: number };
+  Groups & {
+    n: number;
+    labels: string[];
+    actions: number[];
+    steps: number[][];
+    title?: number;
+  };
 
 function generate(r: Random): Case {
   const labels: string[] = [];
@@ -272,17 +296,25 @@ function generate(r: Random): Case {
     const leaf = several(n, slot);
     if (mode === "parents") {
       const parents = r.chance(0.5) ? [slot(), slot()] : [slot()];
-      const parentOf = several(n, () => (r.chance(0.75) ? r.int(parents.length) : -1));
+      const parentOf = several(n, () =>
+        r.chance(0.75) ? r.int(parents.length) : -1,
+      );
       shape = { mode, leaf, parents, parentOf };
     } else shape = { mode, leaf };
   }
   const actions = several(r.range(1, 3), slot);
-  const steps = several(r.range(1, 5), () => [r.int(n), r.int(n), r.int(actions.length)]);
+  const steps = several(r.range(1, 5), () => [
+    r.int(n),
+    r.int(n),
+    r.int(actions.length),
+  ]);
   let groups: Groups = {};
   if (r.chance(0.4)) {
     const named = several(r.range(1, 2), slot);
     const colors = several(named.length, () => color(r));
-    const groupOf = several(n, () => (r.chance(0.8) ? r.int(named.length) : -1));
+    const groupOf = several(n, () =>
+      r.chance(0.8) ? r.int(named.length) : -1,
+    );
     groups = { groups: named, colors, groupOf };
   }
   const title = r.chance(0.3) ? slot() : undefined;
@@ -309,7 +341,10 @@ function build(c: Case, labels: string[]) {
       if (c.mode === "regions") {
         const shape: [string, string][] = [];
         for (let j = 0; j < c.regions.length; j++)
-          shape.push([labels[c.regions[j]], labels[c.pools[j][c.values[k][j]]]]);
+          shape.push([
+            labels[c.regions[j]],
+            labels[c.pools[j][c.values[k][j]]],
+          ]);
         return Object.fromEntries(shape);
       }
       const leaf = labels[c.leaf[k]];
@@ -320,9 +355,11 @@ function build(c: Case, labels: string[]) {
     step: (action) => labels[c.actions[Number(action.slice(1))]],
   };
   if (c.groups) {
-    view.group = ({ k }) => (c.groupOf[k] < 0 ? undefined : labels[c.groups[c.groupOf[k]]]);
+    view.group = ({ k }) =>
+      c.groupOf[k] < 0 ? undefined : labels[c.groups[c.groupOf[k]]];
     const colors: [string, unknown][] = [];
-    for (let j = 0; j < c.groups.length; j++) colors.push([labels[c.groups[j]], c.colors[j]]);
+    for (let j = 0; j < c.groups.length; j++)
+      colors.push([labels[c.groups[j]], c.colors[j]]);
     view.colors = Object.fromEntries(colors);
   }
   if (c.title !== undefined) view.title = labels[c.title];
@@ -332,7 +369,10 @@ function build(c: Case, labels: string[]) {
 const visible = (s: string) =>
   s
     .toWellFormed()
-    .replace(/(?![\t-\r\x85])[\p{Cc}\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu, "")
+    .replace(
+      /(?![\t-\r\x85])[\p{Cc}\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/gu,
+      "",
+    )
     .replace(/\p{White_Space}+/gu, " ")
     .trim();
 const wrapped = (s: string) => visible(s).replaceAll(" ", "");
@@ -356,10 +396,7 @@ const fromMermaid = (s: string) =>
     d ? fromRef(Number(d)) : (NAMED[n] ?? `&${n};`),
   );
 const decoded = (s: string) =>
-  s
-    .replace(/ﬂ°°/g, "&#")
-    .replace(/ﬂ°/g, "&")
-    .replace(/¶ß/g, ";");
+  s.replace(/ﬂ°°/g, "&#").replace(/ﬂ°/g, "&").replace(/¶ß/g, ";");
 const MARKER_END = /marker-end="url\([\d+./:=?A-Za-z-]*?#/g;
 const rewritten = (s: string) =>
   /ﬂ°|¶ß/.test(s) || s.replace(MARKER_END, 'marker-end="url(#') !== s;
@@ -393,12 +430,18 @@ function expected(chart: Chart): Want {
   };
   const multi = chart.regions.length > 1;
   const used = new Set<string>();
-  if (multi) nodes.set("all", { text: "At the same time", parent: null, group: true });
+  if (multi)
+    nodes.set("all", { text: "At the same time", parent: null, group: true });
   for (let i = 0; i < chart.regions.length; i++) {
     const region = chart.regions[i];
     const wrap = multi ? `r${i}` : null;
-    if (wrap) nodes.set(wrap, { text: region.name, parent: "all", group: true });
-    const tree = (prefix: string[], parent: string | null, below: ChartState[]) => {
+    if (wrap)
+      nodes.set(wrap, { text: region.name, parent: "all", group: true });
+    const tree = (
+      prefix: string[],
+      parent: string | null,
+      below: ChartState[],
+    ) => {
       const heads = new Map<string, ChartState[]>();
       for (const s of below) {
         const head = s.path[prefix.length];
@@ -414,12 +457,14 @@ function expected(chart: Chart): Want {
         const node = id(region.name, path);
         nodes.set(node, { text: head, parent, group: inner.length > 0 });
         if (inner.length) tree(path, node, inner);
-        else if (leaf?.group !== undefined) used.add(chart.colors[String(leaf.group)]);
+        else if (leaf?.group !== undefined)
+          used.add(chart.colors[String(leaf.group)]);
       }
     };
     tree([], wrap, region.states);
     for (const s of region.states)
-      if (s.start) edges.push([`${wrap ?? "root"}_start`, id(region.name, s.path), ""]);
+      if (s.start)
+        edges.push([`${wrap ?? "root"}_start`, id(region.name, s.path), ""]);
     for (const s of region.steps)
       edges.push([
         id(region.name, s.from),
@@ -429,8 +474,10 @@ function expected(chart: Chart): Want {
   }
   let legend = 0;
   for (const [text, cls] of Object.entries(chart.colors))
-    if (used.has(cls)) nodes.set(`lg${legend++}`, { text, parent: "legend", group: false });
-  if (legend) nodes.set("legend", { text: "Legend", parent: null, group: true });
+    if (used.has(cls))
+      nodes.set(`lg${legend++}`, { text, parent: "legend", group: false });
+  if (legend)
+    nodes.set("legend", { text: "Legend", parent: null, group: true });
   return { nodes, edges, direction: multi ? "LR" : "TB", title: chart.title };
 }
 
@@ -441,7 +488,12 @@ const edgeKeys = (edges: string[][], withLabels: boolean) => {
   return keys.sort().join("\n");
 };
 
-async function readMermaid(text: string, want: Want, { mermaid, html }: Tools, problems: string[]) {
+async function readMermaid(
+  text: string,
+  want: Want,
+  { mermaid, html }: Tools,
+  problems: string[],
+) {
   let data;
   try {
     data = (await mermaid.mermaidAPI.getDiagramFromText(text)).db.getData();
@@ -454,14 +506,25 @@ async function readMermaid(text: string, want: Want, { mermaid, html }: Tools, p
   for (const n of data.nodes) byId.set(n.id, n);
   let count = 0;
   for (const n of data.nodes) {
-    if (n.shape === "divider" || n.shape === "stateStart" || n.shape === "stateEnd") continue;
+    if (
+      n.shape === "divider" ||
+      n.shape === "stateStart" ||
+      n.shape === "stateEnd"
+    )
+      continue;
     count++;
     let parent = byId.get(n.parentId);
     while (parent?.shape === "divider") parent = byId.get(parent.parentId);
     const w = want.nodes.get(n.id);
     const shown = fromMermaid(n.label ?? "");
-    if (!w || (parent?.id ?? null) !== w.parent || Boolean(n.isGroup) !== w.group)
-      problems.push(`mermaid-nodes: Mermaid draws ${n.id} where the chart has no such node`);
+    if (
+      !w ||
+      (parent?.id ?? null) !== w.parent ||
+      Boolean(n.isGroup) !== w.group
+    )
+      problems.push(
+        `mermaid-nodes: Mermaid draws ${n.id} where the chart has no such node`,
+      );
     else if (rewritten(shown))
       problems.push(
         `mermaid-text: Mermaid's SVG cleanup rewrites ${n.id}'s ${JSON.stringify(shown)}`,
@@ -481,13 +544,17 @@ async function readMermaid(text: string, want: Want, { mermaid, html }: Tools, p
   const raw = head ? String(JSON.parse(head[1])) : undefined;
   const title = raw === undefined ? undefined : fromMermaid(raw);
   if ((title !== undefined) !== titled(want))
-    problems.push(`mermaid-title: Mermaid draws a title for ${JSON.stringify(want.title)}`);
+    problems.push(
+      `mermaid-title: Mermaid draws a title for ${JSON.stringify(want.title)}`,
+    );
   else if (raw?.includes("<"))
     problems.push(
       `mermaid-title: Mermaid's sanitizer reads the < in ${JSON.stringify(raw)} as a tag`,
     );
   else if (title?.includes("\0"))
-    problems.push(`mermaid-title: a browser draws the NUL in ${JSON.stringify(title)} as U+FFFD`);
+    problems.push(
+      `mermaid-title: a browser draws the NUL in ${JSON.stringify(title)} as U+FFFD`,
+    );
   else if (title !== undefined && visible(title) !== visible(want.title ?? ""))
     problems.push(
       `mermaid-text: the title shows ${JSON.stringify(title)} for ${JSON.stringify(want.title)}`,
@@ -509,7 +576,12 @@ async function readMermaid(text: string, want: Want, { mermaid, html }: Tools, p
       );
 }
 
-function readPele(text: string, want: Want, render: Render, problems: string[]) {
+function readPele(
+  text: string,
+  want: Want,
+  render: Render,
+  problems: string[],
+) {
   let svg: string;
   try {
     ({ svg } = render(text));
@@ -537,14 +609,18 @@ function readPele(text: string, want: Want, render: Render, problems: string[]) 
       );
   }
   let arrows = 0;
-  for (const _ of svg.matchAll(/<g class="pele-edge pele-transition"/g)) arrows++;
+  for (const _ of svg.matchAll(/<g class="pele-edge pele-transition"/g))
+    arrows++;
   if (arrows !== want.edges.length)
     problems.push(`pele-edges: ${arrows} arrows for ${want.edges.length}`);
   for (const m of svg.matchAll(
     /<g class="pele-edge-label" data-id="edge(\d+)"[^>]*>[\s\S]*?<text[^>]*>([\s\S]*?)<\/text>/g,
   )) {
     const w = want.edges[Number(m[1])];
-    if (!w) problems.push(`pele-edges: Pele labels edge${m[1]}, which the chart does not have`);
+    if (!w)
+      problems.push(
+        `pele-edges: Pele labels edge${m[1]}, which the chart does not have`,
+      );
     else if (wrapped(fromSvg(m[2])) !== wrapped(w[2]))
       problems.push(
         `pele-text: edge${m[1]} shows ${JSON.stringify(fromSvg(m[2]))} for ${JSON.stringify(w[2])}`,
@@ -552,7 +628,9 @@ function readPele(text: string, want: Want, render: Render, problems: string[]) 
   }
   const title = svg.match(/<text class="pele-title"[^>]*>([\s\S]*?)<\/text>/);
   if (Boolean(title) !== titled(want))
-    problems.push(`pele-title: Pele draws a title for ${JSON.stringify(want.title)}`);
+    problems.push(
+      `pele-title: Pele draws a title for ${JSON.stringify(want.title)}`,
+    );
   else if (title && wrapped(fromSvg(title[1])) !== wrapped(want.title ?? ""))
     problems.push(
       `pele-text: the title shows ${JSON.stringify(fromSvg(title[1]))} for ${JSON.stringify(want.title)}`,
@@ -561,7 +639,11 @@ function readPele(text: string, want: Want, render: Render, problems: string[]) 
 
 type Checked = { refused?: true; text?: string; problems: string[] };
 
-async function check(c: Case, labels: string[], tools: Tools): Promise<Checked> {
+async function check(
+  c: Case,
+  labels: string[],
+  tools: Tools,
+): Promise<Checked> {
   const { graph, view } = build(c, labels);
   let refuse = false;
   for (const [, value] of Object.entries(view.colors ?? {}))
@@ -575,7 +657,10 @@ async function check(c: Case, labels: string[], tools: Tools): Promise<Checked> 
       return { refused: true, problems: [] };
     return { problems: [`skill-throws: ${e.message}`] };
   }
-  if (refuse) return { problems: ["colors: checkView accepts a color that is not in the theme"] };
+  if (refuse)
+    return {
+      problems: ["colors: checkView accepts a color that is not in the theme"],
+    };
   let chart: Chart;
   let text: string;
   try {
@@ -625,9 +710,12 @@ export async function fuzz({
       if (same) labels = plain;
     }
     const kept = [];
-    for (let j = 0; j < labels.length; j++) if (labels[j] !== `n${j}`) kept.push(labels[j]);
+    for (let j = 0; j < labels.length; j++)
+      if (labels[j] !== `n${j}`) kept.push(labels[j]);
     const last = await check(c, labels, tools);
-    const colors = c.colors ? ` and the colors ${JSON.stringify(c.colors)}` : "";
+    const colors = c.colors
+      ? ` and the colors ${JSON.stringify(c.colors)}`
+      : "";
     return {
       drawn,
       refused,

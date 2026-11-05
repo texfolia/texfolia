@@ -27,17 +27,9 @@ export type MergeStateStatus =
   | "UNKNOWN"
   | "UNSTABLE";
 export type RollupState =
-  | "ERROR"
-  | "EXPECTED"
-  | "FAILURE"
-  | "PENDING"
-  | "SUCCESS"
-  | null;
+  "ERROR" | "EXPECTED" | "FAILURE" | "PENDING" | "SUCCESS" | null;
 export type ReviewDecision =
-  | "APPROVED"
-  | "CHANGES_REQUESTED"
-  | "REVIEW_REQUIRED"
-  | null;
+  "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
 export interface PullRequestFacts {
   readonly context: PrContext;
   readonly mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
@@ -177,9 +169,7 @@ export interface MergedPr {
   readonly mergedAt: string | null;
 }
 export type MergeGateReason =
-  | "closed-without-merge"
-  | "draft-pr"
-  | "changes-requested";
+  "closed-without-merge" | "draft-pr" | "changes-requested";
 export type MergeBlocker =
   | {
       readonly kind: "merge-conflicts";
@@ -263,8 +253,10 @@ interface EventBase<K extends string, M extends WatchMode = WatchMode> {
   readonly mode: M;
   readonly kind: K;
 }
-interface Progress<K extends string, M extends WatchMode = WatchMode>
-  extends EventBase<K, M> {
+interface Progress<
+  K extends string,
+  M extends WatchMode = WatchMode,
+> extends EventBase<K, M> {
   readonly terminal: false;
 }
 interface Terminal<
@@ -397,11 +389,11 @@ export interface GitHubReader {
   checksFastPath(context: PrContext): Promise<ChecksFastPath>;
   checkRollupPage(
     context: PrContext,
-    after: string | null
+    after: string | null,
   ): Promise<RollupPage>;
   reviewThreadPage(
     context: PrContext,
-    after: string | null
+    after: string | null,
   ): Promise<ReviewThreadPage>;
   commitRollups(context: PrContext): Promise<readonly CommitRollup[]>;
 }

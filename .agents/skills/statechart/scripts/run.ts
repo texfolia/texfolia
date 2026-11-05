@@ -1,17 +1,28 @@
 import { Buffer } from "node:buffer";
-import { type ChildProcess, execFile, type ExecFileException, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  execFile,
+  type ExecFileException,
+  spawn,
+} from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { inspect } from "node:util";
+
 import { boundRun, chartRun, configText } from "./backends/cfg.ts";
 import { plainText } from "./backends/plain-text.ts";
 import { readConfig } from "./frontends/config.ts";
 import { parseDot } from "./frontends/dot.ts";
 import { readCounterexample, readMarks } from "./frontends/marks.ts";
 import { readMessages } from "./frontends/messages.ts";
-import { initialOnlyProperties, readChecks, readSany, readSpec } from "./frontends/spec.ts";
+import {
+  initialOnlyProperties,
+  readChecks,
+  readSany,
+  readSpec,
+} from "./frontends/spec.ts";
 import { readTrace } from "./frontends/trace.ts";
 import { type Break, readVerdict } from "./frontends/verdict.ts";
 import {
@@ -32,8 +43,8 @@ import {
   RERUN_STATES,
   type Rule,
   ruleKey,
-  type Stop,
   stateRules,
+  type Stop,
   type Trace,
   type Verdict,
 } from "./ir.ts";
@@ -76,7 +87,11 @@ type ChildResult = {
   error: ExecFileException | undefined;
 };
 
-const runChild = (file: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) =>
+const runChild = (
+  file: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv },
+) =>
   new Promise<ChildResult>((resolve) => {
     execFile(
       file,
@@ -84,7 +99,11 @@ const runChild = (file: string, args: string[], options: { cwd: string; env: Nod
       { encoding: "utf8", maxBuffer: 1 << 30, ...options },
       (error, stdout, stderr) =>
         resolve({
-          status: error ? (typeof error.code === "number" ? error.code : null) : 0,
+          status: error
+            ? typeof error.code === "number"
+              ? error.code
+              : null
+            : 0,
           stdout,
           stderr,
           error: typeof error?.code === "string" ? error : undefined,
@@ -94,10 +113,9 @@ const runChild = (file: string, args: string[], options: { cwd: string; env: Nod
 
 export const killGroup = (pid: number) =>
   new Promise((resolve) =>
-    spawn("/bin/sh", ["-c", 'kill -s KILL -- "-$1"', "sh", String(pid)], { stdio: "ignore" }).on(
-      "exit",
-      resolve,
-    ),
+    spawn("/bin/sh", ["-c", 'kill -s KILL -- "-$1"', "sh", String(pid)], {
+      stdio: "ignore",
+    }).on("exit", resolve),
   );
 
 export const messageOf = (error: unknown) =>
@@ -194,9 +212,15 @@ async function findTlc(cwd: string) {
   const { TLA2TOOLS, JAVA } = process.env;
   if (TLA2TOOLS) return { jar: TLA2TOOLS, java: JAVA || "java" };
   const mise = (...args: string[]) =>
-    runChild("mise", args, { cwd, env: { ...process.env, MISE_CEILING_PATHS: cwd } });
+    runChild("mise", args, {
+      cwd,
+      env: { ...process.env, MISE_CEILING_PATHS: cwd },
+    });
   const where = () =>
-    Promise.all([mise("where", TLC_TOOL), mise("which", "java", "--tool", JAVA_TOOL)]);
+    Promise.all([
+      mise("where", TLC_TOOL),
+      mise("which", "java", "--tool", JAVA_TOOL),
+    ]);
   let found = await where();
   if (found.some((r) => r.status !== 0)) {
     const r = await mise("install", JAVA_TOOL, TLC_TOOL);
@@ -239,7 +263,8 @@ const stopOf = (r: FileResult): Stop => {
       errors.push(m);
   if (!errors.length) return { status: r.status, message: tail(r) };
   const lines = [...plainText(errors)].join("").trim().split("\n");
-  if (lines.length > 40) lines.splice(40, Infinity, `... ${lines.length - 40} more lines`);
+  if (lines.length > 40)
+    lines.splice(40, Infinity, `... ${lines.length - 40} more lines`);
   return { status: r.status, message: lines.join("\n") };
 };
 
@@ -252,10 +277,14 @@ const names = (rules: Rule[], kind: Rule["kind"]) => {
 const brokenRule = (rules: Rule[], broke: Break) => {
   if (broke.kind === "temporal") return undefined;
   for (const rule of rules)
-    if (rule.kind === broke.kind && (broke.kind === "deadlock" || rule.name === broke.name))
+    if (
+      rule.kind === broke.kind &&
+      (broke.kind === "deadlock" || rule.name === broke.name)
+    )
       return rule;
   if (broke.kind === "invariant")
-    for (const rule of rules) if (rule.kind === "property" && rule.name === broke.name) return rule;
+    for (const rule of rules)
+      if (rule.kind === "property" && rule.name === broke.name) return rule;
   return undefined;
 };
 
@@ -267,18 +296,41 @@ function* only(marks: Iterable<Mark>, rules: Set<string>) {
   }
 }
 
-export async function check(specFile: string, configFile: string): Promise<CheckResult> {
-  const cfg = readConfig({ file: configFile, text: fs.readFileSync(configFile, "utf8") });
+export async function check(
+  specFile: string,
+  configFile: string,
+): Promise<CheckResult> {
+  const cfg = readConfig({
+    file: configFile,
+    text: fs.readFileSync(configFile, "utf8"),
+  });
   const checks = readChecks({ configFile, config: cfg });
   const folder = path.dirname(path.resolve(specFile));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-"));
   try {
     const tlc = await findTlc(dir);
-    const config = (name: string, sections: ConfigSection[], extra: string[]) => {
-      fs.writeFileSync(path.join(dir, `${name}.cfg`), configText(sections, extra));
-      return [`-metadir`, path.join(dir, `meta-${name}`), "-config", path.join(dir, `${name}.cfg`)];
+    const config = (
+      name: string,
+      sections: ConfigSection[],
+      extra: string[],
+    ) => {
+      fs.writeFileSync(
+        path.join(dir, `${name}.cfg`),
+        configText(sections, extra),
+      );
+      return [
+        `-metadir`,
+        path.join(dir, `meta-${name}`),
+        "-config",
+        path.join(dir, `${name}.cfg`),
+      ];
     };
-    const runJava = (name: string, main: string, args: string[], jvm: string[] = []) => {
+    const runJava = (
+      name: string,
+      main: string,
+      args: string[],
+      jvm: string[] = [],
+    ) => {
       const tmp = path.join(dir, `tmp-${name}`);
       fs.mkdirSync(tmp);
       return runToFiles(
@@ -295,7 +347,10 @@ export async function check(specFile: string, configFile: string): Promise<Check
         {
           cwd: dir,
           out: path.join(dir, name),
-          env: process.platform === "darwin" ? process.env : { ...process.env, LC_ALL: "C.UTF-8" },
+          env:
+            process.platform === "darwin"
+              ? process.env
+              : { ...process.env, LC_ALL: "C.UTF-8" },
         },
       );
     };
@@ -306,7 +361,9 @@ export async function check(specFile: string, configFile: string): Promise<Check
       ["-XX:TieredStopAtLevel=1"],
     );
     if (xml.status !== 0)
-      throw new Error(`SANY could not read ${specFile} (exit ${xml.status}):\n${tail(xml)}`);
+      throw new Error(
+        `SANY could not read ${specFile} (exit ${xml.status}):\n${tail(xml)}`,
+      );
     const sany = readSany(fs.readFileSync(xml.stdout, "utf8"));
     const module = path.basename(specFile, ".tla");
     const spec = { ...readSpec({ module, sany, checks }), folder };
@@ -315,7 +372,11 @@ export async function check(specFile: string, configFile: string): Promise<Check
     for (const name of spec.properties) all.push({ kind: "property", name });
     const verdicts = new Map<string, Verdict>();
     const decide = (rule: Rule, outcome: Outcome, r?: FileResult) =>
-      verdicts.set(ruleKey(rule), { rule, outcome, messages: r && messagesOf(r.output) });
+      verdicts.set(ruleKey(rule), {
+        rule,
+        outcome,
+        messages: r && messagesOf(r.output),
+      });
     const judge = async () => {
       const groups = [all];
       let first: FileResult | undefined;
@@ -323,7 +384,8 @@ export async function check(specFile: string, configFile: string): Promise<Check
       const states = { distinct: 0, initial: 0, complete: false, cut: false };
       for (let k = 1; groups.length;) {
         const group: Rule[] = [];
-        for (const rule of groups[0]) if (!verdicts.has(ruleKey(rule))) group.push(rule);
+        for (const rule of groups[0])
+          if (!verdicts.has(ruleKey(rule))) group.push(rule);
         if (first && !group.length) {
           groups.shift();
           continue;
@@ -362,7 +424,8 @@ export async function check(specFile: string, configFile: string): Promise<Check
         } else if (broke && properties.length) {
           if (broke.kind === "temporal") {
             states.complete = true;
-            for (const rule of group) if (rule.kind !== "property") decide(rule, "holds");
+            for (const rule of group)
+              if (rule.kind !== "property") decide(rule, "holds");
           }
           const pending: Rule[][] = [];
           const rest: Rule[] = [];
@@ -376,14 +439,17 @@ export async function check(specFile: string, configFile: string): Promise<Check
             `TLC exited ${r.status} on ${specFile}, but its output names no rule that broke:\n${tail(r)}`,
           );
       }
-      for (const rule of all) if (!verdicts.has(ruleKey(rule))) decide(rule, "not checked");
+      for (const rule of all)
+        if (!verdicts.has(ruleKey(rule))) decide(rule, "not checked");
       return { first: first!, stop, states };
     };
     fs.writeFileSync(path.join(dir, "ChartBound.tla"), boundRun(spec.module));
     const judged = await judge();
     const exit = exitClass(judged.first.status);
     const failed = (r: FileResult) =>
-      new Error(`TLC could not check ${specFile} (exit ${r.status}):\n${stopOf(r).message}`);
+      new Error(
+        `TLC could not check ${specFile} (exit ${r.status}):\n${stopOf(r).message}`,
+      );
     const initialOnly = initialOnlyProperties(sany, spec);
     const propertiesWith = (bugOf: (trace: Trace) => Lasso | undefined) => {
       const properties: Property[] = [];
@@ -392,7 +458,10 @@ export async function check(specFile: string, configFile: string): Promise<Check
         const v = must(verdicts, ruleKey(rule));
         properties.push({
           ...v,
-          bug: v.outcome === "broken" && v.messages ? bugOf(readTrace(v.messages)) : undefined,
+          bug:
+            v.outcome === "broken" && v.messages
+              ? bugOf(readTrace(v.messages))
+              : undefined,
           initialOnly: initialOnly.has(rule.name),
         });
       }
@@ -416,7 +485,10 @@ export async function check(specFile: string, configFile: string): Promise<Check
         "-tool",
         ...PINNED_FLAGS,
         "-deadlock",
-        ...config("ChartRun", spec.written, ["INVARIANT ChartMark", "CONSTRAINT ChartBudget"]),
+        ...config("ChartRun", spec.written, [
+          "INVARIANT ChartMark",
+          "CONSTRAINT ChartBudget",
+        ]),
         "-dump",
         "dot,actionlabels",
         path.join(dir, "graph"),
@@ -427,11 +499,16 @@ export async function check(specFile: string, configFile: string): Promise<Check
       if (readVerdict(messagesOf(drawn.output)).distinct <= CHART_STATES) {
         const graph = parseDot(fileLines(file));
         const find = finder(graph, spec.variables);
-        const drawing = drawn.status === 0 ? undefined : { status: drawn.status };
+        const drawing =
+          drawn.status === 0 ? undefined : { status: drawn.status };
         const broken = new Set<string>();
         for (const { rule, outcome } of verdicts.values())
-          if (rule.kind === "invariant" && outcome === "broken") broken.add(rule.name);
-        const marks = only(readMarks(readMessages(fileLines(drawn.stdout)), tag), broken);
+          if (rule.kind === "invariant" && outcome === "broken")
+            broken.add(rule.name);
+        const marks = only(
+          readMarks(readMessages(fileLines(drawn.stdout)), tag),
+          broken,
+        );
         const past = mark(graph, marks, spec.variables, rules, find);
         const excludes = hasSection(spec, "ACTION_CONSTRAINT");
         for (const rule of rules) {
@@ -447,11 +524,26 @@ export async function check(specFile: string, configFile: string): Promise<Check
           const counterexample = readCounterexample(messages);
           if (
             !drawing ||
-            lasso(graph, { seq: counterexample, loop: undefined }, spec.variables, find)
+            lasso(
+              graph,
+              { seq: counterexample, loop: undefined },
+              spec.variables,
+              find,
+            )
           )
-            addPast(graph, counterexample, spec.variables, rule, past, excludes, find);
+            addPast(
+              graph,
+              counterexample,
+              spec.variables,
+              rule,
+              past,
+              excludes,
+              find,
+            );
         }
-        const properties = propertiesWith((trace) => lasso(graph, trace, spec.variables, find));
+        const properties = propertiesWith((trace) =>
+          lasso(graph, trace, spec.variables, find),
+        );
         return {
           ...common,
           graph,

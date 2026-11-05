@@ -8,222 +8,242 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as PricingRouteImport } from './routes/pricing'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
-import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
-import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as ApiAuthSplatRouteImport } from "./routes/api.auth.$";
+import { Route as ApiCompileProjectIdRouteImport } from "./routes/api.compile.$projectId";
+import { Route as IndexRouteImport } from "./routes/index";
+import { Route as LoginRouteImport } from "./routes/login";
+import { Route as PricingRouteImport } from "./routes/pricing";
+import { Route as PrivacyRouteImport } from "./routes/privacy";
+import { Route as ProjectsRouteImport } from "./routes/projects";
+import { Route as ProjectsProjectIdRouteImport } from "./routes/projects/$projectId";
+import { Route as ProjectsIndexRouteImport } from "./routes/projects/index";
+import { Route as TermsRouteImport } from "./routes/terms";
 
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+  id: "/login",
+  path: "/login",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PricingRoute = PricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
+  id: "/pricing",
+  path: "/pricing",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
+  id: "/privacy",
+  path: "/privacy",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
+  id: "/projects",
+  path: "/projects",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
+  id: "/terms",
+  path: "/terms",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => ProjectsRoute,
-} as any)
+} as any);
 const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
-  id: '/$projectId',
-  path: '/$projectId',
+  id: "/$projectId",
+  path: "/$projectId",
   getParentRoute: () => ProjectsRoute,
-} as any)
+} as any);
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
+  id: "/api/auth/$",
+  path: "/api/auth/$",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+const ApiCompileProjectIdRoute = ApiCompileProjectIdRouteImport.update({
+  id: "/api/compile/$projectId",
+  path: "/api/compile/$projectId",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRouteWithChildren
-  '/terms': typeof TermsRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/projects/': typeof ProjectsIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
+  "/": typeof IndexRoute;
+  "/login": typeof LoginRoute;
+  "/pricing": typeof PricingRoute;
+  "/privacy": typeof PrivacyRoute;
+  "/projects": typeof ProjectsRouteWithChildren;
+  "/terms": typeof TermsRoute;
+  "/projects/$projectId": typeof ProjectsProjectIdRoute;
+  "/projects/": typeof ProjectsIndexRoute;
+  "/api/auth/$": typeof ApiAuthSplatRoute;
+  "/api/compile/$projectId": typeof ApiCompileProjectIdRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
-  '/terms': typeof TermsRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/projects': typeof ProjectsIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
+  "/": typeof IndexRoute;
+  "/login": typeof LoginRoute;
+  "/pricing": typeof PricingRoute;
+  "/privacy": typeof PrivacyRoute;
+  "/terms": typeof TermsRoute;
+  "/projects/$projectId": typeof ProjectsProjectIdRoute;
+  "/projects": typeof ProjectsIndexRoute;
+  "/api/auth/$": typeof ApiAuthSplatRoute;
+  "/api/compile/$projectId": typeof ApiCompileProjectIdRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRouteWithChildren
-  '/terms': typeof TermsRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/projects/': typeof ProjectsIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/login": typeof LoginRoute;
+  "/pricing": typeof PricingRoute;
+  "/privacy": typeof PrivacyRoute;
+  "/projects": typeof ProjectsRouteWithChildren;
+  "/terms": typeof TermsRoute;
+  "/projects/$projectId": typeof ProjectsProjectIdRoute;
+  "/projects/": typeof ProjectsIndexRoute;
+  "/api/auth/$": typeof ApiAuthSplatRoute;
+  "/api/compile/$projectId": typeof ApiCompileProjectIdRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
+  fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
-    | '/'
-    | '/login'
-    | '/pricing'
-    | '/privacy'
-    | '/projects'
-    | '/terms'
-    | '/projects/$projectId'
-    | '/projects/'
-    | '/api/auth/$'
-  fileRoutesByTo: FileRoutesByTo
+    | "/"
+    | "/login"
+    | "/pricing"
+    | "/privacy"
+    | "/projects"
+    | "/terms"
+    | "/projects/$projectId"
+    | "/projects/"
+    | "/api/auth/$"
+    | "/api/compile/$projectId";
+  fileRoutesByTo: FileRoutesByTo;
   to:
-    | '/'
-    | '/login'
-    | '/pricing'
-    | '/privacy'
-    | '/terms'
-    | '/projects/$projectId'
-    | '/projects'
-    | '/api/auth/$'
+    | "/"
+    | "/login"
+    | "/pricing"
+    | "/privacy"
+    | "/terms"
+    | "/projects/$projectId"
+    | "/projects"
+    | "/api/auth/$"
+    | "/api/compile/$projectId";
   id:
-    | '__root__'
-    | '/'
-    | '/login'
-    | '/pricing'
-    | '/privacy'
-    | '/projects'
-    | '/terms'
-    | '/projects/$projectId'
-    | '/projects/'
-    | '/api/auth/$'
-  fileRoutesById: FileRoutesById
+    | "__root__"
+    | "/"
+    | "/login"
+    | "/pricing"
+    | "/privacy"
+    | "/projects"
+    | "/terms"
+    | "/projects/$projectId"
+    | "/projects/"
+    | "/api/auth/$"
+    | "/api/compile/$projectId";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  LoginRoute: typeof LoginRoute
-  PricingRoute: typeof PricingRoute
-  PrivacyRoute: typeof PrivacyRoute
-  ProjectsRoute: typeof ProjectsRouteWithChildren
-  TermsRoute: typeof TermsRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  IndexRoute: typeof IndexRoute;
+  LoginRoute: typeof LoginRoute;
+  PricingRoute: typeof PricingRoute;
+  PrivacyRoute: typeof PrivacyRoute;
+  ProjectsRoute: typeof ProjectsRouteWithChildren;
+  TermsRoute: typeof TermsRoute;
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute;
+  ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pricing': {
-      id: '/pricing'
-      path: '/pricing'
-      fullPath: '/pricing'
-      preLoaderRoute: typeof PricingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/projects': {
-      id: '/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/projects/': {
-      id: '/projects/'
-      path: '/'
-      fullPath: '/projects/'
-      preLoaderRoute: typeof ProjectsIndexRouteImport
-      parentRoute: typeof ProjectsRoute
-    }
-    '/projects/$projectId': {
-      id: '/projects/$projectId'
-      path: '/$projectId'
-      fullPath: '/projects/$projectId'
-      preLoaderRoute: typeof ProjectsProjectIdRouteImport
-      parentRoute: typeof ProjectsRoute
-    }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/login": {
+      id: "/login";
+      path: "/login";
+      fullPath: "/login";
+      preLoaderRoute: typeof LoginRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/pricing": {
+      id: "/pricing";
+      path: "/pricing";
+      fullPath: "/pricing";
+      preLoaderRoute: typeof PricingRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/privacy": {
+      id: "/privacy";
+      path: "/privacy";
+      fullPath: "/privacy";
+      preLoaderRoute: typeof PrivacyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/projects": {
+      id: "/projects";
+      path: "/projects";
+      fullPath: "/projects";
+      preLoaderRoute: typeof ProjectsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/terms": {
+      id: "/terms";
+      path: "/terms";
+      fullPath: "/terms";
+      preLoaderRoute: typeof TermsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/projects/": {
+      id: "/projects/";
+      path: "/";
+      fullPath: "/projects/";
+      preLoaderRoute: typeof ProjectsIndexRouteImport;
+      parentRoute: typeof ProjectsRoute;
+    };
+    "/projects/$projectId": {
+      id: "/projects/$projectId";
+      path: "/$projectId";
+      fullPath: "/projects/$projectId";
+      preLoaderRoute: typeof ProjectsProjectIdRouteImport;
+      parentRoute: typeof ProjectsRoute;
+    };
+    "/api/auth/$": {
+      id: "/api/auth/$";
+      path: "/api/auth/$";
+      fullPath: "/api/auth/$";
+      preLoaderRoute: typeof ApiAuthSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/compile/$projectId": {
+      id: "/api/compile/$projectId";
+      path: "/api/compile/$projectId";
+      fullPath: "/api/compile/$projectId";
+      preLoaderRoute: typeof ApiCompileProjectIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
 interface ProjectsRouteChildren {
-  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
-  ProjectsIndexRoute: typeof ProjectsIndexRoute
+  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute;
+  ProjectsIndexRoute: typeof ProjectsIndexRoute;
 }
 
 const ProjectsRouteChildren: ProjectsRouteChildren = {
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
-}
+};
 
 const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
   ProjectsRouteChildren,
-)
+);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -233,16 +253,18 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectsRoute: ProjectsRouteWithChildren,
   TermsRoute: TermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
-}
+  ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();
 
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
+import type { createStart } from "@tanstack/react-start";
+
+import type { getRouter } from "./router.tsx";
+declare module "@tanstack/react-start" {
   interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
+    ssr: true;
+    router: Awaited<ReturnType<typeof getRouter>>;
   }
 }

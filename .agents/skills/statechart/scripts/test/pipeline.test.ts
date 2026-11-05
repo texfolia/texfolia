@@ -5,6 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { inspect } from "node:util";
+
 import { checkView } from "../frontends/view.ts";
 import {
   type CheckResult,
@@ -42,26 +43,39 @@ for (const url of process.argv.slice(1)) await import(url);
 console.log(JSON.stringify(edges));
 `;
 const loads = (...targets: string[]) => {
-  const urls = targets.flatMap(sources).map((file) => pathToFileURL(path.join(scripts, file)).href);
-  const out = execFileSync(process.execPath, ["--input-type=module", "-e", RECORD, ...urls], {
-    encoding: "utf8",
-  });
+  const urls = targets
+    .flatMap(sources)
+    .map((file) => pathToFileURL(path.join(scripts, file)).href);
+  const out = execFileSync(
+    process.execPath,
+    ["--input-type=module", "-e", RECORD, ...urls],
+    {
+      encoding: "utf8",
+    },
+  );
   const name = (url: string) =>
     url.startsWith("file:") ? path.relative(scripts, fileURLToPath(url)) : url;
-  return (JSON.parse(out) as string[][]).map(([from, to]) => [name(from), name(to)]);
+  return (JSON.parse(out) as string[][]).map(([from, to]) => [
+    name(from),
+    name(to),
+  ]);
 };
 
 const COMMENT =
   /("(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*'|`(?:[^`\\]|\\[\s\S])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
 const codeOf = (file: string) =>
-  fs.readFileSync(path.join(scripts, file), "utf8").replace(COMMENT, (_, text) => text ?? " ");
+  fs
+    .readFileSync(path.join(scripts, file), "utf8")
+    .replace(COMMENT, (_, text) => text ?? " ");
 
 const RUNTIME =
   /\b(?:process|require|globalThis|global|Deno|Bun|Buffer|setImmediate|clearImmediate|fetch)\b|\bimport\s*\(/g;
 const TYPE_IMPORT =
   /\b(?:import|export)\s+type\b\s*(?:[\w$]+|\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})\s*from\s*["']([^"']*)["']/g;
 const typeImports = (file: string) =>
-  Array.from(codeOf(file).matchAll(TYPE_IMPORT), (m) => path.join(path.dirname(file), m[1]));
+  Array.from(codeOf(file).matchAll(TYPE_IMPORT), (m) =>
+    path.join(path.dirname(file), m[1]),
+  );
 
 test("ir.ts imports nothing", () => {
   assert.deepEqual(loads("ir.ts"), []);
@@ -76,7 +90,8 @@ test("each pass imports only ir.ts", () => {
   );
   const found = loads("passes");
   assert.ok(found.length > 0);
-  for (const [from, to] of found) assert.equal(to, "ir.ts", `${from} imports ${to}`);
+  for (const [from, to] of found)
+    assert.equal(to, "ir.ts", `${from} imports ${to}`);
   for (const file of files)
     for (const to of typeImports(file))
       assert.equal(to, "ir.ts", `${file} imports types from ${to}`);
@@ -93,19 +108,25 @@ test("pipeline.ts reaches no node: module", () => {
 
 test("ir.ts, the passes, pipeline.ts, the frontends, the backends, and every file they load are .ts files that name no listed runtime global and call no import()", () => {
   const targets = ["ir.ts", "passes", "pipeline.ts", "frontends", "backends"];
-  const reached = loads(...targets).flatMap(([, to]) => (to.startsWith("node:") ? [] : [to]));
+  const reached = loads(...targets).flatMap(([, to]) =>
+    to.startsWith("node:") ? [] : [to],
+  );
   const files = [...new Set([...targets.flatMap(sources), ...reached])];
   assert.deepEqual(
     files.filter((file) => !file.endsWith(".ts")),
     [],
   );
-  for (const file of files) assert.deepEqual(codeOf(file).match(RUNTIME), null, file);
+  for (const file of files)
+    assert.deepEqual(codeOf(file).match(RUNTIME), null, file);
 });
 
 test("no frontend or backend loads a node: module when imported, even through another file", () => {
   for (const folder of ["frontends", "backends"]) {
     const files = fs
-      .readdirSync(path.join(scripts, folder), { encoding: "utf8", recursive: true })
+      .readdirSync(path.join(scripts, folder), {
+        encoding: "utf8",
+        recursive: true,
+      })
       .filter((f) => f.endsWith(".ts"));
     assert.ok(files.length > 0, folder);
     for (const f of files)
@@ -143,7 +164,13 @@ const twoStates = (breaks: Rule[], property = "Settles"): CheckResult => ({
     ]),
     steps: [{ from: "1", to: "2", action: "Grow" }],
   },
-  rules: [{ rule: small, outcome: breaks.length ? "broken" : "holds", messages: undefined }],
+  rules: [
+    {
+      rule: small,
+      outcome: breaks.length ? "broken" : "holds",
+      messages: undefined,
+    },
+  ],
   properties: [
     {
       rule: { kind: "property", name: property },
@@ -163,10 +190,19 @@ const twoStates = (breaks: Rule[], property = "Settles"): CheckResult => ({
   stop: undefined,
   drawing: undefined,
   states: { distinct: 2, initial: 1, complete: true, cut: false },
-  messages: [{ code: EC.TLC_FINISHED, level: LEVEL.NONE, body: ["Finished in 394ms at (T)"] }],
+  messages: [
+    {
+      code: EC.TLC_FINISHED,
+      level: LEVEL.NONE,
+      body: ["Finished in 394ms at (T)"],
+    },
+  ],
 });
 
-const body = (files: Map<string, Iterable<string | Uint8Array>>, name: string) => {
+const body = (
+  files: Map<string, Iterable<string | Uint8Array>>,
+  name: string,
+) => {
   let text = "";
   for (const part of files.get(name) ?? [])
     text += typeof part === "string" ? part : new TextDecoder().decode(part);
@@ -182,7 +218,10 @@ test("the pipeline turns a hand-built graph into the out folder's files with no 
   );
   assert.equal(body(broken.files, "report.md"), broken.report);
   assert.equal(body(broken.files, "tlc.out"), "Finished in 00s at (T)\n");
-  assert.equal(body(broken.files, "tlc-Settles.out"), "State 1: <Initial predicate>\nx = 0\n");
+  assert.equal(
+    body(broken.files, "tlc-Settles.out"),
+    "State 1: <Initial predicate>\nx = 0\n",
+  );
   assert.equal(
     broken.report,
     [
@@ -206,7 +245,10 @@ test("the pipeline turns a hand-built graph into the out folder's files with no 
 
   const holds = compile(twoStates([]), noView);
   assert.equal(holds.exit, 0);
-  assert.deepEqual([...holds.files.keys()], ["chart.mmd", "report.md", "tlc.out"]);
+  assert.deepEqual(
+    [...holds.files.keys()],
+    ["chart.mmd", "report.md", "tlc.out"],
+  );
   assert.match(holds.report, /^## Rules that hold\nSmall, Settles$/m);
   assert.doesNotMatch(body(holds.files, "chart.mmd"), /breaks/);
 });
@@ -221,7 +263,12 @@ test("an invariant and a property with one name stay two rules", () => {
         rule: { kind: "property", name: "Small" },
         outcome: "broken",
         messages: [],
-        bug: { start: "1", path: [{ action: "Grow", state: "2", step }], loop: 1, stutters: true },
+        bug: {
+          start: "1",
+          path: [{ action: "Grow", state: "2", step }],
+          loop: 1,
+          stutters: true,
+        },
         initialOnly: false,
       },
     ];
@@ -244,19 +291,27 @@ test("a PROPERTY that breaks with no path writes TLC's counterexample", () => {
     report,
     /^## Settles breaks\nTLC found a counterexample\. It is in tlc-Settles\.out\.$/m,
   );
-  assert.equal(body(files, "tlc-Settles.out"), "State 1: <Initial predicate>\nx = 0\n");
+  assert.equal(
+    body(files, "tlc-Settles.out"),
+    "State 1: <Initial predicate>\nx = 0\n",
+  );
 });
 
 test("a rule named NoDeadlock leaves the deadlock rule a name of its own", () => {
   const holds = (result: CheckResult) => {
     result.spec.deadlock = true;
     result.rules = holding(result.spec);
-    return compile(result, noView).report.match(/^## Rules that hold\n(.*)$/m)?.[1];
+    return compile(result, noView).report.match(
+      /^## Rules that hold\n(.*)$/m,
+    )?.[1];
   };
   const invariant = twoStates([]);
   invariant.spec.invariants = ["NoDeadlock"];
   assert.equal(holds(invariant), "NoDeadlock, CHECK_DEADLOCK, Settles");
-  assert.equal(holds(twoStates([], "NoDeadlock")), "Small, CHECK_DEADLOCK, NoDeadlock");
+  assert.equal(
+    holds(twoStates([], "NoDeadlock")),
+    "Small, CHECK_DEADLOCK, NoDeadlock",
+  );
   assert.equal(holds(twoStates([])), "Small, NoDeadlock, Settles");
 });
 

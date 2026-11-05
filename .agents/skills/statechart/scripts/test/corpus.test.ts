@@ -5,105 +5,142 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
 import { check, PINNED_FLAGS } from "../run.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const corpus = path.join(here, "corpus");
-const skip = !process.env.TLA2TOOLS && "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
+const skip =
+  !process.env.TLA2TOOLS &&
+  "set TLA2TOOLS to the path of tla2tools.jar to run TLC";
 const read = (file: string) => fs.readFileSync(file, "utf8");
 
 for (const name of fs.readdirSync(corpus)) {
-  test(`${name} gives the committed chart and report when TLC runs`, { skip }, () => {
-    const dir = path.join(corpus, name);
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-"));
-    const tlc = path.join(tmp, "tlc");
-    const out = path.join(tmp, "out");
-    fs.mkdirSync(tlc);
-    const view = path.join(dir, "view.mjs");
+  test(
+    `${name} gives the committed chart and report when TLC runs`,
+    { skip },
+    () => {
+      const dir = path.join(corpus, name);
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-"));
+      const tlc = path.join(tmp, "tlc");
+      const out = path.join(tmp, "out");
+      fs.mkdirSync(tlc);
+      const view = path.join(dir, "view.mjs");
+      const r = spawnSync(
+        process.execPath,
+        [
+          path.join(here, "../statechart.ts"),
+          path.join(dir, `${name}.tla`),
+          ...(fs.existsSync(view) ? ["--view", view] : []),
+          "--out",
+          out,
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            JAVA: path.join(here, "java.ts"),
+            STATECHART_JAVA: process.env.JAVA ?? "java",
+            STATECHART_RECORD: tlc,
+          },
+        },
+      );
+      assert.equal(r.stderr, "");
+      if (process.env.STATECHART_UPDATE) {
+        for (const f of fs.readdirSync(dir))
+          if (/\.(out|exit|dot|mmd|md)$/.test(f)) fs.rmSync(path.join(dir, f));
+        for (const f of fs.readdirSync(tlc))
+          fs.copyFileSync(path.join(tlc, f), path.join(dir, f));
+        for (const f of ["chart.mmd", "report.md"])
+          fs.copyFileSync(path.join(out, f), path.join(dir, f));
+      }
+      const report = read(path.join(out, "report.md"));
+      const first = path.join(dir, "verdict-1.exit");
+      const plain = fs.existsSync(first) ? Number(read(first)) : 0;
+      assert.equal(
+        r.status,
+        plain === 0 ? 0 : [11, 12, 13].includes(plain) ? 1 : 2,
+      );
+      assert.equal(report, read(path.join(dir, "report.md")));
+      assert.equal(
+        read(path.join(out, "chart.mmd")),
+        read(path.join(dir, "chart.mmd")),
+      );
+    },
+  );
+}
+
+test(
+  "a spec in a folder whose name is not ASCII checks under the POSIX locale",
+  { skip },
+  () => {
+    const dir = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")),
+      "spec-é",
+    );
+    fs.cpSync(path.join(corpus, "Login"), dir, { recursive: true });
+    const out = path.join(dir, "out");
     const r = spawnSync(
       process.execPath,
       [
         path.join(here, "../statechart.ts"),
-        path.join(dir, `${name}.tla`),
-        ...(fs.existsSync(view) ? ["--view", view] : []),
+        path.join(dir, "Login.tla"),
+        "--view",
+        path.join(dir, "view.mjs"),
         "--out",
         out,
       ],
       {
         encoding: "utf8",
-        env: {
-          ...process.env,
-          JAVA: path.join(here, "java.ts"),
-          STATECHART_JAVA: process.env.JAVA ?? "java",
-          STATECHART_RECORD: tlc,
-        },
+        env: { ...process.env, LC_ALL: "POSIX", LC_CTYPE: "", LANG: "" },
       },
     );
     assert.equal(r.stderr, "");
-    if (process.env.STATECHART_UPDATE) {
-      for (const f of fs.readdirSync(dir))
-        if (/\.(out|exit|dot|mmd|md)$/.test(f)) fs.rmSync(path.join(dir, f));
-      for (const f of fs.readdirSync(tlc)) fs.copyFileSync(path.join(tlc, f), path.join(dir, f));
-      for (const f of ["chart.mmd", "report.md"])
-        fs.copyFileSync(path.join(out, f), path.join(dir, f));
-    }
+    assert.equal(r.status, 0);
+    assert.equal(
+      read(path.join(out, "chart.mmd")),
+      read(path.join(corpus, "Login", "chart.mmd")),
+    );
+  },
+);
+
+test(
+  "an invariant named NoDeadlock and a deadlock break as two rules",
+  { skip },
+  () => {
+    const out = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")),
+      "out",
+    );
+    const r = spawnSync(
+      process.execPath,
+      [
+        path.join(here, "../statechart.ts"),
+        path.join(corpus, "UserNoDeadlock", "UserNoDeadlock.tla"),
+        "--out",
+        out,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(r.stderr, "");
+    assert.equal(r.status, 1);
     const report = read(path.join(out, "report.md"));
-    const first = path.join(dir, "verdict-1.exit");
-    const plain = fs.existsSync(first) ? Number(read(first)) : 0;
-    assert.equal(r.status, plain === 0 ? 0 : [11, 12, 13].includes(plain) ? 1 : 2);
-    assert.equal(report, read(path.join(dir, "report.md")));
-    assert.equal(read(path.join(out, "chart.mmd")), read(path.join(dir, "chart.mmd")));
-  });
-}
-
-test("a spec in a folder whose name is not ASCII checks under the POSIX locale", { skip }, () => {
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), "spec-é");
-  fs.cpSync(path.join(corpus, "Login"), dir, { recursive: true });
-  const out = path.join(dir, "out");
-  const r = spawnSync(
-    process.execPath,
-    [
-      path.join(here, "../statechart.ts"),
-      path.join(dir, "Login.tla"),
-      "--view",
-      path.join(dir, "view.mjs"),
-      "--out",
-      out,
-    ],
-    { encoding: "utf8", env: { ...process.env, LC_ALL: "POSIX", LC_CTYPE: "", LANG: "" } },
-  );
-  assert.equal(r.stderr, "");
-  assert.equal(r.status, 0);
-  assert.equal(read(path.join(out, "chart.mmd")), read(path.join(corpus, "Login", "chart.mmd")));
-});
-
-test("an invariant named NoDeadlock and a deadlock break as two rules", { skip }, () => {
-  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), "out");
-  const r = spawnSync(
-    process.execPath,
-    [
-      path.join(here, "../statechart.ts"),
-      path.join(corpus, "UserNoDeadlock", "UserNoDeadlock.tla"),
-      "--out",
-      out,
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(r.stderr, "");
-  assert.equal(r.status, 1);
-  const report = read(path.join(out, "report.md"));
-  assert.match(
-    report,
-    /^## NoDeadlock breaks\nThe shortest path has 1 step:\n0\. 0\n1\. Next: 1$/m,
-  );
-  assert.match(
-    report,
-    /^## CHECK_DEADLOCK breaks\nThe shortest path has 3 steps:\n(.*\n){3}3\. Next: 3$/m,
-  );
-});
+    assert.match(
+      report,
+      /^## NoDeadlock breaks\nThe shortest path has 1 step:\n0\. 0\n1\. Next: 1$/m,
+    );
+    assert.match(
+      report,
+      /^## CHECK_DEADLOCK breaks\nThe shortest path has 3 steps:\n(.*\n){3}3\. Next: 3$/m,
+    );
+  },
+);
 
 const writeSpec = (name: string, tla: string[], cfg: string) => {
-  const base = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")), name);
+  const base = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "statechart-corpus-")),
+    name,
+  );
   fs.writeFileSync(`${base}.tla`, `${tla.join("\n")}\n`);
   fs.writeFileSync(`${base}.cfg`, cfg);
   return base;
@@ -112,7 +149,13 @@ const login = path.join(corpus, "Login", "Login");
 const broken = () =>
   writeSpec(
     "Broken",
-    ["---- MODULE Broken ----", "VARIABLE x", "Init == x = 0", "Next == x' = y", "===="],
+    [
+      "---- MODULE Broken ----",
+      "VARIABLE x",
+      "Init == x = 0",
+      "Next == x' = y",
+      "====",
+    ],
     "INIT Init\nNEXT Next\n",
   );
 
@@ -171,7 +214,11 @@ for (const [input, name, tla] of [
   [
     "a nested block comment",
     "Nested",
-    counter("Nested", [], ["(* outer (* inner *) VARIABLES ghost *)", "VARIABLE x"]),
+    counter(
+      "Nested",
+      [],
+      ["(* outer (* inner *) VARIABLES ghost *)", "VARIABLE x"],
+    ),
   ],
   [
     'a "(*" string',
@@ -197,7 +244,11 @@ for (const [input, name, tla] of [
   ],
 ] as const) {
   test(`a spec with ${input} gives plain TLC's exit and path`, { skip }, () => {
-    const base = writeSpec(name, [...tla], "SPECIFICATION Spec\nINVARIANT Low\n");
+    const base = writeSpec(
+      name,
+      [...tla],
+      "SPECIFICATION Spec\nINVARIANT Low\n",
+    );
     const tlc = plainTlc(base);
     assert.equal(tlc.rule, "Low");
     const out = path.join(path.dirname(base), "out");
@@ -222,35 +273,43 @@ for (const [input, name, tla] of [
   });
 }
 
-test("a property that breaks on a loop draws the loop and reports it", { skip }, () => {
-  const base = writeSpec(
-    "Cycle",
-    [
-      "---- MODULE Cycle ----",
-      "EXTENDS Integers",
-      "VARIABLE x",
-      "Init == x = 0",
-      "Next == x' = (x + 1) % 3",
-      "Spec == Init /\\ [][Next]_x /\\ WF_x(Next)",
-      "Prop == <>(x = 5)",
-      "====",
-    ],
-    "SPECIFICATION Spec\nPROPERTY Prop\n",
-  );
-  const out = path.join(path.dirname(base), "out");
-  const r = spawnSync(
-    process.execPath,
-    [path.join(here, "../statechart.ts"), `${base}.tla`, "--out", out],
-    { encoding: "utf8" },
-  );
-  assert.equal(r.stderr, "");
-  assert.equal(r.status, 1);
-  assert.match(
-    read(path.join(out, "report.md")),
-    /^## Prop breaks\nTLC's counterexample is in tlc-Prop\.out\. It has 3 steps:\n0\. 0\n1\. Next: 1\n2\. Next: 2\n3\. Next: 0\nThe run loops through "0", "1" and "2" forever\.$/m,
-  );
-  assert.equal(read(path.join(out, "chart.mmd")).match(/^ {2}class s\d+ repeats$/gm)?.length, 3);
-});
+test(
+  "a property that breaks on a loop draws the loop and reports it",
+  { skip },
+  () => {
+    const base = writeSpec(
+      "Cycle",
+      [
+        "---- MODULE Cycle ----",
+        "EXTENDS Integers",
+        "VARIABLE x",
+        "Init == x = 0",
+        "Next == x' = (x + 1) % 3",
+        "Spec == Init /\\ [][Next]_x /\\ WF_x(Next)",
+        "Prop == <>(x = 5)",
+        "====",
+      ],
+      "SPECIFICATION Spec\nPROPERTY Prop\n",
+    );
+    const out = path.join(path.dirname(base), "out");
+    const r = spawnSync(
+      process.execPath,
+      [path.join(here, "../statechart.ts"), `${base}.tla`, "--out", out],
+      { encoding: "utf8" },
+    );
+    assert.equal(r.stderr, "");
+    assert.equal(r.status, 1);
+    assert.match(
+      read(path.join(out, "report.md")),
+      /^## Prop breaks\nTLC's counterexample is in tlc-Prop\.out\. It has 3 steps:\n0\. 0\n1\. Next: 1\n2\. Next: 2\n3\. Next: 0\nThe run loops through "0", "1" and "2" forever\.$/m,
+    );
+    assert.equal(
+      read(path.join(out, "chart.mmd")).match(/^ {2}class s\d+ repeats$/gm)
+        ?.length,
+      3,
+    );
+  },
+);
 
 test(
   "a property's loop comes from the whole state graph when TLC explores for over 3 seconds",
@@ -393,7 +452,10 @@ test(
     process.env.TMPDIR = tmp;
     try {
       await check(`${login}.tla`, `${login}.cfg`);
-      await assert.rejects(check(`${base}.tla`, `${base}.cfg`), /SANY could not read/);
+      await assert.rejects(
+        check(`${base}.tla`, `${base}.cfg`),
+        /SANY could not read/,
+      );
     } finally {
       if (saved === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = saved;

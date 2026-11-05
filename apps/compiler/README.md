@@ -68,10 +68,15 @@ cron starts it after deployment and recovers it after exits. The first request o
 cron starts the instance; provisioning/restarts can still cause a cold start. This
 is one continuously billed instance, not a zero-downtime guarantee.
 
-Production `POST /compile` also returns `X-Compilation-Id` and a relative `Location`
-such as `/compilations/<uuid>.pdf`. An authenticated `GET` at that location retrieves
-the PDF from the private R2 bucket. Sources are supplied with every request and
-are not persisted. Configure an R2 lifecycle policy for PDF retention as needed.
+For compiler diagnostics on successful builds, send `Accept: multipart/form-data`.
+The response contains a PDF part named `pdf` and the compiler transcript in `log`.
+
+The web backend sends its reserved project job UUID in `X-Compilation-Id` to
+store a successful PDF in R2. The Worker returns the ID, `X-Compilation-Size`
+in bytes, and a relative `Location` such as `/compilations/<uuid>.pdf`. An
+authenticated `GET` at that location retrieves the PDF. Compile requests without
+a job UUID return the result directly. The compiler receives the source files
+with every request and clears its temporary directory when the job finishes.
 
 ## Checks
 

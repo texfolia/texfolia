@@ -5,15 +5,27 @@ export type Value =
   | { kind: "model"; name: string }
   | { kind: "set"; members: Value[] }
   | { kind: "interval"; lo: number; hi: number }
-  | { kind: "function"; printedAs: "tuple" | "record" | "pairs"; keys: Value[]; values: Value[] };
+  | {
+      kind: "function";
+      printedAs: "tuple" | "record" | "pairs";
+      keys: Value[];
+      values: Value[];
+    };
 
 export type Vars = { [name: string]: Value };
 
-export type Rule = { kind: "invariant" | "deadlock" | "property"; name: string };
+export type Rule = {
+  kind: "invariant" | "deadlock" | "property";
+  name: string;
+};
 
 type StateBase = { vars: Vars; start: boolean; breaks: Rule[] };
 
-export type PastState = StateBase & { ends: Rule[]; past: true; excluded: boolean };
+export type PastState = StateBase & {
+  ends: Rule[];
+  past: true;
+  excluded: boolean;
+};
 
 export type State =
   | (StateBase & { ends?: Rule[]; past?: undefined; excluded?: undefined })
@@ -82,7 +94,12 @@ export type Spec = {
   written: ConfigSection[];
 };
 
-export type Message = { code: number; level: number; body: Part[]; beforeMarker?: string };
+export type Message = {
+  code: number;
+  level: number;
+  body: Part[];
+  beforeMarker?: string;
+};
 
 export type Line = string;
 
@@ -107,7 +124,13 @@ export const EC = {
   TLC_SANY_START: 2220,
 } as const;
 
-export const LEVEL = { NONE: 0, ERROR: 1, TLCBUG: 2, WARNING: 3, STATE: 4 } as const;
+export const LEVEL = {
+  NONE: 0,
+  ERROR: 1,
+  TLCBUG: 2,
+  WARNING: 3,
+  STATE: 4,
+} as const;
 
 export type Outcome = "broken" | "holds" | "not checked";
 
@@ -117,7 +140,10 @@ export type Verdict = {
   messages: Iterable<Part> | undefined;
 };
 
-export type Property = Verdict & { bug: Lasso | undefined; initialOnly: boolean };
+export type Property = Verdict & {
+  bug: Lasso | undefined;
+  initialOnly: boolean;
+};
 
 export type Stop = { status: number | null; message: string };
 
@@ -130,7 +156,12 @@ export type CheckResult = {
   exit: 0 | 1 | 2;
   stop: Stop | undefined;
   drawing: { status: number | null } | undefined;
-  states: { distinct: number; initial: number; complete: boolean; cut: boolean };
+  states: {
+    distinct: number;
+    initial: number;
+    complete: boolean;
+    cut: boolean;
+  };
   messages: Iterable<Part>;
 };
 
@@ -250,7 +281,9 @@ export const PART = 1 << 24;
 export const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 export const list = (items: string[], and = "and") =>
-  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} ${and} ${items.at(-1)}`;
+  items.length < 2
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} ${and} ${items.at(-1)}`;
 
 const ESCAPES: { [c: string]: string } = {
   '"': '\\"',
@@ -260,7 +293,8 @@ const ESCAPES: { [c: string]: string } = {
   "\r": "\\r",
   "\f": "\\f",
 };
-const quote = (s: string) => `"${s.replace(/["\\\n\t\r\f]/g, (c) => ESCAPES[c])}"`;
+const quote = (s: string) =>
+  `"${s.replace(/["\\\n\t\r\f]/g, (c) => ESCAPES[c])}"`;
 
 const joined = (items: Value[], sep: string) => {
   let s = "";
@@ -299,7 +333,8 @@ export const show = (v: Value): string => {
 
 export const must = <K, V>(map: ReadonlyMap<K, V>, key: K): V => {
   const value = map.get(key);
-  if (value === undefined) throw new Error(`The chart lost track of ${JSON.stringify(key)}.`);
+  if (value === undefined)
+    throw new Error(`The chart lost track of ${JSON.stringify(key)}.`);
   return value;
 };
 
@@ -342,12 +377,14 @@ export const sortBy = (items: Int32Array, keys: Int32Array[]) => {
   for (let k = keys.length - 1; k >= 0; k--) {
     const key = keys[k];
     let size = 0;
-    for (let p = 0; p < items.length; p++) if (key[items[p]] >= size) size = key[items[p]] + 1;
+    for (let p = 0; p < items.length; p++)
+      if (key[items[p]] >= size) size = key[items[p]] + 1;
     const start = new Int32Array(size + 1);
     for (let p = 0; p < items.length; p++) start[key[items[p]] + 1]++;
     for (let v = 0; v < size; v++) start[v + 1] += start[v];
     const sorted = new Int32Array(items.length);
-    for (let p = 0; p < items.length; p++) sorted[start[key[items[p]]]++] = items[p];
+    for (let p = 0; p < items.length; p++)
+      sorted[start[key[items[p]]]++] = items[p];
     items = sorted;
   }
   return items;
@@ -378,7 +415,8 @@ export function holds(condition: Condition, others: string[]) {
 export const ruleKey = (rule: Rule) => tupleKey([rule.kind, rule.name]);
 
 export const hasRule = (rules: Rule[], rule: Rule) => {
-  for (const r of rules) if (r.kind === rule.kind && r.name === rule.name) return true;
+  for (const r of rules)
+    if (r.kind === rule.kind && r.name === rule.name) return true;
   return false;
 };
 
@@ -387,7 +425,8 @@ const ascending = (keys: string[]) => {
   return true;
 };
 
-const span = (lo: number, hi: number) => (hi > lo ? `${lo}..${hi}` : String(lo));
+const span = (lo: number, hi: number) =>
+  hi > lo ? `${lo}..${hi}` : String(lo);
 
 const setKey = (members: Value[]) => {
   const ints: number[] = [];
@@ -409,7 +448,8 @@ const setKey = (members: Value[]) => {
     i = j + 1;
   }
   for (let i = 0; i < others.length; i++)
-    if (!i || others[i] !== others[i - 1]) s += (s.length > 1 ? "," : "") + others[i];
+    if (!i || others[i] !== others[i - 1])
+      s += (s.length > 1 ? "," : "") + others[i];
   return s + "}";
 };
 
@@ -422,16 +462,22 @@ const functionKey = ({ keys, values }: { keys: Value[]; values: Value[] }) => {
     keyTexts.push(key(keys[i]));
     if (typeof keys[i] === "number") ints++;
   }
-  const rank = (i: number) => (typeof keys[i] === "number" ? (keys[i] as number) : Infinity);
-  order.sort((a, b) => rank(a) - rank(b) || byText(keyTexts[a], keyTexts[b]) || a - b);
+  const rank = (i: number) =>
+    typeof keys[i] === "number" ? (keys[i] as number) : Infinity;
+  order.sort(
+    (a, b) => rank(a) - rank(b) || byText(keyTexts[a], keyTexts[b]) || a - b,
+  );
   let tuple = ints === keys.length;
-  for (let i = 0; tuple && i < order.length; i++) tuple = keys[order[i]] === i + 1;
+  for (let i = 0; tuple && i < order.length; i++)
+    tuple = keys[order[i]] === i + 1;
   let s = tuple ? "<<" : "(";
   for (let i = 0, kept = 0; i < order.length; i++) {
     const k = order[i];
     if (i && keyTexts[k] === keyTexts[order[i - 1]]) continue;
     const v = key(values[k]);
-    s += tuple ? `${kept++ ? "," : ""}${v}` : `${kept++ ? "@@" : ""}${keyTexts[k]}:>${v}`;
+    s += tuple
+      ? `${kept++ ? "," : ""}${v}`
+      : `${kept++ ? "@@" : ""}${keyTexts[k]}:>${v}`;
   }
   return s + (tuple ? ">>" : ")");
 };
@@ -506,7 +552,11 @@ export const findTrace = <Id>(
   return trace;
 };
 
-export const findLoop = <Id>({ seq, loop }: Trace, names: string[], find: Find<Id>) => {
+export const findLoop = <Id>(
+  { seq, loop }: Trace,
+  names: string[],
+  find: Find<Id>,
+) => {
   const found: { action: string; id: Id | undefined }[] = [];
   for (const { action, vars } of seq)
     found.push({ action, id: vars && find(valuesOf(vars, names)) });
