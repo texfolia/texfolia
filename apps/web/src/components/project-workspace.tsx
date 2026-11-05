@@ -1,5 +1,7 @@
 import "dockview-react/dist/styles/dockview.css";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
+import type { EditorView } from "@uiw/react-codemirror";
 import {
   type DockviewApi,
   DockviewDefaultTab,
@@ -20,20 +22,19 @@ import {
   useRef,
   useState,
 } from "react";
+import { z } from "zod";
 
 import { Editor } from "#/components/editor";
-import {
-  LatexFormatSettings,
-  useLatexFormatSettings,
-} from "#/components/latex-format-settings";
 import {
   ProjectFileTree,
   type ProjectNode,
 } from "#/components/project-file-tree";
+import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -46,6 +47,7 @@ import {
   SidebarTrigger,
 } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
+import { useSettings } from "#/hooks/use-settings";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { latexCompletion } from "#/lib/latex/completion";
@@ -97,8 +99,24 @@ function projectPaths(nodes: ProjectNode[]) {
 
 const PdfViewer = lazy(() => import("#/components/pdf"));
 
-function FileEditor({ params }: IDockviewPanelProps<FilePanelParams>) {
+function FileEditor({
+  params,
+  api: panelApi,
+}: IDockviewPanelProps<FilePanelParams>) {
   const workspace = useWorkspace();
+  const editor = useRef<EditorView | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    const subscription = panelApi.onDidActiveChange(({ isActive }) => {
+      cancelAnimationFrame(frame);
+      if (isActive)
+        frame = requestAnimationFrame(() => editor.current?.focus());
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      subscription.dispose();
+    };
+  }, [panelApi]);
   const draft = workspace.drafts.get(params.node.id);
   const path = workspace.paths.get(params.node.id) ?? params.node.name;
   if (params.node.kind === "binary")
@@ -109,16 +127,19 @@ function FileEditor({ params }: IDockviewPanelProps<FilePanelParams>) {
     );
   return (
     <Editor
+      onCreateEditor={(view) => {
+        editor.current = view;
+        if (panelApi.isActive) view.focus();
+      }}
       filename={params.node.name}
       defaultValue={draft?.value ?? ""}
-      defaultSavedValue={draft?.savedValue ?? ""}
+      savedValue={draft?.savedValue ?? ""}
       allowOpenFile={false}
       completion={workspace.completion}
       problems={workspace.problems.get(path) ?? noProblems}
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
       onChange={(value) => workspace.change(params.node.id, value)}
-      onSave={(value) => workspace.change(params.node.id, value, true)}
     />
   );
 }
@@ -151,6 +172,7 @@ function CompiledPdf() {
 
 const components = { editor: FileEditor, pdf: CompiledPdf };
 const tabComponents = { file: FileTab };
+const savedSourcesSchema = z.record(z.string(), z.string());
 
 export function ProjectWorkspace({
   projectId,
@@ -162,6 +184,7 @@ export function ProjectWorkspace({
   nodes: ProjectNode[];
 }) {
   const api = useRef<DockviewApi | null>(null);
+  const container = useRef<HTMLDivElement>(null);
   const previewId = useRef<string | null>(null);
   const drafts = useRef(new Map<string, FileState>());
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
@@ -182,8 +205,11 @@ export function ProjectWorkspace({
   const [compileError, setCompileError] = useState("");
   const [jump, setJump] = useState<Workspace["jump"]>();
   const [showProblems, setShowProblems] = useState(false);
-  const { settings: formatSettings, update: updateFormatSettings } =
-    useLatexFormatSettings();
+  const {
+    formatting: { settings: formatSettings },
+    open: settingsOpen,
+  } = useSettings();
+  const storageKey = `texfolia.project.${projectId}.sources`;
   const compileInFlight = useRef(false);
 
   const allProblems = useMemo(
@@ -206,6 +232,22 @@ export function ProjectWorkspace({
 
   async function compileProject() {
     if (!main || compileInFlight.current) return;
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify(
+          Object.fromEntries(
+            [...drafts.current].map(([id, draft]) => [id, draft.value]),
+          ),
+        ),
+      );
+      for (const [id, draft] of drafts.current) change(id, draft.value, true);
+    } catch {
+      setCompileError(
+        "Could not save sources in this browser. Download your files to keep a copy, then free browser storage and try again.",
+      );
+      return;
+    }
     compileInFlight.current = true;
     setCompiling(true);
     setCompileError("");
@@ -267,6 +309,30 @@ export function ProjectWorkspace({
       setCompiling(false);
     }
   }
+
+  function cycleTab(direction: number) {
+    const panels =
+      api.current?.panels.filter((panel) => panel.id !== "pdf") ?? [];
+    const currentId = api.current?.activePanel?.id ?? activeId;
+    const index = panels.findIndex((panel) => panel.id === currentId);
+    panels[
+      (index + direction + panels.length) % panels.length
+    ]?.api.setActive();
+  }
+
+  useHotkeys(
+    [
+      { hotkey: "Mod+S", callback: () => void compileProject() },
+      { hotkey: "Control+PageDown", callback: () => cycleTab(1) },
+      { hotkey: "Control+PageUp", callback: () => cycleTab(-1) },
+    ],
+    {
+      target: container,
+      capture: true,
+      ignoreInputs: false,
+      enabled: !settingsOpen,
+    },
+  );
 
   useEffect(
     () => () => {
@@ -349,6 +415,23 @@ export function ProjectWorkspace({
 
   function onReady({ api: dock }: DockviewReadyEvent) {
     api.current = dock;
+    try {
+      const saved = savedSourcesSchema.safeParse(
+        JSON.parse(localStorage.getItem(storageKey) ?? "null"),
+      );
+      if (saved.success) {
+        for (const node of nodes) {
+          const value = saved.data[node.id];
+          const path = paths.get(node.id);
+          if (node.kind === "text" && value !== undefined && path) {
+            drafts.current.set(node.id, { value, savedValue: value });
+            update(path, value);
+          }
+        }
+      }
+    } catch {
+      setCompileError("Saved sources could not be read from this browser.");
+    }
     subscriptions.current.forEach((subscription) => subscription.dispose());
     subscriptions.current = [
       dock.onDidActivePanelChange(({ panel }) => {
@@ -388,7 +471,7 @@ export function ProjectWorkspace({
         formatSettings,
       }}
     >
-      <SidebarProvider className="h-svh overflow-hidden">
+      <SidebarProvider ref={container} className="h-svh overflow-hidden">
         <Sidebar variant="inset">
           <SidebarHeader>
             <SidebarMenu>
@@ -412,6 +495,13 @@ export function ProjectWorkspace({
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SettingsDialog />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
         </Sidebar>
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           <header className="flex shrink-0 items-center gap-2 border-b p-2">
@@ -420,7 +510,7 @@ export function ProjectWorkspace({
               disabled={!main || compiling}
               onClick={() => void compileProject()}
             >
-              {compiling ? "Compiling…" : "Compile"}
+              {compiling ? "Compiling…" : "Save & compile"}
             </Button>
             <Button
               variant="outline"
@@ -429,10 +519,6 @@ export function ProjectWorkspace({
             >
               Problems ({allProblems.length})
             </Button>
-            <LatexFormatSettings
-              settings={formatSettings}
-              onChange={updateFormatSettings}
-            />
           </header>
           {compileError && (
             <p

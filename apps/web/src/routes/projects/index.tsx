@@ -1,8 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useFormatForDisplay, useHotkey } from "@tanstack/react-hotkeys";
+import { ClientOnly, createFileRoute, Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
-import { FolderOpenIcon, Search, Settings } from "lucide-react";
+import { FolderOpenIcon, Search } from "lucide-react";
+import { useRef } from "react";
 
 import { ProjectForm } from "#/components/project-form";
+import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import {
@@ -39,6 +42,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarTrigger,
 } from "#/components/ui/sidebar";
 import {
   Table,
@@ -66,8 +70,22 @@ export const Route = createFileRoute("/projects/")({
   component: RouteComponent,
 });
 
+function SearchShortcut() {
+  const formatShortcut = useFormatForDisplay();
+  return <Kbd>{formatShortcut("Mod+K")}</Kbd>;
+}
+
 function RouteComponent() {
   const { projects } = Route.useLoaderData();
+  const search = useRef<HTMLInputElement>(null);
+  useHotkey(
+    "Mod+K",
+    () => {
+      search.current?.focus();
+      search.current?.select();
+    },
+    { ignoreInputs: false },
+  );
 
   const table = useTable({
     key: "projects",
@@ -92,19 +110,21 @@ function RouteComponent() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <Button variant="outline" className="w-full">
-                <Settings />
-                Settings
-              </Button>
+              <SettingsDialog />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         <main className="flex flex-col gap-4 p-4">
-          <h1>Projects</h1>
+          <div className="flex items-center gap-2">
+            <SidebarTrigger />
+            <h1>Projects</h1>
+          </div>
           <InputGroup className="max-w-sm">
             <InputGroupInput
+              ref={search}
+              aria-label="Search projects"
               placeholder="Search projects..."
               value={table.state.globalFilter || ""}
               onChange={(e) => table.setGlobalFilter(e.target.value)}
@@ -113,7 +133,9 @@ function RouteComponent() {
               <Search />
             </InputGroupAddon>
             <InputGroupAddon align="inline-end">
-              <Kbd>&#x2318;K</Kbd>
+              <ClientOnly fallback={<Kbd>Mod+K</Kbd>}>
+                <SearchShortcut />
+              </ClientOnly>
             </InputGroupAddon>
           </InputGroup>
           <Card>

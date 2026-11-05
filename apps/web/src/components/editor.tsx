@@ -2,12 +2,21 @@ import {
   autocompletion,
   type CompletionSource,
 } from "@codemirror/autocomplete";
-import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
-import { StreamLanguage } from "@codemirror/language";
+import {
+  indentLess,
+  indentMore,
+  redo,
+  redoDepth,
+  undo,
+  undoDepth,
+} from "@codemirror/commands";
+import { indentUnit, StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { openSearchPanel } from "@codemirror/search";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import CodeMirror, {
+  EditorState,
   EditorView,
   keymap,
   type ReactCodeMirrorRef,
@@ -29,8 +38,14 @@ import {
   PanelHeader,
 } from "#/components/panel-header";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+import { useSettings } from "#/hooks/use-settings";
 import { downloadFile } from "#/lib/download-file";
 import type { LatexProblem } from "#/lib/latex/analysis";
+import {
+  applyLatexHeading,
+  headingCommands,
+  toggleLatexCommand,
+} from "#/lib/latex/editor-commands";
 import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 
 const latex = StreamLanguage.define(stex);
@@ -38,7 +53,6 @@ const editorTheme = EditorView.theme({
   "&": { backgroundColor: "var(--background)", color: "var(--foreground)" },
   ".cm-content, .cm-gutters": {
     fontFamily: "var(--font-mono)",
-    fontSize: "13px",
   },
   ".cm-gutters": {
     backgroundColor: "var(--muted)",
@@ -52,10 +66,10 @@ const editorTheme = EditorView.theme({
 
 type EditorProps = {
   defaultValue?: string;
-  defaultSavedValue?: string;
+  savedValue?: string;
   filename?: string;
   onChange?: (value: string) => void;
-  onSave?: (value: string) => void;
+  onCreateEditor?: (view: EditorView) => void;
   allowOpenFile?: boolean;
   completion?: CompletionSource;
   problems?: LatexProblem[];
@@ -65,10 +79,10 @@ type EditorProps = {
 
 export function Editor({
   defaultValue = "",
-  defaultSavedValue = defaultValue,
+  savedValue,
   filename = "main.tex",
   onChange,
-  onSave,
+  onCreateEditor,
   allowOpenFile = true,
   completion,
   problems,
@@ -76,12 +90,13 @@ export function Editor({
   formatSettings = defaultFormatSettings,
 }: EditorProps) {
   const editor = useRef<ReactCodeMirrorRef>(null);
+  const container = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const openRequest = useRef(0);
   const [value, setValue] = useState(defaultValue);
   const [name, setName] = useState(filename);
-  const [savedValue, setSavedValue] = useState(defaultSavedValue);
-  const [wrap, setWrap] = useState(true);
+  const [downloadedValue, setDownloadedValue] = useState(defaultValue);
+  const { editor: preferences, updateEditor } = useSettings();
   const [error, setError] = useState("");
   const [status, setStatus] = useState({
     line: 1,
@@ -90,10 +105,44 @@ export function Editor({
     undo: false,
     redo: false,
   });
-  const modified = value !== savedValue;
+  const modified = value !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
   const canFormat = isLatex || /\.bib$/i.test(name);
   const { format, formatting, formatError } = useLatexFormatter(formatSettings);
+
+  useHotkeys(
+    [
+      {
+        hotkey: "Mod+B",
+        callback: () => {
+          const view = editor.current?.view;
+          if (view) toggleLatexCommand("textbf")(view);
+        },
+      },
+      {
+        hotkey: "Mod+I",
+        callback: () => {
+          const view = editor.current?.view;
+          if (view) toggleLatexCommand("textit")(view);
+        },
+      },
+      {
+        hotkey: "Mod+U",
+        callback: () => {
+          const view = editor.current?.view;
+          if (view) toggleLatexCommand("underline")(view);
+        },
+      },
+      ...headingCommands.map((command, level) => ({
+        hotkey: { code: `Digit${level}`, mod: true, alt: true },
+        callback: () => {
+          const view = editor.current?.view;
+          if (view) applyLatexHeading(command)(view);
+        },
+      })),
+    ],
+    { target: container, capture: true, ignoreInputs: false, enabled: isLatex },
+  );
 
   useEffect(() => {
     const view = editor.current?.view;
@@ -133,25 +182,27 @@ export function Editor({
         ? [autocompletion({ override: [completion] })]
         : []),
       editorTheme,
-      ...(wrap ? [EditorView.lineWrapping] : []),
+      EditorView.theme({
+        ".cm-content, .cm-gutters": { fontSize: `${preferences.fontSize}px` },
+      }),
+      EditorState.tabSize.of(formatSettings.indent),
+      indentUnit.of(" ".repeat(formatSettings.indent)),
+      ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
       keymap.of([
         ...(canFormat ? [{ key: "Mod-Shift-f", run: format }] : []),
-        {
-          key: "Mod-s",
-          run: (view) => {
-            const content = view.state.doc.toString();
-            downloadFile(
-              new Blob([content], { type: "text/plain;charset=utf-8" }),
-              name,
-            );
-            setSavedValue(content);
-            onSave?.(content);
-            return true;
-          },
-        },
+        { key: "Mod-h", mac: "Mod-Shift-h", run: openSearchPanel },
+        { key: "Mod-]", run: indentMore },
+        { key: "Mod-[", run: indentLess },
       ]),
     ],
-    [name, wrap, onSave, isLatex, completion, canFormat, format],
+    [
+      preferences,
+      formatSettings.indent,
+      isLatex,
+      completion,
+      canFormat,
+      format,
+    ],
   );
 
   async function openFile(file: File) {
@@ -167,7 +218,7 @@ export function Editor({
       )
         return;
       setName(file.name);
-      setSavedValue(text);
+      setDownloadedValue(text);
       setError("");
       const view = editor.current?.view;
       if (view)
@@ -188,6 +239,7 @@ export function Editor({
 
   return (
     <section
+      ref={container}
       aria-label="Source editor"
       className="bg-background flex h-full min-h-0 min-w-0 flex-col"
     >
@@ -202,14 +254,13 @@ export function Editor({
             </PanelAction>
           )}
           <PanelAction
-            label="Download source (⌘/Ctrl+S)"
+            label="Download source"
             onClick={() => {
               downloadFile(
                 new Blob([value], { type: "text/plain;charset=utf-8" }),
                 name,
               );
-              setSavedValue(value);
-              onSave?.(value);
+              setDownloadedValue(value);
             }}
           >
             <Download />
@@ -266,8 +317,13 @@ export function Editor({
           )}
           <PanelAction
             label="Wrap lines"
-            aria-pressed={wrap}
-            onClick={() => setWrap(!wrap)}
+            aria-pressed={preferences.wrapLines}
+            onClick={() =>
+              updateEditor({
+                ...preferences,
+                wrapLines: !preferences.wrapLines,
+              })
+            }
           >
             <WrapText />
           </PanelAction>
@@ -292,6 +348,7 @@ export function Editor({
       )}
       <CodeMirror
         ref={editor}
+        onCreateEditor={onCreateEditor}
         value={value}
         onChange={(text) => {
           setValue(text);

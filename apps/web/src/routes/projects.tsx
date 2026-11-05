@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
+import { SettingsProvider } from "#/hooks/use-settings";
 import { getSession } from "#/lib/auth.functions";
 
 export const Route = createFileRoute("/projects")({
@@ -15,5 +16,9 @@ export const Route = createFileRoute("/projects")({
 
     return { user: session.user };
   },
-  component: () => <Outlet />,
+  component: () => (
+    <SettingsProvider>
+      <Outlet />
+    </SettingsProvider>
+  ),
 });
