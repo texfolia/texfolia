@@ -50,6 +50,7 @@ import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSettings } from "#/hooks/use-settings";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
+import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
 import type { FormatSettings } from "#/lib/latex/format";
 
@@ -210,7 +211,8 @@ export function ProjectWorkspace({
     open: settingsOpen,
   } = useSettings();
   const storageKey = `texfolia.project.${projectId}.sources`;
-  const compileInFlight = useRef(false);
+  const compilation = useRef<AbortController | null>(null);
+  useEffect(() => () => compilation.current?.abort(), [projectId]);
 
   const allProblems = useMemo(
     () => [...result.analysis.problems, ...compileProblems],
@@ -231,7 +233,7 @@ export function ProjectWorkspace({
     [...paths.values()].find((path) => path.endsWith(".tex"));
 
   async function compileProject() {
-    if (!main || compileInFlight.current) return;
+    if (!main || compilation.current) return;
     try {
       localStorage.setItem(
         storageKey,
@@ -248,7 +250,8 @@ export function ProjectWorkspace({
       );
       return;
     }
-    compileInFlight.current = true;
+    const controller = new AbortController();
+    compilation.current = controller;
     setCompiling(true);
     setCompileError("");
     setCompileProblems([]);
@@ -262,50 +265,31 @@ export function ProjectWorkspace({
       }),
     );
     try {
-      const response = await fetch(
-        `/api/compile/${encodeURIComponent(projectId)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mainFile: main, files }),
-        },
-      );
-      let log: string;
-      if (response.ok) {
-        const form = await response.formData();
-        const file = form.get("pdf");
-        const transcript = form.get("log");
-        if (!(file instanceof File) || typeof transcript !== "string")
-          throw new Error("Invalid compiler result");
-        setPdf(file);
-        log = transcript;
-      } else {
-        const failure: unknown = await response.json();
-        setCompileError(
-          failure &&
-            typeof failure === "object" &&
-            "error" in failure &&
-            typeof failure.error === "string"
-            ? failure.error
-            : "Compilation failed",
-        );
-        log =
-          failure &&
-          typeof failure === "object" &&
-          "log" in failure &&
-          typeof failure.log === "string"
-            ? failure.log
-            : "";
-      }
-      const diagnostics = parseCompileLog(log, filenames, main);
+      const result = await requestCompilation({
+        projectId,
+        mainFile: main,
+        files,
+        signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(10 * 60_000),
+        ]),
+      });
+      if ("pdf" in result) setPdf(result.pdf);
+      else setCompileError(result.error);
+      const diagnostics = parseCompileLog(result.log, filenames, main);
       if (revision.current === snapshot) {
         setCompileProblems(diagnostics);
         if (diagnostics.length) setShowProblems(true);
       }
-    } catch {
-      setCompileError("The compiler could not be reached. Try again.");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setCompileError(
+        error instanceof DOMException && error.name === "TimeoutError"
+          ? "The compile job is taking longer than expected. Try again in a few minutes."
+          : "The compiler could not be reached. Try again.",
+      );
     } finally {
-      compileInFlight.current = false;
+      compilation.current = null;
       setCompiling(false);
     }
   }

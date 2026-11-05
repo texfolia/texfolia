@@ -1,85 +1,66 @@
-import { compile, HttpError, parseProject } from "./compile";
+import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 
-export function createHandler(
+import { compile } from "./compile";
+import { HttpError, maxProjectBytes, parseProject } from "./project";
+
+export function createEngineHandler(
   options: { token?: string; compile?: typeof compile } = {},
 ) {
+  const app = new Hono();
   let busy = false;
-  return async (request: Request): Promise<Response> => {
-    const path = new URL(request.url).pathname;
-    if (path === "/health" && request.method === "GET")
-      return Response.json({ status: "ready" });
-    if (
-      options.token &&
-      request.headers.get("authorization") !== `Bearer ${options.token}`
-    ) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (path !== "/compile")
-      return Response.json({ error: "Not found" }, { status: 404 });
-    if (request.method !== "POST")
-      return new Response(null, { status: 405, headers: { Allow: "POST" } });
-    if (busy)
-      return Response.json(
-        { error: "Compiler busy; retry shortly" },
-        { status: 503, headers: { "Retry-After": "1" } },
-      );
-    busy = true;
-    try {
-      if (!request.headers.get("content-type")?.startsWith("application/json"))
-        throw new HttpError(415, "Expected application/json");
-      // Enforce the limit for chunked requests too, before JSON parsing.
-      const reader = request.body?.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          size += value.length;
-          if (size > 10 * 1024 * 1024) {
-            await reader.cancel();
-            throw new HttpError(413, "Project exceeds 10 MiB");
-          }
-          chunks.push(value);
-        }
+  app.get("/health", (c) => c.json({ status: "ready" }));
+  app.post(
+    "/compile",
+    async (c, next) => {
+      if (
+        options.token &&
+        c.req.header("Authorization") !== `Bearer ${options.token}`
+      )
+        return c.json({ error: "Unauthorized" }, 401);
+      await next();
+    },
+    bodyLimit({
+      maxSize: maxProjectBytes,
+      onError: (c) => c.json({ error: "Project exceeds 10 MiB" }, 413),
+    }),
+    async (c) => {
+      if (busy) {
+        c.header("Retry-After", "1");
+        return c.json({ error: "Compiler busy; retry shortly" }, 503);
       }
-      let body: unknown;
+      busy = true;
       try {
-        body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      } catch {
-        throw new HttpError(400, "Invalid JSON");
-      }
-      const result = await (options.compile ?? compile)(parseProject(body));
-      if (request.headers.get("Accept") === "multipart/form-data") {
-        const body = new FormData();
-        body.set(
+        if (!c.req.header("Content-Type")?.startsWith("application/json"))
+          return c.json({ error: "Expected application/json" }, 415);
+        let body: unknown;
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: "Invalid JSON" }, 400);
+        }
+        const result = await (options.compile ?? compile)(parseProject(body));
+        const form = new FormData();
+        form.set(
           "pdf",
-          new Blob([result.pdf], { type: "application/pdf" }),
+          new Blob([new Uint8Array(result.pdf)], { type: "application/pdf" }),
           "output.pdf",
         );
-        body.set("log", result.log);
-        return new Response(body, { headers: { "Cache-Control": "no-store" } });
+        form.set("log", result.log);
+        return new Response(form, { headers: { "Cache-Control": "no-store" } });
+      } finally {
+        busy = false;
       }
-      return new Response(result.pdf, {
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": 'inline; filename="output.pdf"',
-          "Cache-Control": "no-store",
-        },
-      });
-    } catch (error) {
-      if (error instanceof HttpError)
-        return Response.json(
-          { error: error.message, log: error.log },
-          { status: error.status },
-        );
-      console.error(error);
+    },
+  );
+  app.onError((error, c) => {
+    if (error instanceof HttpError)
       return Response.json(
-        { error: "Compilation service failed" },
-        { status: 500 },
+        { error: error.message, log: error.log },
+        { status: error.status },
       );
-    } finally {
-      busy = false;
-    }
-  };
+    console.error("TeX host failed", { error });
+    return c.json({ error: "Compilation service failed" }, 500);
+  });
+  return (request: Request) => app.fetch(request);
 }

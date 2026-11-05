@@ -1,5 +1,5 @@
 import { S3Client } from "bun";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import { db, projectJob, projectNode } from "../src";
 
@@ -58,44 +58,35 @@ for (const [table, storage] of [
   }
 }
 
-// A network failure can leave an older job running after the Worker stored its PDF.
+// The browser can stop polling before the Worker stores the PDF.
+const unfinished = inArray(projectJob.status, ["queued", "running"]);
 const stale = new Date(Date.now() - 5 * 60_000);
 const jobs = await db
   .select({ id: projectJob.id })
   .from(projectJob)
   .where(
     and(
-      eq(projectJob.status, "running"),
+      unfinished,
       isNull(projectJob.objectKey),
-      lt(projectJob.startedAt, stale),
+      lt(projectJob.createdAt, stale),
     ),
   );
 for (const { id } of jobs) {
   const key = `compilations/${id}.pdf`;
   try {
-    const result = (await pdfs.exists(key)) ? await pdfs.stat(key) : null;
+    // An absent PDF can mean the job is still queued or running.
+    if (!(await pdfs.exists(key))) continue;
+    const result = await pdfs.stat(key);
     await db
       .update(projectJob)
-      .set(
-        result
-          ? {
-              status: "succeeded",
-              objectKey: key,
-              sizeBytes: BigInt(result.size),
-              finishedAt: new Date(),
-            }
-          : {
-              status: "failed",
-              error: "Compiler did not return a result",
-              finishedAt: new Date(),
-            },
-      )
+      .set({
+        status: "succeeded",
+        objectKey: key,
+        sizeBytes: BigInt(result.size),
+        finishedAt: new Date(),
+      })
       .where(
-        and(
-          eq(projectJob.id, id),
-          eq(projectJob.status, "running"),
-          isNull(projectJob.objectKey),
-        ),
+        and(eq(projectJob.id, id), unfinished, isNull(projectJob.objectKey)),
       );
   } catch (error) {
     console.error("Could not reconcile compile job", { id, error });

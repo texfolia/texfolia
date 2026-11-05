@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
-import { HttpError, parseProject } from "../src/compile";
-import { createHandler } from "../src/server";
+import { HttpError, parseProject } from "../src/project";
+import { createEngineHandler } from "../src/server";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "hello" } };
 const request = (body: unknown = project) =>
@@ -36,8 +36,8 @@ test("rejects traversal, absolute paths, missing inputs and file collisions", ()
     parseProject({ ...project, files: { ...project.files, a: "", "a/b": "" } }),
   ).toThrow(HttpError);
 });
-test("requires auth and returns PDF bytes", async () => {
-  const handler = createHandler({
+test("requires auth before handing work to the engine", async () => {
+  const handler = createEngineHandler({
     token: "secret",
     compile: async () => ({ pdf: Buffer.from("%PDF-1.5"), log: "" }),
   });
@@ -45,11 +45,10 @@ test("requires auth and returns PDF bytes", async () => {
   const authorized = request();
   authorized.headers.set("authorization", "Bearer secret");
   const response = await handler(authorized);
-  expect(response.headers.get("content-type")).toBe("application/pdf");
-  expect(await response.text()).toBe("%PDF-1.5");
+  expect(response.status).toBe(200);
 });
 test("rejects malformed and oversized projects", async () => {
-  const handler = createHandler();
+  const handler = createEngineHandler();
   expect((await handler(request({ files: {} }))).status).toBe(400);
   expect(
     (
@@ -64,7 +63,7 @@ test("reports errors, rejects overlapping jobs and accepts work after failure", 
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const handler = createHandler({
+  const handler = createEngineHandler({
     compile: async () => {
       await pending;
       throw new HttpError(
@@ -86,7 +85,7 @@ test("reports errors, rejects overlapping jobs and accepts work after failure", 
 });
 
 test("returns the PDF and log when multipart is requested", async () => {
-  const handler = createHandler({
+  const handler = createEngineHandler({
     compile: async () => ({
       pdf: Buffer.from("%PDF-1.5"),
       log: "warning: main.tex:3: Reference undefined",
