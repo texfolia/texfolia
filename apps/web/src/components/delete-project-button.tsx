@@ -1,5 +1,5 @@
+import { IconTrash } from "@tabler/icons-react";
 import { useRouter } from "@tanstack/react-router";
-import { Trash } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -64,7 +64,7 @@ export function DeleteProjectButton({
         render={<Button size="icon-lg" variant="outline" />}
         aria-label={`Delete ${project.name}`}
       >
-        <Trash />
+        <IconTrash />
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

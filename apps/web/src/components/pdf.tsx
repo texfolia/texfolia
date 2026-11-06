@@ -1,15 +1,15 @@
 import { Toolbar } from "@base-ui/react/toolbar";
 import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  FileText,
-  FolderOpen,
-  Maximize,
-  RotateCw,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+  IconChevronLeft,
+  IconChevronRight,
+  IconDownload,
+  IconFileText,
+  IconFolderOpen,
+  IconMaximize,
+  IconRotateClockwise,
+  IconZoomIn,
+  IconZoomOut,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
@@ -154,7 +154,7 @@ function PdfPanel({
             label="Open PDF"
             onClick={() => fileInput.current?.click()}
           >
-            <FolderOpen />
+            <IconFolderOpen />
           </PanelAction>
           <Toolbar.Group
             className="flex items-center gap-1"
@@ -165,7 +165,7 @@ function PdfPanel({
               disabled={!ready || page <= 1}
               onClick={() => goToPage(page - 1)}
             >
-              <ChevronLeft />
+              <IconChevronLeft />
             </PanelAction>
             <Toolbar.Input
               render={<Input />}
@@ -201,7 +201,7 @@ function PdfPanel({
               disabled={!ready || page >= pages}
               onClick={() => goToPage(page + 1)}
             >
-              <ChevronRight />
+              <IconChevronRight />
             </PanelAction>
           </Toolbar.Group>
           <Toolbar.Group
@@ -213,7 +213,7 @@ function PdfPanel({
               disabled={!ready || scale <= 0.25}
               onClick={() => changeZoom(-0.25)}
             >
-              <ZoomOut />
+              <IconZoomOut />
             </PanelAction>
             <span
               className="min-w-10 text-center text-xs tabular-nums"
@@ -226,7 +226,7 @@ function PdfPanel({
               disabled={!ready || scale >= 3}
               onClick={() => changeZoom(0.25)}
             >
-              <ZoomIn />
+              <IconZoomIn />
             </PanelAction>
             <PanelAction
               label="Fit to width"
@@ -234,7 +234,7 @@ function PdfPanel({
               aria-pressed={zoom.kind === "fit"}
               onClick={() => setZoom({ kind: "fit" })}
             >
-              <Maximize />
+              <IconMaximize />
             </PanelAction>
           </Toolbar.Group>
           <PanelAction
@@ -242,14 +242,14 @@ function PdfPanel({
             disabled={!ready}
             onClick={() => setRotation((value) => (value + 90) % 360)}
           >
-            <RotateCw />
+            <IconRotateClockwise />
           </PanelAction>
           <PanelAction
             label="Download PDF"
             disabled={!ready || downloading}
             onClick={() => void download()}
           >
-            <Download />
+            <IconDownload />
           </PanelAction>
         </PanelActions>
       </PanelHeader>
@@ -370,7 +370,7 @@ function PdfPanel({
           </Document>
         ) : (
           <div className="flex h-full min-h-48 flex-col items-center justify-center gap-3 p-6 text-center">
-            <FileText className="text-muted-foreground size-8" />
+            <IconFileText className="text-muted-foreground size-8" />
             <div>
               <p className="text-sm font-medium">No PDF open</p>
               <p className="text-muted-foreground mt-1 text-xs">
@@ -382,7 +382,7 @@ function PdfPanel({
               size="sm"
               onClick={() => fileInput.current?.click()}
             >
-              <FolderOpen />
+              <IconFolderOpen />
               Open PDF
             </Button>
           </div>

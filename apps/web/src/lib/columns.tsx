@@ -1,6 +1,11 @@
+import {
+  IconCopy,
+  IconDownload,
+  IconPencil,
+  IconUserPlus,
+} from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
-import { Copy, Download, Edit, UserPlus } from "lucide-react";
 
 import { DeleteProjectButton } from "#/components/delete-project-button";
 import {
@@ -77,16 +82,16 @@ export const columns = columnHelper.columns([
     cell: ({ row }) => (
       <ButtonGroup>
         <Button size="icon-lg" variant="outline">
-          <Copy />
+          <IconCopy />
         </Button>
         <Button size="icon-lg" variant="outline">
-          <Download />
+          <IconDownload />
         </Button>
         <Button size="icon-lg" variant="outline">
-          <UserPlus />
+          <IconUserPlus />
         </Button>
         <Button size="icon-lg" variant="outline">
-          <Edit />
+          <IconPencil />
         </Button>
         <DeleteProjectButton project={row.original} />
       </ButtonGroup>

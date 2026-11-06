@@ -1,5 +1,10 @@
+import {
+  IconCode,
+  IconKeyboard,
+  IconSettings,
+  IconWand,
+} from "@tabler/icons-react";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { Code2, Keyboard, Settings, WandSparkles } from "lucide-react";
 import { useId } from "react";
 
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
@@ -27,10 +32,10 @@ import {
 import { type SettingsSection, useSettings } from "#/hooks/use-settings";
 
 const sections = [
-  { title: "Editor", icon: Code2 },
-  { title: "Formatting", icon: WandSparkles },
-  { title: "Keyboard shortcuts", icon: Keyboard },
-] satisfies { title: SettingsSection; icon: typeof Code2 }[];
+  { title: "Editor", icon: IconCode },
+  { title: "Formatting", icon: IconWand },
+  { title: "Keyboard shortcuts", icon: IconKeyboard },
+] satisfies { title: SettingsSection; icon: typeof IconCode }[];
 
 const shortcuts = [
   ["Save locally and compile", "Mod + S"],
@@ -70,7 +75,7 @@ export function SettingsDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<SidebarMenuButton tooltip="Settings" />}>
-        <Settings />
+        <IconSettings />
         <span>Settings</span>
       </DialogTrigger>
       <DialogContent className="h-[min(580px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl">

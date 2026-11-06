@@ -1,7 +1,7 @@
+import { IconFolderOpen, IconSearch } from "@tabler/icons-react";
 import { useFormatForDisplay, useHotkey } from "@tanstack/react-hotkeys";
 import { ClientOnly, createFileRoute, Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
-import { FolderOpenIcon, Search } from "lucide-react";
 import { useRef } from "react";
 
 import { ProjectForm } from "#/components/project-form";
@@ -130,7 +130,7 @@ function RouteComponent() {
               onChange={(e) => table.setGlobalFilter(e.target.value)}
             />
             <InputGroupAddon>
-              <Search />
+              <IconSearch />
             </InputGroupAddon>
             <InputGroupAddon align="inline-end">
               <ClientOnly fallback={<Kbd>Mod+K</Kbd>}>
@@ -171,7 +171,7 @@ function RouteComponent() {
                       <Empty>
                         <EmptyHeader>
                           <EmptyMedia variant="icon">
-                            <FolderOpenIcon />
+                            <IconFolderOpen />
                           </EmptyMedia>
                           <EmptyTitle>No Projects Yet</EmptyTitle>
                           <EmptyDescription>No data found</EmptyDescription>

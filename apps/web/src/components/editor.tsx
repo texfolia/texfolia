@@ -15,6 +15,15 @@ import { indentUnit, StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
 import { openSearchPanel } from "@codemirror/search";
+import {
+  IconArrowBackUp,
+  IconArrowForwardUp,
+  IconDownload,
+  IconFolderOpen,
+  IconSearch,
+  IconTextWrap,
+  IconWand,
+} from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import CodeMirror, {
   EditorState,
@@ -23,15 +32,6 @@ import CodeMirror, {
   Prec,
   type ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
-import {
-  Download,
-  FolderOpen,
-  Redo2,
-  Search,
-  Undo2,
-  WandSparkles,
-  WrapText,
-} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -253,7 +253,7 @@ export function Editor({
               label="Open source file"
               onClick={() => fileInput.current?.click()}
             >
-              <FolderOpen />
+              <IconFolderOpen />
             </PanelAction>
           )}
           <PanelAction
@@ -266,7 +266,7 @@ export function Editor({
               setDownloadedValue(value);
             }}
           >
-            <Download />
+            <IconDownload />
           </PanelAction>
           <PanelAction
             label="Undo"
@@ -279,7 +279,7 @@ export function Editor({
               }
             }}
           >
-            <Undo2 />
+            <IconArrowBackUp />
           </PanelAction>
           <PanelAction
             label="Redo"
@@ -292,7 +292,7 @@ export function Editor({
               }
             }}
           >
-            <Redo2 />
+            <IconArrowForwardUp />
           </PanelAction>
           <PanelAction
             label="Find and replace"
@@ -301,7 +301,7 @@ export function Editor({
               if (view) openSearchPanel(view);
             }}
           >
-            <Search />
+            <IconSearch />
           </PanelAction>
           {canFormat && (
             <PanelAction
@@ -315,7 +315,7 @@ export function Editor({
                 }
               }}
             >
-              <WandSparkles />
+              <IconWand />
             </PanelAction>
           )}
           <PanelAction
@@ -328,7 +328,7 @@ export function Editor({
               })
             }
           >
-            <WrapText />
+            <IconTextWrap />
           </PanelAction>
         </PanelActions>
       </PanelHeader>

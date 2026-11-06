@@ -1,4 +1,25 @@
-import { ChevronRight, File, FileText, Folder, FolderOpen } from "lucide-react";
+import {
+  type Icon,
+  IconBooks,
+  IconChevronRight,
+  IconFile,
+  IconFileCode,
+  IconFileSettings,
+  IconFileSpreadsheet,
+  IconFileText,
+  IconFileTypeCsv,
+  IconFileTypeJpg,
+  IconFileTypePdf,
+  IconFileTypePng,
+  IconFileTypeSvg,
+  IconFileTypeZip,
+  IconFileVector,
+  IconFolder,
+  IconFolderOpen,
+  IconMarkdown,
+  IconPhoto,
+  IconTex,
+} from "@tabler/icons-react";
 import { useMemo } from "react";
 
 import {
@@ -16,6 +37,92 @@ import type { getProject } from "#/lib/projects.functions";
 export type ProjectNode = Awaited<
   ReturnType<typeof getProject>
 >["nodes"][number];
+
+const fileIcons = new Map<string, Icon>(
+  [
+    { extensions: ["tex", "ltx", "latex"], icon: IconTex },
+    { extensions: ["bib"], icon: IconBooks },
+    {
+      extensions: [
+        "sty",
+        "cls",
+        "clo",
+        "bst",
+        "bbx",
+        "cbx",
+        "lbx",
+        "cfg",
+        "def",
+        "json",
+        "yaml",
+        "yml",
+        "toml",
+        "ini",
+      ],
+      icon: IconFileSettings,
+    },
+    { extensions: ["pdf"], icon: IconFileTypePdf },
+    { extensions: ["png"], icon: IconFileTypePng },
+    { extensions: ["jpg", "jpeg"], icon: IconFileTypeJpg },
+    { extensions: ["svg"], icon: IconFileTypeSvg },
+    { extensions: ["eps", "ps", "ai"], icon: IconFileVector },
+    {
+      extensions: ["gif", "webp", "avif", "bmp", "tif", "tiff", "ico"],
+      icon: IconPhoto,
+    },
+    { extensions: ["csv"], icon: IconFileTypeCsv },
+    {
+      extensions: ["tsv", "dat", "xls", "xlsx", "ods"],
+      icon: IconFileSpreadsheet,
+    },
+    { extensions: ["md", "markdown"], icon: IconMarkdown },
+    {
+      extensions: [
+        "py",
+        "r",
+        "jl",
+        "lua",
+        "sh",
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "html",
+        "css",
+        "xml",
+      ],
+      icon: IconFileCode,
+    },
+    {
+      extensions: ["zip", "gz", "tar", "tgz", "bz2", "xz", "7z", "rar"],
+      icon: IconFileTypeZip,
+    },
+    {
+      extensions: [
+        "txt",
+        "log",
+        "aux",
+        "bbl",
+        "blg",
+        "toc",
+        "lof",
+        "lot",
+        "out",
+      ],
+      icon: IconFileText,
+    },
+  ].flatMap(({ extensions, icon }) =>
+    extensions.map((extension): [string, Icon] => [extension, icon]),
+  ),
+);
+
+function ProjectFileIcon({ name, kind }: Pick<ProjectNode, "name" | "kind">) {
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  const FileIcon =
+    fileIcons.get(extension) ?? (kind === "text" ? IconFileText : IconFile);
+  return <FileIcon aria-hidden="true" />;
+}
 
 export function ProjectFileTree({
   nodes,
@@ -54,9 +161,9 @@ export function ProjectFileTree({
                   render={<SidebarMenuButton />}
                   style={{ paddingLeft: 8 + depth * 14 }}
                 >
-                  <ChevronRight className="transition-transform in-aria-expanded:rotate-90" />
-                  <Folder className="in-aria-expanded:hidden" />
-                  <FolderOpen className="hidden in-aria-expanded:block" />
+                  <IconChevronRight className="transition-transform in-aria-expanded:rotate-90" />
+                  <IconFolder className="in-aria-expanded:hidden" />
+                  <IconFolderOpen className="hidden in-aria-expanded:block" />
                   <span>{node.name}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -78,7 +185,7 @@ export function ProjectFileTree({
                   }
                 }}
               >
-                {node.kind === "text" ? <FileText /> : <File />}
+                <ProjectFileIcon name={node.name} kind={node.kind} />
                 <span>{node.name}</span>
               </SidebarMenuButton>
             )}

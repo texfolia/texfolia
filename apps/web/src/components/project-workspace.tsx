@@ -1,4 +1,5 @@
 import "dockview-react/dist/styles/dockview.css";
+import { IconArrowLeft } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
 import type { EditorView } from "@uiw/react-codemirror";
@@ -11,7 +12,6 @@ import {
   type IDockviewPanelProps,
   themeLight,
 } from "dockview-react";
-import { ArrowLeft } from "lucide-react";
 import {
   createContext,
   lazy,
@@ -461,7 +461,7 @@ export function ProjectWorkspace({
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton render={<Link to="/projects" />}>
-                  <ArrowLeft />
+                  <IconArrowLeft />
                   Back to Projects
                 </SidebarMenuButton>
               </SidebarMenuItem>
