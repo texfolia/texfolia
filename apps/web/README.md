@@ -17,6 +17,20 @@ To build this application for production:
 bun --bun run build
 ```
 
+## Editor libraries
+
+The editor uses [codemirror-lang-latex](https://github.com/TeXlyre/codemirror-lang-latex) for parsing, highlighting, folding, indentation, environment closing, completion, tooltips, and syntax diagnostics. `src/lib/latex/language.ts` combines its completion source with project labels, citations, file paths, and package commands. A single linter merges syntax diagnostics with project and compiler diagnostics so neither replaces the other.
+
+Syntax linting runs in open editors and reports to the workspace Problems panel. The analysis worker checks references, citations, and missing files across the project. File-local checks for references, bibliography declarations, and package imports are disabled in project editors because those declarations can live in another file. Document-environment checks are disabled to support included fragments.
+
+Editor-owned linting uses the package's public `EditorView` API. Keeping syntax linting in the analysis worker would require a fabricated editor view, so the integration does not use that approach.
+
+[wasm-latex-tools](https://github.com/TeXlyre/wasm-latex-tools) supplies `TexFmt` in the formatting worker. Formatting retains minimal edits, isolated undo, and rejection of results after the source changes. `bun run dev` and `bun run build` copy package assets into the ignored `public/core` directory. Use `bun run latex:assets` to refresh those assets separately. Keep `core/texfmt/tex_fmt.js` and `core/texfmt/tex_fmt_bg.wasm` in deployed static assets; `TexFmt` loads them at runtime.
+
+[UIW themes](https://uiwjs.github.io/react-codemirror/#/extensions/themes-all) supply the editor colors. **Settings > Editor > Editor theme** selects a theme and saves it in browser storage. Existing font and wrapping preferences gain the default GitHub Light theme when loaded.
+
+Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the integration. Completion tests exercise the installed language extension together with project suggestions.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

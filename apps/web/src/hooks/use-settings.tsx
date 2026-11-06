@@ -9,13 +9,19 @@ import {
 import { z } from "zod";
 
 import { useLatexFormatSettings } from "#/components/latex-format-settings";
+import { editorThemeSchema } from "#/lib/editor-themes";
 
 const editorSettingsSchema = z.object({
   fontSize: z.number().int().min(10).max(24),
   wrapLines: z.boolean(),
+  theme: editorThemeSchema.default("githubLight"),
 });
 type EditorSettings = z.infer<typeof editorSettingsSchema>;
-const defaultEditorSettings: EditorSettings = { fontSize: 13, wrapLines: true };
+const defaultEditorSettings: EditorSettings = {
+  fontSize: 13,
+  wrapLines: true,
+  theme: "githubLight",
+};
 export type SettingsSection = "Editor" | "Formatting" | "Keyboard shortcuts";
 
 function useSettingsState() {

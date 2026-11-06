@@ -30,6 +30,7 @@ import {
   SidebarProvider,
 } from "#/components/ui/sidebar";
 import { type SettingsSection, useSettings } from "#/hooks/use-settings";
+import { editorThemes, editorThemeSchema } from "#/lib/editor-themes";
 
 const sections = [
   { title: "Editor", icon: IconCode },
@@ -145,6 +146,31 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
                         browser.
                       </p>
                     </div>
+                    <Field>
+                      <FieldLabel htmlFor={`${id}-theme`}>
+                        Editor theme
+                      </FieldLabel>
+                      <select
+                        id={`${id}-theme`}
+                        value={editor.theme}
+                        className="border-input bg-input/20 focus-visible:border-ring focus-visible:ring-ring/30 h-7 w-full rounded-md border px-2 text-xs outline-none focus-visible:ring-2"
+                        onChange={(event) => {
+                          const theme = editorThemeSchema.safeParse(
+                            event.target.value,
+                          );
+                          if (theme.success)
+                            updateEditor({ ...editor, theme: theme.data });
+                        }}
+                      >
+                        {Object.entries(editorThemes).map(
+                          ([value, { label }]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </Field>
                     <Field>
                       <FieldLabel htmlFor={`${id}-font-size`}>
                         Font size

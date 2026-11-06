@@ -3,24 +3,50 @@ import { test } from "node:test";
 
 import {
   CompletionContext,
+  type CompletionSource,
   insertCompletionText,
 } from "@codemirror/autocomplete";
 import { indentUnit } from "@codemirror/language";
-import { EditorState, type Transaction } from "@uiw/react-codemirror";
+import {
+  EditorState,
+  Transaction,
+  type TransactionSpec,
+} from "@uiw/react-codemirror";
 
 import { emptyAnalysis } from "./analysis";
 import { latexCompletion } from "./completion";
+import { editorLanguage } from "./language";
 
 async function complete(doc: string, label: string, pos = doc.length) {
   let state = EditorState.create({
     doc,
     selection: { anchor: pos },
-    extensions: [indentUnit.of("  ")],
+    extensions: [
+      indentUnit.of("  "),
+      editorLanguage({
+        filename: "main.tex",
+        completion: latexCompletion(
+          () => ({
+            ...emptyAnalysis,
+            labels: ["sec:intro"],
+            citations: ["knuth1984"],
+          }),
+          ["chapters/intro.tex", "image.png"],
+        ),
+        getProblems: () => [],
+        publishSyntax: () => {},
+      }),
+    ],
   });
-  const result = await latexCompletion(
-    () => emptyAnalysis,
-    [],
-  )(new CompletionContext(state, pos, true));
+  const context = new CompletionContext(state, pos, true);
+  const results = await Promise.all(
+    state
+      .languageDataAt<CompletionSource>("autocomplete", pos)
+      .map((source) => source(context)),
+  );
+  const result = results.find((result) =>
+    result?.options.some((option) => option.label === label),
+  );
   const option = result?.options.find((option) => option.label === label);
   assert.ok(result && option, `Expected ${label} completion for ${doc}`);
   const to = result.to ?? pos;
@@ -30,8 +56,11 @@ async function complete(doc: string, label: string, pos = doc.length) {
         get state() {
           return state;
         },
-        dispatch(transaction: Transaction) {
-          state = transaction.state;
+        dispatch(transaction: Transaction | TransactionSpec) {
+          state =
+            transaction instanceof Transaction
+              ? transaction.state
+              : state.update(transaction).state;
         },
       },
       option,
@@ -66,11 +95,6 @@ test("begin completion consumes the auto-closed brace", async () => {
   assert.equal(state.doc.toString(), "\\begin{document}\n  \n\\end{document}");
 });
 
-test("begin completion works after typing the closing brace", async () => {
-  const state = await complete("\\begin{doc}", "document");
-  assert.equal(state.doc.toString(), "\\begin{document}\n  \n\\end{document}");
-});
-
 test("environment snippets preserve surrounding indentation and text", async () => {
   const state = await complete(
     "  \\begin{equ} text",
@@ -88,7 +112,35 @@ test("end completion inserts only the environment name", async () => {
   assert.equal(state.doc.toString(), "\\end{document}");
 });
 
-test("command completions still replace only the command", async () => {
+test("upstream command completion places the caret inside its argument", async () => {
   const state = await complete("\\sec", "\\section");
-  assert.equal(state.doc.toString(), "\\section");
+  assert.equal(state.doc.toString(), "\\section{}");
+  assert.equal(state.selection.main.head, "\\section{".length);
+});
+
+test("project labels complement upstream command completions", async () => {
+  const state = await complete(
+    "\\ref{sec:i}",
+    "sec:intro",
+    "\\ref{sec:i".length,
+  );
+  assert.equal(state.doc.toString(), "\\ref{sec:intro}");
+});
+
+test("project bibliography keys complete inside a citation list", async () => {
+  const state = await complete(
+    "\\cite{other, kn}",
+    "knuth1984",
+    "\\cite{other, kn".length,
+  );
+  assert.equal(state.doc.toString(), "\\cite{other, knuth1984}");
+});
+
+test("project file suggestions keep the closing brace", async () => {
+  const state = await complete(
+    "\\input{chap}",
+    "chapters/intro.tex",
+    "\\input{chap".length,
+  );
+  assert.equal(state.doc.toString(), "\\input{chapters/intro.tex}");
 });

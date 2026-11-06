@@ -16,6 +16,7 @@ import {
   createContext,
   lazy,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -65,6 +66,7 @@ type Workspace = {
   paths: ReadonlyMap<string, string>;
   completion: ReturnType<typeof latexCompletion>;
   problems: ReadonlyMap<string, LatexProblem[]>;
+  reportSyntax: (path: string, problems: LatexProblem[]) => void;
   jump: { id: string; line: number } | undefined;
   pdf: File | null;
   formatSettings: FormatSettings;
@@ -143,6 +145,7 @@ function FileEditor({
       allowOpenFile={false}
       completion={workspace.completion}
       problems={workspace.problems.get(path) ?? noProblems}
+      onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
       onChange={(value) => workspace.change(params.node.id, value)}
@@ -305,6 +308,17 @@ export function ProjectWorkspace({
     () => latexCompletion(() => currentAnalysis.current, filenames),
     [filenames],
   );
+  const [syntaxProblems, setSyntaxProblems] = useState(
+    new Map<string, LatexProblem[]>(),
+  );
+  const reportSyntax = useCallback((path: string, problems: LatexProblem[]) => {
+    const next = problems.map((problem) => ({ ...problem, path }));
+    setSyntaxProblems((previous) => {
+      if (JSON.stringify(previous.get(path) ?? []) === JSON.stringify(next))
+        return previous;
+      return new Map(previous).set(path, next);
+    });
+  }, []);
   const [compileProblems, setCompileProblems] = useState<LatexProblem[]>([]);
   const [pdf, setPdf] = useState<File | null>(null);
   const [compiling, setCompiling] = useState(false);
@@ -320,18 +334,24 @@ export function ProjectWorkspace({
   useEffect(() => () => compilation.current?.abort(), [projectId]);
 
   const allProblems = useMemo(
-    () => [...result.analysis.problems, ...compileProblems],
-    [result, compileProblems],
+    () => [
+      ...result.analysis.problems,
+      ...compileProblems,
+      ...[...syntaxProblems]
+        .filter(([path]) => filenames.includes(path))
+        .flatMap(([, problems]) => problems),
+    ],
+    [result, compileProblems, syntaxProblems, filenames],
   );
   const problems = useMemo(() => {
     const byPath = new Map<string, LatexProblem[]>();
-    for (const problem of allProblems) {
+    for (const problem of [...result.analysis.problems, ...compileProblems]) {
       const list = byPath.get(problem.path) ?? [];
       list.push(problem);
       byPath.set(problem.path, list);
     }
     return byPath;
-  }, [allProblems]);
+  }, [result, compileProblems]);
 
   const main =
     [...paths.values()].find((path) => path === "main.tex") ??
@@ -589,6 +609,7 @@ export function ProjectWorkspace({
         paths,
         completion,
         problems,
+        reportSyntax,
         jump,
         pdf,
         formatSettings,

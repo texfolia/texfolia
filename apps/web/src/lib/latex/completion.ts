@@ -1,87 +1,9 @@
 import {
   type Completion,
   type CompletionSource,
-  snippetCompletion,
 } from "@codemirror/autocomplete";
 
 import { isIncludePath, type LatexAnalysis } from "./analysis";
-
-const environments = [
-  "align",
-  "align*",
-  "array",
-  "center",
-  "description",
-  "document",
-  "enumerate",
-  "equation",
-  "equation*",
-  "figure",
-  "gather",
-  "itemize",
-  "minipage",
-  "pmatrix",
-  "quote",
-  "table",
-  "tabular",
-  "theorem",
-  "verbatim",
-];
-
-const coreCommands = [
-  "author",
-  "begin",
-  "bibliography",
-  "caption",
-  "chapter",
-  "cite",
-  "documentclass",
-  "emph",
-  "end",
-  "eqref",
-  "frac",
-  "include",
-  "includegraphics",
-  "input",
-  "item",
-  "label",
-  "left",
-  "maketitle",
-  "newcommand",
-  "newpage",
-  "pageref",
-  "paragraph",
-  "ref",
-  "renewcommand",
-  "right",
-  "section",
-  "sqrt",
-  "subsection",
-  "sum",
-  "tableofcontents",
-  "textbf",
-  "textit",
-  "title",
-  "usepackage",
-].map((name) => "\\" + name);
-
-const snippets = [
-  snippetCompletion("\\begin{${environment}}\n\t${}\n\\end{${environment}}", {
-    label: "\\begin…\\end",
-    type: "text",
-    detail: "environment snippet",
-  }),
-  snippetCompletion("\\frac{${numerator}}{${denominator}}", {
-    label: "\\frac{}",
-    type: "text",
-    detail: "fraction snippet",
-  }),
-  snippetCompletion("\\section{${title}}", {
-    label: "\\section{}",
-    type: "text",
-    detail: "section snippet",
-  }),
-];
 
 function prefixed(
   values: readonly string[],
@@ -121,29 +43,6 @@ export function latexCompletion(
       context.pos,
     );
     if (/(?:^|[^\\])(?:\\\\)*%/.test(before)) return null;
-    const environment = /\\begin\s*\{([^{}\s]*)(\}?)$/.exec(before);
-    if (environment) {
-      const prefix = environment[1] ?? "";
-      const closingBrace = environment[2] ?? "";
-      const options = prefixed(environments, prefix, "type").map((option) =>
-        snippetCompletion(
-          `${option.label}}\n\t\${}\n\\end{${option.label}}`,
-          option,
-        ),
-      );
-      return options.length
-        ? {
-            from: context.pos - prefix.length - closingBrace.length,
-            filter: false,
-            to:
-              !closingBrace &&
-              context.state.sliceDoc(context.pos, context.pos + 1) === "}"
-                ? context.pos + 1
-                : context.pos,
-            options,
-          }
-        : null;
-    }
     const argument =
       /\\([a-z]+)\*?\s*(?:\[[^\]]*\]\s*){0,2}\{(?:[^{}]*,\s*)?([^{}\s,]*)$/i.exec(
         before,
@@ -152,14 +51,11 @@ export function latexCompletion(
     if (argumentCommand && prefix !== undefined) {
       const command = argumentCommand;
       const analysis = getAnalysis();
-      const options =
-        command === "end"
-          ? prefixed(environments, prefix, "type")
-          : /^(?:[a-z]*cite[a-z]*|nocite)$/i.test(command)
-            ? prefixed(analysis.citations, prefix, "constant")
-            : /^(?:ref|eqref|autoref|pageref|cref)$/i.test(command)
-              ? prefixed(analysis.labels, prefix, "reference")
-              : prefixed(fileOptions.get(command) ?? [], prefix, "file");
+      const options = /^(?:[a-z]*cite[a-z]*|nocite)$/i.test(command)
+        ? prefixed(analysis.citations, prefix, "constant")
+        : /^(?:ref|eqref|autoref|pageref|cref)$/i.test(command)
+          ? prefixed(analysis.labels, prefix, "reference")
+          : prefixed(fileOptions.get(command) ?? [], prefix, "file");
       return options.length
         ? { from: context.pos - prefix.length, options }
         : null;
@@ -167,15 +63,10 @@ export function latexCompletion(
 
     const command = /(?:^|[^\\])(?:\\\\)*(\\[a-zA-Z]*)$/.exec(before)?.[1];
     if (!command) return null;
-    const commands = [
-      ...new Set([...coreCommands, ...getAnalysis().commands]),
-    ].sort();
+    const commands = getAnalysis().commands;
     return {
       from: context.pos - command.length,
-      options: [
-        ...prefixed(commands, command, "function"),
-        ...snippets.filter(({ label }) => label.startsWith(command)),
-      ],
+      options: prefixed(commands, command, "function"),
     };
   };
 }

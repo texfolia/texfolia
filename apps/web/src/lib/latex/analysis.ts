@@ -15,7 +15,6 @@ type FileSymbols = {
   bibliography: SymbolAt[];
   includes: Array<SymbolAt & { command: string }>;
   packages: string[];
-  problems: LatexProblem[];
 };
 
 export type LatexAnalysis = {
@@ -61,7 +60,6 @@ export function scanFile(path: string, text: string): FileSymbols {
     bibliography: [],
     includes: [],
     packages: [],
-    problems: [],
   };
   if (!texFile.test(path) && !/\.bib$/i.test(path)) return symbols;
 
@@ -90,33 +88,6 @@ export function scanFile(path: string, text: string): FileSymbols {
     return symbols;
   }
 
-  const getLine = lineNumber(text);
-  function problem(
-    { from, to }: { from: number; to: number },
-    message: string,
-  ) {
-    symbols.problems.push({
-      path,
-      line: getLine(from),
-      message,
-      severity: "warning",
-      range: { from, to },
-    });
-  }
-
-  const braces: number[] = [];
-  for (const match of source.matchAll(/\\(?:[a-zA-Z]+|[^\r\n])|[{}]/g)) {
-    if (match[0] === "{") braces.push(match.index);
-    if (match[0] === "}" && braces.pop() === undefined)
-      problem(
-        { from: match.index, to: match.index + 1 },
-        "Unmatched closing brace",
-      );
-  }
-  for (const from of braces)
-    problem({ from, to: from + 1 }, "Unmatched opening brace");
-
-  const environments: SymbolAt[] = [];
   for (const match of source.matchAll(
     /\\\\|\\([a-zA-Z]+\*?)\s*(?:\[[^\]\r\n]*\]\s*){0,2}\{([^{}\r\n]*)\}/g,
   )) {
@@ -128,11 +99,7 @@ export function scanFile(path: string, text: string): FileSymbols {
       if (!key) continue;
       const start = from + part.index + part[0].indexOf(key);
       const symbol = { key, from: start, to: start + key.length };
-      if (command === "begin") environments.push(symbol);
-      else if (command === "end") {
-        if (environments.at(-1)?.key === key) environments.pop();
-        else problem(symbol, `Unexpected \\end{${key}}`);
-      } else if (command === "label") symbols.labels.push(key);
+      if (command === "label") symbols.labels.push(key);
       else if (refCommand.test(command)) symbols.references.push(symbol);
       else if (citeCommand.test(command)) symbols.citations.push(symbol);
       else if (command === "usepackage" || command === "RequirePackage")
@@ -152,8 +119,6 @@ export function scanFile(path: string, text: string): FileSymbols {
         });
     }
   }
-  for (const opening of environments)
-    problem(opening, `Missing \\end{${opening.key}}`);
   return symbols;
 }
 
@@ -189,7 +154,6 @@ export function analyzeProject(
   }
 
   for (const [path, file] of files) {
-    problems.push(...file.problems);
     let getLine: ReturnType<typeof lineNumber> | undefined;
     function report(
       symbol: SymbolAt,

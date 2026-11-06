@@ -1,6 +1,5 @@
 import {
   acceptCompletion,
-  autocompletion,
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import {
@@ -12,9 +11,7 @@ import {
   undoDepth,
 } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { indentUnit, StreamLanguage } from "@codemirror/language";
-import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
+import { indentUnit } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import {
   IconArrowBackUp,
@@ -44,6 +41,7 @@ import {
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { useSettings } from "#/hooks/use-settings";
 import { downloadFile } from "#/lib/download-file";
+import { editorThemes } from "#/lib/editor-themes";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import {
   applyLatexHeading,
@@ -51,22 +49,7 @@ import {
   toggleLatexCommand,
 } from "#/lib/latex/editor-commands";
 import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
-
-const latex = StreamLanguage.define(stex);
-const editorTheme = EditorView.theme({
-  "&": { backgroundColor: "var(--background)", color: "var(--foreground)" },
-  ".cm-content, .cm-gutters": {
-    fontFamily: "var(--font-mono)",
-  },
-  ".cm-gutters": {
-    backgroundColor: "var(--muted)",
-    color: "var(--muted-foreground)",
-    borderRight: "1px solid var(--border)",
-  },
-  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--accent)" },
-  ".cm-cursor": { borderLeftColor: "var(--foreground)" },
-  ".cm-scroller": { overflow: "auto" },
-});
+import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
 
 type EditorProps = {
   defaultValue?: string;
@@ -78,6 +61,7 @@ type EditorProps = {
   allowOpenFile?: boolean;
   completion?: CompletionSource;
   problems?: LatexProblem[];
+  onSyntaxProblems?: (problems: LatexProblem[]) => void;
   jump?: { line: number };
   formatSettings?: FormatSettings;
 };
@@ -92,10 +76,15 @@ export function Editor({
   allowOpenFile = true,
   completion,
   problems,
+  onSyntaxProblems,
   jump,
   formatSettings = defaultFormatSettings,
 }: EditorProps) {
   const editor = useRef<ReactCodeMirrorRef>(null);
+  const problemsRef = useRef(problems);
+  problemsRef.current = problems;
+  const syntaxCallback = useRef(onSyntaxProblems);
+  syntaxCallback.current = onSyntaxProblems;
   const container = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const openRequest = useRef(0);
@@ -150,18 +139,7 @@ export function Editor({
 
   useEffect(() => {
     const view = editor.current?.view;
-    if (!view || !problems) return;
-    const diagnostics: Diagnostic[] = problems.flatMap(
-      ({ line, range, severity, message }) => {
-        const doc = view.state.doc;
-        if (range && range.from <= doc.length && range.to <= doc.length)
-          return [{ ...range, severity, message }];
-        if (range || line > doc.lines) return [];
-        const { from, to } = doc.line(line);
-        return [{ from, to, severity, message }];
-      },
-    );
-    view.dispatch(setDiagnostics(view.state, diagnostics));
+    view?.dispatch({ effects: projectProblemsChanged.of() });
   }, [problems]);
 
   useEffect(() => {
@@ -179,16 +157,27 @@ export function Editor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [modified]);
 
+  const language = useMemo(
+    () =>
+      editorLanguage({
+        filename: name,
+        completion,
+        getProblems: () => problemsRef.current ?? [],
+        publishSyntax: (next) => syntaxCallback.current?.(next),
+      }),
+    [name, completion],
+  );
+
   const extensions = useMemo(
     () => [
-      ...(isLatex ? [latex] : []),
+      language,
       ...(isMarkdown ? [markdown()] : []),
-      ...(isLatex && completion
-        ? [autocompletion({ override: [completion] })]
-        : []),
-      editorTheme,
       EditorView.theme({
-        ".cm-content, .cm-gutters": { fontSize: `${preferences.fontSize}px` },
+        ".cm-content, .cm-gutters": {
+          fontFamily: "var(--font-geist-mono)",
+          fontSize: `${preferences.fontSize}px`,
+        },
+        ".cm-scroller": { overflow: "auto" },
       }),
       EditorState.tabSize.of(formatSettings.indent),
       indentUnit.of(" ".repeat(formatSettings.indent)),
@@ -213,7 +202,7 @@ export function Editor({
       formatSettings.indent,
       isLatex,
       isMarkdown,
-      completion,
+      language,
       canFormat,
       format,
     ],
@@ -389,7 +378,7 @@ export function Editor({
         }}
         extensions={extensions}
         height="100%"
-        theme="none"
+        theme={editorThemes[preferences.theme].extension}
         placeholder={
           isMarkdown ? "Write your Markdown here…" : "Write your LaTeX here…"
         }
