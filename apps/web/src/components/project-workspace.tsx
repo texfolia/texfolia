@@ -192,7 +192,12 @@ function WorkspaceSidebar({
   showProblems: boolean;
   onToggleProblems: () => void;
 }) {
-  const { setOpen } = useSidebar();
+  const { setOpen, toggleSidebar } = useSidebar();
+
+  useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
+    ignoreInputs: false,
+    ignoreDefaultPrevented: true,
+  });
 
   return (
     <Sidebar
@@ -547,7 +552,8 @@ export function ProjectWorkspace({
     >
       <SidebarProvider
         ref={container}
-        className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem]"
+        keyboardShortcut={false}
+        className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem] [&_[data-slot=sidebar-container]]:transition-none [&_[data-slot=sidebar-gap]]:transition-none"
       >
         <header className="bg-background z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b px-3">
           <Button

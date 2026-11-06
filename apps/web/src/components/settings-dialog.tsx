@@ -54,7 +54,7 @@ const shortcuts = [
   ["Indent / outdent", "Tab / Shift + Tab"],
   ["Format document", "Mod + Shift + F"],
   ["Next / previous editor tab", "Ctrl + Page Down / Page Up"],
-  ["Toggle sidebar", "Mod + Shift + B"],
+  ["Toggle sidebar (outside editor)", "Mod + B"],
   ["Search projects", "Mod + K"],
   ["Settings", "Mod + ,"],
   ["Keyboard shortcuts", "Mod + /"],

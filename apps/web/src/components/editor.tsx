@@ -112,13 +112,6 @@ export function Editor({
   useHotkeys(
     [
       {
-        hotkey: "Mod+B",
-        callback: () => {
-          const view = editor.current?.view;
-          if (view) toggleLatexCommand("textbf")(view);
-        },
-      },
-      {
         hotkey: "Mod+I",
         callback: () => {
           const view = editor.current?.view;
@@ -187,7 +180,14 @@ export function Editor({
       EditorState.tabSize.of(formatSettings.indent),
       indentUnit.of(" ".repeat(formatSettings.indent)),
       ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
-      Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
+      Prec.high(
+        keymap.of([
+          { key: "Tab", run: acceptCompletion },
+          ...(isLatex
+            ? [{ key: "Mod-b", run: toggleLatexCommand("textbf") }]
+            : []),
+        ]),
+      ),
       keymap.of([
         ...(canFormat ? [{ key: "Mod-Shift-f", run: format }] : []),
         { key: "Mod-h", mac: "Mod-Shift-h", run: openSearchPanel },

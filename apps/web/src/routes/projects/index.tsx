@@ -43,6 +43,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "#/components/ui/sidebar";
 import {
   Table,
@@ -67,7 +68,11 @@ export const Route = createFileRoute("/projects/")({
   loader: async () => {
     return { projects: await getProjects() };
   },
-  component: RouteComponent,
+  component: () => (
+    <SidebarProvider keyboardShortcut={false}>
+      <RouteComponent />
+    </SidebarProvider>
+  ),
 });
 
 function SearchShortcut() {
@@ -77,6 +82,11 @@ function SearchShortcut() {
 
 function RouteComponent() {
   const { projects } = Route.useLoaderData();
+  const { toggleSidebar } = useSidebar();
+  useHotkey("Mod+B", toggleSidebar, {
+    ignoreInputs: false,
+    ignoreDefaultPrevented: true,
+  });
   const search = useRef<HTMLInputElement>(null);
   useHotkey(
     "Mod+K",
@@ -95,7 +105,7 @@ function RouteComponent() {
   });
 
   return (
-    <SidebarProvider>
+    <>
       <Sidebar variant="inset">
         <SidebarHeader>
           <SidebarMenu>
@@ -204,6 +214,6 @@ function RouteComponent() {
           </Card>
         </main>
       </SidebarInset>
-    </SidebarProvider>
+    </>
   );
 }
