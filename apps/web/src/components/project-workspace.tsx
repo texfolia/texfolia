@@ -1,5 +1,5 @@
 import "dockview-react/dist/styles/dockview.css";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconAlertCircle, IconArrowLeft, IconFiles } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
 import type { EditorView } from "@uiw/react-codemirror";
@@ -39,12 +39,12 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSettings } from "#/hooks/use-settings";
@@ -174,6 +174,96 @@ function CompiledPdf() {
 const components = { editor: FileEditor, pdf: CompiledPdf };
 const tabComponents = { file: FileTab };
 const savedSourcesSchema = z.record(z.string(), z.string());
+
+function WorkspaceSidebar({
+  name,
+  nodes,
+  activeId,
+  ready,
+  onOpen,
+  showProblems,
+  onToggleProblems,
+}: {
+  name: string;
+  nodes: ProjectNode[];
+  activeId: string | undefined;
+  ready: boolean;
+  onOpen: (node: ProjectNode, permanent: boolean) => void;
+  showProblems: boolean;
+  onToggleProblems: () => void;
+}) {
+  const { setOpen } = useSidebar();
+
+  return (
+    <Sidebar
+      collapsible="icon"
+      className="top-(--workspace-header-height) bottom-(--workspace-footer-height) h-auto overflow-hidden"
+    >
+      <div className="flex size-full">
+        <Sidebar
+          collapsible="none"
+          className="w-(--sidebar-width-icon)! shrink-0 border-r"
+        >
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarMenu aria-label="Workspace navigation">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Project files"
+                    aria-label="Project files"
+                    isActive
+                    onClick={() => setOpen(true)}
+                  >
+                    <IconFiles />
+                    <span className="sr-only">Project files</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Problems"
+                    aria-label="Problems"
+                    aria-expanded={showProblems}
+                    onClick={onToggleProblems}
+                  >
+                    <IconAlertCircle />
+                    <span className="sr-only">Problems</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SettingsDialog iconOnly />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+        <Sidebar
+          collapsible="none"
+          className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"
+        >
+          <SidebarHeader className="h-11 justify-center border-b px-4">
+            <h2 className="text-sm font-medium">Files</h2>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
+              <SidebarGroupContent aria-busy={!ready}>
+                <ProjectFileTree
+                  nodes={nodes}
+                  activeId={activeId}
+                  onOpen={onOpen}
+                />
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+        </Sidebar>
+      </div>
+    </Sidebar>
+  );
+}
 
 export function ProjectWorkspace({
   projectId,
@@ -455,116 +545,123 @@ export function ProjectWorkspace({
         formatSettings,
       }}
     >
-      <SidebarProvider ref={container} className="h-svh overflow-hidden">
-        <Sidebar variant="inset">
-          <SidebarHeader>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton render={<Link to="/projects" />}>
-                  <IconArrowLeft />
-                  Back to Projects
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
-              <SidebarGroupContent aria-busy={!ready}>
-                <ProjectFileTree
-                  nodes={nodes}
-                  activeId={activeId}
-                  onOpen={openFile}
+      <SidebarProvider
+        ref={container}
+        className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem]"
+      >
+        <header className="bg-background z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b px-3">
+          <Button
+            render={<Link to="/projects" />}
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back to Projects"
+            title="Back to Projects"
+          >
+            <IconArrowLeft />
+          </Button>
+          <SidebarTrigger />
+          <span className="bg-border mx-1 h-4 w-px shrink-0" />
+          <h1
+            className="min-w-0 flex-1 truncate text-sm font-medium"
+            title={name}
+          >
+            {name}
+          </h1>
+          <Button
+            disabled={!main || compiling}
+            onClick={() => void compileProject()}
+          >
+            {compiling ? "Compiling…" : "Save & compile"}
+          </Button>
+        </header>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <WorkspaceSidebar
+            name={name}
+            nodes={nodes}
+            activeId={activeId}
+            ready={ready}
+            onOpen={openFile}
+            showProblems={showProblems}
+            onToggleProblems={() => setShowProblems(!showProblems)}
+          />
+          <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {compileError && (
+              <p
+                role="alert"
+                className="text-destructive border-b px-3 py-2 text-sm"
+              >
+                {compileError}
+              </p>
+            )}
+            <div className="min-h-0 flex-1">
+              <ClientOnly>
+                <DockviewReact
+                  className="size-full"
+                  theme={themeLight}
+                  components={components}
+                  tabComponents={tabComponents}
+                  onReady={onReady}
                 />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SettingsDialog />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-          <header className="flex shrink-0 items-center gap-2 border-b p-2">
-            <SidebarTrigger />
-            <Button
-              disabled={!main || compiling}
-              onClick={() => void compileProject()}
-            >
-              {compiling ? "Compiling…" : "Save & compile"}
-            </Button>
-            <Button
-              variant="outline"
-              aria-expanded={showProblems}
-              onClick={() => setShowProblems(!showProblems)}
-            >
-              Problems ({allProblems.length})
-            </Button>
-          </header>
-          {compileError && (
-            <p
-              role="alert"
-              className="text-destructive border-b px-3 py-2 text-sm"
-            >
-              {compileError}
-            </p>
-          )}
-          <div className="min-h-0 flex-1">
-            <ClientOnly>
-              <DockviewReact
-                className="size-full"
-                theme={themeLight}
-                components={components}
-                tabComponents={tabComponents}
-                onReady={onReady}
-              />
-            </ClientOnly>
-          </div>
-          {showProblems && (
-            <section
-              aria-label="LaTeX problems"
-              className="max-h-44 shrink-0 overflow-auto border-t px-3 py-2 text-sm"
-            >
-              {allProblems.length ? (
-                <ul className="space-y-1">
-                  {allProblems.map((problem, index) => (
-                    <li key={`${problem.path}:${problem.line}:${index}`}>
-                      <Button
-                        variant="ghost"
-                        className="h-auto justify-start text-left whitespace-normal"
-                        onClick={() => {
-                          const node = nodes.find(
-                            (candidate) =>
-                              paths.get(candidate.id) === problem.path,
-                          );
-                          if (!node) return;
-                          openFile(node, true);
-                          setJump({ id: node.id, line: problem.line });
-                        }}
-                      >
-                        <span
-                          className={
-                            problem.severity === "error"
-                              ? "text-destructive"
-                              : "text-muted-foreground"
-                          }
+              </ClientOnly>
+            </div>
+            {showProblems && (
+              <section
+                aria-label="LaTeX problems"
+                className="max-h-44 shrink-0 overflow-auto border-t px-3 py-2 text-sm"
+              >
+                {allProblems.length ? (
+                  <ul className="space-y-1">
+                    {allProblems.map((problem, index) => (
+                      <li key={`${problem.path}:${problem.line}:${index}`}>
+                        <Button
+                          variant="ghost"
+                          className="h-auto justify-start text-left whitespace-normal"
+                          onClick={() => {
+                            const node = nodes.find(
+                              (candidate) =>
+                                paths.get(candidate.id) === problem.path,
+                            );
+                            if (!node) return;
+                            openFile(node, true);
+                            setJump({ id: node.id, line: problem.line });
+                          }}
                         >
-                          {problem.path}:{problem.line}
-                        </span>
-                        {problem.message}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">No problems.</p>
-              )}
-            </section>
-          )}
-        </SidebarInset>
+                          <span
+                            className={
+                              problem.severity === "error"
+                                ? "text-destructive"
+                                : "text-muted-foreground"
+                            }
+                          >
+                            {problem.path}:{problem.line}
+                          </span>
+                          {problem.message}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">No problems.</p>
+                )}
+              </section>
+            )}
+          </main>
+        </div>
+        <footer className="bg-background text-muted-foreground z-20 flex h-(--workspace-footer-height) shrink-0 items-center justify-between gap-3 border-t px-3 text-xs">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 px-2 text-xs"
+            aria-expanded={showProblems}
+            onClick={() => setShowProblems(!showProblems)}
+          >
+            <IconAlertCircle />
+            Problems ({allProblems.length})
+          </Button>
+          <span className="min-w-0 truncate">
+            {activeId ? paths.get(activeId) : "LaTeX workspace"}
+          </span>
+        </footer>
       </SidebarProvider>
     </WorkspaceContext.Provider>
   );

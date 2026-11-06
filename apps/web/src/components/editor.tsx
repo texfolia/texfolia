@@ -101,9 +101,6 @@ export function Editor({
   const { editor: preferences, updateEditor } = useSettings();
   const [error, setError] = useState("");
   const [status, setStatus] = useState({
-    line: 1,
-    column: 1,
-    lines: 1,
     undo: false,
     redo: false,
   });
@@ -358,21 +355,12 @@ export function Editor({
           onChange?.(text);
         }}
         onUpdate={({ state }) => {
-          const position = state.selection.main.head;
-          const line = state.doc.lineAt(position);
           const next = {
-            line: line.number,
-            column: position - line.from + 1,
-            lines: state.doc.lines,
             undo: undoDepth(state) > 0,
             redo: redoDepth(state) > 0,
           };
           setStatus((previous) =>
-            previous.line === next.line &&
-            previous.column === next.column &&
-            previous.lines === next.lines &&
-            previous.undo === next.undo &&
-            previous.redo === next.redo
+            previous.undo === next.undo && previous.redo === next.redo
               ? previous
               : next,
           );
@@ -384,15 +372,6 @@ export function Editor({
         aria-label="LaTeX source"
         className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
       />
-      <footer className="text-muted-foreground flex shrink-0 items-center justify-between gap-2 border-t px-3 py-1.5 text-xs">
-        <span>
-          LaTeX · {status.lines} {status.lines === 1 ? "line" : "lines"}
-          {modified ? " · Modified" : ""}
-        </span>
-        <span>
-          Ln {status.line}, Col {status.column}
-        </span>
-      </footer>
     </section>
   );
 }

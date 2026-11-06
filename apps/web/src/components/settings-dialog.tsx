@@ -60,7 +60,7 @@ const shortcuts = [
   ["Keyboard shortcuts", "Mod + /"],
 ];
 
-export function SettingsDialog() {
+export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
   const {
     editor,
     updateEditor,
@@ -74,9 +74,12 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<SidebarMenuButton tooltip="Settings" />}>
+      <DialogTrigger
+        render={<SidebarMenuButton tooltip="Settings" />}
+        aria-label="Settings"
+      >
         <IconSettings />
-        <span>Settings</span>
+        <span className={iconOnly ? "sr-only" : undefined}>Settings</span>
       </DialogTrigger>
       <DialogContent className="h-[min(580px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl">
         <DialogTitle className="sr-only">Settings</DialogTitle>
