@@ -121,6 +121,29 @@ export function latexCompletion(
       context.pos,
     );
     if (/(?:^|[^\\])(?:\\\\)*%/.test(before)) return null;
+    const environment = /\\begin\s*\{([^{}\s]*)(\}?)$/.exec(before);
+    if (environment) {
+      const prefix = environment[1] ?? "";
+      const closingBrace = environment[2] ?? "";
+      const options = prefixed(environments, prefix, "type").map((option) =>
+        snippetCompletion(
+          `${option.label}}\n\t\${}\n\\end{${option.label}}`,
+          option,
+        ),
+      );
+      return options.length
+        ? {
+            from: context.pos - prefix.length - closingBrace.length,
+            filter: false,
+            to:
+              !closingBrace &&
+              context.state.sliceDoc(context.pos, context.pos + 1) === "}"
+                ? context.pos + 1
+                : context.pos,
+            options,
+          }
+        : null;
+    }
     const argument =
       /\\([a-z]+)\*?\s*(?:\[[^\]]*\]\s*){0,2}\{(?:[^{}]*,\s*)?([^{}\s,]*)$/i.exec(
         before,
@@ -130,7 +153,7 @@ export function latexCompletion(
       const command = argumentCommand;
       const analysis = getAnalysis();
       const options =
-        command === "begin" || command === "end"
+        command === "end"
           ? prefixed(environments, prefix, "type")
           : /^(?:[a-z]*cite[a-z]*|nocite)$/i.test(command)
             ? prefixed(analysis.citations, prefix, "constant")

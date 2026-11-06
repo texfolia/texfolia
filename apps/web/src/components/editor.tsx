@@ -1,4 +1,5 @@
 import {
+  acceptCompletion,
   autocompletion,
   type CompletionSource,
 } from "@codemirror/autocomplete";
@@ -19,6 +20,7 @@ import CodeMirror, {
   EditorState,
   EditorView,
   keymap,
+  Prec,
   type ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
 import {
@@ -188,6 +190,7 @@ export function Editor({
       EditorState.tabSize.of(formatSettings.indent),
       indentUnit.of(" ".repeat(formatSettings.indent)),
       ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
+      Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
       keymap.of([
         ...(canFormat ? [{ key: "Mod-Shift-f", run: format }] : []),
         { key: "Mod-h", mac: "Mod-Shift-h", run: openSearchPanel },
