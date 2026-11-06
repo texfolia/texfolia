@@ -11,6 +11,7 @@ import {
   undo,
   undoDepth,
 } from "@codemirror/commands";
+import { markdown } from "@codemirror/lang-markdown";
 import { indentUnit, StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { type Diagnostic, setDiagnostics } from "@codemirror/lint";
@@ -19,6 +20,7 @@ import {
   IconArrowBackUp,
   IconArrowForwardUp,
   IconDownload,
+  IconEye,
   IconFolderOpen,
   IconSearch,
   IconTextWrap,
@@ -72,6 +74,7 @@ type EditorProps = {
   filename?: string;
   onChange?: (value: string) => void;
   onCreateEditor?: (view: EditorView) => void;
+  onOpenPreview?: () => void;
   allowOpenFile?: boolean;
   completion?: CompletionSource;
   problems?: LatexProblem[];
@@ -85,6 +88,7 @@ export function Editor({
   filename = "main.tex",
   onChange,
   onCreateEditor,
+  onOpenPreview,
   allowOpenFile = true,
   completion,
   problems,
@@ -106,8 +110,16 @@ export function Editor({
   });
   const modified = value !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
+  const isMarkdown = /\.(?:md|markdown)$/i.test(name);
   const canFormat = isLatex || /\.bib$/i.test(name);
   const { format, formatting, formatError } = useLatexFormatter(formatSettings);
+
+  useHotkeys([{ hotkey: "Mod+Shift+V", callback: () => onOpenPreview?.() }], {
+    target: container,
+    capture: true,
+    ignoreInputs: false,
+    enabled: isMarkdown && !!onOpenPreview,
+  });
 
   useHotkeys(
     [
@@ -170,6 +182,7 @@ export function Editor({
   const extensions = useMemo(
     () => [
       ...(isLatex ? [latex] : []),
+      ...(isMarkdown ? [markdown()] : []),
       ...(isLatex && completion
         ? [autocompletion({ override: [completion] })]
         : []),
@@ -199,6 +212,7 @@ export function Editor({
       preferences,
       formatSettings.indent,
       isLatex,
+      isMarkdown,
       completion,
       canFormat,
       format,
@@ -245,6 +259,14 @@ export function Editor({
     >
       <PanelHeader title={name}>
         <PanelActions label="Editor actions">
+          {isMarkdown && onOpenPreview && (
+            <PanelAction
+              label="Open Markdown preview (⌘/Ctrl+Shift+V)"
+              onClick={onOpenPreview}
+            >
+              <IconEye />
+            </PanelAction>
+          )}
           {allowOpenFile && (
             <PanelAction
               label="Open source file"
@@ -332,7 +354,7 @@ export function Editor({
       <input
         ref={fileInput}
         type="file"
-        accept=".tex,.bib,.sty,.cls,.txt,text/plain"
+        accept=".tex,.ltx,.bib,.sty,.cls,.md,.markdown,.txt,text/plain,text/markdown"
         className="hidden"
         aria-label="Choose source file"
         onChange={(event) => {
@@ -368,8 +390,10 @@ export function Editor({
         extensions={extensions}
         height="100%"
         theme="none"
-        placeholder="Write your LaTeX here…"
-        aria-label="LaTeX source"
+        placeholder={
+          isMarkdown ? "Write your Markdown here…" : "Write your LaTeX here…"
+        }
+        aria-label={isMarkdown ? "Markdown source" : "LaTeX source"}
         className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
       />
     </section>

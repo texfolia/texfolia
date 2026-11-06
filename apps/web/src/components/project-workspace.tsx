@@ -26,6 +26,10 @@ import { z } from "zod";
 
 import { Editor } from "#/components/editor";
 import {
+  MarkdownPreview,
+  type MarkdownPreviewParams,
+} from "#/components/markdown-preview";
+import {
   ProjectFileTree,
   type ProjectNode,
 } from "#/components/project-file-tree";
@@ -65,6 +69,7 @@ type Workspace = {
   pdf: File | null;
   formatSettings: FormatSettings;
   keepOpen: (id: string) => void;
+  openMarkdownPreview: (id: string) => void;
   change: (id: string, value: string, saved?: boolean) => void;
 };
 const WorkspaceContext = createContext<Workspace | null>(null);
@@ -141,6 +146,7 @@ function FileEditor({
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
       onChange={(value) => workspace.change(params.node.id, value)}
+      onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
     />
   );
 }
@@ -171,7 +177,11 @@ function CompiledPdf() {
   );
 }
 
-const components = { editor: FileEditor, pdf: CompiledPdf };
+const components = {
+  editor: FileEditor,
+  pdf: CompiledPdf,
+  markdown: MarkdownPreview,
+};
 const tabComponents = { file: FileTab };
 const savedSourcesSchema = z.record(z.string(), z.string());
 
@@ -391,8 +401,11 @@ export function ProjectWorkspace({
 
   function cycleTab(direction: number) {
     const panels =
-      api.current?.panels.filter((panel) => panel.id !== "pdf") ?? [];
-    const currentId = api.current?.activePanel?.id ?? activeId;
+      api.current?.panels.filter((panel) => panel.api.component === "editor") ??
+      [];
+    const activePanel = api.current?.activePanel;
+    const currentId =
+      activePanel?.api.component === "editor" ? activePanel.id : activeId;
     const index = panels.findIndex((panel) => panel.id === currentId);
     panels[
       (index + direction + panels.length) % panels.length
@@ -443,6 +456,9 @@ export function ProjectWorkspace({
     const previous = drafts.current.get(id) ?? { value: "", savedValue: "" };
     const savedValue = saved ? value : previous.savedValue;
     drafts.current.set(id, { value, savedValue });
+    api.current
+      ?.getPanel(`markdown:${id}`)
+      ?.api.updateParameters({ source: value });
     const path = paths.get(id);
     if (path && previous.value !== value) {
       update(path, value);
@@ -453,6 +469,30 @@ export function ProjectWorkspace({
     const node = nodes.find((node) => node.id === id);
     if (node)
       panel?.api.setTitle(`${node.name}${value !== savedValue ? " ●" : ""}`);
+  }
+
+  function openMarkdownPreview(id: string) {
+    const dock = api.current;
+    const node = nodes.find((node) => node.id === id);
+    if (!dock || !node || !/\.(?:md|markdown)$/i.test(node.name)) return;
+    keepOpen(id);
+    const existing = dock.getPanel(`markdown:${id}`);
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+    const reference = dock.panels.find(
+      (panel) => panel.api.component !== "editor",
+    );
+    dock.addPanel<MarkdownPreviewParams>({
+      id: `markdown:${id}`,
+      component: "markdown",
+      title: `Preview: ${node.name}`,
+      params: { source: drafts.current.get(id)?.value ?? "" },
+      position: reference
+        ? { referencePanel: reference.id, direction: "within" }
+        : { referencePanel: id, direction: "right" },
+    });
   }
 
   function openFile(node: ProjectNode, permanent: boolean) {
@@ -468,7 +508,10 @@ export function ProjectWorkspace({
       ? dock.getPanel(previewId.current)
       : undefined;
     const reference =
-      preview ?? dock.panels.find((panel) => panel.id !== "pdf");
+      preview ?? dock.panels.find((panel) => panel.api.component === "editor");
+    const previewPanel = dock.panels.find(
+      (panel) => panel.api.component !== "editor",
+    );
     const draft = drafts.current.get(node.id);
     dock.addPanel<FilePanelParams>({
       id: node.id,
@@ -482,8 +525,8 @@ export function ProjectWorkspace({
       renderer: "always",
       position: reference
         ? { referencePanel: reference.id, direction: "within" }
-        : dock.getPanel("pdf")
-          ? { referencePanel: "pdf", direction: "left" }
+        : previewPanel
+          ? { referencePanel: previewPanel.id, direction: "left" }
           : undefined,
     });
     if (!permanent) {
@@ -514,7 +557,7 @@ export function ProjectWorkspace({
     subscriptions.current.forEach((subscription) => subscription.dispose());
     subscriptions.current = [
       dock.onDidActivePanelChange(({ panel }) => {
-        if (panel?.id !== "pdf") setActiveId(panel?.id);
+        if (panel?.api.component === "editor") setActiveId(panel.id);
       }),
       dock.onDidRemovePanel((panel) => {
         if (previewId.current === panel.id) previewId.current = null;
@@ -541,6 +584,7 @@ export function ProjectWorkspace({
       value={{
         drafts: drafts.current,
         keepOpen,
+        openMarkdownPreview,
         change,
         paths,
         completion,

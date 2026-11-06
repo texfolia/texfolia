@@ -45,7 +45,7 @@ const shortcuts = [
   ["Heading 1–6", "Mod + Alt + 1–6"],
   ["Normal text", "Mod + Alt + 0"],
   ["Copy / cut / paste", "Mod + C / X / V"],
-  ["Paste plain text", "Mod + Shift + V"],
+  ["Open Markdown preview", "Mod + Shift + V"],
   ["Select all", "Mod + A"],
   ["Undo / redo", "Mod + Z / Mod + Shift + Z"],
   ["Find", "Mod + F"],
