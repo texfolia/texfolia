@@ -1,0 +1,148 @@
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
+import { type ApiBindings, createApp } from "./api";
+import { createJobs, type Engine, type ObjectStore } from "./jobs";
+
+export function createLocalRuntime(options: {
+  path: string;
+  engine: Engine;
+  token?: string;
+}) {
+  mkdirSync(dirname(options.path), { recursive: true });
+  const db = new Database(options.path, { strict: true });
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS objects (key TEXT PRIMARY KEY, body BLOB NOT NULL, metadata TEXT);
+    CREATE TABLE IF NOT EXISTS queue (
+      id TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL
+    );
+  `);
+  const read = db.query<{ body: Uint8Array }, [string]>(
+    "SELECT body FROM objects WHERE key = ?",
+  );
+  const head = db.query<{ size: number; metadata: string | null }, [string]>(
+    "SELECT length(body) AS size, metadata FROM objects WHERE key = ?",
+  );
+  const create = db.query("INSERT OR IGNORE INTO objects VALUES (?, ?, ?)");
+  const write = db.query(
+    "INSERT OR REPLACE INTO objects (key, body) VALUES (?, ?)",
+  );
+  const remove = db.query("DELETE FROM objects WHERE key = ?");
+  const keys = db.query<{ key: string }, [string]>(
+    "SELECT key FROM objects WHERE key GLOB ?",
+  );
+  const encoder = new TextEncoder();
+  const store: ObjectStore = {
+    async read(key) {
+      const row = read.get(key);
+      if (!row) return null;
+      return new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(row.body);
+          controller.close();
+        },
+      });
+    },
+    async head(key) {
+      const object = head.get(key);
+      return object
+        ? { size: object.size, metadata: object.metadata ?? undefined }
+        : null;
+    },
+    async create(key, value, metadata) {
+      return (
+        create.run(
+          key,
+          typeof value === "string" ? encoder.encode(value) : value,
+          metadata ?? null,
+        ).changes > 0
+      );
+    },
+    async write(key, value) {
+      write.run(key, encoder.encode(value));
+    },
+    async remove(key) {
+      remove.run(key);
+    },
+    async *keys(prefix) {
+      for (const row of keys.all(`${prefix}*`)) yield row.key;
+    },
+  };
+  const enqueue = db.query(
+    "INSERT OR IGNORE INTO queue (id, due) VALUES (?, ?)",
+  );
+  const next = db.query<{ id: string; attempts: number }, [number]>(
+    "SELECT id, attempts FROM queue WHERE due <= ? ORDER BY due, rowid LIMIT 1",
+  );
+  const retry = db.query(
+    "UPDATE queue SET attempts = attempts + 1, due = ? WHERE id = ?",
+  );
+  const ack = db.query("DELETE FROM queue WHERE id = ?");
+  const jobs = createJobs({
+    store,
+    engine: options.engine,
+    queue: {
+      async send({ id }) {
+        enqueue.run(id, Date.now());
+      },
+    },
+  });
+  const app = createApp();
+  let count = 0;
+  let resetsAt = 0;
+  const bindings: ApiBindings = {
+    jobs,
+    token: options.token,
+    allowAnonymous: true,
+    limiter: {
+      async limit() {
+        if (Date.now() >= resetsAt) {
+          count = 0;
+          resetsAt = Date.now() + 60_000;
+        }
+        return { success: ++count <= 10 };
+      },
+    },
+  };
+  let recoverAt = 0;
+  async function drain() {
+    if (Date.now() >= recoverAt) {
+      await jobs.recover();
+      recoverAt = Date.now() + 5 * 60_000;
+    }
+    let row = next.get(Date.now());
+    while (row) {
+      try {
+        if (await jobs.consume(row.id, row.attempts + 1)) ack.run(row.id);
+        else retry.run(Date.now() + 5_000, row.id);
+      } catch (error) {
+        console.error("Local compile queue processing failed", {
+          jobId: row.id,
+          error,
+        });
+        retry.run(Date.now() + 5_000, row.id);
+      }
+      row = next.get(Date.now());
+    }
+  }
+  let active: Promise<void> | undefined;
+  const timer = setInterval(() => {
+    active ??= drain()
+      .catch((error) => {
+        console.error("Local compile queue failed", { error });
+      })
+      .finally(() => {
+        active = undefined;
+      });
+  }, 250);
+  return {
+    fetch: (request: Request) => app.fetch(request, bindings),
+    async close() {
+      clearInterval(timer);
+      await active;
+      db.close();
+    },
+  };
+}

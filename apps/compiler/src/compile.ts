@@ -2,72 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
-export class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public log?: string,
-  ) {
-    super(message);
-  }
-}
-
-export type Project = {
-  mainFile: string;
-  files: Record<string, string | { base64: string }>;
-};
-
-function safePath(value: string): boolean {
-  return (
-    value.length > 0 &&
-    value.length <= 240 &&
-    !/[\\:\x00-\x1f]/.test(value) &&
-    !value.startsWith("/") &&
-    value
-      .split("/")
-      .every((part) => part !== "" && part !== "." && part !== "..")
-  );
-}
-
-export function parseProject(value: unknown): Project {
-  if (!value || typeof value !== "object")
-    throw new HttpError(400, "Expected a project object");
-  const { mainFile = "main.tex", files } = value as Project;
-  if (
-    typeof mainFile !== "string" ||
-    !safePath(mainFile) ||
-    !mainFile.endsWith(".tex")
-  ) {
-    throw new HttpError(400, "mainFile must be a relative .tex path");
-  }
-  if (!files || typeof files !== "object" || Array.isArray(files))
-    throw new HttpError(400, "files must be an object");
-  const entries = Object.entries(files);
-  if (!entries.length || entries.length > 200)
-    throw new HttpError(400, "Provide 1–200 files");
-  if (!Object.hasOwn(files, mainFile))
-    throw new HttpError(400, "mainFile is missing from files");
-  for (const [path, content] of entries) {
-    if (!safePath(path)) throw new HttpError(400, `Invalid file path: ${path}`);
-    if (
-      typeof content !== "string" &&
-      !(
-        content &&
-        typeof content === "object" &&
-        typeof content.base64 === "string" &&
-        /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-          content.base64,
-        )
-      )
-    ) {
-      throw new HttpError(400, `Invalid content for ${path}`);
-    }
-    // Avoid ambiguous file/directory collisions before writing anything.
-    if (entries.some(([other]) => other.startsWith(`${path}/`)))
-      throw new HttpError(400, "File paths overlap");
-  }
-  return { mainFile, files };
-}
+import { HttpError, type Project } from "./project";
 
 async function readLog(stream: ReadableStream<Uint8Array>): Promise<string> {
   const reader = stream.getReader();

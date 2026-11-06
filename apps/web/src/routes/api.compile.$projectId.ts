@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { db, projectJob } from "@texfolia/db";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { auth } from "#/lib/auth";
@@ -9,142 +9,266 @@ const payload = z.object({
   mainFile: z.string(),
   files: z.record(z.string(), z.string()),
 });
+const idSchema = z.uuid();
+const pending = z.object({
+  id: idSchema,
+  status: z.enum(["queued", "running"]),
+});
+const status = z.union([
+  pending,
+  z.object({
+    id: idSchema,
+    status: z.literal("succeeded"),
+    artifactUrl: z.string(),
+    sizeBytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(20 * 1024 * 1024),
+    log: z.string(),
+  }),
+  z.object({
+    id: idSchema,
+    status: z.literal("failed"),
+    error: z.string(),
+    log: z.string(),
+  }),
+]);
+const failure = z.object({ error: z.string(), log: z.string().optional() });
 const maxBytes = 10 * 1024 * 1024;
+const noStore = { "Cache-Control": "no-store" };
+
+function json(data: unknown, status = 200, headers: HeadersInit = noStore) {
+  return Response.json(data, { status, headers });
+}
+
+async function checkProject(request: Request, projectId: string) {
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return json({ error: "Unauthorized" }, 401);
+  if (!idSchema.safeParse(projectId).success)
+    return json({ error: "Project not found" }, 404);
+  const project = await db.query.project.findFirst({
+    columns: { id: true },
+    where: {
+      id: projectId,
+      ownerId: session.user.id,
+      deletedAt: { isNull: true },
+    },
+  });
+  return project ? null : json({ error: "Project not found" }, 404);
+}
+
+function fetchCompiler(base: string, path: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  const token = process.env.COMPILER_TOKEN;
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(new URL(path, base), {
+    ...init,
+    headers,
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+
+async function readSources(request: Request) {
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let bytes = 0;
+  while (reader) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    bytes += value.length;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      return json({ error: "Project exceeds 10 MiB" }, 413);
+    }
+    chunks.push(new Uint8Array(value));
+  }
+  const body = await new Blob(chunks).text();
+  try {
+    payload.parse(JSON.parse(body));
+    return body;
+  } catch {
+    return json({ error: "Invalid project sources" }, 400);
+  }
+}
+
+function updateJob(
+  id: string,
+  values: Partial<typeof projectJob.$inferInsert>,
+) {
+  return db
+    .update(projectJob)
+    .set(values)
+    .where(
+      and(
+        eq(projectJob.id, id),
+        inArray(projectJob.status, ["queued", "running"]),
+      ),
+    );
+}
 
 export const Route = createFileRoute("/api/compile/$projectId")({
   server: {
     handlers: {
       POST: async ({ request, params }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
-        if (!session)
-          return Response.json({ error: "Unauthorized" }, { status: 401 });
-        if (!z.uuid().safeParse(params.projectId).success)
-          return Response.json({ error: "Project not found" }, { status: 404 });
-        const project = await db.query.project.findFirst({
-          columns: { id: true },
-          where: {
-            id: params.projectId,
-            ownerId: session.user.id,
-            deletedAt: { isNull: true },
-          },
-        });
-        if (!project)
-          return Response.json({ error: "Project not found" }, { status: 404 });
-
-        const url = process.env.COMPILER_URL;
-        if (!url)
-          return Response.json(
-            { error: "Compiler is not configured" },
-            { status: 503 },
-          );
+        const denied = await checkProject(request, params.projectId);
+        if (denied) return denied;
+        const base = process.env.COMPILER_URL;
+        if (!base) return json({ error: "Compiler is not configured" }, 503);
         if (
           !request.headers.get("Content-Type")?.startsWith("application/json")
         )
-          return Response.json(
-            { error: "Expected application/json" },
-            { status: 415 },
-          );
-        const reader = request.body?.getReader();
-        const chunks: Uint8Array<ArrayBuffer>[] = [];
-        let bytes = 0;
-        while (reader) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          bytes += value.length;
-          if (bytes > maxBytes) {
-            await reader.cancel();
-            return Response.json(
-              { error: "Project exceeds 10 MiB" },
-              { status: 413 },
-            );
-          }
-          chunks.push(new Uint8Array(value));
-        }
-        const body = await new Blob(chunks).text();
-        try {
-          payload.parse(JSON.parse(body));
-        } catch {
-          return Response.json(
-            { error: "Invalid project sources" },
-            { status: 400 },
-          );
-        }
+          return json({ error: "Expected application/json" }, 415);
+        const body = await readSources(request);
+        if (typeof body !== "string") return body;
 
         const id = crypto.randomUUID();
         await db.insert(projectJob).values({
           id,
-          projectId: project.id,
-          status: "running",
+          projectId: params.projectId,
+          status: "queued",
           sizeBytes: 0n,
-          startedAt: new Date(),
         });
-        const finish = (values: Partial<typeof projectJob.$inferInsert>) =>
-          db
-            .update(projectJob)
-            .set({ ...values, finishedAt: new Date() })
-            .where(eq(projectJob.id, id));
 
         try {
-          const headers = new Headers({
-            Accept: "multipart/form-data",
-            "Content-Type": "application/json",
-            "X-Compilation-Id": id,
-          });
-          if (process.env.COMPILER_TOKEN)
-            headers.set(
-              "Authorization",
-              `Bearer ${process.env.COMPILER_TOKEN}`,
-            );
-          const result = await fetch(new URL("/compile", url), {
+          const response = await fetchCompiler(base, "/compile", {
             method: "POST",
-            headers,
-            body,
-            signal: AbortSignal.timeout(90_000),
-          });
-          if (!result.ok) {
-            const failure = z
-              .object({ error: z.string(), log: z.string().optional() })
-              .safeParse(await result.json().catch(() => undefined));
-            const detail = failure.success
-              ? failure.data
-              : { error: "Compilation service failed" };
-            await finish({ status: "failed", ...detail });
-            return Response.json(detail, { status: result.status });
-          }
-          const form = await result.clone().formData();
-          const pdf = form.get("pdf");
-          const log = form.get("log");
-          if (!(pdf instanceof Blob) || typeof log !== "string")
-            throw new Error("Invalid compiler result");
-          const location = result.headers.get("Location");
-          const size = result.headers.get("X-Compilation-Size");
-          if (
-            location !== null &&
-            (location !== `/compilations/${id}.pdf` ||
-              size !== String(pdf.size))
-          )
-            throw new Error("Invalid stored PDF metadata");
-          await finish({
-            status: "succeeded",
-            log,
-            objectKey: location?.slice(1),
-            sizeBytes: location ? BigInt(pdf.size) : 0n,
-          });
-          return new Response(result.body, {
             headers: {
-              "Content-Type":
-                result.headers.get("Content-Type") ?? "multipart/form-data",
-              "Cache-Control": "no-store",
+              "Content-Type": "application/json",
+              "X-Compilation-Id": id,
             },
+            body,
           });
+          if (response.status === 202) {
+            const accepted = pending.parse(await response.json());
+            if (accepted.id !== id) throw new Error("Invalid compiler job ID");
+          } else if (response.status < 500) {
+            const parsed = failure.safeParse(
+              await response.json().catch(() => null),
+            );
+            const detail = parsed.success
+              ? parsed.data
+              : { error: "Compilation service failed" };
+            await updateJob(id, {
+              ...detail,
+              status: "failed",
+              finishedAt: new Date(),
+            });
+            const headers = new Headers(noStore);
+            const retryAfter = response.headers.get("Retry-After");
+            if (retryAfter) headers.set("Retry-After", retryAfter);
+            return json(detail, response.ok ? 502 : response.status, headers);
+          } else {
+            throw new Error(`Compiler submission returned ${response.status}`);
+          }
         } catch (error) {
-          // A lost response may follow a successful R2 write. The reserved job ID
-          // lets the storage reconciliation script recover it without guessing ownership.
-          console.error("Compile transport failed", { jobId: id, error });
-          return Response.json(
-            { error: "Compilation service failed" },
-            { status: 502 },
-          );
+          // A lost response can follow a successful submission. Let the client
+          // check the reserved ID before asking the user to submit new work.
+          console.error("Compile submission response failed", {
+            jobId: id,
+            error,
+          });
+        }
+        const statusUrl = `/api/compile/${params.projectId}?job=${id}`;
+        return json({ id, status: "queued", statusUrl }, 202, {
+          ...noStore,
+          Location: statusUrl,
+          "Retry-After": "1",
+        });
+      },
+      GET: async ({ request, params }) => {
+        const denied = await checkProject(request, params.projectId);
+        if (denied) return denied;
+        const url = new URL(request.url);
+        const parsedId = idSchema.safeParse(url.searchParams.get("job"));
+        if (!parsedId.success) return json({ error: "Job not found" }, 404);
+        const id = parsedId.data;
+        const job = await db.query.projectJob.findFirst({
+          columns: { id: true, status: true, createdAt: true },
+          where: { id, projectId: params.projectId },
+        });
+        if (!job) return json({ error: "Job not found" }, 404);
+        const base = process.env.COMPILER_URL;
+        if (!base) return json({ error: "Compiler is not configured" }, 503);
+        const pdfPath = `/compilations/${id}.pdf`;
+        try {
+          if (url.searchParams.get("artifact") === "pdf") {
+            if (job.status !== "succeeded")
+              return json({ error: "PDF not found" }, 404);
+            const pdf = await fetchCompiler(base, pdfPath);
+            if (pdf.status === 404)
+              return json({ error: "PDF not found" }, 404);
+            if (
+              !pdf.ok ||
+              pdf.headers.get("Content-Type") !== "application/pdf"
+            )
+              throw new Error("Invalid compiler PDF response");
+            return new Response(pdf.body, {
+              headers: { ...noStore, "Content-Type": "application/pdf" },
+            });
+          }
+
+          const response = await fetchCompiler(base, `/jobs/${id}`);
+          if (response.status === 404) {
+            if (Date.now() - job.createdAt.getTime() < 30_000)
+              return json({ id, status: "queued" }, 200, {
+                ...noStore,
+                "Retry-After": "1",
+              });
+            const error = "The compiler did not receive this job. Try again.";
+            await updateJob(id, {
+              status: "failed",
+              error,
+              finishedAt: new Date(),
+            });
+            return json({ id, status: "failed", error, log: "" });
+          }
+          if (!response.ok)
+            throw new Error(`Compiler status returned ${response.status}`);
+          const result = status.parse(await response.json());
+          if (result.id !== id) throw new Error("Invalid compiler job ID");
+          switch (result.status) {
+            case "queued":
+            case "running":
+              if (result.status === "running" && job.status === "queued") {
+                await db
+                  .update(projectJob)
+                  .set({ status: "running", startedAt: new Date() })
+                  .where(
+                    and(eq(projectJob.id, id), eq(projectJob.status, "queued")),
+                  );
+              }
+              return json(result, 200, { ...noStore, "Retry-After": "1" });
+            case "succeeded":
+              if (result.artifactUrl !== pdfPath)
+                throw new Error("Invalid compiler artifact URL");
+              await updateJob(id, {
+                status: "succeeded",
+                log: result.log,
+                objectKey: pdfPath.slice(1),
+                sizeBytes: BigInt(result.sizeBytes),
+                finishedAt: new Date(),
+              });
+              return json({
+                ...result,
+                artifactUrl: `/api/compile/${params.projectId}?job=${id}&artifact=pdf`,
+              });
+            case "failed":
+              await updateJob(id, {
+                status: "failed",
+                error: result.error,
+                log: result.log,
+                finishedAt: new Date(),
+              });
+              return json(result);
+          }
+        } catch (error) {
+          console.error("Compile status or artifact fetch failed", {
+            jobId: id,
+            error,
+          });
+          return json({ error: "Compilation service failed" }, 502);
         }
       },
     },

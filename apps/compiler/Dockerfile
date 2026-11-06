@@ -7,7 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 ENV XDG_CACHE_HOME=/home/bun/.cache TECTONIC_UNTRUSTED_MODE=1 PORT=8080
 RUN mkdir -p /home/bun/.cache && chown -R bun:bun /home/bun/.cache
 WORKDIR /app
-COPY --chown=bun:bun src ./src
+COPY package.json bun.lock ./
+COPY apps/compiler/package.json apps/compiler/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/typescript-config/package.json packages/typescript-config/package.json
+RUN bun install --filter compiler --production --frozen-lockfile
+COPY --chown=bun:bun apps/compiler/src ./apps/compiler/src
+RUN mkdir -p /app/apps/compiler/.cache && chown bun:bun /app/apps/compiler/.cache
+WORKDIR /app/apps/compiler
 USER bun
 # Cache the base LaTeX format and packages in the image, before accepting work.
 RUN mkdir /tmp/warmup && printf '\\documentclass{article}\n\\begin{document}Ready\\end{document}\n' > /tmp/warmup/main.tex \

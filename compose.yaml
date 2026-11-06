@@ -1,11 +1,16 @@
 services:
   compiler:
-    build: ./apps/compiler
+    build:
+      context: .
+      dockerfile: apps/compiler/Dockerfile
     platform: linux/amd64
     ports:
       - "127.0.0.1:8080:8080"
+    environment:
+      COMPILER_TOKEN: ${COMPILER_TOKEN:-}
     volumes:
-      - ./apps/compiler/src:/app/src:ro
+      - ./apps/compiler/src:/app/apps/compiler/src:ro
+      - compiler-data:/app/apps/compiler/.cache
     command: ["bun", "--watch", "src/index.ts"]
     restart: unless-stopped
     mem_limit: 1g
@@ -27,4 +32,5 @@ services:
       - pgdata:/var/lib/postgresql
 
 volumes:
+  compiler-data:
   pgdata:
