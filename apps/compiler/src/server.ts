@@ -5,21 +5,13 @@ import { compile } from "./compile";
 import { HttpError, maxProjectBytes, parseProject } from "./project";
 
 export function createEngineHandler(
-  options: { token?: string; compile?: typeof compile } = {},
+  options: { compile?: typeof compile } = {},
 ) {
   const app = new Hono();
   let busy = false;
   app.get("/health", (c) => c.json({ status: "ready" }));
   app.post(
     "/compile",
-    async (c, next) => {
-      if (
-        options.token &&
-        c.req.header("Authorization") !== `Bearer ${options.token}`
-      )
-        return c.json({ error: "Unauthorized" }, 401);
-      await next();
-    },
     bodyLimit({
       maxSize: maxProjectBytes,
       onError: (c) => c.json({ error: "Project exceeds 10 MiB" }, 413),

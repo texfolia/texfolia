@@ -8,6 +8,7 @@
   "scripts": {
     "auth:generate": "bun --env-file=../../packages/db/.env x --bun auth@latest generate --output ../../packages/db/src/db/auth-schema.ts --config ./src/lib/auth.ts --yes",
     "build": "bun run latex:assets && vite build",
+    "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --include-runtime=false && bun fmt worker-configuration.d.ts",
     "deploy": "bun run build && wrangler deploy",
     "dev": "bun run latex:assets && vite dev --port 3000",
     "format": "bun fmt",

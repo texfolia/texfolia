@@ -54,6 +54,12 @@ This project uses the Cloudflare Vite plugin (configured in `vite.config.ts`) an
 
 For production env vars, run `wrangler secret put MY_VAR` for each secret listed in `.env.example`. Public (non-secret) vars go in `wrangler.jsonc` under `vars`.
 
+Deploy `texfolia-compiler` before deploying the web app. Production compiler
+requests use the `COMPILER` service binding in `wrangler.jsonc` and need no
+internal token. `COMPILER_URL` is only a development setting and defaults to
+`http://localhost:8080`. See the [compiler deployment guide](../compiler/README.md).
+After changing bindings, run `bun run cf:typegen` to refresh their TypeScript types.
+
 KV, D1, R2, and Durable Object bindings are configured in `wrangler.jsonc` — see https://developers.cloudflare.com/workers/wrangler/configuration/.
 
 ## Routing

@@ -5,11 +5,7 @@ import { dirname } from "node:path";
 import { type ApiBindings, createApp } from "./api";
 import { createJobs, type Engine, type ObjectStore } from "./jobs";
 
-export function createLocalRuntime(options: {
-  path: string;
-  engine: Engine;
-  token?: string;
-}) {
+export function createLocalRuntime(options: { path: string; engine: Engine }) {
   mkdirSync(dirname(options.path), { recursive: true });
   const db = new Database(options.path, { strict: true });
   db.exec(`
@@ -94,8 +90,6 @@ export function createLocalRuntime(options: {
   let resetsAt = 0;
   const bindings: ApiBindings = {
     jobs,
-    token: options.token,
-    allowAnonymous: true,
     limiter: {
       async limit() {
         if (Date.now() >= resetsAt) {

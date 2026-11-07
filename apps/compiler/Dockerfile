@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
     | tar -xz -C /usr/local/bin tectonic \
     && rm -rf /var/lib/apt/lists/*
-ENV XDG_CACHE_HOME=/home/bun/.cache TECTONIC_UNTRUSTED_MODE=1 PORT=8080
+ENV XDG_CACHE_HOME=/home/bun/.cache TECTONIC_UNTRUSTED_MODE=1 HOST=0.0.0.0 PORT=8080
 RUN mkdir -p /home/bun/.cache && chown -R bun:bun /home/bun/.cache
 WORKDIR /app
 COPY package.json bun.lock ./

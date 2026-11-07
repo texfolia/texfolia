@@ -7,14 +7,13 @@ import { createJobs, type ObjectStore } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import { HttpError } from "../src/project";
 
-const token = "test-token";
 const project = { mainFile: "main.tex", files: { "main.tex": "source" } };
 const output = {
   pdf: new TextEncoder().encode("%PDF-1.5"),
   log: "TeX transcript",
 };
 
-test("local API accepts jobs before TeX finishes and retains results across restarts", async () => {
+test("local API accepts jobs without a token and retains results across restarts", async () => {
   const root = await mkdtemp(join(tmpdir(), "texfolia-compiler-"));
   const path = join(root, "jobs.sqlite");
   const engineStarted = Promise.withResolvers<void>();
@@ -26,7 +25,7 @@ test("local API accepts jobs before TeX finishes and retains results across rest
     await finishEngine.promise;
     return output;
   };
-  const first = createLocalRuntime({ path, token, engine });
+  const first = createLocalRuntime({ path, engine });
   const id = crypto.randomUUID();
   const statusUrl = `/jobs/${id}`;
   const artifactUrl = `/compilations/${id}.pdf`;
@@ -34,7 +33,6 @@ test("local API accepts jobs before TeX finishes and retains results across rest
     new Request(`http://local${path}`, {
       ...init,
       headers: {
-        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "X-Compilation-Id": id,
       },
@@ -43,7 +41,7 @@ test("local API accepts jobs before TeX finishes and retains results across rest
     request("/compile", { method: "POST", body: JSON.stringify(project) });
   try {
     expect((await first.fetch(new Request("http://local/health"))).status).toBe(
-      401,
+      200,
     );
     expect((await first.fetch(submit())).status).toBe(202);
     await engineStarted.promise;
@@ -62,7 +60,7 @@ test("local API accepts jobs before TeX finishes and retains results across rest
     finishEngine.resolve();
     await first.close();
   }
-  const restarted = createLocalRuntime({ path, token, engine });
+  const restarted = createLocalRuntime({ path, engine });
   try {
     const state = await restarted.fetch(request(statusUrl));
     expect(await state.json()).toMatchObject({

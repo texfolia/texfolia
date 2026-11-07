@@ -3,8 +3,6 @@ import { z } from "zod";
 
 const base = process.env.COMPILER_URL ?? "http://localhost:8080";
 const headers = new Headers({ "Content-Type": "application/json" });
-if (process.env.COMPILER_TOKEN)
-  headers.set("Authorization", `Bearer ${process.env.COMPILER_TOKEN}`);
 const files = {
   "main.tex":
     "\\documentclass{article}\\begin{document}\\input{sections/hello}\\end{document}",

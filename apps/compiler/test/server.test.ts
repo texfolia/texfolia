@@ -36,15 +36,11 @@ test("rejects traversal, absolute paths, missing inputs and file collisions", ()
     parseProject({ ...project, files: { ...project.files, a: "", "a/b": "" } }),
   ).toThrow(HttpError);
 });
-test("requires auth before handing work to the engine", async () => {
+test("accepts work over the private container connection without a token", async () => {
   const handler = createEngineHandler({
-    token: "secret",
     compile: async () => ({ pdf: Buffer.from("%PDF-1.5"), log: "" }),
   });
-  expect((await handler(request())).status).toBe(401);
-  const authorized = request();
-  authorized.headers.set("authorization", "Bearer secret");
-  const response = await handler(authorized);
+  const response = await handler(request());
   expect(response.status).toBe(200);
 });
 test("rejects malformed and oversized projects", async () => {

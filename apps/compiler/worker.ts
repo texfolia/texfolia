@@ -10,7 +10,6 @@ interface Env {
   PDFS: R2Bucket;
   COMPILE_QUEUE: Queue<{ id: string }>;
   COMPILE_LIMIT: RateLimit;
-  COMPILER_TOKEN: string;
 }
 
 export class TectonicContainer extends Container<Env> {
@@ -18,7 +17,6 @@ export class TectonicContainer extends Container<Env> {
   override sleepAfter = "10m";
   override envVars = {
     NODE_ENV: "production",
-    COMPILER_TOKEN: this.env.COMPILER_TOKEN,
     COMPILER_MODE: "engine",
   };
 
@@ -77,7 +75,6 @@ function containerEngine(env: Env): Engine {
         headers: {
           "Content-Type": "application/json",
           Accept: "multipart/form-data",
-          Authorization: `Bearer ${env.COMPILER_TOKEN}`,
         },
         body: JSON.stringify(project),
         signal: AbortSignal.timeout(90_000),
@@ -116,7 +113,6 @@ export default {
       request,
       {
         jobs: jobsFor(env),
-        token: env.COMPILER_TOKEN,
         limiter: env.COMPILE_LIMIT,
       },
       ctx,

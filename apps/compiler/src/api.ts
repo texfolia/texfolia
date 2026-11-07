@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { bearerAuth } from "hono/bearer-auth";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 
@@ -13,8 +12,6 @@ import {
 
 export interface ApiBindings {
   jobs: Jobs;
-  token?: string;
-  allowAnonymous?: boolean;
   limiter: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
@@ -22,17 +19,7 @@ export function createApp() {
   const app = new Hono<{ Bindings: ApiBindings }>();
   app.use("*", async (c, next) => {
     c.header("Cache-Control", "no-store");
-    if (!c.env.token) {
-      if (!c.env.allowAnonymous) return c.json({ error: "Unauthorized" }, 401);
-      return next();
-    }
-    const message = { error: "Unauthorized" };
-    return bearerAuth<{ Bindings: ApiBindings }>({
-      token: c.env.token,
-      noAuthenticationHeader: { message },
-      invalidAuthenticationHeader: { message },
-      invalidToken: { message },
-    })(c, next);
+    await next();
   });
   app.get("/health", (c) => c.json({ status: "ready" }));
   app.post(

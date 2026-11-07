@@ -6,8 +6,6 @@ services:
     platform: linux/amd64
     ports:
       - "127.0.0.1:8080:8080"
-    environment:
-      COMPILER_TOKEN: ${COMPILER_TOKEN:-}
     volumes:
       - ./apps/compiler/src:/app/apps/compiler/src:ro
       - compiler-data:/app/apps/compiler/.cache

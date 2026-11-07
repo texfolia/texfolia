@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import { auth } from "#/lib/auth";
+import { fetchCompiler } from "#/lib/compiler.server";
 
 const payload = z.object({
   mainFile: z.string(),
@@ -58,18 +59,6 @@ async function checkProject(request: Request, projectId: string) {
   return project ? null : json({ error: "Project not found" }, 404);
 }
 
-function fetchCompiler(base: string, path: string, init?: RequestInit) {
-  const headers = new Headers(init?.headers);
-  const token = process.env.COMPILER_TOKEN;
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(new URL(path, base), {
-    ...init,
-    headers,
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
-}
-
 async function readSources(request: Request) {
   const reader = request.body?.getReader();
   const chunks: Uint8Array<ArrayBuffer>[] = [];
@@ -114,8 +103,6 @@ export const Route = createFileRoute("/api/compile/$projectId")({
       POST: async ({ request, params }) => {
         const denied = await checkProject(request, params.projectId);
         if (denied) return denied;
-        const base = process.env.COMPILER_URL;
-        if (!base) return json({ error: "Compiler is not configured" }, 503);
         if (
           !request.headers.get("Content-Type")?.startsWith("application/json")
         )
@@ -132,7 +119,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         });
 
         try {
-          const response = await fetchCompiler(base, "/compile", {
+          const response = await fetchCompiler("/compile", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -189,14 +176,12 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           where: { id, projectId: params.projectId },
         });
         if (!job) return json({ error: "Job not found" }, 404);
-        const base = process.env.COMPILER_URL;
-        if (!base) return json({ error: "Compiler is not configured" }, 503);
         const pdfPath = `/compilations/${id}.pdf`;
         try {
           if (url.searchParams.get("artifact") === "pdf") {
             if (job.status !== "succeeded")
               return json({ error: "PDF not found" }, 404);
-            const pdf = await fetchCompiler(base, pdfPath);
+            const pdf = await fetchCompiler(pdfPath);
             if (pdf.status === 404)
               return json({ error: "PDF not found" }, 404);
             if (
@@ -209,7 +194,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             });
           }
 
-          const response = await fetchCompiler(base, `/jobs/${id}`);
+          const response = await fetchCompiler(`/jobs/${id}`);
           if (response.status === 404) {
             if (Date.now() - job.createdAt.getTime() < 30_000)
               return json({ id, status: "queued" }, 200, {

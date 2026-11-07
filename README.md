@@ -119,7 +119,10 @@ sequenceDiagram
     W-->>B: PDF bytes for the preview
 ```
 
-On Cloudflare, the compiler Worker uses R2 for job data and PDFs, and Cloudflare Queues to dispatch jobs. Locally, the same API uses SQLite and runs Tectonic in the compiler container.
+On Cloudflare, the web app calls the compiler through a private service binding.
+The compiler Worker uses R2 for job data and PDFs, and Cloudflare Queues to
+dispatch jobs. Locally, the same API uses loopback HTTP with SQLite and runs
+Tectonic in the compiler container. Neither connection requires an internal token.
 
 ## Repository layout
 
