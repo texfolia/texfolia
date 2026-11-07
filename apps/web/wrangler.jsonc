@@ -5,4 +5,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "services": [{ "binding": "COMPILER", "service": "texfolia-compiler" }],
+  "send_email": [{ "name": "EMAIL" }],
+  "vars": {
+    "EMAIL_FROM": "noreply@texfolia.com",
+    "TURNSTILE_HOSTNAMES": "www.texfolia.com",
+  },
 }

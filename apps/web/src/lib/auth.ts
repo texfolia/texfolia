@@ -3,15 +3,30 @@ import { stripe } from "@better-auth/stripe";
 import { db } from "@texfolia/db";
 import * as schema from "@texfolia/db";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import Stripe from "stripe";
+
+import { sendEmail } from "#/lib/email";
+import { verifyLoginTurnstile } from "#/lib/turnstile.server";
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-10-28.endive",
 });
 
 export const auth = betterAuth({
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/email-otp/send-verification-otp") return;
+
+      if (!ctx.headers || !(await verifyLoginTurnstile(ctx.headers))) {
+        throw new APIError("FORBIDDEN", {
+          message: "Security verification failed. Please try again.",
+        });
+      }
+    }),
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
@@ -39,13 +54,23 @@ export const auth = betterAuth({
   },
   plugins: [
     emailOTP({
-      async sendVerificationOTP({ type }) {
-        if (type === "sign-in") {
-          // Send the OTP for sign in
-        } else if (type === "email-verification") {
-          // Send the OTP for email verification
-        } else {
-          // Send the OTP for password reset
+      otpLength: 6,
+      expiresIn: 300,
+      allowedAttempts: 3,
+      storeOTP: "hashed",
+      async sendVerificationOTP({ email, otp }) {
+        try {
+          await sendEmail({
+            to: email,
+            subject: "Your Texfolia verification code",
+            text: `Your Texfolia verification code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
+            html: `<p>Your Texfolia verification code is:</p><p><strong>${otp}</strong></p><p>It expires in 5 minutes. If you did not request this code, you can ignore this email.</p>`,
+          });
+        } catch {
+          throw new APIError("SERVICE_UNAVAILABLE", {
+            message:
+              "Unable to send your verification code. Please try again later.",
+          });
         }
       },
     }),

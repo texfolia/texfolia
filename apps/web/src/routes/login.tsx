@@ -67,6 +67,7 @@ function RouteComponent() {
           <MicrosoftIcon />
           Continue with Microsoft
         </Button>
+        
       </div>
     </div>
   );

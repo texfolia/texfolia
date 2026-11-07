@@ -8,7 +8,7 @@
   "scripts": {
     "auth:generate": "bun --env-file=../../packages/db/.env x --bun auth@latest generate --output ../../packages/db/src/db/auth-schema.ts --config ./src/lib/auth.ts --yes",
     "build": "bun run latex:assets && vite build",
-    "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --include-runtime=false && bun fmt worker-configuration.d.ts",
+    "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --include-runtime=false --strict-vars=false && bun fmt worker-configuration.d.ts",
     "deploy": "bun run build && wrangler deploy",
     "dev": "bun run latex:assets && vite dev --port 3000",
     "format": "bun fmt",
@@ -67,6 +67,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.26.0",
+    "@cloudflare/workers-types": "5.20261031.1",
     "@tanstack/devtools-vite": "0.8.6",
     "@tanstack/router-cli": "^1.132.0",
     "@texfolia/typescript-config": "workspace:*",
