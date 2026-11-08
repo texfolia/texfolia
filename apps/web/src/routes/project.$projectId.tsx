@@ -11,14 +11,14 @@ import { SettingsProvider } from "#/providers/settings-provider";
 
 export const Route = createFileRoute("/project/$projectId")({
   ssr: false,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await getSession();
 
     if (!session) {
       throw redirect({
         to: "/login",
         search: {
-          redirectTo: location.href,
+          redirectTo: location.pathname,
         },
       });
     }

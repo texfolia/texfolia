@@ -4,7 +4,7 @@ import MicrosoftIcon from "@iconify-react/thesvg-color/microsoft";
 import GithubIcon from "@iconify-react/thesvg/github";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { revalidateLogic, useForm } from "@tanstack/react-form-start";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { AnimatePresence } from "motion/react";
 import { useState } from "react";
@@ -28,10 +28,21 @@ import {
 } from "#/components/ui/input-otp";
 import { authClient } from "#/lib/auth-client";
 
-export const Route = createFileRoute("/login")({ component: RouteComponent });
+export const loginSearchSchema = z.object({
+  redirectTo: z
+    .string()
+    .regex(/^\/(?!\/)[^\u0000-\u0020\\]*$/)
+    .catch("/projects")
+    .optional(),
+});
+
+export const Route = createFileRoute("/login")({
+  validateSearch: loginSearchSchema,
+  component: RouteComponent,
+});
 
 function RouteComponent() {
-  const navigate = useNavigate();
+  const { redirectTo = "/projects" } = Route.useSearch();
   const turnstile = useTurnstile();
 
   const [step, setStep] = useState<"email" | "otp">("email");
@@ -81,7 +92,7 @@ function RouteComponent() {
         return;
       }
 
-      navigate({ to: "/projects" });
+      window.location.assign(redirectTo);
     },
   });
 
@@ -102,7 +113,10 @@ function RouteComponent() {
                   <Field>
                     <Button
                       onClick={() =>
-                        authClient.signIn.social({ provider: "github" })
+                        authClient.signIn.social({
+                          provider: "github",
+                          callbackURL: redirectTo,
+                        })
                       }
                       size="lg"
                       type="button"
@@ -115,7 +129,10 @@ function RouteComponent() {
                     <Button
                       type="button"
                       onClick={() =>
-                        authClient.signIn.social({ provider: "gitlab" })
+                        authClient.signIn.social({
+                          provider: "gitlab",
+                          callbackURL: redirectTo,
+                        })
                       }
                       size="lg"
                       variant="outline"
@@ -129,6 +146,7 @@ function RouteComponent() {
                       onClick={() =>
                         authClient.signIn.social({
                           provider: "google",
+                          callbackURL: redirectTo,
                         })
                       }
                       type="button"
@@ -144,6 +162,7 @@ function RouteComponent() {
                       onClick={() =>
                         authClient.signIn.social({
                           provider: "microsoft",
+                          callbackURL: redirectTo,
                         })
                       }
                       size="lg"

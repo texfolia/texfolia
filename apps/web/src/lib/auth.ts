@@ -1,19 +1,71 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
-import { stripe } from "@better-auth/stripe";
+import { stripe, type SubscriptionOptions } from "@better-auth/stripe";
 import { type Db } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
 import { betterAuth } from "better-auth";
-import { captcha, emailOTP } from "better-auth/plugins";
+import { captcha, emailOTP, organization } from "better-auth/plugins";
+import type { Member } from "better-auth/plugins/organization";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import Stripe from "stripe";
 
-import { sendEmail } from "#/lib/email";
+async function sendEmail(
+  options: Parameters<typeof import("./email").sendEmail>[0],
+) {
+  const { sendEmail } = await import("./email");
+  return sendEmail(options);
+}
 
-const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-10-28.endive",
-});
+export function createOrganizationPlugin({
+  baseURL,
+  sendInvitationEmail,
+}: {
+  baseURL: string;
+  sendInvitationEmail: typeof sendEmail;
+}) {
+  return organization({
+    requireEmailVerificationOnInvitation: true,
+    async sendInvitationEmail({ id, email, organization }) {
+      const invitationURL = new URL(
+        `/accept-invitation/${encodeURIComponent(id)}`,
+        baseURL,
+      );
+
+      await sendInvitationEmail({
+        to: email,
+        subject: `You're invited to join ${organization.name} on Texfolia`,
+        text: `You've been invited to join ${organization.name} on Texfolia. Sign in with this email address to review the invitation: ${invitationURL.href}`,
+        html: `<p>You've been invited to join an organization on Texfolia.</p><p>Sign in with this email address to <a href="${invitationURL.href}">review the invitation</a>.</p>`,
+      });
+    },
+  });
+}
+
+export const authorizeOrganizationBilling: NonNullable<
+  SubscriptionOptions["authorizeReference"]
+> = async ({ user, referenceId }, ctx) => {
+  const customerType = ctx.body?.customerType ?? ctx.query?.customerType;
+  if (customerType !== "organization") return referenceId === user.id;
+
+  const membership = await ctx.context.adapter.findOne<Member>({
+    model: "member",
+    where: [
+      { field: "organizationId", value: referenceId },
+      { field: "userId", value: user.id },
+    ],
+  });
+
+  return (
+    membership?.role
+      .split(",")
+      .some((role) => role === "owner" || role === "admin") ?? false
+  );
+};
 
 export function createAuth(db: Db) {
+  const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: "2026-10-28.endive",
+  });
+
   return betterAuth({
     database: drizzleAdapter(db, {
       provider: "pg",
@@ -41,6 +93,10 @@ export function createAuth(db: Db) {
       },
     },
     plugins: [
+      createOrganizationPlugin({
+        baseURL: process.env.BETTER_AUTH_URL!,
+        sendInvitationEmail: sendEmail,
+      }),
       captcha({
         provider: "cloudflare-turnstile",
         secretKey: process.env.TURNSTILE_SECRET!,
@@ -66,6 +122,19 @@ export function createAuth(db: Db) {
         stripeClient,
         stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
         createCustomerOnSignUp: true,
+        organization: {
+          enabled: true,
+        },
+        subscription: {
+          enabled: true,
+          authorizeReference: authorizeOrganizationBilling,
+          plans: [
+            {
+              name: "pro",
+              priceId: process.env.STRIPE_PRO_PRICE_ID!,
+            },
+          ],
+        },
       }),
       tanstackStartCookies(),
     ],

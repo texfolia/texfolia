@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "auth:schema": "bun run --cwd apps/web auth:schema",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "format": "turbo run format",

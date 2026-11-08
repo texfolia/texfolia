@@ -31,6 +31,44 @@ Editor-owned linting uses the package's public `EditorView` API. Keeping syntax 
 
 Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the integration. Completion tests exercise the installed language extension together with project suggestions.
 
+## Personal accounts and organizations
+
+Organization setup follows the [Better Auth organization plugin](https://better-auth.com/docs/plugins/organization)
+and [Stripe organization billing](https://better-auth.com/docs/plugins/stripe#using-with-organizations) documentation.
+`src/lib/auth.ts` contains the organization configuration and billing authorization.
+Auth tables and relations, including organizations, are generated into
+`packages/db/src/db/auth-schema.ts` from the shared auth configuration.
+
+Personal accounts work without an organization. Existing projects remain owned by users,
+and selecting an organization does not transfer personal projects or subscriptions.
+Use `authClient.organization.setActive({ organizationId: null })` to clear the active organization.
+
+Invitations use the existing email service and link to `/accept-invitation/$invitationId`.
+Set `BETTER_AUTH_URL` to the web app's public URL. Recipients must sign in with their
+verified invitation email address and explicitly accept the invitation.
+
+Personal billing uses the default `customerType: "user"`. For organization billing,
+pass `customerType: "organization"` and the organization's ID as `referenceId` to
+`authClient.subscription` methods. Only current owners and admins can access organization billing.
+Each organization has its own Stripe customer ID.
+
+Generate the auth schema from the repository root:
+
+```sh
+bun run auth:schema
+```
+
+The same command is available from `apps/web`. It only generates the TypeScript
+schema in `packages/db`; it does not connect to Postgres, apply migrations, or
+require service credentials. The CLI version matches the installed Better Auth
+version and should be updated with it.
+
+After configuring `packages/db/.env`, apply the schema from the repository root:
+
+```sh
+bun run --cwd packages/db db:push
+```
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

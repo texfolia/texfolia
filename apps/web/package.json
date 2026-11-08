@@ -6,7 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "auth:generate": "bun --env-file=../../packages/db/.env x --bun auth@latest generate --output ../../packages/db/src/db/auth-schema.ts --config ./src/lib/auth.ts --yes",
+    "auth:schema": "bun x --bun auth@1.7.15 generate --output ../../packages/db/src/db/auth-schema.ts --config ./auth.config.ts --yes && bun fmt ../../packages/db/src/db/auth-schema.ts",
     "build": "bun run latex:assets && vite build",
     "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --include-runtime=false --strict-vars=false && bun fmt worker-configuration.d.ts",
     "deploy": "bun run build && wrangler deploy",

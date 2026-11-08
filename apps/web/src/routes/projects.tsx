@@ -19,14 +19,14 @@ export const Route = createFileRoute("/projects")({
       },
     ],
   }),
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await getSession();
 
     if (!session) {
       throw redirect({
         to: "/login",
         search: {
-          redirectTo: location.href,
+          redirectTo: location.pathname,
         },
       });
     }
