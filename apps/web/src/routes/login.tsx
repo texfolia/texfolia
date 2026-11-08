@@ -6,7 +6,7 @@ import { IconArrowLeft } from "@tabler/icons-react";
 import { revalidateLogic, useForm } from "@tanstack/react-form-start";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { useState } from "react";
 import { Turnstile, useTurnstile } from "react-turnstile";
 import { z } from "zod";

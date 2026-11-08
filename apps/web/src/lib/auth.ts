@@ -1,7 +1,7 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { stripe } from "@better-auth/stripe";
-import { db } from "@texfolia/db";
-import * as schema from "@texfolia/db";
+import { type Db } from "@texfolia/db";
+import * as schema from "@texfolia/db/schema";
 import { betterAuth } from "better-auth";
 import { captcha, emailOTP } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
@@ -13,64 +13,66 @@ const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-10-28.endive",
 });
 
-export const auth = betterAuth({
-  database: drizzleAdapter(db, {
-    provider: "pg",
-    schema,
-  }),
-  emailAndPassword: {
-    enabled: true,
-  },
-  socialProviders: {
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    },
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    },
-    gitlab: {
-      clientId: process.env.GITLAB_CLIENT_ID!,
-      clientSecret: process.env.GITLAB_CLIENT_SECRET!,
-    },
-    microsoft: {
-      clientId: process.env.MICROSOFT_CLIENT_ID!,
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-    },
-  },
-  plugins: [
-    captcha({
-      provider: "cloudflare-turnstile",
-      secretKey: process.env.TURNSTILE_SECRET!,
-      endpoints: ["/email-otp/send-verification-otp"],
+export function createAuth(db: Db) {
+  return betterAuth({
+    database: drizzleAdapter(db, {
+      provider: "pg",
+      schema,
     }),
-    emailOTP({
-      async sendVerificationOTP({ email, otp, type }) {
-        if (type === "sign-in") {
-          await sendEmail({
-            to: email,
-            subject: "Your Texfolia verification code",
-            text: `Your Texfolia verification code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
-            html: `<p>Your Texfolia verification code is:</p><p><strong>${otp}</strong></p><p>It expires in 5 minutes. If you did not request this code, you can ignore this email.</p>`,
-          });
-        } else if (type === "email-verification") {
-          // Send the OTP for email verification
-        } else {
-          // Send the OTP for password reset
-        }
+    emailAndPassword: {
+      enabled: true,
+    },
+    socialProviders: {
+      github: {
+        clientId: process.env.GITHUB_CLIENT_ID!,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET!,
       },
-    }),
-    stripe({
-      stripeClient,
-      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
-      createCustomerOnSignUp: true,
-    }),
-    tanstackStartCookies(),
-  ],
-  advanced: {
-    database: {
-      joins: true,
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      },
+      gitlab: {
+        clientId: process.env.GITLAB_CLIENT_ID!,
+        clientSecret: process.env.GITLAB_CLIENT_SECRET!,
+      },
+      microsoft: {
+        clientId: process.env.MICROSOFT_CLIENT_ID!,
+        clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+      },
     },
-  },
-});
+    plugins: [
+      captcha({
+        provider: "cloudflare-turnstile",
+        secretKey: process.env.TURNSTILE_SECRET!,
+        endpoints: ["/email-otp/send-verification-otp"],
+      }),
+      emailOTP({
+        async sendVerificationOTP({ email, otp, type }) {
+          if (type === "sign-in") {
+            await sendEmail({
+              to: email,
+              subject: "Your Texfolia verification code",
+              text: `Your Texfolia verification code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
+              html: `<p>Your Texfolia verification code is:</p><p><strong>${otp}</strong></p><p>It expires in 5 minutes. If you did not request this code, you can ignore this email.</p>`,
+            });
+          } else if (type === "email-verification") {
+            // Send the OTP for email verification
+          } else {
+            // Send the OTP for password reset
+          }
+        },
+      }),
+      stripe({
+        stripeClient,
+        stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+        createCustomerOnSignUp: true,
+      }),
+      tanstackStartCookies(),
+    ],
+    advanced: {
+      database: {
+        joins: true,
+      },
+    },
+  });
+}

@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { db, project, projectNode } from "@texfolia/db";
+import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import z from "zod";
 
@@ -11,10 +11,10 @@ export const createProject = createServerFn({ method: "POST" })
       name: z.string().trim().min(1),
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const session = await ensureSession();
 
-    return db.transaction(async (tx) => {
+    return context.db.transaction(async (tx) => {
       const [newProject] = await tx
         .insert(project)
         .values({
@@ -56,10 +56,10 @@ export const createProject = createServerFn({ method: "POST" })
   });
 
 export const getProjects = createServerFn({ method: "GET" }).handler(
-  async () => {
+  async ({ context }) => {
     const session = await ensureSession();
 
-    return db.query.project.findMany({
+    return context.db.query.project.findMany({
       with: {
         collaborators: {
           with: {
@@ -79,9 +79,9 @@ export type GetProjectsResult = Awaited<ReturnType<typeof getProjects>>;
 
 export const deleteProject = createServerFn({ method: "POST" })
   .validator(z.object({ projectId: z.uuid() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const session = await ensureSession();
-    const [deletedProject] = await db
+    const [deletedProject] = await context.db
       .update(project)
       .set({ deletedAt: new Date() })
       .where(
@@ -99,9 +99,9 @@ export const deleteProject = createServerFn({ method: "POST" })
 
 export const getProject = createServerFn({ method: "GET" })
   .validator(z.object({ projectId: z.uuid() }))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const session = await ensureSession();
-    const result = await db.query.project.findFirst({
+    const result = await context.db.query.project.findFirst({
       where: {
         id: data.projectId,
         ownerId: session.user.id,

@@ -5,12 +5,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./storage": "./src/storage.ts"
+    "./schema": "./src/schema.ts"
   },
   "scripts": {
-    "backfill:object-sizes": "bun scripts/backfill-object-sizes.ts",
-    "push": "bunx drizzle-kit push",
-    "typecheck": "tsc --noEmit"
+    "check": "bun check",
+    "db:push": "drizzle-kit push",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "lint": "bun lint"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.7.14",
