@@ -37,7 +37,12 @@ export const columns = columnHelper.columns([
   columnHelper.accessor("name", {
     header: "Name",
     cell: ({ getValue, row }) => (
-      <Link to="/projects/$projectId" params={{ projectId: row.original.id }}>
+      <Link
+        to="/project/$projectId"
+        params={{
+          projectId: row.original.id,
+        }}
+      >
         {getValue()}
       </Link>
     ),

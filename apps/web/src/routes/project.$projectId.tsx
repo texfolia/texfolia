@@ -1,7 +1,12 @@
 import "dockview-react/dist/styles/dockview.css";
-import { IconAlertCircle, IconArrowLeft, IconFiles } from "@tabler/icons-react";
+import { IconAlertCircle, IconArrowLeft } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
-import { ClientOnly, Link } from "@tanstack/react-router";
+import {
+  ClientOnly,
+  createFileRoute,
+  Link,
+  redirect,
+} from "@tanstack/react-router";
 import type { EditorView } from "@uiw/react-codemirror";
 import {
   type DockviewApi,
@@ -30,34 +35,51 @@ import {
   MarkdownPreview,
   type MarkdownPreviewParams,
 } from "#/components/markdown-preview";
-import {
-  ProjectFileTree,
-  type ProjectNode,
-} from "#/components/project-file-tree";
-import { SettingsDialog } from "#/components/settings-dialog";
+import type { ProjectNode } from "#/components/project-file-tree";
+import { ProjectSidebar } from "#/components/project-sidebar";
 import { Button } from "#/components/ui/button";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
-} from "#/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
-import { useSettings } from "#/hooks/use-settings";
+import { SettingsProvider, useSettings } from "#/hooks/use-settings";
+import { getSession } from "#/lib/auth.functions";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
 import type { FormatSettings } from "#/lib/latex/format";
+import { getProject } from "#/lib/projects.functions";
+
+export const Route = createFileRoute("/project/$projectId")({
+  beforeLoad: async () => {
+    const session = await getSession();
+
+    if (!session) {
+      throw redirect({
+        to: "/login",
+        search: {
+          redirectTo: location.href,
+        },
+      });
+    }
+
+    return { user: session.user };
+  },
+  loader: async ({ params }) => {
+    const project = await getProject({
+      data: {
+        projectId: params.projectId,
+      },
+    });
+
+    return { project };
+  },
+  remountDeps: ({ params }) => params.projectId,
+  component: () => (
+    <SettingsProvider>
+      <RouteComponent />
+    </SettingsProvider>
+  ),
+});
 
 type FileState = { value: string; savedValue: string };
 type FilePanelParams = { node: ProjectNode; preview: boolean };
@@ -188,110 +210,9 @@ const components = {
 const tabComponents = { file: FileTab };
 const savedSourcesSchema = z.record(z.string(), z.string());
 
-function WorkspaceSidebar({
-  name,
-  nodes,
-  activeId,
-  ready,
-  onOpen,
-  showProblems,
-  onToggleProblems,
-}: {
-  name: string;
-  nodes: ProjectNode[];
-  activeId: string | undefined;
-  ready: boolean;
-  onOpen: (node: ProjectNode, permanent: boolean) => void;
-  showProblems: boolean;
-  onToggleProblems: () => void;
-}) {
-  const { setOpen, toggleSidebar } = useSidebar();
-
-  useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
-    ignoreInputs: false,
-    ignoreDefaultPrevented: true,
-  });
-
-  return (
-    <Sidebar
-      collapsible="icon"
-      className="top-(--workspace-header-height) bottom-(--workspace-footer-height) h-auto overflow-hidden"
-    >
-      <div className="flex size-full">
-        <Sidebar
-          collapsible="none"
-          className="w-(--sidebar-width-icon)! shrink-0 border-r"
-        >
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarMenu aria-label="Workspace navigation">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    tooltip="Project files"
-                    aria-label="Project files"
-                    isActive
-                    onClick={() => setOpen(true)}
-                  >
-                    <IconFiles />
-                    <span className="sr-only">Project files</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    tooltip="Problems"
-                    aria-label="Problems"
-                    aria-expanded={showProblems}
-                    onClick={onToggleProblems}
-                  >
-                    <IconAlertCircle />
-                    <span className="sr-only">Problems</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SettingsDialog iconOnly />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
-        <Sidebar
-          collapsible="none"
-          className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"
-        >
-          <SidebarHeader className="h-11 justify-center border-b px-4">
-            <h2 className="text-sm font-medium">Files</h2>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
-              <SidebarGroupContent aria-busy={!ready}>
-                <ProjectFileTree
-                  nodes={nodes}
-                  activeId={activeId}
-                  onOpen={onOpen}
-                />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-        </Sidebar>
-      </div>
-    </Sidebar>
-  );
-}
-
-export function ProjectWorkspace({
-  projectId,
-  name,
-  nodes,
-}: {
-  projectId: string;
-  name: string;
-  nodes: ProjectNode[];
-}) {
+function RouteComponent() {
+  const { project } = Route.useLoaderData();
+  const { id: projectId, name, nodes } = project;
   const api = useRef<DockviewApi | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const previewId = useRef<string | null>(null);
@@ -617,8 +538,7 @@ export function ProjectWorkspace({
     >
       <SidebarProvider
         ref={container}
-        keyboardShortcut={false}
-        className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem] [&_[data-slot=sidebar-container]]:transition-none [&_[data-slot=sidebar-gap]]:transition-none"
+        className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none"
       >
         <header className="bg-background z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b px-3">
           <Button
@@ -646,7 +566,7 @@ export function ProjectWorkspace({
           </Button>
         </header>
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <WorkspaceSidebar
+          <ProjectSidebar
             name={name}
             nodes={nodes}
             activeId={activeId}
