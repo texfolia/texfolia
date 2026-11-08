@@ -97,7 +97,7 @@ function RouteComponent() {
         <AnimatePresence initial={false}>
           {step === "email" ? (
             <form.FormGroup name="emailStep">
-              {(group) => (
+              {() => (
                 <FieldGroup>
                   <Field>
                     <Button
