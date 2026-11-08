@@ -1,4 +1,4 @@
-import type { ProjectNode } from "./collections";
+import type { ProjectNode } from "#/lib/project.functions";
 
 export function projectNodePaths(nodes: ProjectNode[]) {
   const byId = new Map(nodes.map((node) => [node.id, node]));

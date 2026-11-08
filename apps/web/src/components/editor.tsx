@@ -39,7 +39,6 @@ import {
   PanelHeader,
 } from "#/components/panel-header";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
-import { useSettings } from "#/hooks/use-settings";
 import { downloadFile } from "#/lib/download-file";
 import { editorThemes } from "#/lib/editor-themes";
 import type { LatexProblem } from "#/lib/latex/analysis";
@@ -50,6 +49,7 @@ import {
 } from "#/lib/latex/editor-commands";
 import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
+import { useSettings } from "#/providers/settings-provider";
 
 type EditorProps = {
   defaultValue?: string;

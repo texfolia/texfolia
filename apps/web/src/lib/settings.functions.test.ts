@@ -2,8 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 
 import type { StorageApi, StorageEventApi } from "@tanstack/react-db";
 
-import { createBrowserSettingsStore, createSettingsStore } from "./collection";
-import { settingsSchema } from "./schema";
+import {
+  createBrowserSettingsStore,
+  createSettingsStore,
+} from "./settings.functions";
+import { settingsSchema } from "./settings.schema";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {

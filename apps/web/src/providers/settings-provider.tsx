@@ -8,8 +8,8 @@ import {
   useState,
 } from "react";
 
-import { createBrowserSettingsStore } from "#/features/settings/collection";
-import { defaultSettings, type Settings } from "#/features/settings/schema";
+import { createBrowserSettingsStore } from "#/lib/settings.functions";
+import { defaultSettings, type Settings } from "#/lib/settings.schema";
 export type SettingsSection = "Editor" | "Formatting" | "Keyboard shortcuts";
 
 function useSettingsState() {

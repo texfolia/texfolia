@@ -14,11 +14,9 @@ import {
   themeLight,
 } from "dockview-react";
 import {
-  createContext,
   lazy,
   Suspense,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -31,45 +29,26 @@ import {
   MarkdownPreview,
   type MarkdownPreviewParams,
 } from "#/components/markdown-preview";
+import { ProjectSidebar } from "#/components/project-sidebar";
 import { Button } from "#/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
-import type {
-  createProjectFilesStore,
-  ProjectDetails,
-  ProjectNode,
-} from "#/features/projects/collections";
-import { ProjectSidebar } from "#/features/projects/project-sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
-import { useSettings } from "#/hooks/use-settings";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
-import type { FormatSettings } from "#/lib/latex/format";
+import { projectPaths } from "#/lib/project-paths";
+import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
+import { useProjectFiles } from "#/providers/project-files-provider";
+import { useSettings } from "#/providers/settings-provider";
+import {
+  type FileState,
+  useWorkspace,
+  type Workspace,
+  WorkspaceProvider,
+} from "#/providers/workspace-provider";
 
-import { projectPaths } from "./paths";
-
-type FileState = { value: string; savedValue: string };
 type FilePanelParams = { node: ProjectNode; preview: boolean };
-type Workspace = {
-  drafts: Map<string, FileState>;
-  paths: ReadonlyMap<string, string>;
-  completion: ReturnType<typeof latexCompletion>;
-  problems: ReadonlyMap<string, LatexProblem[]>;
-  reportSyntax: (path: string, problems: LatexProblem[]) => void;
-  jump: { id: string; line: number } | undefined;
-  pdf: File | null;
-  formatSettings: FormatSettings;
-  keepOpen: (id: string) => void;
-  openMarkdownPreview: (id: string) => void;
-  change: (id: string, value: string, saved?: boolean) => void;
-};
-const WorkspaceContext = createContext<Workspace | null>(null);
-function useWorkspace() {
-  const workspace = useContext(WorkspaceContext);
-  if (!workspace) throw new Error("Missing project workspace");
-  return workspace;
-}
 const noProblems: LatexProblem[] = [];
 
 const PdfViewer = lazy(() => import("#/components/pdf"));
@@ -155,13 +134,8 @@ const components = {
 const tabComponents = { file: FileTab };
 const savedSourcesSchema = z.record(z.string(), z.string());
 
-export function ProjectWorkspace({
-  project,
-  files,
-}: {
-  project: ProjectDetails;
-  files: ReturnType<typeof createProjectFilesStore>;
-}) {
+export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
+  const files = useProjectFiles();
   const { id: projectId, name } = project;
   const { data: nodes } = useLiveQuery(files.nodes);
   const api = useRef<DockviewApi | null>(null);
@@ -472,7 +446,7 @@ export function ProjectWorkspace({
   }
 
   return (
-    <WorkspaceContext.Provider
+    <WorkspaceProvider
       value={{
         drafts: drafts.current,
         keepOpen,
@@ -519,7 +493,6 @@ export function ProjectWorkspace({
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <ProjectSidebar
             name={name}
-            files={files}
             nodes={nodes}
             activeId={activeId}
             ready={ready}
@@ -606,6 +579,6 @@ export function ProjectWorkspace({
           </span>
         </footer>
       </SidebarProvider>
-    </WorkspaceContext.Provider>
+    </WorkspaceProvider>
   );
 }

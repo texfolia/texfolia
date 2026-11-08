@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
-import type { ProjectNode } from "./collections";
-import { projectNodePaths, projectPaths } from "./paths";
+import { projectNodePaths, projectPaths } from "#/lib/project-paths";
+import type { ProjectNode } from "#/lib/project.functions";
 
 test("files created in nested folders use the same paths in the picker and compiler", () => {
   const nodes: ProjectNode[] = [

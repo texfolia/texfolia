@@ -3,8 +3,8 @@ import { useId } from "react";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { formatSettingsSchema as settingsSchema } from "#/features/settings/schema";
 import type { FormatSettings } from "#/lib/latex/format";
+import { formatSettingsSchema as settingsSchema } from "#/lib/settings.schema";
 
 export function LatexFormatSettingsFields({
   settings,

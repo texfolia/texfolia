@@ -29,8 +29,11 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "#/components/ui/sidebar";
-import { type SettingsSection, useSettings } from "#/hooks/use-settings";
 import { editorThemes, editorThemeSchema } from "#/lib/editor-themes";
+import {
+  type SettingsSection,
+  useSettings,
+} from "#/providers/settings-provider";
 
 const sections = [
   { title: "Editor", icon: IconCode },

@@ -4,22 +4,21 @@ import { useId, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-
-import type { createProjectFilesStore, ProjectNode } from "./collections";
-import { projectNodePaths } from "./paths";
-import { nodeNameSchema } from "./schema";
+import { nodeNameSchema } from "#/lib/project-node.schema";
+import { projectNodePaths } from "#/lib/project-paths";
+import type { ProjectNode } from "#/lib/project.functions";
+import { useProjectFiles } from "#/providers/project-files-provider";
 
 export function CreateNodeForm({
-  files,
   nodes,
   activeId,
   onCreated,
 }: {
-  files: ReturnType<typeof createProjectFilesStore>;
   nodes: ProjectNode[];
   activeId: string | undefined;
   onCreated: (node: ProjectNode, permanent: boolean) => void;
 }) {
+  const files = useProjectFiles();
   const id = useId();
   const [kind, setKind] = useState<"text" | "folder" | null>(null);
   const [name, setName] = useState("");

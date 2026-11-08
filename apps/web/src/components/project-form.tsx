@@ -8,8 +8,8 @@ import { z } from "zod";
 import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { useProjects } from "#/features/projects/context";
-import { projectNameSchema } from "#/features/projects/schema";
+import { projectNameSchema } from "#/lib/project.schema";
+import { useProjects } from "#/providers/projects-provider";
 
 const schema = z.object({
   name: projectNameSchema,

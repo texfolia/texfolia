@@ -1,12 +1,14 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
+import { ProjectList } from "#/components/project-list";
 import { SidebarProvider } from "#/components/ui/sidebar";
-import { createProjectsStore } from "#/features/projects/collections";
-import { ProjectsProvider } from "#/features/projects/context";
-import { ProjectList } from "#/features/projects/project-list";
-import { getProjects } from "#/features/projects/server";
-import { SettingsProvider } from "#/hooks/use-settings";
 import { getSession } from "#/lib/auth.functions";
+import { getProjects } from "#/lib/project.functions";
+import {
+  createProjectsStore,
+  ProjectsProvider,
+} from "#/providers/projects-provider";
+import { SettingsProvider } from "#/providers/settings-provider";
 
 export const Route = createFileRoute("/projects")({
   ssr: false,

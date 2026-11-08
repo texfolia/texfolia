@@ -32,7 +32,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
-import type { ProjectNode } from "#/features/projects/collections";
+import type { ProjectNode } from "#/lib/project.functions";
 
 const fileIcons = new Map<string, Icon>(
   [

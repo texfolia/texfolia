@@ -31,14 +31,6 @@ Editor-owned linting uses the package's public `EditorView` API. Keeping syntax 
 
 Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the integration. Completion tests exercise the installed language extension together with project suggestions.
 
-## Application data
-
-The authenticated routes use TanStack DB collections for project metadata, file
-structure, and browser preferences. See [Application data ownership](docs/data-architecture.md)
-for the module boundaries, persistence behavior, and design rationale. Run
-`bun run lint` to check those boundaries and `bun test` to verify optimistic
-updates, rollback, preference migration, and persistence.
-
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

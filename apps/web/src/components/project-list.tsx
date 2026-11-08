@@ -5,6 +5,8 @@ import { ClientOnly, Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
 import { useRef, useState } from "react";
 
+import { columns } from "#/components/project-columns";
+import { ProjectForm } from "#/components/project-form";
 import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
@@ -51,10 +53,8 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
-import { columns } from "#/features/projects/columns";
-import { useProjects } from "#/features/projects/context";
-import { ProjectForm } from "#/features/projects/project-form";
 import { features } from "#/lib/features";
+import { useProjects } from "#/providers/projects-provider";
 
 function SearchShortcut() {
   const formatShortcut = useFormatForDisplay();

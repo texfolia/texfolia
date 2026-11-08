@@ -1,10 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { createProjectFilesStore } from "#/features/projects/collections";
-import { getProject } from "#/features/projects/server";
-import { ProjectWorkspace } from "#/features/projects/workspace";
-import { SettingsProvider } from "#/hooks/use-settings";
+import { ProjectWorkspace } from "#/components/project-workspace";
 import { getSession } from "#/lib/auth.functions";
+import { getProject } from "#/lib/project.functions";
+import {
+  createProjectFilesStore,
+  ProjectFilesProvider,
+} from "#/providers/project-files-provider";
+import { SettingsProvider } from "#/providers/settings-provider";
 
 export const Route = createFileRoute("/project/$projectId")({
   ssr: false,
@@ -46,5 +49,9 @@ export const Route = createFileRoute("/project/$projectId")({
 
 function WorkspacePage() {
   const { project, files } = Route.useLoaderData();
-  return <ProjectWorkspace project={project} files={files} />;
+  return (
+    <ProjectFilesProvider store={files}>
+      <ProjectWorkspace project={project} />
+    </ProjectFilesProvider>
+  );
 }

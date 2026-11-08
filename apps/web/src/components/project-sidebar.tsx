@@ -1,6 +1,8 @@
 import { IconAlertCircle, IconFiles } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 
+import { CreateNodeForm } from "#/components/create-node-form";
+import { ProjectFileTree } from "#/components/project-file-tree";
 import { SettingsDialog } from "#/components/settings-dialog";
 import {
   Sidebar,
@@ -15,16 +17,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "#/components/ui/sidebar";
-import type {
-  createProjectFilesStore,
-  ProjectNode,
-} from "#/features/projects/collections";
-import { CreateNodeForm } from "#/features/projects/create-node-form";
-import { ProjectFileTree } from "#/features/projects/project-file-tree";
+import type { ProjectNode } from "#/lib/project.functions";
+import { useProjectFiles } from "#/providers/project-files-provider";
 
 export function ProjectSidebar({
   name,
-  files,
   nodes,
   activeId,
   ready,
@@ -33,7 +30,6 @@ export function ProjectSidebar({
   onToggleProblems,
 }: {
   name: string;
-  files: ReturnType<typeof createProjectFilesStore>;
   nodes: ProjectNode[];
   activeId: string | undefined;
   ready: boolean;
@@ -41,6 +37,7 @@ export function ProjectSidebar({
   showProblems: boolean;
   onToggleProblems: () => void;
 }) {
+  const files = useProjectFiles();
   const { setOpen, toggleSidebar } = useSidebar();
 
   useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
@@ -106,7 +103,6 @@ export function ProjectSidebar({
               <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
               {ready && (
                 <CreateNodeForm
-                  files={files}
                   nodes={nodes}
                   activeId={activeId}
                   onCreated={onOpen}

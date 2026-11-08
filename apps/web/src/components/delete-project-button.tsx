@@ -14,8 +14,8 @@ import {
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
 import { toast } from "#/components/ui/toast";
-import type { Project } from "#/features/projects/collections";
-import { useProjects } from "#/features/projects/context";
+import type { Project } from "#/lib/project.functions";
+import { useProjects } from "#/providers/projects-provider";
 
 export function DeleteProjectButton({
   project,

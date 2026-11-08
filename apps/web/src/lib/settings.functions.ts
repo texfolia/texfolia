@@ -11,7 +11,7 @@ import {
   editorSettingsSchema,
   formatSettingsSchema,
   settingsSchema,
-} from "./schema";
+} from "./settings.schema";
 
 const storageKey = "texfolia.settings.v1";
 const storedSettingsSchema = z.record(
