@@ -26,11 +26,11 @@ cp packages/db/.env.example packages/db/.env
 
 Set these values in `apps/web/.env`.
 
-| Variable | Local value |
-| --- | --- |
-| `BETTER_AUTH_SECRET` | Generate a secret with `openssl rand -base64 32`. |
+| Variable                                   | Local value                                                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `BETTER_AUTH_SECRET`                       | Generate a secret with `openssl rand -base64 32`.                                                                                                                              |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Use a GitHub OAuth app with the callback `http://localhost:3000/api/auth/callback/github`. See the [GitHub sign-in guide](https://better-auth.com/docs/authentication/github). |
-| `STRIPE_SECRET_KEY` | Use a Stripe test secret key. The app initializes Stripe at startup and creates a customer on first sign-in. |
+| `STRIPE_SECRET_KEY`                        | Use a Stripe test secret key. The app initializes Stripe at startup and creates a customer on first sign-in.                                                                   |
 
 The example files already point to the local web app, database, and compiler. If you change `DATABASE_URL`, update both environment files. The local compiler accepts requests without a token by default.
 
@@ -126,12 +126,12 @@ Tectonic in the compiler container. Neither connection requires an internal toke
 
 ## Repository layout
 
-| Path | Responsibility |
-| --- | --- |
-| [`apps/web`](apps/web) | React workspace, Better Auth, project management, and the browser-facing compile endpoint. |
-| [`apps/compiler`](apps/compiler) | Hono API, job processing, and Tectonic. See the [compiler API and deployment guide](apps/compiler/README.md). |
-| [`packages/db`](packages/db) | Drizzle schema, PostgreSQL client, and database migrations. |
-| [`packages/typescript-config`](packages/typescript-config) | Shared TypeScript settings. |
+| Path                                                       | Responsibility                                                                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [`apps/web`](apps/web)                                     | React workspace, Better Auth, project management, and the browser-facing compile endpoint.                    |
+| [`apps/compiler`](apps/compiler)                           | Hono API, job processing, and Tectonic. See the [compiler API and deployment guide](apps/compiler/README.md). |
+| [`packages/db`](packages/db)                               | Drizzle schema, PostgreSQL client, and database migrations.                                                   |
+| [`packages/typescript-config`](packages/typescript-config) | Shared TypeScript settings.                                                                                   |
 
 ## Contributing
 
