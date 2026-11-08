@@ -1,0 +1,53 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+import { ensureSession } from "./auth.functions";
+import { createProjectSchema } from "./project.schema";
+
+export const createProject = createServerFn({ method: "POST" })
+  .validator(createProjectSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.createProject({
+      db: context.db,
+      ownerId: session.user.id,
+      data,
+    });
+  });
+
+export const getProjects = createServerFn({ method: "GET" }).handler(
+  async ({ context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.getProjects({ db: context.db, ownerId: session.user.id });
+  },
+);
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .validator(z.object({ projectId: z.uuid() }))
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.deleteProject({
+      db: context.db,
+      ownerId: session.user.id,
+      projectId: data.projectId,
+    });
+  });
+
+export const getProject = createServerFn({ method: "GET" })
+  .validator(z.object({ projectId: z.uuid() }))
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.getProject({
+      db: context.db,
+      ownerId: session.user.id,
+      projectId: data.projectId,
+    });
+  });
+
+export type Project = Awaited<ReturnType<typeof getProjects>>[number];
+export type ProjectDetails = Awaited<ReturnType<typeof getProject>>;
+export type ProjectNode = ProjectDetails["nodes"][number];

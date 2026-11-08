@@ -18,11 +18,10 @@ import {
 import { Button } from "#/components/ui/button";
 import { ButtonGroup } from "#/components/ui/button-group";
 import { Checkbox } from "#/components/ui/checkbox";
+import type { Features } from "#/lib/features";
+import type { Project } from "#/lib/project.functions";
 
-import type { Features } from "./features";
-import type { GetProjectsResult } from "./projects.functions";
-
-const columnHelper = createColumnHelper<Features, GetProjectsResult[number]>();
+const columnHelper = createColumnHelper<Features, Project>();
 
 export const columns = columnHelper.columns([
   columnHelper.display({

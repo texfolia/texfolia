@@ -32,11 +32,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
-import type { getProject } from "#/lib/projects.functions";
-
-export type ProjectNode = Awaited<
-  ReturnType<typeof getProject>
->["nodes"][number];
+import type { ProjectNode } from "#/lib/project.functions";
 
 const fileIcons = new Map<string, Icon>(
   [
@@ -127,10 +123,12 @@ function ProjectFileIcon({ name, kind }: Pick<ProjectNode, "name" | "kind">) {
 export function ProjectFileTree({
   nodes,
   activeId,
+  isPending,
   onOpen,
 }: {
   nodes: ProjectNode[];
   activeId: string | undefined;
+  isPending: (id: string) => boolean;
   onOpen: (node: ProjectNode, permanent: boolean) => void;
 }) {
   const children = useMemo(() => {
@@ -158,6 +156,7 @@ export function ProjectFileTree({
             {node.kind === "folder" ? (
               <Collapsible defaultOpen className="group/folder">
                 <CollapsibleTrigger
+                  disabled={isPending(node.id)}
                   render={<SidebarMenuButton />}
                   style={{ paddingLeft: 8 + depth * 14 }}
                 >
@@ -172,6 +171,7 @@ export function ProjectFileTree({
               </Collapsible>
             ) : (
               <SidebarMenuButton
+                disabled={isPending(node.id)}
                 style={{ paddingLeft: 22 + depth * 14 }}
                 isActive={activeId === node.id}
                 aria-current={activeId === node.id ? "true" : undefined}

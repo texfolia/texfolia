@@ -29,8 +29,11 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "#/components/ui/sidebar";
-import { type SettingsSection, useSettings } from "#/hooks/use-settings";
 import { editorThemes, editorThemeSchema } from "#/lib/editor-themes";
+import {
+  type SettingsSection,
+  useSettings,
+} from "#/providers/settings-provider";
 
 const sections = [
   { title: "Editor", icon: IconCode },
@@ -70,6 +73,8 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
     setOpen,
     section,
     setSection,
+    error,
+    ready,
   } = useSettings();
   const id = useId();
 
@@ -137,123 +142,133 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
                 <h2 className="font-medium">{section}</h2>
               </header>
               <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
-                {section === "Editor" && (
-                  <>
-                    <div>
-                      <h3 className="font-medium">Make room for your ideas</h3>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        Editor preferences apply to every project in this
-                        browser.
-                      </p>
-                    </div>
-                    <Field>
-                      <FieldLabel htmlFor={`${id}-theme`}>
-                        Editor theme
-                      </FieldLabel>
-                      <select
-                        id={`${id}-theme`}
-                        value={editor.theme}
-                        className="border-input bg-input/20 focus-visible:border-ring focus-visible:ring-ring/30 h-7 w-full rounded-md border px-2 text-xs outline-none focus-visible:ring-2"
-                        onChange={(event) => {
-                          const theme = editorThemeSchema.safeParse(
-                            event.target.value,
-                          );
-                          if (theme.success)
-                            updateEditor({ ...editor, theme: theme.data });
-                        }}
-                      >
-                        {Object.entries(editorThemes).map(
-                          ([value, { label }]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor={`${id}-font-size`}>
-                        Font size
-                      </FieldLabel>
-                      <Input
-                        id={`${id}-font-size`}
-                        type="number"
-                        min={10}
-                        max={24}
-                        value={editor.fontSize}
-                        onChange={(event) => {
-                          const fontSize = event.target.valueAsNumber;
-                          if (
-                            Number.isInteger(fontSize) &&
-                            fontSize >= 10 &&
-                            fontSize <= 24
-                          )
-                            updateEditor({ ...editor, fontSize });
-                        }}
-                      />
-                    </Field>
-                    <Field orientation="horizontal">
-                      <Checkbox
-                        id={`${id}-wrap-lines`}
-                        checked={editor.wrapLines}
-                        onCheckedChange={(wrapLines) =>
-                          updateEditor({ ...editor, wrapLines })
-                        }
-                      />
-                      <FieldLabel htmlFor={`${id}-wrap-lines`}>
-                        Wrap lines in the editor
-                      </FieldLabel>
-                    </Field>
-                    <p className="text-muted-foreground text-xs">
-                      Save with Mod+S to keep your project sources in this
-                      browser and compile the PDF.
-                    </p>
-                  </>
+                {error && (
+                  <p role="alert" className="text-destructive text-sm">
+                    {error}
+                  </p>
                 )}
-                {section === "Formatting" && (
-                  <>
-                    <div>
-                      <h3 className="font-medium">LaTeX formatting</h3>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        Applied when you run Format document. Formatting does
-                        not change your editor’s visual line wrapping.
-                      </p>
-                    </div>
-                    <LatexFormatSettingsFields
-                      settings={formatting.settings}
-                      onChange={formatting.update}
-                    />
-                  </>
-                )}
-                {section === "Keyboard shortcuts" && (
-                  <>
-                    <p className="text-muted-foreground text-sm">
-                      Mod means ⌘ on Mac and Ctrl on Windows or Linux. Alt means
-                      Option on Mac. Formatting shortcuts apply to the focused
-                      LaTeX editor. Press Escape, then Tab to move focus out of
-                      the editor.
-                    </p>
-                    <dl className="divide-y">
-                      {shortcuts.map(([label, keys]) => (
-                        <div
-                          key={label}
-                          className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0"
+                <fieldset disabled={!ready} className="space-y-6">
+                  {section === "Editor" && (
+                    <>
+                      <div>
+                        <h3 className="font-medium">
+                          Make room for your ideas
+                        </h3>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                          Editor preferences apply to every project in this
+                          browser.
+                        </p>
+                      </div>
+                      <Field>
+                        <FieldLabel htmlFor={`${id}-theme`}>
+                          Editor theme
+                        </FieldLabel>
+                        <select
+                          id={`${id}-theme`}
+                          value={editor.theme}
+                          className="border-input bg-input/20 focus-visible:border-ring focus-visible:ring-ring/30 h-7 w-full rounded-md border px-2 text-xs outline-none focus-visible:ring-2"
+                          onChange={(event) => {
+                            const theme = editorThemeSchema.safeParse(
+                              event.target.value,
+                            );
+                            if (theme.success)
+                              updateEditor({ ...editor, theme: theme.data });
+                          }}
                         >
-                          <dt>{label}</dt>
-                          <dd>
-                            <Kbd className="h-auto text-right whitespace-normal">
-                              {keys}
-                            </Kbd>
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p className="text-muted-foreground text-xs">
-                      Heading levels map to section, subsection, subsubsection,
-                      paragraph, subparagraph, and an unnumbered subparagraph.
-                    </p>
-                  </>
-                )}
+                          {Object.entries(editorThemes).map(
+                            ([value, { label }]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor={`${id}-font-size`}>
+                          Font size
+                        </FieldLabel>
+                        <Input
+                          id={`${id}-font-size`}
+                          type="number"
+                          min={10}
+                          max={24}
+                          value={editor.fontSize}
+                          onChange={(event) => {
+                            const fontSize = event.target.valueAsNumber;
+                            if (
+                              Number.isInteger(fontSize) &&
+                              fontSize >= 10 &&
+                              fontSize <= 24
+                            )
+                              updateEditor({ ...editor, fontSize });
+                          }}
+                        />
+                      </Field>
+                      <Field orientation="horizontal">
+                        <Checkbox
+                          id={`${id}-wrap-lines`}
+                          checked={editor.wrapLines}
+                          onCheckedChange={(wrapLines) =>
+                            updateEditor({ ...editor, wrapLines })
+                          }
+                        />
+                        <FieldLabel htmlFor={`${id}-wrap-lines`}>
+                          Wrap lines in the editor
+                        </FieldLabel>
+                      </Field>
+                      <p className="text-muted-foreground text-xs">
+                        Save with Mod+S to keep your project sources in this
+                        browser and compile the PDF.
+                      </p>
+                    </>
+                  )}
+                  {section === "Formatting" && (
+                    <>
+                      <div>
+                        <h3 className="font-medium">LaTeX formatting</h3>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                          Applied when you run Format document. Formatting does
+                          not change your editor’s visual line wrapping.
+                        </p>
+                      </div>
+                      <LatexFormatSettingsFields
+                        settings={formatting.settings}
+                        onChange={formatting.update}
+                      />
+                    </>
+                  )}
+                  {section === "Keyboard shortcuts" && (
+                    <>
+                      <p className="text-muted-foreground text-sm">
+                        Mod means ⌘ on Mac and Ctrl on Windows or Linux. Alt
+                        means Option on Mac. Formatting shortcuts apply to the
+                        focused LaTeX editor. Press Escape, then Tab to move
+                        focus out of the editor.
+                      </p>
+                      <dl className="divide-y">
+                        {shortcuts.map(([label, keys]) => (
+                          <div
+                            key={label}
+                            className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0"
+                          >
+                            <dt>{label}</dt>
+                            <dd>
+                              <Kbd className="h-auto text-right whitespace-normal">
+                                {keys}
+                              </Kbd>
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <p className="text-muted-foreground text-xs">
+                        Heading levels map to section, subsection,
+                        subsubsection, paragraph, subparagraph, and an
+                        unnumbered subparagraph.
+                      </p>
+                    </>
+                  )}
+                </fieldset>
               </div>
             </section>
           </SidebarProvider>

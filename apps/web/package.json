@@ -15,7 +15,6 @@
     "format:check": "bun fmt --check",
     "generate-routes": "tsr generate",
     "latex:assets": "wasm-latex-tools copy-assets ./public/core",
-    "lint": "bun lint",
     "preview": "vite preview",
     "test": "bun test",
     "typecheck": "tsc --noEmit"

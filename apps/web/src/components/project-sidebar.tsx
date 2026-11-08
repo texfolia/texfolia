@@ -1,10 +1,8 @@
 import { IconAlertCircle, IconFiles } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 
-import {
-  ProjectFileTree,
-  type ProjectNode,
-} from "#/components/project-file-tree";
+import { CreateNodeForm } from "#/components/create-node-form";
+import { ProjectFileTree } from "#/components/project-file-tree";
 import { SettingsDialog } from "#/components/settings-dialog";
 import {
   Sidebar,
@@ -19,6 +17,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "#/components/ui/sidebar";
+import type { ProjectNode } from "#/lib/project.functions";
+import { useProjectFiles } from "#/providers/project-files-provider";
 
 export function ProjectSidebar({
   name,
@@ -37,6 +37,7 @@ export function ProjectSidebar({
   showProblems: boolean;
   onToggleProblems: () => void;
 }) {
+  const files = useProjectFiles();
   const { setOpen, toggleSidebar } = useSidebar();
 
   useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
@@ -100,10 +101,20 @@ export function ProjectSidebar({
           <SidebarContent>
             <SidebarGroup>
               <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
+              {ready && (
+                <CreateNodeForm
+                  nodes={nodes}
+                  activeId={activeId}
+                  onCreated={onOpen}
+                />
+              )}
               <SidebarGroupContent aria-busy={!ready}>
                 <ProjectFileTree
                   nodes={nodes}
                   activeId={activeId}
+                  isPending={(id) =>
+                    files.nodes.get(id)?.$hasPendingWrites ?? false
+                  }
                   onOpen={onOpen}
                 />
               </SidebarGroupContent>
