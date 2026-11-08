@@ -3,14 +3,14 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import z from "zod";
 
-import { ensureSession } from "./auth.functions";
+import {
+  createNodeSchema,
+  createProjectSchema,
+} from "#/features/projects/schema";
+import { ensureSession } from "#/lib/auth.functions";
 
 export const createProject = createServerFn({ method: "POST" })
-  .validator(
-    z.object({
-      name: z.string().trim().min(1),
-    }),
-  )
+  .validator(createProjectSchema)
   .handler(async ({ data, context }) => {
     const session = await ensureSession();
 
@@ -18,6 +18,7 @@ export const createProject = createServerFn({ method: "POST" })
       const [newProject] = await tx
         .insert(project)
         .values({
+          id: data.id,
           ownerId: session.user.id,
           name: data.name,
         })
@@ -51,7 +52,7 @@ export const createProject = createServerFn({ method: "POST" })
         sizeBytes: 0n,
       });
 
-      return newProject.id;
+      return { ...newProject, collaborators: [] };
     });
   });
 
@@ -110,10 +111,63 @@ export const getProject = createServerFn({ method: "GET" })
       with: {
         nodes: {
           where: { deletedAt: { isNull: true } },
-          columns: { id: true, parentId: true, name: true, kind: true },
+          columns: {
+            id: true,
+            projectId: true,
+            parentId: true,
+            name: true,
+            kind: true,
+          },
         },
       },
     });
     if (!result) throw new Error("Project not found");
     return result;
+  });
+
+export const createProjectNode = createServerFn({ method: "POST" })
+  .validator(createNodeSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    return context.db.transaction(async (tx) => {
+      // Serialize structure changes with deletion and verify ownership before
+      // accepting a parent supplied by the client.
+      const [ownedProject] = await tx
+        .select({ id: project.id })
+        .from(project)
+        .where(
+          and(
+            eq(project.id, data.projectId),
+            eq(project.ownerId, session.user.id),
+            isNull(project.deletedAt),
+          ),
+        )
+        .for("update");
+      if (!ownedProject) throw new Error("Project not found");
+      const parent = await tx.query.projectNode.findFirst({
+        where: {
+          id: data.parentId,
+          projectId: data.projectId,
+          kind: "folder",
+          deletedAt: { isNull: true },
+        },
+      });
+      if (!parent) throw new Error("Folder not found");
+      const [node] = await tx
+        .insert(projectNode)
+        .values({ ...data, sizeBytes: 0n })
+        .returning({
+          id: projectNode.id,
+          projectId: projectNode.projectId,
+          parentId: projectNode.parentId,
+          name: projectNode.name,
+          kind: projectNode.kind,
+        });
+      if (!node) throw new Error("Failed to create file");
+      await tx
+        .update(project)
+        .set({ updatedAt: new Date() })
+        .where(eq(project.id, data.projectId));
+      return node;
+    });
   });

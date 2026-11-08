@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { db, projectJob } from "@texfolia/db";
+import type { Db } from "@texfolia/db";
+import { projectJob } from "@texfolia/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
-import { auth } from "#/lib/auth";
+import type { createAuth } from "#/lib/auth";
 import { fetchCompiler } from "#/lib/compiler.server";
 
 const payload = z.object({
@@ -43,7 +44,11 @@ function json(data: unknown, status = 200, headers: HeadersInit = noStore) {
   return Response.json(data, { status, headers });
 }
 
-async function checkProject(request: Request, projectId: string) {
+async function checkProject(
+  request: Request,
+  projectId: string,
+  { auth, db }: { auth: ReturnType<typeof createAuth>; db: Db },
+) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return json({ error: "Unauthorized" }, 401);
   if (!idSchema.safeParse(projectId).success)
@@ -83,6 +88,7 @@ async function readSources(request: Request) {
 }
 
 function updateJob(
+  db: Db,
   id: string,
   values: Partial<typeof projectJob.$inferInsert>,
 ) {
@@ -100,8 +106,9 @@ function updateJob(
 export const Route = createFileRoute("/api/compile/$projectId")({
   server: {
     handlers: {
-      POST: async ({ request, params }) => {
-        const denied = await checkProject(request, params.projectId);
+      POST: async ({ request, params, context }) => {
+        const { db } = context;
+        const denied = await checkProject(request, params.projectId, context);
         if (denied) return denied;
         if (
           !request.headers.get("Content-Type")?.startsWith("application/json")
@@ -137,7 +144,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             const detail = parsed.success
               ? parsed.data
               : { error: "Compilation service failed" };
-            await updateJob(id, {
+            await updateJob(db, id, {
               ...detail,
               status: "failed",
               finishedAt: new Date(),
@@ -164,8 +171,9 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           "Retry-After": "1",
         });
       },
-      GET: async ({ request, params }) => {
-        const denied = await checkProject(request, params.projectId);
+      GET: async ({ request, params, context }) => {
+        const { db } = context;
+        const denied = await checkProject(request, params.projectId, context);
         if (denied) return denied;
         const url = new URL(request.url);
         const parsedId = idSchema.safeParse(url.searchParams.get("job"));
@@ -202,7 +210,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                 "Retry-After": "1",
               });
             const error = "The compiler did not receive this job. Try again.";
-            await updateJob(id, {
+            await updateJob(db, id, {
               status: "failed",
               error,
               finishedAt: new Date(),
@@ -228,7 +236,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             case "succeeded":
               if (result.artifactUrl !== pdfPath)
                 throw new Error("Invalid compiler artifact URL");
-              await updateJob(id, {
+              await updateJob(db, id, {
                 status: "succeeded",
                 log: result.log,
                 objectKey: pdfPath.slice(1),
@@ -240,7 +248,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                 artifactUrl: `/api/compile/${params.projectId}?job=${id}&artifact=pdf`,
               });
             case "failed":
-              await updateJob(id, {
+              await updateJob(db, id, {
                 status: "failed",
                 error: result.error,
                 log: result.log,

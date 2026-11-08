@@ -1,42 +1,10 @@
-import { useEffect, useId, useState } from "react";
-import { z } from "zod";
+import { useId } from "react";
 
 import { Checkbox } from "#/components/ui/checkbox";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
-
-const storageKey = "texfolia.format";
-const settingsSchema = z.object({
-  indent: z.number().int().min(1).max(8),
-  wrap: z.boolean(),
-  width: z.number().int().min(40).max(200),
-});
-
-export function useLatexFormatSettings() {
-  const [settings, setSettings] = useState(defaultFormatSettings);
-  useEffect(() => {
-    try {
-      const saved = settingsSchema.safeParse(
-        JSON.parse(localStorage.getItem(storageKey) ?? "null"),
-      );
-      if (saved.success) setSettings(saved.data);
-    } catch {
-      // Keep defaults if browser storage cannot be read.
-    }
-  }, []);
-
-  function update(next: FormatSettings) {
-    setSettings(next);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-    } catch {
-      // Keep the current settings for this session.
-    }
-  }
-
-  return { settings, update };
-}
+import { formatSettingsSchema as settingsSchema } from "#/features/settings/schema";
+import type { FormatSettings } from "#/lib/latex/format";
 
 export function LatexFormatSettingsFields({
   settings,
@@ -55,6 +23,7 @@ export function LatexFormatSettingsFields({
           type="number"
           min={1}
           max={8}
+          key={`indent-${settings.indent}`}
           defaultValue={settings.indent}
           onBlur={(event) => {
             const value = settingsSchema.shape.indent.safeParse(
@@ -80,6 +49,7 @@ export function LatexFormatSettingsFields({
           type="number"
           min={40}
           max={200}
+          key={`width-${settings.width}`}
           defaultValue={settings.width}
           disabled={!settings.wrap}
           onBlur={(event) => {

@@ -16,8 +16,7 @@ import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as TermsRouteImport } from './routes/terms'
-import { Route as ProjectsIndexRouteImport } from './routes/projects.index.tsx'
-import { Route as ProjectsProjectIdRouteImport } from './routes/project.$projectId.tsx'
+import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api.compile.$projectId'
 
@@ -56,15 +55,10 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ProjectsRoute,
-} as any)
-const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
-  id: '/$projectId',
-  path: '/$projectId',
-  getParentRoute: () => ProjectsRoute,
+const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
+  id: '/project/$projectId',
+  path: '/project/$projectId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -83,10 +77,9 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRouteWithChildren
+  '/projects': typeof ProjectsRoute
   '/terms': typeof TermsRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/projects/': typeof ProjectsIndexRoute
+  '/project/$projectId': typeof ProjectProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
 }
@@ -96,9 +89,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/projects': typeof ProjectsRoute
   '/terms': typeof TermsRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/projects': typeof ProjectsIndexRoute
+  '/project/$projectId': typeof ProjectProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
 }
@@ -109,10 +102,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRouteWithChildren
+  '/projects': typeof ProjectsRoute
   '/terms': typeof TermsRoute
-  '/projects/$projectId': typeof ProjectsProjectIdRoute
-  '/projects/': typeof ProjectsIndexRoute
+  '/project/$projectId': typeof ProjectProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
 }
@@ -126,8 +118,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/projects'
     | '/terms'
-    | '/projects/$projectId'
-    | '/projects/'
+    | '/project/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
   fileRoutesByTo: FileRoutesByTo
@@ -137,9 +128,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/pricing'
     | '/privacy'
-    | '/terms'
-    | '/projects/$projectId'
     | '/projects'
+    | '/terms'
+    | '/project/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
   id:
@@ -151,8 +142,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/projects'
     | '/terms'
-    | '/projects/$projectId'
-    | '/projects/'
+    | '/project/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
   fileRoutesById: FileRoutesById
@@ -163,8 +153,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
-  ProjectsRoute: typeof ProjectsRouteWithChildren
+  ProjectsRoute: typeof ProjectsRoute
   TermsRoute: typeof TermsRoute
+  ProjectProjectIdRoute: typeof ProjectProjectIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
 }
@@ -220,19 +211,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/projects/': {
-      id: '/projects/'
-      path: '/'
-      fullPath: '/projects/'
-      preLoaderRoute: typeof ProjectsIndexRouteImport
-      parentRoute: typeof ProjectsRoute
-    }
-    '/projects/$projectId': {
-      id: '/projects/$projectId'
-      path: '/$projectId'
-      fullPath: '/projects/$projectId'
-      preLoaderRoute: typeof ProjectsProjectIdRouteImport
-      parentRoute: typeof ProjectsRoute
+    '/project/$projectId': {
+      id: '/project/$projectId'
+      path: '/project/$projectId'
+      fullPath: '/project/$projectId'
+      preLoaderRoute: typeof ProjectProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -251,28 +235,15 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface ProjectsRouteChildren {
-  ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
-  ProjectsIndexRoute: typeof ProjectsIndexRoute
-}
-
-const ProjectsRouteChildren: ProjectsRouteChildren = {
-  ProjectsProjectIdRoute: ProjectsProjectIdRoute,
-  ProjectsIndexRoute: ProjectsIndexRoute,
-}
-
-const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
-  ProjectsRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
-  ProjectsRoute: ProjectsRouteWithChildren,
+  ProjectsRoute: ProjectsRoute,
   TermsRoute: TermsRoute,
+  ProjectProjectIdRoute: ProjectProjectIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
 }

@@ -1,3 +1,4 @@
+import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import {
   createContext,
@@ -6,48 +7,49 @@ import {
   useEffect,
   useState,
 } from "react";
-import { z } from "zod";
 
-import { useLatexFormatSettings } from "#/components/latex-format-settings";
-import { editorThemeSchema } from "#/lib/editor-themes";
-
-const editorSettingsSchema = z.object({
-  fontSize: z.number().int().min(10).max(24),
-  wrapLines: z.boolean(),
-  theme: editorThemeSchema.default("githubLight"),
-});
-type EditorSettings = z.infer<typeof editorSettingsSchema>;
-const defaultEditorSettings: EditorSettings = {
-  fontSize: 13,
-  wrapLines: true,
-  theme: "githubLight",
-};
+import { createBrowserSettingsStore } from "#/features/settings/collection";
+import { defaultSettings, type Settings } from "#/features/settings/schema";
 export type SettingsSection = "Editor" | "Formatting" | "Keyboard shortcuts";
 
 function useSettingsState() {
-  const [editor, setEditor] = useState(defaultEditorSettings);
-  const formatting = useLatexFormatSettings();
+  const [store] = useState(() => createBrowserSettingsStore(window));
+  const [ready, setReady] = useState(false);
+  const { data } = useLiveQuery({
+    query: (q) =>
+      ready ? q.from({ preferences: store.preferences }) : undefined,
+  });
+  const preferences = data?.[0] ?? defaultSettings;
+  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("Editor");
 
   useEffect(() => {
-    try {
-      const saved = editorSettingsSchema.safeParse(
-        JSON.parse(localStorage.getItem("texfolia.editor") ?? "null"),
-      );
-      if (saved.success) setEditor(saved.data);
-    } catch {
-      // Browser storage may be unavailable; retain session preferences.
-    }
-  }, []);
+    let active = true;
+    void store
+      .initialize()
+      .then(() => {
+        if (active) setReady(true);
+      })
+      .catch(() => {
+        if (active)
+          setError(
+            "Preferences could not be loaded. Check browser storage and reload to try again.",
+          );
+      });
+    return () => {
+      active = false;
+      void store.preferences.cleanup({ dependents: true });
+    };
+  }, [store]);
 
-  function updateEditor(next: EditorSettings) {
-    setEditor(next);
-    try {
-      localStorage.setItem("texfolia.editor", JSON.stringify(next));
-    } catch {
-      // The preference still applies for the current session.
-    }
+  function persist(operation: () => Promise<void>) {
+    setError(null);
+    void operation().catch(() =>
+      setError(
+        "Your preference could not be saved. Check browser storage and try again.",
+      ),
+    );
   }
 
   useHotkeys(
@@ -65,9 +67,16 @@ function useSettingsState() {
   );
 
   return {
-    editor,
-    updateEditor,
-    formatting,
+    editor: preferences.editor,
+    updateEditor: (editor: Settings["editor"]) =>
+      persist(() => store.updateEditor(editor)),
+    formatting: {
+      settings: preferences.formatting,
+      update: (formatting: Settings["formatting"]) =>
+        persist(() => store.updateFormatting(formatting)),
+    },
+    error: error ?? store.warning,
+    ready,
     open,
     setOpen,
     section,

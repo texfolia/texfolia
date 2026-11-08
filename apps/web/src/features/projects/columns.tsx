@@ -7,7 +7,6 @@ import {
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 
-import { DeleteProjectButton } from "#/components/delete-project-button";
 import {
   Avatar,
   AvatarFallback,
@@ -18,11 +17,11 @@ import {
 import { Button } from "#/components/ui/button";
 import { ButtonGroup } from "#/components/ui/button-group";
 import { Checkbox } from "#/components/ui/checkbox";
+import type { Project } from "#/features/projects/collections";
+import { DeleteProjectButton } from "#/features/projects/delete-project-button";
+import type { Features } from "#/lib/features";
 
-import type { Features } from "./features";
-import type { GetProjectsResult } from "./projects.functions";
-
-const columnHelper = createColumnHelper<Features, GetProjectsResult[number]>();
+const columnHelper = createColumnHelper<Features, Project>();
 
 export const columns = columnHelper.columns([
   columnHelper.display({

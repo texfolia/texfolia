@@ -1,5 +1,4 @@
 import { IconTrash } from "@tabler/icons-react";
-import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
 import {
@@ -14,17 +13,16 @@ import {
   AlertDialogTrigger,
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
-import {
-  deleteProject,
-  type GetProjectsResult,
-} from "#/lib/projects.functions";
+import { toast } from "#/components/ui/toast";
+import type { Project } from "#/features/projects/collections";
+import { useProjects } from "#/features/projects/context";
 
 export function DeleteProjectButton({
   project,
 }: {
-  project: Pick<GetProjectsResult[number], "id" | "name">;
+  project: Pick<Project, "id" | "name">;
 }) {
-  const router = useRouter();
+  const projects = useProjects();
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,21 +32,20 @@ export function DeleteProjectButton({
     setError(null);
 
     try {
-      await deleteProject({ data: { projectId: project.id } });
+      await projects.remove(project.id);
     } catch {
+      toast.add({
+        title: "Project was not deleted",
+        description: "Your project has been restored. Please try again.",
+        type: "error",
+      });
       setError("Unable to delete your project. Please try again.");
       setIsDeleting(false);
       return;
     }
 
     setOpen(false);
-    try {
-      await router.invalidate();
-    } catch {
-      window.location.reload();
-    } finally {
-      setIsDeleting(false);
-    }
+    setIsDeleting(false);
   }
 
   return (

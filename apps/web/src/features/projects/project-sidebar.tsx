@@ -1,10 +1,6 @@
 import { IconAlertCircle, IconFiles } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 
-import {
-  ProjectFileTree,
-  type ProjectNode,
-} from "#/components/project-file-tree";
 import { SettingsDialog } from "#/components/settings-dialog";
 import {
   Sidebar,
@@ -19,9 +15,16 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "#/components/ui/sidebar";
+import type {
+  createProjectFilesStore,
+  ProjectNode,
+} from "#/features/projects/collections";
+import { CreateNodeForm } from "#/features/projects/create-node-form";
+import { ProjectFileTree } from "#/features/projects/project-file-tree";
 
 export function ProjectSidebar({
   name,
+  files,
   nodes,
   activeId,
   ready,
@@ -30,6 +33,7 @@ export function ProjectSidebar({
   onToggleProblems,
 }: {
   name: string;
+  files: ReturnType<typeof createProjectFilesStore>;
   nodes: ProjectNode[];
   activeId: string | undefined;
   ready: boolean;
@@ -100,10 +104,21 @@ export function ProjectSidebar({
           <SidebarContent>
             <SidebarGroup>
               <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
+              {ready && (
+                <CreateNodeForm
+                  files={files}
+                  nodes={nodes}
+                  activeId={activeId}
+                  onCreated={onOpen}
+                />
+              )}
               <SidebarGroupContent aria-busy={!ready}>
                 <ProjectFileTree
                   nodes={nodes}
                   activeId={activeId}
+                  isPending={(id) =>
+                    files.nodes.get(id)?.$hasPendingWrites ?? false
+                  }
                   onOpen={onOpen}
                 />
               </SidebarGroupContent>

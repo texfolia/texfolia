@@ -8,14 +8,16 @@ import { z } from "zod";
 import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { createProject } from "#/lib/projects.functions";
+import { useProjects } from "#/features/projects/context";
+import { projectNameSchema } from "#/features/projects/schema";
 
 const schema = z.object({
-  name: z.string().trim().min(1, { message: "Please enter a project name." }),
+  name: projectNameSchema,
 });
 
 export function ProjectForm() {
   const navigate = useNavigate();
+  const projects = useProjects();
   const nameId = useId();
   const errorId = `${nameId}-error`;
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -26,12 +28,10 @@ export function ProjectForm() {
       setSubmitError(null);
 
       try {
-        const projectId = await createProject({
-          data: { name: value.name.trim() },
-        });
+        const projectId = await projects.create(value.name);
 
         await navigate({
-          to: "/projects/$projectId",
+          to: "/project/$projectId",
           params: { projectId },
         });
       } catch {
