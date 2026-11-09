@@ -3,7 +3,12 @@
 The Hono API accepts a project, returns a job URL, and lets you poll for its
 result. On Cloudflare, the Worker stores the sources in R2 and sends the job ID
 to Cloudflare Queues. The queue consumer calls a Tectonic container and stores the
-PDF and diagnostics. The same API runs locally with SQLite and Tectonic.
+PDF and diagnostics. The same Hono API runs locally with SQLite and calls the
+same Go engine over HTTP.
+
+The engine image contains a Go executable and Tectonic. It accepts one project
+at a time, runs Tectonic in a temporary directory, and streams back the PDF and
+bounded diagnostics. Hono owns job storage, queues, retries, and rate limits.
 
 ## Run locally
 
@@ -17,12 +22,21 @@ The API listens at `http://localhost:8080`. The web app uses that address during
 development; set `COMPILER_URL` to override it. Compose publishes the port only
 on loopback. No internal token is needed.
 
-Compose reloads the compiler when you edit its source. The `compiler-data`
-volume keeps queued jobs and PDFs across restarts. To run without Docker,
-install Tectonic and run `bun run --cwd apps/compiler start`. Set
-`COMPILER_DB_PATH` to override the default `.cache/compiler.sqlite` path. The
-standalone server binds to `127.0.0.1`; the Docker image sets `HOST=0.0.0.0` so
-Docker and Cloudflare can reach the container port.
+Compose starts the private `latex-engine` service and reloads Hono when you edit
+its source. Rebuild the engine after changing its Go source. The `compiler-data`
+volume keeps queued jobs and PDFs across restarts.
+
+To run without Docker, install Go 1.26 or later and Tectonic. Start the engine:
+
+```sh
+cd apps/compiler/engine
+PORT=8081 go run .
+```
+
+In another terminal, run `bun run --cwd apps/compiler start` from the repository
+root. `ENGINE_URL` defaults to `http://127.0.0.1:8081`.
+Set `COMPILER_DB_PATH` to override `.cache/compiler.sqlite`. Both standalone
+servers bind to `127.0.0.1`; their Docker images set `HOST=0.0.0.0`.
 
 ## API reference
 
@@ -94,11 +108,23 @@ sources after saving a terminal result. Tectonic runs with `--untrusted`, withou
 service credentials, in a temporary directory that the container clears after
 each run.
 
+The engine's private HTTP interface has two endpoints: `GET /health` returns
+readiness, and `POST /compile` accepts the same project JSON as Hono. A successful
+engine response is multipart form data with an `application/pdf` file named
+`pdf` and a text field named `log`. Failures return JSON with `error` and `log`.
+Overlapping requests return `503` with `Retry-After: 1`. The engine has no job
+API or persistent job data. Its image warms the base LaTeX format during build
+and runs as an unprivileged user.
+
 ## Verify the compiler
 
 ```sh
 bun run --cwd apps/compiler typecheck
 bun run --cwd apps/compiler test
+cd apps/compiler/engine
+go test -race ./...
+go vet ./...
+cd ../../..
 # With the API running, submit a multi-file project and invalid LaTeX:
 bun run apps/compiler/test/smoke.ts
 ```
