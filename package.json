@@ -9,8 +9,10 @@
   "scripts": {
     "auth:schema": "bun run --cwd apps/web auth:schema",
     "build": "turbo run build",
+    "db:push": "bun run --cwd packages/db db:push",
     "dev": "turbo run dev",
     "format": "turbo run format",
+    "format:check": "turbo run format:check",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
