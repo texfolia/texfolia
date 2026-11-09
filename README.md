@@ -121,8 +121,9 @@ sequenceDiagram
 
 On Cloudflare, the web app calls the compiler through a private service binding.
 The compiler Worker uses R2 for job data and PDFs, and Cloudflare Queues to
-dispatch jobs. Locally, the same API uses loopback HTTP with SQLite and runs
-Tectonic in the compiler container. Neither connection requires an internal token.
+dispatch jobs. Locally, the same Hono API uses loopback HTTP with SQLite. Both
+runtimes call a separate Go engine image that runs Tectonic and returns the PDF
+and diagnostics. Neither connection requires an internal token.
 
 ## Repository layout
 

@@ -2,8 +2,9 @@ import { Container, getContainer } from "@cloudflare/containers";
 import { z } from "zod";
 
 import { createApp } from "./src/api";
-import { createJobs, type Engine, type ObjectStore } from "./src/jobs";
-import { HttpError, jobIdSchema } from "./src/project";
+import { createEngineClient } from "./src/engine";
+import { createJobs, type ObjectStore } from "./src/jobs";
+import { jobIdSchema } from "./src/project";
 
 interface Env {
   COMPILER: DurableObjectNamespace<TectonicContainer>;
@@ -15,10 +16,6 @@ interface Env {
 export class TectonicContainer extends Container<Env> {
   override defaultPort = 8080;
   override sleepAfter = "10m";
-  override envVars = {
-    NODE_ENV: "production",
-    COMPILER_MODE: "engine",
-  };
 
   // Keep this singleton warm even when there are no compilation requests.
   override async onActivityExpired() {}
@@ -66,34 +63,6 @@ function r2Store(bucket: R2Bucket): ObjectStore {
   };
 }
 
-const failure = z.object({ error: z.string(), log: z.string().optional() });
-function containerEngine(env: Env): Engine {
-  return async (project) => {
-    const response = await getContainer(env.COMPILER, "compiler").fetch(
-      new Request("http://container/compile", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "multipart/form-data",
-        },
-        body: JSON.stringify(project),
-        signal: AbortSignal.timeout(90_000),
-      }),
-    );
-    if ([400, 408, 413, 422].includes(response.status)) {
-      const detail = failure.parse(await response.json());
-      throw new HttpError(response.status, detail.error, detail.log);
-    }
-    if (!response.ok) throw new Error(`TeX host returned ${response.status}`);
-    const form = await response.formData();
-    const pdf = form.get("pdf");
-    const log = form.get("log");
-    if (!(pdf instanceof Blob) || typeof log !== "string")
-      throw new Error("TeX host returned an invalid result");
-    return { pdf: new Uint8Array(await pdf.arrayBuffer()), log };
-  };
-}
-
 const app = createApp();
 const queueMessage = z.object({ id: jobIdSchema });
 const jobsFor = (env: Env) =>
@@ -104,7 +73,9 @@ const jobsFor = (env: Env) =>
         await env.COMPILE_QUEUE.send(message);
       },
     },
-    engine: containerEngine(env),
+    engine: createEngineClient((request) =>
+      getContainer(env.COMPILER, "compiler").fetch(request),
+    ),
   });
 
 export default {
