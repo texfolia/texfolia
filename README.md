@@ -9,6 +9,7 @@ Texfolia is a browser-based LaTeX workspace. Edit project files, check LaTeX err
 - Write LaTeX with syntax highlighting, folding, and completions for project labels, citations, and file paths.
 - Format LaTeX with TexFmt and see editor, project, and compiler diagnostics in the Problems panel.
 - Preview Markdown and compiled PDFs alongside your source.
+- Apply app-wide themes or import a VS Code color theme in Settings → Appearance. See [theme behavior and import limits](docs/themes.md).
 
 ## Local development
 

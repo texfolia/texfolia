@@ -2,13 +2,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { ProjectList } from "#/components/project-list";
 import { SidebarProvider } from "#/components/ui/sidebar";
-import { getSession } from "#/lib/auth.functions";
 import { getProjects } from "#/lib/project.functions";
 import {
   createProjectsStore,
   ProjectsProvider,
 } from "#/providers/projects-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
+import { ThemeProvider } from "#/providers/theme-provider";
 
 export const Route = createFileRoute("/projects")({
   ssr: false,
@@ -19,10 +19,9 @@ export const Route = createFileRoute("/projects")({
       },
     ],
   }),
-  beforeLoad: async ({ location }) => {
-    const session = await getSession();
-
-    if (!session) {
+  beforeLoad: ({ location, context }) => {
+    const user = context.appUser;
+    if (!user) {
       throw redirect({
         to: "/login",
         search: {
@@ -31,7 +30,7 @@ export const Route = createFileRoute("/projects")({
       });
     }
 
-    return { user: session.user };
+    return { user };
   },
   loader: async ({ context }) => {
     const store = createProjectsStore({
@@ -46,13 +45,16 @@ export const Route = createFileRoute("/projects")({
 
 function ProjectsPage() {
   const { store } = Route.useLoaderData();
+  const { user } = Route.useRouteContext();
   return (
-    <ProjectsProvider store={store}>
-      <SettingsProvider>
-        <SidebarProvider>
-          <ProjectList />
-        </SidebarProvider>
-      </SettingsProvider>
-    </ProjectsProvider>
+    <ThemeProvider userId={user.id}>
+      <ProjectsProvider store={store}>
+        <SettingsProvider>
+          <SidebarProvider>
+            <ProjectList />
+          </SidebarProvider>
+        </SettingsProvider>
+      </ProjectsProvider>
+    </ThemeProvider>
   );
 }

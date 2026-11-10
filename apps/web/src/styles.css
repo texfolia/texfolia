@@ -129,3 +129,104 @@
     @apply font-sans;
   }
 }
+
+:root {
+  --input-foreground: var(--foreground);
+  --input-placeholder: var(--muted-foreground);
+  --panel-background: var(--background);
+  --pdf-original-foreground: #242424;
+  --activity-background: var(--sidebar);
+  --activity-foreground: var(--sidebar-foreground);
+  --status-background: var(--background);
+  --status-foreground: var(--muted-foreground);
+  --tab-active-background: var(--background);
+  --tab-active-foreground: var(--foreground);
+  --tab-inactive-background: var(--muted);
+  --tab-inactive-foreground: var(--muted-foreground);
+  --tab-border: var(--border);
+  --tab-header: var(--muted);
+  --selection: var(--accent);
+  --selection-foreground: var(--accent-foreground);
+  --overlay: #0000004d;
+  --pdf-original-surround: #e4e4e7;
+  --pdf-surround: var(--muted);
+}
+
+html[data-app-theme] {
+  scrollbar-color: var(--border) var(--background);
+  caret-color: var(--foreground);
+}
+
+html[data-app-theme] ::selection {
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+
+.dockview-theme-texfolia {
+  --dv-group-view-background-color: var(--background);
+  --dv-tabs-and-actions-container-background-color: var(--tab-header);
+  --dv-activegroup-visiblepanel-tab-background-color: var(
+    --tab-active-background
+  );
+  --dv-activegroup-visiblepanel-tab-color: var(--tab-active-foreground);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(
+    --tab-inactive-background
+  );
+  --dv-activegroup-hiddenpanel-tab-color: var(--tab-inactive-foreground);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(
+    --tab-active-background
+  );
+  --dv-inactivegroup-visiblepanel-tab-color: var(--tab-inactive-foreground);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(
+    --tab-inactive-background
+  );
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--tab-inactive-foreground);
+  --dv-tab-divider-color: var(--tab-border);
+  --dv-separator-border: var(--border);
+  --dv-paneview-header-border-color: var(--border);
+  --dv-paneview-active-outline-color: var(--ring);
+  --dv-drag-over-background-color: var(--accent);
+  --dv-drag-over-border-color: var(--ring);
+  --dv-active-sash-color: var(--ring);
+  --dv-sash-color: var(--border);
+  --dv-scrollbar-background-color: var(--border);
+  --dv-tabs-container-scrollbar-color: var(--border);
+  --dv-icon-hover-background-color: var(--accent);
+  --dv-context-menu-background-color: var(--popover);
+  --dv-context-menu-color: var(--popover-foreground);
+  --dv-floating-titlebar-background-color: var(--tab-header);
+  --dv-floating-titlebar-border-bottom: 1px solid var(--border);
+  --dv-floating-group-border: 1px solid var(--border);
+  --dv-dnd-compass-color: var(--popover);
+  --dv-dnd-compass-cell-color: var(--muted);
+  --dv-dnd-compass-active-cell-color: var(--accent);
+  --dv-dnd-compass-edge-cell-color: var(--primary);
+  --dv-edge-dock-indicator-color: var(--ring);
+  --dv-tabs-and-actions-container-height: 35px;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-tab-font-size: 13px;
+}
+
+.pdf-viewport[data-pdf-mode="original"] {
+  background: var(--pdf-original-surround);
+  --foreground: var(--pdf-original-foreground);
+  --muted-foreground: var(--pdf-original-foreground);
+  color: var(--foreground);
+}
+
+.pdf-viewport[data-pdf-mode="match"] {
+  background: var(--pdf-surround);
+}
+
+.pdf-viewport[data-pdf-dark="true"] .react-pdf__Page {
+  filter: invert(0.9) hue-rotate(180deg);
+}
+
+html[data-app-theme] :is([data-slot="input"], [data-slot="textarea"], select) {
+  color: var(--input-foreground);
+}
+
+html[data-app-theme]
+  :is([data-slot="input"], [data-slot="textarea"])::placeholder {
+  color: var(--input-placeholder);
+}

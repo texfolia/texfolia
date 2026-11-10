@@ -60,14 +60,13 @@ test("existing editor and formatter preferences migrate and survive a fresh stor
   expect(store.preferences.get("preferences")?.editor).toEqual({
     fontSize: 18,
     wrapLines: false,
-    theme: "githubLight",
   });
-  await store.updateEditor({ fontSize: 20, wrapLines: true, theme: "nord" });
+  await store.updateEditor({ fontSize: 20, wrapLines: true });
   const fresh = storeFor(backend);
   await fresh.initialize();
   expect(settingsSchema.parse(fresh.preferences.get("preferences"))).toEqual({
     id: "preferences",
-    editor: { fontSize: 20, wrapLines: true, theme: "nord" },
+    editor: { fontSize: 20, wrapLines: true },
     formatting: { indent: 4, wrap: false, width: 120 },
   });
 });
@@ -96,7 +95,6 @@ test("active settings consumers see each other's updates", async () => {
   await second.updateEditor({
     fontSize: 22,
     wrapLines: false,
-    theme: "dracula",
   });
   expect(first.preferences.get("preferences")?.editor.fontSize).toBe(22);
   expect(first.preferences.get("preferences")?.formatting.indent).toBe(3);
@@ -108,7 +106,7 @@ test("storage failure rejects the change and rolls preferences back", async () =
   await store.initialize();
   backend.failWrites();
   await expect(
-    store.updateEditor({ fontSize: 23, wrapLines: false, theme: "nord" }),
+    store.updateEditor({ fontSize: 23, wrapLines: false }),
   ).rejects.toThrow();
   expect(store.preferences.get("preferences")?.editor.fontSize).toBe(13);
 });
@@ -123,7 +121,7 @@ test("denied browser storage still allows session preferences", async () => {
   });
   cleanups.push(() => store.preferences.cleanup());
   await store.initialize();
-  await store.updateEditor({ fontSize: 19, wrapLines: false, theme: "nord" });
+  await store.updateEditor({ fontSize: 19, wrapLines: false });
   expect(store.preferences.get("preferences")?.editor.fontSize).toBe(19);
   expect(store.warning).toContain("until you leave this page");
 });

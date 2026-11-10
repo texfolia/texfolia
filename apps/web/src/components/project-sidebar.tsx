@@ -53,7 +53,7 @@ export function ProjectSidebar({
       <div className="flex size-full">
         <Sidebar
           collapsible="none"
-          className="w-(--sidebar-width-icon)! shrink-0 border-r"
+          className="w-(--sidebar-width-icon)! shrink-0 border-r [--sidebar-foreground:var(--activity-foreground)] [--sidebar:var(--activity-background)]"
         >
           <SidebarContent>
             <SidebarGroup>
