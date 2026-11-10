@@ -96,10 +96,7 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
           saved in this browser.
         </DialogDescription>
         <HotkeysProvider scope={`settings-${id}`} exclusive>
-          <SidebarProvider
-            keyboardShortcut={false}
-            className="min-h-0 flex-col overflow-hidden md:flex-row"
-          >
+          <SidebarProvider className="min-h-0 flex-col overflow-hidden md:flex-row">
             <Sidebar
               collapsible="none"
               className="h-auto w-full shrink-0 border-b md:h-full md:w-48 md:border-r md:border-b-0"
