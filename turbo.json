@@ -41,7 +41,7 @@
       "passThroughEnv": ["*"]
     },
     "web#dev": {
-      "dependsOn": ["compiler#dev:setup", "@texfolia/db#db:push"],
+      "dependsOn": ["compiler#dev:setup", "@texfolia/db#dev:setup"],
       "with": ["compiler#dev"],
       "cache": false,
       "persistent": true,
@@ -53,7 +53,7 @@
       "passThroughEnv": ["*"]
     },
     "web#dev:workers": {
-      "dependsOn": ["@texfolia/db#db:push", "compiler#ready:workers"],
+      "dependsOn": ["@texfolia/db#dev:setup", "compiler#ready:workers"],
       "with": ["compiler#dev:workers"],
       "cache": false,
       "persistent": true,
@@ -67,7 +67,6 @@
       "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
     },
     "db:push": {
-      "dependsOn": ["//#db:setup"],
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]
     },
@@ -140,13 +139,45 @@
     },
     "web#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".wrangler/deploy/**"]
+      "outputs": ["dist/**", ".wrangler/deploy/**"],
+      "env": ["CLOUDFLARE_ENV", "VITE_*"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
     "generate-routes": {
       "cache": false
     },
     "latex:assets": {
       "cache": false
+    },
+    "@texfolia/db#dev:setup": {
+      "dependsOn": ["//#db:setup"],
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
+    },
+    "db:generate": {
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
+    },
+    "db:migrate": {
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
+    },
+    "test:integration": {
+      "cache": false,
+      "passThroughEnv": ["INTEGRATION_DATABASE_URL"]
+    },
+    "stripe:listen": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["STRIPE_*"]
+    },
+    "build:production": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".wrangler/deploy/**"]
+    },
+    "build:staging": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".wrangler/deploy/**"]
     }
   }
 }

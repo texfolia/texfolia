@@ -27,8 +27,35 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "<production hyperdrive id>",
-      "localConnectionString": "postgres://user:password@localhost:5432/db",
+      "id": "<local-only; configure production or staging before deploying>",
     },
   ],
+  "env": {
+    "production": {
+      "name": "texfolia-web",
+      "hyperdrive": [
+        { "binding": "HYPERDRIVE", "id": "<production hyperdrive id>" },
+      ],
+      "services": [{ "binding": "COMPILER", "service": "texfolia-compiler" }],
+      "send_email": [{ "name": "EMAIL" }],
+      "vars": {
+        "EMAIL_FROM": "noreply@texfolia.com",
+        "TURNSTILE_HOSTNAMES": "www.texfolia.com",
+      },
+    },
+    "staging": {
+      "name": "texfolia-web-staging",
+      "hyperdrive": [
+        { "binding": "HYPERDRIVE", "id": "<staging hyperdrive id>" },
+      ],
+      "services": [
+        { "binding": "COMPILER", "service": "texfolia-compiler-staging" },
+      ],
+      "send_email": [{ "name": "EMAIL" }],
+      "vars": {
+        "EMAIL_FROM": "noreply@texfolia.com",
+        "TURNSTILE_HOSTNAMES": "<staging hostname>",
+      },
+    },
+  },
 }

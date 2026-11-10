@@ -8,7 +8,10 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
+    "dev:setup": "bun run db:push",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",

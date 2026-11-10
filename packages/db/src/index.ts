@@ -12,7 +12,12 @@ const standaloneAuthRelations = defineRelationsPart(
 );
 
 export function createDb(connectionString: string) {
-  const client = new Pool({ connectionString, max: 5 });
+  const client = new Pool({
+    connectionString,
+    max: 5,
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 10_000,
+  });
 
   return drizzle({
     client,

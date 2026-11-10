@@ -9,7 +9,11 @@
   "scripts": {
     "auth:schema": "turbo run auth:schema",
     "build": "turbo run build",
+    "build:production": "turbo run build:production",
+    "build:staging": "turbo run build:staging",
     "cf:typegen": "turbo run cf:typegen",
+    "db:generate": "turbo run db:generate",
+    "db:migrate": "turbo run db:migrate",
     "db:push": "turbo run db:push",
     "db:setup": "docker compose up --wait db",
     "deploy": "turbo run deploy",
@@ -24,7 +28,9 @@
     "lint:repo": "oxlint",
     "smoke": "turbo run smoke",
     "smoke:workers": "turbo run smoke:workers",
+    "stripe:listen": "turbo run stripe:listen",
     "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
