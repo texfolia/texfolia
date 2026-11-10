@@ -1,6 +1,3 @@
 **
-!package.json
-!bun.lock
-!apps/*/package.json
-!packages/*/package.json
-!apps/compiler/src/**
+!apps/compiler/engine/*.go
+!apps/compiler/engine/go.mod

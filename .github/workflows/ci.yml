@@ -22,3 +22,15 @@ jobs:
         run: bun run test
       - name: Check formatting
         run: bun fmt --check apps packages package.json turbo.json tsconfig.json
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/compiler/engine/go.mod
+          cache: false
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l apps/compiler/engine)"
+      - name: Test engine
+        working-directory: apps/compiler/engine
+        run: go test -race ./...
+      - name: Vet engine
+        working-directory: apps/compiler/engine
+        run: go vet ./...
