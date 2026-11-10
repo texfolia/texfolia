@@ -1,8 +1,29 @@
 import { z } from "zod";
 
-import { HttpError, jobIdSchema, parseProject, type Project } from "./project";
+import {
+  EngineError,
+  HttpError,
+  jobIdSchema,
+  parseProject,
+  type Project,
+} from "./project";
+import {
+  emitCompileEvent,
+  decodeTelemetry,
+  parseEngineTiming,
+  jobTimingSchema,
+  planSchema,
+  unknownEngineTiming,
+  type EngineTiming,
+} from "./telemetry";
 
-const common = { id: jobIdSchema, digest: z.string(), createdAt: z.string() };
+const common = {
+  id: jobIdSchema,
+  digest: z.string(),
+  createdAt: z.string(),
+  plan: planSchema.default("unknown"),
+  timing: jobTimingSchema.optional(),
+};
 const queuedSchema = z.object({ ...common, status: z.literal("queued") });
 const runningSchema = z.object({ ...common, status: z.literal("running") });
 const succeededSchema = z.object({
@@ -43,7 +64,8 @@ export interface JobQueue {
 }
 export type Engine = (
   project: Project,
-) => Promise<{ pdf: Uint8Array; log: string }>;
+  context: { jobId: string; attempt: number; plan: z.infer<typeof planSchema> },
+) => Promise<{ pdf: Uint8Array; log: string; timing: EngineTiming }>;
 const maxAttempts = 4;
 const redeliverAfterMs = 60 * 60_000;
 
@@ -95,7 +117,11 @@ export function createJobs(options: {
 
   return {
     get,
-    async submit(id: string, project: Project): Promise<Job> {
+    async submit(
+      id: string,
+      project: Project,
+      plan: z.infer<typeof planSchema> = "unknown",
+    ): Promise<Job> {
       const body = JSON.stringify(project);
       const digest = Array.from(
         new Uint8Array(
@@ -105,6 +131,7 @@ export function createJobs(options: {
       ).join("");
       const job: Job = {
         id,
+        plan,
         digest,
         status: "queued",
         createdAt: new Date().toISOString(),
@@ -167,7 +194,28 @@ export function createJobs(options: {
       }
       const job = await pending(id);
       if (!job) return true;
-      await store.create(`running/${id}`, "running");
+      const consumedAt = performance.now();
+      const jobAgeMs = Math.max(0, Date.now() - Date.parse(job.createdAt));
+      const firstQueueWait = z.object({
+        queueWaitMs: z.number().nonnegative(),
+      });
+      await store.create(
+        `running/${id}`,
+        "running",
+        JSON.stringify({ queueWaitMs: jobAgeMs }),
+      );
+      const running = await store.head(`running/${id}`);
+      const parsedWait = firstQueueWait.safeParse(
+        decodeTelemetry(running?.metadata),
+      );
+      const queueWaitMs = parsedWait.success
+        ? parsedWait.data.queueWaitMs
+        : null;
+      let inputReadMs = 0;
+      let engineRequestMs = 0;
+      let publishMs = 0;
+      let engineTiming = unknownEngineTiming;
+      let artifactReused = false;
       let result: TerminalJob;
       try {
         const pdfKey = `compilations/${id}.pdf`;
@@ -178,15 +226,31 @@ export function createJobs(options: {
         let log: string;
         let sizeBytes: number;
         if (previous) {
+          artifactReused = true;
+          engineTiming = parseEngineTiming(previous.metadata);
           const transcript = await store.read(transcriptKey);
           log = transcript ? await new Response(transcript).text() : "";
           sizeBytes = previous.size;
         } else {
-          const output = await engine(
-            parseProject(await readJson(sourceKey(id))),
-          );
+          const inputStart = performance.now();
+          const project = parseProject(await readJson(sourceKey(id)));
+          inputReadMs = performance.now() - inputStart;
+          const engineStart = performance.now();
+          let output: Awaited<ReturnType<Engine>>;
+          try {
+            output = await engine(project, {
+              jobId: id,
+              attempt,
+              plan: job.plan,
+            });
+            engineTiming = output.timing;
+          } finally {
+            engineRequestMs = performance.now() - engineStart;
+          }
+          const publishStart = performance.now();
           await store.write(transcriptKey, output.log);
-          await store.create(pdfKey, output.pdf);
+          await store.create(pdfKey, output.pdf, JSON.stringify(engineTiming));
+          publishMs = performance.now() - publishStart;
           log = output.log;
           sizeBytes = output.pdf.byteLength;
         }
@@ -198,8 +262,21 @@ export function createJobs(options: {
           artifactUrl: `/${pdfKey}`,
         };
       } catch (error) {
-        if (!(error instanceof HttpError) && attempt < maxAttempts)
+        if (error instanceof HttpError || error instanceof EngineError)
+          engineTiming = error.timing;
+        if (!(error instanceof HttpError) && attempt < maxAttempts) {
+          emitCompileEvent({
+            event: "compile_retry",
+            jobId: id,
+            plan: job.plan,
+            attempt,
+            queueWaitMs,
+            inputReadMs,
+            engineRequestMs,
+            ...engineTiming,
+          });
           return false;
+        }
         result = {
           ...job,
           status: "failed",
@@ -211,7 +288,25 @@ export function createJobs(options: {
           errorStatus: error instanceof HttpError ? error.status : 502,
         };
       }
-      await store.create(`results/${id}.json`, JSON.stringify(result));
+      result.timing = {
+        ...engineTiming,
+        plan: job.plan,
+        attempt,
+        artifactReused,
+        queueWaitMs,
+        inputReadMs,
+        engineRequestMs,
+        publishMs,
+        backendMs: jobAgeMs + performance.now() - consumedAt,
+      };
+      if (await store.create(`results/${id}.json`, JSON.stringify(result))) {
+        emitCompileEvent({
+          event: "compile_backend",
+          jobId: id,
+          status: result.status,
+          ...result.timing,
+        });
+      }
       await cleanup(id);
       return true;
     },

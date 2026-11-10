@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { type EngineTiming, unknownEngineTiming } from "./telemetry";
+
 export const maxProjectBytes = 10 * 1024 * 1024;
 export const jobIdSchema = z
   .string()
@@ -10,8 +12,20 @@ export class HttpError extends Error {
     public status: number,
     message: string,
     public log = "",
+    public timing: EngineTiming = unknownEngineTiming,
   ) {
     super(message);
+  }
+}
+
+export class EngineError extends Error {
+  constructor(
+    cause: unknown,
+    public timing: EngineTiming,
+  ) {
+    super(cause instanceof Error ? cause.message : "TeX host request failed", {
+      cause,
+    });
   }
 }
 

@@ -6,6 +6,14 @@ import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
 import { fetchCompiler } from "#/lib/compiler.server";
+import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
+
+const compilerTimingSchema = z.looseObject({
+  plan: z.enum(["free", "pro", "unknown"]),
+  engine: z.enum(["tectonic", "texlive", "unknown"]),
+  temperature: z.enum(["cold", "warm", "unknown"]),
+});
+type CompilerTiming = z.infer<typeof compilerTimingSchema>;
 
 const payload = z.object({
   mainFile: z.string(),
@@ -28,12 +36,14 @@ const status = z.union([
       .min(1)
       .max(20 * 1024 * 1024),
     log: z.string(),
+    timing: compilerTimingSchema.optional(),
   }),
   z.object({
     id: idSchema,
     status: z.literal("failed"),
     error: z.string(),
     log: z.string(),
+    timing: compilerTimingSchema.optional(),
   }),
 ]);
 const failure = z.object({ error: z.string(), log: z.string().optional() });
@@ -61,7 +71,9 @@ async function checkProject(
       deletedAt: { isNull: true },
     },
   });
-  return project ? null : json({ error: "Project not found" }, 404);
+  return project
+    ? { userId: session.user.id }
+    : json({ error: "Project not found" }, 404);
 }
 
 async function readSources(request: Request) {
@@ -103,13 +115,55 @@ function updateJob(
     );
 }
 
+async function compilePlan(db: Db, userId: string) {
+  try {
+    const subscription = await db.query.subscription.findFirst({
+      columns: { id: true },
+      where: {
+        referenceId: userId,
+        plan: "pro",
+        status: { in: ["active", "trialing"] },
+      },
+    });
+    return subscription ? "pro" : "free";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function readPreviewTiming(request: Request) {
+  const reader = request.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > 4096) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(new Uint8Array(value));
+  }
+  try {
+    const parsed = previewTimingSchema.safeParse(
+      JSON.parse(await new Blob(chunks).text()),
+    );
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export const Route = createFileRoute("/api/compile/$projectId")({
   server: {
     handlers: {
       POST: async ({ request, params, context }) => {
+        const started = performance.now();
         const { db } = context;
         const denied = await checkProject(request, params.projectId, context);
-        if (denied) return denied;
+        if (denied instanceof Response) return denied;
         if (
           !request.headers.get("Content-Type")?.startsWith("application/json")
         )
@@ -117,7 +171,10 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         const body = await readSources(request);
         if (typeof body !== "string") return body;
 
-        const id = crypto.randomUUID();
+        const id =
+          idSchema.safeParse(request.headers.get("X-Compilation-Id")).data ??
+          crypto.randomUUID();
+        const plan = await compilePlan(db, denied.userId);
         await db.insert(projectJob).values({
           id,
           projectId: params.projectId,
@@ -131,6 +188,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             headers: {
               "Content-Type": "application/json",
               "X-Compilation-Id": id,
+              "X-Compile-Plan": plan,
             },
             body,
           });
@@ -152,6 +210,14 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             const headers = new Headers(noStore);
             const retryAfter = response.headers.get("Retry-After");
             if (retryAfter) headers.set("Retry-After", retryAfter);
+            console.info({
+              telemetryVersion: 1,
+              event: "compile_web_submission",
+              jobId: id,
+              plan,
+              outcome: "rejected",
+              submissionMs: performance.now() - started,
+            });
             return json(detail, response.ok ? 502 : response.status, headers);
           } else {
             throw new Error(`Compiler submission returned ${response.status}`);
@@ -164,6 +230,13 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             error,
           });
         }
+        console.info({
+          telemetryVersion: 1,
+          event: "compile_web_submission",
+          jobId: id,
+          plan,
+          submissionMs: performance.now() - started,
+        });
         const statusUrl = `/api/compile/${params.projectId}?job=${id}`;
         return json({ id, status: "queued", statusUrl }, 202, {
           ...noStore,
@@ -171,10 +244,48 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           "Retry-After": "1",
         });
       },
+      PATCH: async ({ request, params, context }) => {
+        const denied = await checkProject(request, params.projectId, context);
+        if (denied instanceof Response) return denied;
+        const id = idSchema.safeParse(
+          new URL(request.url).searchParams.get("job"),
+        );
+        if (!id.success) return json({ error: "Job not found" }, 404);
+        const job = await context.db.query.projectJob.findFirst({
+          columns: { id: true, status: true },
+          where: { id: id.data, projectId: params.projectId },
+        });
+        if (!job || job.status !== "succeeded")
+          return json({ error: "Job not found" }, 404);
+        const body = await readPreviewTiming(request);
+        if (!body) return json({ error: "Invalid preview timing" }, 400);
+        let timing: CompilerTiming | undefined;
+        try {
+          const response = await fetchCompiler(`/jobs/${id.data}`);
+          const result = status.safeParse(await response.json());
+          if (
+            result.success &&
+            result.data.id === id.data &&
+            result.data.status === "succeeded"
+          )
+            timing = result.data.timing;
+        } catch {
+          /* Preview reporting must not affect compilation. */
+        }
+        console.info({
+          ...timing,
+          ...body,
+          telemetryVersion: 1,
+          event: "compile_preview",
+          jobId: id.data,
+          source: "browser",
+        });
+        return new Response(null, { status: 204, headers: noStore });
+      },
       GET: async ({ request, params, context }) => {
         const { db } = context;
         const denied = await checkProject(request, params.projectId, context);
-        if (denied) return denied;
+        if (denied instanceof Response) return denied;
         const url = new URL(request.url);
         const parsedId = idSchema.safeParse(url.searchParams.get("job"));
         if (!parsedId.success) return json({ error: "Job not found" }, 404);

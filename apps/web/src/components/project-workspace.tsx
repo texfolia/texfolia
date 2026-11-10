@@ -176,6 +176,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   } = useSettings();
   const storageKey = `texfolia.project.${projectId}.sources`;
   const compilation = useRef<AbortController | null>(null);
+  const lastEditAt = useRef<number | null>(null);
   useEffect(() => () => compilation.current?.abort(), [projectId]);
 
   const allProblems = useMemo(
@@ -204,6 +205,8 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
 
   async function compileProject() {
     if (!main || compilation.current) return;
+    const startedAt = performance.now();
+    const editedAt = lastEditAt.current;
     try {
       localStorage.setItem(
         storageKey,
@@ -237,6 +240,8 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     try {
       const result = await requestCompilation({
         projectId,
+        startedAt,
+        lastEditAt: editedAt,
         mainFile: main,
         files,
         signal: AbortSignal.any([
@@ -326,6 +331,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
       ?.api.updateParameters({ source: value });
     const path = paths.get(id);
     if (path && previous.value !== value) {
+      lastEditAt.current = performance.now();
       update(path, value);
       setCompileProblems((current) => (current.length ? [] : current));
     }

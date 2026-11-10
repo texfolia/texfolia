@@ -9,6 +9,7 @@ import {
   maxProjectBytes,
   parseProject,
 } from "./project";
+import { emitCompileEvent, planSchema } from "./telemetry";
 
 export interface ApiBindings {
   jobs: Jobs;
@@ -49,7 +50,18 @@ export function createApp() {
       } catch {
         return c.json({ error: "Invalid JSON" }, 400);
       }
-      const job = await c.env.jobs.submit(parsedId.data, parseProject(body));
+      const started = performance.now();
+      const job = await c.env.jobs.submit(
+        parsedId.data,
+        parseProject(body),
+        planSchema.catch("unknown").parse(c.req.header("X-Compile-Plan")),
+      );
+      emitCompileEvent({
+        event: "compile_submission",
+        jobId: job.id,
+        plan: job.plan,
+        submissionMs: performance.now() - started,
+      });
       const statusUrl = `/jobs/${job.id}`;
       c.header("Location", statusUrl);
       c.header("Retry-After", "1");
