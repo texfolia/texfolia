@@ -22,6 +22,7 @@ import {
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { downloadFile } from "#/lib/download-file";
+import { reportCompilePreview } from "#/lib/latex/compile-telemetry";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";
@@ -299,19 +300,21 @@ function PdfPanel({
               loadedFile.current = file;
               setLoad({ kind: "ready", pages: numPages });
             }}
-            onLoadError={() =>
+            onLoadError={() => {
+              reportCompilePreview(file, "preview_failed");
               setLoad({
                 kind: "error",
                 message:
                   "Could not load this PDF. It may be damaged or unavailable.",
-              })
-            }
-            onSourceError={() =>
+              });
+            }}
+            onSourceError={() => {
+              reportCompilePreview(file, "preview_failed");
               setLoad({
                 kind: "error",
                 message: "Could not read this PDF. Try another file.",
-              })
-            }
+              });
+            }}
             onPassword={(respond, reason) => {
               const password = window.prompt(
                 reason === 2
@@ -360,6 +363,10 @@ function PdfPanel({
                 pageNumber={page}
                 scale={scale}
                 rotate={(nativeSize.rotation + rotation) % 360}
+                onRenderSuccess={() => reportCompilePreview(file, "rendered")}
+                onRenderError={() =>
+                  reportCompilePreview(file, "preview_failed")
+                }
                 onLoadSuccess={(pdfPage) => {
                   const box = pdfPage.getViewport({ scale: 1, rotation: 0 });
                   setNativeSize({

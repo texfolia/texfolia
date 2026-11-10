@@ -63,7 +63,13 @@ func transcript(path string) (string, error) {
 	return string(head) + "\n…\n" + string(tail), err
 }
 
-func compile(ctx context.Context, p project, timeout time.Duration) (_ *result, err error) {
+func compile(ctx context.Context, p project, timeout time.Duration, timing *engineTiming) (_ *result, err error) {
+	prepStart := time.Now()
+	defer func() {
+		if timing.InputPrepMs == nil {
+			timing.InputPrepMs = elapsedMs(prepStart)
+		}
+	}()
 	root, err := os.MkdirTemp("", "texfolia-")
 	if err != nil {
 		return nil, err
@@ -99,7 +105,12 @@ func compile(ctx context.Context, p project, timeout time.Duration) (_ *result, 
 	stdout, stderr := &limitedLog{}, &limitedLog{}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.WaitDelay = time.Second
+	timing.InputPrepMs = elapsedMs(prepStart)
+	compileStart := time.Now()
 	runErr := cmd.Run()
+	timing.CompileMs = elapsedMs(compileStart)
+	outputStart := time.Now()
+	defer func() { timing.OutputMs = elapsedMs(outputStart) }()
 	name := strings.TrimSuffix(filepath.Base(p.mainFile), ".tex")
 	texLog, err := transcript(filepath.Join(output, name+".log"))
 	if err != nil {

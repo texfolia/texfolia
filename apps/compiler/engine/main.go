@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net"
@@ -36,6 +37,7 @@ func writeError(w http.ResponseWriter, err error) {
 func newHandler(timeout time.Duration) http.Handler {
 	mux := http.NewServeMux()
 	var busy atomic.Bool
+	var warmed atomic.Bool
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"status":"ready"}`)
@@ -47,6 +49,14 @@ func newHandler(timeout time.Duration) http.Handler {
 			return
 		}
 		defer busy.Store(false)
+		timing := engineTiming{Engine: "tectonic", Temperature: "unknown"}
+		jobID := r.Header.Get("X-Compilation-Id")
+		jobID = jobID[:min(len(jobID), 64)]
+		defer func() {
+			slog.New(slog.NewJSONHandler(os.Stdout, nil)).Info("compile_engine",
+				"event", "compile_engine", "telemetryVersion", 1, "jobId", jobID,
+				"attempt", r.Header.Get("X-Compile-Attempt"), "plan", r.Header.Get("X-Compile-Plan"), "timing", timing)
+		}()
 		contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if err != nil || contentType != "application/json" {
 			writeError(w, &httpError{status: 415, message: "Expected application/json"})
@@ -68,7 +78,14 @@ func newHandler(timeout time.Duration) http.Handler {
 			writeError(w, err)
 			return
 		}
-		result, err := compile(r.Context(), p, timeout)
+		timing.Temperature = "cold"
+		if warmed.Swap(true) {
+			timing.Temperature = "warm"
+		}
+		result, err := compile(r.Context(), p, timeout, &timing)
+		if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
+			w.Header().Set("X-Compile-Timing", string(encoded))
+		}
 		if err != nil {
 			writeError(w, err)
 			return

@@ -82,6 +82,9 @@ flowchart TD
 
 Browser workers check references as you edit and format LaTeX on request.
 
+Compile stage boundaries and the p50/p95 query are documented in
+[Compile telemetry](docs/compile-telemetry.md).
+
 ### How a compile becomes a PDF
 
 ```mermaid

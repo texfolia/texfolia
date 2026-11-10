@@ -207,3 +207,33 @@ func TestBusyTimeoutAndRecovery(t *testing.T) {
 	}
 	assertClean(t, temp)
 }
+
+func TestStageTiming(t *testing.T) {
+	handler, _, _ := testEngine(t, time.Second)
+	for i, source := range []string{"hello", "bad"} {
+		req := httptest.NewRequest("POST", "/compile", strings.NewReader(`{"files":{"main.tex":"`+source+`"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Compilation-Id", "01911111-1111-4111-8111-111111111111")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		var timing engineTiming
+		if err := json.Unmarshal([]byte(response.Header().Get("X-Compile-Timing")), &timing); err != nil {
+			t.Fatal(err)
+		}
+		expected := "cold"
+		if i > 0 {
+			expected = "warm"
+		}
+		if timing.Engine != "tectonic" || timing.Temperature != expected {
+			t.Fatalf("incorrect engine context: %+v", timing)
+		}
+		for _, duration := range []*float64{timing.InputPrepMs, timing.CompileMs, timing.OutputMs} {
+			if duration == nil || *duration < 0 {
+				t.Fatalf("missing stage timing: %+v", timing)
+			}
+		}
+		if i == 1 && response.Code != 422 {
+			t.Fatalf("timing changed failure behavior: %d", response.Code)
+		}
+	}
+}

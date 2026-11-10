@@ -6,11 +6,20 @@ import { join } from "node:path";
 import { createJobs, type ObjectStore } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import { HttpError } from "../src/project";
+import { unknownEngineTiming } from "../src/telemetry";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "source" } };
 const output = {
   pdf: new TextEncoder().encode("%PDF-1.5"),
   log: "TeX transcript",
+  timing: {
+    ...unknownEngineTiming,
+    engine: "tectonic" as const,
+    temperature: "warm" as const,
+    inputPrepMs: 2,
+    compileMs: 5,
+    outputMs: 1,
+  },
 };
 
 test("local API accepts jobs without a token and retains results across restarts", async () => {
@@ -128,12 +137,13 @@ test("redelivery after an interrupted result write recovers the matching PDF and
         messages.push(message);
       },
     },
-    engine: async () => {
+    engine: async (_project, context) => {
+      expect(context).toEqual({ jobId: id, attempt: 1, plan: "pro" });
       runs++;
       return output;
     },
   });
-  await jobs.submit(id, project);
+  await jobs.submit(id, project, "pro");
   expect(messages).toEqual([{ id }]);
   await expect(jobs.consume(id, 1)).rejects.toThrow("Interrupted");
   expect(await jobs.artifact(id)).toBeNull();
@@ -143,6 +153,15 @@ test("redelivery after an interrupted result write recovers the matching PDF and
   expect(await jobs.get(id)).toMatchObject({
     status: "succeeded",
     log: output.log,
+    plan: "pro",
+    timing: {
+      engine: "tectonic",
+      temperature: "warm",
+      compileMs: 5,
+      plan: "pro",
+      artifactReused: true,
+      attempt: 2,
+    },
   });
   expect(runs).toBe(1);
 
@@ -151,7 +170,12 @@ test("redelivery after an interrupted result write recovers the matching PDF and
     store,
     queue: { async send() {} },
     engine: async () => {
-      throw new HttpError(422, "Invalid LaTeX", "TeX error at line 1");
+      throw new HttpError(
+        422,
+        "Invalid LaTeX",
+        "TeX error at line 1",
+        output.timing,
+      );
     },
   });
   await failingJobs.submit(failed, project);
@@ -160,6 +184,34 @@ test("redelivery after an interrupted result write recovers the matching PDF and
     status: "failed",
     errorStatus: 422,
     log: "TeX error at line 1",
+    timing: {
+      engine: "tectonic",
+      temperature: "warm",
+      compileMs: 5,
+      artifactReused: false,
+    },
   });
   expect(await failingJobs.artifact(failed)).toBeNull();
+
+  const retryId = crypto.randomUUID();
+  let retryRuns = 0;
+  const retryJobs = createJobs({
+    store,
+    queue: { async send() {} },
+    engine: async () => {
+      if (++retryRuns === 1) throw new Error("Temporary engine outage");
+      return output;
+    },
+  });
+  await retryJobs.submit(retryId, project, "free");
+  expect(await retryJobs.consume(retryId, 1)).toBe(false);
+  const firstWait = JSON.parse(
+    data.get(`running/${retryId}`)?.metadata ?? "null",
+  ).queueWaitMs;
+  await Bun.sleep(10);
+  expect(await retryJobs.consume(retryId, 2)).toBe(true);
+  const retried = await retryJobs.get(retryId);
+  expect(retried?.timing?.queueWaitMs).toBe(firstWait);
+  expect(retried?.timing?.backendMs).toBeGreaterThan(firstWait);
+  expect(retried?.timing?.attempt).toBe(2);
 });
