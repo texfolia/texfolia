@@ -4,12 +4,14 @@ import { env } from "cloudflare:workers";
 
 import { createAuth } from "./lib/auth";
 
-const requestContext = createMiddleware().server(({ next }) => {
+const requestContext = createMiddleware().server(async ({ next }) => {
   const db = createDb(env.HYPERDRIVE.connectionString);
-
-  const auth = createAuth(db);
-
-  return next({ context: { auth, db } });
+  try {
+    const auth = createAuth(db);
+    return await next({ context: { auth, db } });
+  } finally {
+    await db.$client.end();
+  }
 });
 
 export const startInstance = createStart(() => ({
