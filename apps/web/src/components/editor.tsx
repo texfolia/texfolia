@@ -40,7 +40,6 @@ import {
 } from "#/components/panel-header";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { downloadFile } from "#/lib/download-file";
-import { editorThemes } from "#/lib/editor-themes";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import {
   applyLatexHeading,
@@ -50,6 +49,7 @@ import {
 import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
 import { useSettings } from "#/providers/settings-provider";
+import { useTheme } from "#/providers/theme-provider";
 
 type EditorProps = {
   defaultValue?: string;
@@ -80,6 +80,7 @@ export function Editor({
   jump,
   formatSettings = defaultFormatSettings,
 }: EditorProps) {
+  const { theme } = useTheme();
   const editor = useRef<ReactCodeMirrorRef>(null);
   const problemsRef = useRef(problems);
   problemsRef.current = problems;
@@ -378,7 +379,7 @@ export function Editor({
         }}
         extensions={extensions}
         height="100%"
-        theme={editorThemes[preferences.theme].extension}
+        theme={theme.extension}
         placeholder={
           isMarkdown ? "Write your Markdown here…" : "Write your LaTeX here…"
         }

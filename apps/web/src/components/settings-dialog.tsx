@@ -1,12 +1,14 @@
 import {
   IconCode,
   IconKeyboard,
+  IconPalette,
   IconSettings,
   IconWand,
 } from "@tabler/icons-react";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { useId } from "react";
 
+import { AppearanceSettings } from "#/components/appearance-settings";
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -29,13 +31,13 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "#/components/ui/sidebar";
-import { editorThemes, editorThemeSchema } from "#/lib/editor-themes";
 import {
   type SettingsSection,
   useSettings,
 } from "#/providers/settings-provider";
 
 const sections = [
+  { title: "Appearance", icon: IconPalette },
   { title: "Editor", icon: IconCode },
   { title: "Formatting", icon: IconWand },
   { title: "Keyboard shortcuts", icon: IconKeyboard },
@@ -90,14 +92,11 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
       <DialogContent className="h-[min(580px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl">
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
-          Customize the editor and view keyboard shortcuts. Preferences are
+          Customize the app, editor, and keyboard shortcuts. Preferences are
           saved in this browser.
         </DialogDescription>
         <HotkeysProvider scope={`settings-${id}`} exclusive>
-          <SidebarProvider
-            keyboardShortcut={false}
-            className="min-h-0 flex-col overflow-hidden md:flex-row"
-          >
+          <SidebarProvider className="min-h-0 flex-col overflow-hidden md:flex-row">
             <Sidebar
               collapsible="none"
               className="h-auto w-full shrink-0 border-b md:h-full md:w-48 md:border-r md:border-b-0"
@@ -108,7 +107,7 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
               <SidebarContent>
                 <SidebarGroup>
                   <nav aria-label="Settings sections">
-                    <SidebarMenu className="grid grid-cols-3 md:flex md:flex-col">
+                    <SidebarMenu className="grid grid-cols-4 md:flex md:flex-col">
                       {sections.map(({ title, icon: Icon }) => (
                         <SidebarMenuItem key={title}>
                           <SidebarMenuButton
@@ -147,7 +146,11 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
                     {error}
                   </p>
                 )}
-                <fieldset disabled={!ready} className="space-y-6">
+                <fieldset
+                  disabled={section !== "Appearance" && !ready}
+                  className="space-y-6"
+                >
+                  {section === "Appearance" && <AppearanceSettings />}
                   {section === "Editor" && (
                     <>
                       <div>
@@ -159,31 +162,6 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
                           browser.
                         </p>
                       </div>
-                      <Field>
-                        <FieldLabel htmlFor={`${id}-theme`}>
-                          Editor theme
-                        </FieldLabel>
-                        <select
-                          id={`${id}-theme`}
-                          value={editor.theme}
-                          className="border-input bg-input/20 focus-visible:border-ring focus-visible:ring-ring/30 h-7 w-full rounded-md border px-2 text-xs outline-none focus-visible:ring-2"
-                          onChange={(event) => {
-                            const theme = editorThemeSchema.safeParse(
-                              event.target.value,
-                            );
-                            if (theme.success)
-                              updateEditor({ ...editor, theme: theme.data });
-                          }}
-                        >
-                          {Object.entries(editorThemes).map(
-                            ([value, { label }]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </Field>
                       <Field>
                         <FieldLabel htmlFor={`${id}-font-size`}>
                           Font size

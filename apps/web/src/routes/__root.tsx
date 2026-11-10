@@ -4,17 +4,32 @@ import {
   HeadContent,
   Outlet,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { useLayoutEffect } from "react";
 
 import { Toaster } from "#/components/ui/toast";
 import { TooltipProvider } from "#/components/ui/tooltip";
-import { ThemeProvider } from "#/providers/theme-provider";
+import { getSession } from "#/lib/auth.functions";
+import {
+  clearAppTheme,
+  isAppPath,
+  themeBootstrap,
+} from "#/lib/theme-bootstrap";
 
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
-  head: () => ({
+  beforeLoad: async ({ location }) => ({
+    appUser: isAppPath(location.pathname)
+      ? ((await getSession())?.user ?? null)
+      : null,
+  }),
+  head: ({ match }) => ({
+    scripts: match.context.appUser
+      ? [{ children: themeBootstrap(match.context.appUser.id) }]
+      : [],
     meta: [
       {
         charSet: "utf-8",
@@ -44,12 +59,11 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider defaultTheme="system" storageKey="theme">
-          <TooltipProvider>
-            <Outlet />
-            <Toaster />
-          </TooltipProvider>
-        </ThemeProvider>
+        <BrandThemeReset />
+        <TooltipProvider>
+          <Outlet />
+          <Toaster />
+        </TooltipProvider>
         <TanStackDevtools
           config={{
             position: "bottom-right",
@@ -65,4 +79,14 @@ function RootDocument() {
       </body>
     </html>
   );
+}
+
+function BrandThemeReset() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  useLayoutEffect(() => {
+    if (!isAppPath(pathname)) clearAppTheme(document.documentElement);
+  }, [pathname]);
+  return null;
 }

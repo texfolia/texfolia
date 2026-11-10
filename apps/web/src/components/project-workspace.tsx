@@ -11,7 +11,6 @@ import {
   type DockviewReadyEvent,
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
-  themeLight,
 } from "dockview-react";
 import {
   lazy,
@@ -465,7 +464,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
         ref={container}
         className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none"
       >
-        <header className="bg-background z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b px-3">
+        <header className="z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b bg-(--activity-background) px-3 text-(--activity-foreground)">
           <Button
             render={<Link to="/projects" />}
             variant="ghost"
@@ -513,7 +512,10 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
               <ClientOnly>
                 <DockviewReact
                   className="size-full"
-                  theme={themeLight}
+                  theme={{
+                    name: "texfolia",
+                    className: "dockview-theme-texfolia",
+                  }}
                   components={components}
                   tabComponents={tabComponents}
                   onReady={onReady}
@@ -523,7 +525,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
             {showProblems && (
               <section
                 aria-label="LaTeX problems"
-                className="max-h-44 shrink-0 overflow-auto border-t px-3 py-2 text-sm"
+                className="max-h-44 shrink-0 overflow-auto border-t bg-(--panel-background) px-3 py-2 text-sm"
               >
                 {allProblems.length ? (
                   <ul className="space-y-1">
@@ -563,7 +565,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
             )}
           </main>
         </div>
-        <footer className="bg-background text-muted-foreground z-20 flex h-(--workspace-footer-height) shrink-0 items-center justify-between gap-3 border-t px-3 text-xs">
+        <footer className="z-20 flex h-(--workspace-footer-height) shrink-0 items-center justify-between gap-3 border-t bg-(--status-background) px-3 text-xs text-(--status-foreground)">
           <Button
             variant="ghost"
             size="sm"

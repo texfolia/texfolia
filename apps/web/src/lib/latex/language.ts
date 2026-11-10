@@ -1,9 +1,10 @@
 import type { CompletionSource } from "@codemirror/autocomplete";
 import { type Diagnostic, linter } from "@codemirror/lint";
 import { type EditorView, StateEffect } from "@uiw/react-codemirror";
-import { latex, latexLanguage, latexLinter } from "codemirror-lang-latex";
+import { latexLinter } from "codemirror-lang-latex";
 
 import type { LatexProblem } from "./analysis";
+import { bibtexLanguage, themedLatex } from "./highlight";
 
 export const projectProblemsChanged = StateEffect.define<void>();
 
@@ -19,6 +20,7 @@ export function editorLanguage({
   publishSyntax: (problems: LatexProblem[]) => void;
 }) {
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(filename);
+  const support = isLatex ? themedLatex(filename) : null;
   const checkSyntax = latexLinter({
     fileName: filename,
     checkMissingDocumentEnv: false,
@@ -28,19 +30,15 @@ export function editorLanguage({
   });
 
   return [
-    ...(isLatex
+    ...(support
       ? [
-          // Use language data so upstream and project completions can coexist.
-          latex({
-            fileName: filename,
-            enableLinting: false,
-            enableAutocomplete: false,
-          }),
+          support,
           ...(completion
-            ? [latexLanguage.data.of({ autocomplete: completion })]
+            ? [support.language.data.of({ autocomplete: completion })]
             : []),
         ]
       : []),
+    ...(/\.bib$/i.test(filename) ? [bibtexLanguage] : []),
     linter(
       (view) => {
         const syntax = isLatex ? checkSyntax(view) : [];

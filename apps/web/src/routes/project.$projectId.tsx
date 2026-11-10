@@ -1,20 +1,19 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { ProjectWorkspace } from "#/components/project-workspace";
-import { getSession } from "#/lib/auth.functions";
 import { getProject } from "#/lib/project.functions";
 import {
   createProjectFilesStore,
   ProjectFilesProvider,
 } from "#/providers/project-files-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
+import { ThemeProvider } from "#/providers/theme-provider";
 
 export const Route = createFileRoute("/project/$projectId")({
   ssr: false,
-  beforeLoad: async ({ location }) => {
-    const session = await getSession();
-
-    if (!session) {
+  beforeLoad: ({ location, context }) => {
+    const user = context.appUser;
+    if (!user) {
       throw redirect({
         to: "/login",
         search: {
@@ -23,7 +22,7 @@ export const Route = createFileRoute("/project/$projectId")({
       });
     }
 
-    return { user: session.user };
+    return { user };
   },
   loader: async ({ params }) => {
     const project = await getProject({
@@ -40,11 +39,7 @@ export const Route = createFileRoute("/project/$projectId")({
     return { project, files };
   },
   remountDeps: ({ params }) => params.projectId,
-  component: () => (
-    <SettingsProvider>
-      <WorkspacePage />
-    </SettingsProvider>
-  ),
+  component: ThemedWorkspace,
 });
 
 function WorkspacePage() {
@@ -53,5 +48,16 @@ function WorkspacePage() {
     <ProjectFilesProvider store={files}>
       <ProjectWorkspace project={project} />
     </ProjectFilesProvider>
+  );
+}
+
+function ThemedWorkspace() {
+  const { user } = Route.useRouteContext();
+  return (
+    <ThemeProvider userId={user.id}>
+      <SettingsProvider>
+        <WorkspacePage />
+      </SettingsProvider>
+    </ThemeProvider>
   );
 }

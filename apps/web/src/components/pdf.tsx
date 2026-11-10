@@ -6,6 +6,7 @@ import {
   IconFileText,
   IconFolderOpen,
   IconMaximize,
+  IconPalette,
   IconRotateClockwise,
   IconZoomIn,
   IconZoomOut,
@@ -21,6 +22,7 @@ import {
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { downloadFile } from "#/lib/download-file";
+import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -64,6 +66,8 @@ function PdfPanel({
   filename: string;
   onOpen: (file: File) => void;
 }) {
+  const { appearance, setPdfMode, theme } = useTheme();
+  const matchTheme = appearance.pdfMode === "match";
   const fileInput = useRef<HTMLInputElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
@@ -150,6 +154,15 @@ function PdfPanel({
     >
       <PanelHeader title={file ? filename : "PDF preview"}>
         <PanelActions label="PDF actions">
+          <PanelAction
+            label={
+              matchTheme ? "Show PDF in true colors" : "Match PDF to theme"
+            }
+            aria-pressed={matchTheme}
+            onClick={() => setPdfMode(matchTheme ? "original" : "match")}
+          >
+            <IconPalette />
+          </PanelAction>
           <PanelAction
             label="Open PDF"
             onClick={() => fileInput.current?.click()}
@@ -270,7 +283,12 @@ function PdfPanel({
           {downloadError}
         </p>
       )}
-      <div ref={viewport} className="bg-muted/40 min-h-0 flex-1 overflow-auto">
+      <div
+        ref={viewport}
+        data-pdf-mode={appearance.pdfMode}
+        data-pdf-dark={matchTheme && theme.mode === "dark" ? "true" : undefined}
+        className="pdf-viewport min-h-0 flex-1 overflow-auto"
+      >
         {file ? (
           <Document
             key={retry}

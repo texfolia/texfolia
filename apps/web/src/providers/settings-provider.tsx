@@ -10,7 +10,8 @@ import {
 
 import { createBrowserSettingsStore } from "#/lib/settings.functions";
 import { defaultSettings, type Settings } from "#/lib/settings.schema";
-export type SettingsSection = "Editor" | "Formatting" | "Keyboard shortcuts";
+export type SettingsSection =
+  "Appearance" | "Editor" | "Formatting" | "Keyboard shortcuts";
 
 function useSettingsState() {
   const [store] = useState(() => createBrowserSettingsStore(window));
@@ -22,7 +23,7 @@ function useSettingsState() {
   const preferences = data?.[0] ?? defaultSettings;
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [section, setSection] = useState<SettingsSection>("Editor");
+  const [section, setSection] = useState<SettingsSection>("Appearance");
 
   useEffect(() => {
     let active = true;
