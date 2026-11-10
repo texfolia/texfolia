@@ -9,12 +9,16 @@
   "scripts": {
     "auth:schema": "bun run --cwd apps/web auth:schema",
     "build": "turbo run build",
+    "db:generate": "bun run --cwd packages/db db:generate",
+    "db:migrate": "bun run --cwd packages/db db:migrate",
     "db:push": "bun run --cwd packages/db db:push",
     "dev": "turbo run dev",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
+    "stripe:listen": "stripe listen --forward-to localhost:3000/api/auth/stripe/webhook",
     "test": "turbo run test",
+    "test:integration": "bun run --cwd apps/web test/postgres.ts",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
