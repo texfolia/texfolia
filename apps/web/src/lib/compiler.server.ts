@@ -2,7 +2,7 @@ export async function fetchCompiler(path: string, init?: RequestInit) {
   const options: RequestInit = {
     ...init,
     redirect: "manual",
-    signal: AbortSignal.timeout(15_000),
+    signal: init?.signal ?? AbortSignal.timeout(15_000),
   };
   const response = import.meta.env.DEV
     ? await fetch(

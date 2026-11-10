@@ -34,7 +34,11 @@ test("local API accepts jobs without a token and retains results across restarts
     await finishEngine.promise;
     return output;
   };
-  const first = createLocalRuntime({ path, engine });
+  const first = createLocalRuntime({
+    path,
+    engine,
+    projectEngine: () => engine,
+  });
   const id = crypto.randomUUID();
   const statusUrl = `/jobs/${id}`;
   const artifactUrl = `/compilations/${id}.pdf`;
@@ -69,7 +73,11 @@ test("local API accepts jobs without a token and retains results across restarts
     finishEngine.resolve();
     await first.close();
   }
-  const restarted = createLocalRuntime({ path, engine });
+  const restarted = createLocalRuntime({
+    path,
+    engine,
+    projectEngine: () => engine,
+  });
   try {
     const state = await restarted.fetch(request(statusUrl));
     expect(await state.json()).toMatchObject({

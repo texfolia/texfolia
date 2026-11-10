@@ -35,11 +35,13 @@ In each environment in `apps/web/wrangler.jsonc`:
 The Cloudflare Vite plugin selects bindings at build time. Build for the intended environment, then deploy the resulting configuration:
 
 ```sh
-bun run --cwd apps/web build:staging
-bun run --cwd apps/web wrangler deploy
+bun run build:staging
+bunx turbo run deploy --filter=web --only
 ```
 
-Use `build:production` for production. Rebuild when switching environments. Passing `--env` only at deploy time does not retarget an already-built Worker.
+Use `bun run build:production` for production. The `--only` deploy skips build
+dependencies so it uses the environment selected by the preceding build.
+Rebuild when switching environments. Passing `--env` only at deploy time does not retarget an already-built Worker.
 
 Before deployment, run the repository checks and `wrangler deploy --dry-run` against the selected build. After deployment, verify email sign-in, a fresh session, project creation, and compilation in that environment. A local test does not verify a provisioned Hyperdrive pool or Neon branch.
 

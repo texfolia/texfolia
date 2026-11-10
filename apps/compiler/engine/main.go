@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -34,21 +35,77 @@ func writeError(w http.ResponseWriter, err error) {
 	}{failure.message, failure.log})
 }
 
+type engineRun struct {
+	id     string
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
 func newHandler(timeout time.Duration) http.Handler {
 	mux := http.NewServeMux()
-	var busy atomic.Bool
+	var mu sync.Mutex
+	var active *engineRun
+	var owner string
+	cancelled := make(map[string]bool)
+	mux.HandleFunc("DELETE /compilations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		mu.Lock()
+		// Remember an early cancellation that overtakes the POST on another connection.
+		if len(cancelled) >= 1024 {
+			clear(cancelled)
+		}
+		cancelled[id] = true
+		run := active
+		if run != nil && run.id == id {
+			run.cancel()
+		}
+		mu.Unlock()
+		if run != nil && run.id == id {
+			<-run.done
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	var warmed atomic.Bool
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"status":"ready"}`)
 	})
 	mux.HandleFunc("POST /compile", func(w http.ResponseWriter, r *http.Request) {
-		if !busy.CompareAndSwap(false, true) {
+		mu.Lock()
+		projectID := r.Header.Get("X-Project-Id")
+		if owner != "" && owner != projectID {
+			mu.Unlock()
+			writeError(w, &httpError{status: 409, message: "Engine belongs to another project"})
+			return
+		}
+		if projectID != "" {
+			owner = projectID
+		}
+		id := r.Header.Get("X-Compilation-Id")
+		if cancelled[id] {
+			delete(cancelled, id)
+			mu.Unlock()
+			writeError(w, &httpError{status: 409, message: "Compilation cancelled"})
+			return
+		}
+		if active != nil {
+			mu.Unlock()
 			w.Header().Set("Retry-After", "1")
 			writeError(w, &httpError{status: 503, message: "Compiler busy; retry shortly"})
 			return
 		}
-		defer busy.Store(false)
+		ctx, cancel := context.WithCancel(r.Context())
+		run := &engineRun{id: id, cancel: cancel, done: make(chan struct{})}
+		active = run
+		mu.Unlock()
+		defer func() {
+			cancel()
+			mu.Lock()
+			active = nil
+			delete(cancelled, id)
+			close(run.done)
+			mu.Unlock()
+		}()
 		timing := engineTiming{Engine: "tectonic", Temperature: "unknown"}
 		jobID := r.Header.Get("X-Compilation-Id")
 		jobID = jobID[:min(len(jobID), 64)]
@@ -82,7 +139,7 @@ func newHandler(timeout time.Duration) http.Handler {
 		if warmed.Swap(true) {
 			timing.Temperature = "warm"
 		}
-		result, err := compile(r.Context(), p, timeout, &timing)
+		result, err := compile(ctx, p, timeout, &timing)
 		if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
 			w.Header().Set("X-Compile-Timing", string(encoded))
 		}

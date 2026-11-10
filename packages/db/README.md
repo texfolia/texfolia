@@ -4,7 +4,11 @@ The app uses Drizzle and `pg` against PostgreSQL. Workers receive their connecti
 
 ## Run locally
 
-Configure `packages/db/.env` and `apps/web/.env`, start Postgres, and apply the schema as described in the root README. The default database is `db` on `localhost:5432`. Then run `bun run dev` from the repository root. Turbo runs the workspace development tasks; schema setup is an explicit command.
+Configure `packages/db/.env` and `apps/web/.env` as described in the root README.
+The default database is `db` on `localhost:5432`. Run `bun run dev` or
+`bun run dev:workers` from the repository root. Turbo starts local Postgres,
+waits for its health check, applies the schema, and then starts the web app.
+All commands in this guide run through Turbo from the repository root.
 
 For standalone schema commands, copy `.env.example` to `.env` in this directory and set `DATABASE_URL`. Use a direct Postgres connection string for schema commands, including on Neon. `DATABASE_URL` must be configured; there is no fallback connection string.
 
@@ -12,7 +16,10 @@ For standalone schema commands, copy `.env.example` to `.env` in this directory 
 bun run db:push
 ```
 
-Run this command from the repository root. There are currently no generated migration files or snapshots in the repository.
+Standalone schema tasks use the configured database without starting Docker.
+Local development applies the same schema through a separate setup task that
+depends on the local database service. There are currently no generated migration
+files or snapshots in the repository.
 
 ## Change the schema
 

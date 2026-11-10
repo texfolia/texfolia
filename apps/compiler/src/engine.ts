@@ -18,20 +18,48 @@ export function createEngineClient(
     const started = performance.now();
     let timing = unknownEngineTiming;
     try {
-      const response = await fetchEngine(
-        new Request(new URL("/compile", baseUrl).href, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "multipart/form-data",
-            "X-Compilation-Id": context.jobId,
-            "X-Compile-Attempt": String(context.attempt),
-            "X-Compile-Plan": context.plan,
-          },
-          body: JSON.stringify(project),
-          signal: AbortSignal.timeout(90_000),
-        }),
-      );
+      context.signal?.throwIfAborted();
+      let cancellation: Promise<void> | undefined;
+      const cancel = () => {
+        cancellation = fetchEngine(
+          new Request(new URL(`/compilations/${context.jobId}`, baseUrl).href, {
+            method: "DELETE",
+            signal: AbortSignal.timeout(90_000),
+          }),
+        ).then((response) => {
+          if (!response.ok) throw new Error("Engine cancellation failed");
+        });
+        // Observe failures immediately while the original engine request settles.
+        void cancellation.catch(() => {});
+      };
+      context.signal?.addEventListener("abort", cancel, { once: true });
+      let response: Response;
+      try {
+        response = await fetchEngine(
+          new Request(new URL("/compile", baseUrl).href, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "multipart/form-data",
+              "X-Compilation-Id": context.jobId,
+              "X-Compile-Attempt": String(context.attempt),
+              "X-Compile-Plan": context.plan,
+              ...(context.projectId
+                ? { "X-Project-Id": context.projectId }
+                : {}),
+            },
+            body: JSON.stringify(project),
+            signal: AbortSignal.timeout(90_000),
+          }),
+        );
+      } finally {
+        context.signal?.removeEventListener("abort", cancel);
+        await cancellation;
+      }
+      if (context.signal?.aborted) {
+        await response.body?.cancel();
+        context.signal.throwIfAborted();
+      }
       timing = parseEngineTiming(response.headers.get("X-Compile-Timing"));
       if ([400, 408, 413, 422].includes(response.status)) {
         const detail = failure.parse(await response.json());
@@ -50,7 +78,10 @@ export function createEngineClient(
     } finally {
       emitCompileEvent({
         event: "compile_engine_request",
-        ...context,
+        jobId: context.jobId,
+        projectId: context.projectId,
+        attempt: context.attempt,
+        plan: context.plan,
         ...timing,
         engineRequestMs: performance.now() - started,
       });

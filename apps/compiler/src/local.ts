@@ -3,9 +3,16 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { type ApiBindings, createApp } from "./api";
+import { ProjectCoordinatorCore } from "./coordinator";
+import { createCoordinatorApp } from "./coordinator-api";
 import { createJobs, type Engine, type ObjectStore } from "./jobs";
+import { jobIdSchema } from "./project";
 
-export function createLocalRuntime(options: { path: string; engine: Engine }) {
+export function createLocalRuntime(options: {
+  path: string;
+  engine: Engine;
+  projectEngine: (projectId: string) => Engine;
+}) {
   mkdirSync(dirname(options.path), { recursive: true });
   const db = new Database(options.path, { strict: true });
   db.exec(`
@@ -14,6 +21,7 @@ export function createLocalRuntime(options: { path: string; engine: Engine }) {
     CREATE TABLE IF NOT EXISTS queue (
       id TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS coordinators (projectId TEXT PRIMARY KEY, state TEXT NOT NULL, alarm INTEGER);
   `);
   const read = db.query<{ body: Uint8Array }, [string]>(
     "SELECT body FROM objects WHERE key = ?",
@@ -86,6 +94,70 @@ export function createLocalRuntime(options: { path: string; engine: Engine }) {
     },
   });
   const app = createApp();
+  let closed = false;
+  const loadCoordinator = db.query<
+    { state: string; alarm: number | null },
+    [string]
+  >("SELECT state, alarm FROM coordinators WHERE projectId = ?");
+  const saveCoordinator = db.query(
+    "INSERT INTO coordinators (projectId, state) VALUES (?, ?) ON CONFLICT(projectId) DO UPDATE SET state = excluded.state",
+  );
+  const scheduleCoordinator = db.query(
+    "UPDATE coordinators SET alarm = ? WHERE projectId = ?",
+  );
+  const coordinators = new Map<
+    string,
+    {
+      core: ProjectCoordinatorCore;
+      app: ReturnType<typeof createCoordinatorApp>;
+      alarm: ReturnType<typeof setTimeout> | undefined;
+    }
+  >();
+  function coordinatorFor(projectId: string) {
+    const existing = coordinators.get(projectId);
+    if (existing) return existing;
+    const saved = loadCoordinator.get(projectId);
+    const schedule = async (at: number) => {
+      if (closed) return;
+      scheduleCoordinator.run(at, projectId);
+      clearTimeout(entry.alarm);
+      entry.alarm = setTimeout(
+        () => {
+          void core.wake().catch((error) => {
+            console.error("Local project coordinator failed", {
+              projectId,
+              error,
+            });
+            void schedule(Date.now() + 1000);
+          });
+        },
+        Math.max(0, at - Date.now()),
+      );
+    };
+    const core = new ProjectCoordinatorCore({
+      projectId,
+      saved: saved?.state ?? null,
+      save: (value) => {
+        saveCoordinator.run(projectId, value);
+      },
+      schedule,
+      overflow: async () => {},
+      store,
+      engine: options.projectEngine(projectId),
+    });
+    const entry: {
+      core: ProjectCoordinatorCore;
+      app: ReturnType<typeof createCoordinatorApp>;
+      alarm: ReturnType<typeof setTimeout> | undefined;
+    } = { core, app: createCoordinatorApp(core), alarm: undefined };
+    coordinators.set(projectId, entry);
+    if (saved?.alarm) void schedule(saved.alarm);
+    return entry;
+  }
+  for (const row of db
+    .query<{ projectId: string }, []>("SELECT projectId FROM coordinators")
+    .all())
+    coordinatorFor(row.projectId);
   let count = 0;
   let resetsAt = 0;
   const bindings: ApiBindings = {
@@ -132,9 +204,25 @@ export function createLocalRuntime(options: { path: string; engine: Engine }) {
       });
   }, 250);
   return {
-    fetch: (request: Request) => app.fetch(request, bindings),
+    fetch: (request: Request) => {
+      const path = new URL(request.url).pathname;
+      if (path.startsWith("/projects/")) {
+        const id = jobIdSchema.safeParse(path.split("/")[2]);
+        if (!id.success)
+          return Promise.resolve(
+            Response.json({ error: "Invalid project ID" }, { status: 400 }),
+          );
+        return coordinatorFor(id.data).app.fetch(request);
+      }
+      return app.fetch(request, bindings);
+    },
     async close() {
+      closed = true;
       clearInterval(timer);
+      for (const entry of coordinators.values()) clearTimeout(entry.alarm);
+      await Promise.all(
+        [...coordinators.values()].map((entry) => entry.core.close()),
+      );
       await active;
       db.close();
     },

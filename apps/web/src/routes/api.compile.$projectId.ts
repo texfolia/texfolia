@@ -23,6 +23,7 @@ const idSchema = z.uuid();
 const pending = z.object({
   id: idSchema,
   status: z.enum(["queued", "running"]),
+  supersededId: idSchema.optional(),
 });
 const status = z.union([
   pending,
@@ -183,18 +184,44 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         });
 
         try {
-          const response = await fetchCompiler("/compile", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Compilation-Id": id,
-              "X-Compile-Plan": plan,
+          const response = await fetchCompiler(
+            `/projects/${params.projectId}/compile`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Compilation-Id": id,
+                "X-Compile-Plan": plan,
+                ...(request.headers.has("X-Editor-Id") ||
+                request.headers.has("X-Editor-Sequence")
+                  ? {
+                      "X-Editor-Id": request.headers.get("X-Editor-Id") ?? "",
+                      "X-Editor-Sequence":
+                        request.headers.get("X-Editor-Sequence") ?? "",
+                    }
+                  : {}),
+              },
+              body,
             },
-            body,
-          });
+          );
           if (response.status === 202) {
             const accepted = pending.parse(await response.json());
             if (accepted.id !== id) throw new Error("Invalid compiler job ID");
+            if (accepted.supersededId)
+              await db
+                .update(projectJob)
+                .set({
+                  status: "failed",
+                  error: "Compilation superseded by a newer revision",
+                  finishedAt: new Date(),
+                })
+                .where(
+                  and(
+                    eq(projectJob.projectId, params.projectId),
+                    eq(projectJob.id, accepted.supersededId),
+                    inArray(projectJob.status, ["queued", "running"]),
+                  ),
+                );
           } else if (response.status < 500) {
             const parsed = failure.safeParse(
               await response.json().catch(() => null),
@@ -261,7 +288,9 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         if (!body) return json({ error: "Invalid preview timing" }, 400);
         let timing: CompilerTiming | undefined;
         try {
-          const response = await fetchCompiler(`/jobs/${id.data}`);
+          const response = await fetchCompiler(
+            `/projects/${params.projectId}/jobs/${id.data}`,
+          );
           const result = status.safeParse(await response.json());
           if (
             result.success &&
@@ -287,6 +316,17 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         const denied = await checkProject(request, params.projectId, context);
         if (denied instanceof Response) return denied;
         const url = new URL(request.url);
+        if (!url.searchParams.has("job")) {
+          try {
+            const events = url.searchParams.get("events") === "1";
+            return await fetchCompiler(
+              `/projects/${params.projectId}${events ? "/events" : ""}`,
+              events ? { signal: request.signal } : undefined,
+            );
+          } catch {
+            return json({ error: "Project coordinator unavailable" }, 502);
+          }
+        }
         const parsedId = idSchema.safeParse(url.searchParams.get("job"));
         if (!parsedId.success) return json({ error: "Job not found" }, 404);
         const id = parsedId.data;
@@ -295,12 +335,14 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           where: { id, projectId: params.projectId },
         });
         if (!job) return json({ error: "Job not found" }, 404);
-        const pdfPath = `/compilations/${id}.pdf`;
+        const pdfPath = `/projects/${params.projectId}/compilations/${id}.pdf`;
         try {
           if (url.searchParams.get("artifact") === "pdf") {
             if (job.status !== "succeeded")
               return json({ error: "PDF not found" }, 404);
-            const pdf = await fetchCompiler(pdfPath);
+            let pdf = await fetchCompiler(pdfPath);
+            if (pdf.status === 404)
+              pdf = await fetchCompiler(`/compilations/${id}.pdf`);
             if (pdf.status === 404)
               return json({ error: "PDF not found" }, 404);
             if (
@@ -313,7 +355,12 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             });
           }
 
-          const response = await fetchCompiler(`/jobs/${id}`);
+          let response = await fetchCompiler(
+            `/projects/${params.projectId}/jobs/${id}`,
+          );
+          // Retain access to jobs submitted before project coordination shipped.
+          if (response.status === 404)
+            response = await fetchCompiler(`/jobs/${id}`);
           if (response.status === 404) {
             if (Date.now() - job.createdAt.getTime() < 30_000)
               return json({ id, status: "queued" }, 200, {
@@ -345,7 +392,10 @@ export const Route = createFileRoute("/api/compile/$projectId")({
               }
               return json(result, 200, { ...noStore, "Retry-After": "1" });
             case "succeeded":
-              if (result.artifactUrl !== pdfPath)
+              if (
+                result.artifactUrl !== pdfPath &&
+                result.artifactUrl !== `/compilations/${id}.pdf`
+              )
                 throw new Error("Invalid compiler artifact URL");
               await updateJob(db, id, {
                 status: "succeeded",

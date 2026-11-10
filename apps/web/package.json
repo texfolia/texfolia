@@ -11,14 +11,17 @@
     "build:production": "CLOUDFLARE_ENV=production bun run build",
     "build:staging": "CLOUDFLARE_ENV=staging bun run build",
     "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --strict-vars=false",
-    "deploy": "bun run build && wrangler deploy",
+    "deploy": "wrangler deploy",
     "dev": "bun run latex:assets && vite dev --port 3000 --strictPort",
+    "dev:workers": "COMPILER_URL=http://127.0.0.1:8787 bun run dev",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "generate-routes": "tsr generate",
     "latex:assets": "wasm-latex-tools copy-assets ./public/core",
     "preview": "vite preview",
+    "stripe:listen": "stripe listen --forward-to localhost:3000/api/auth/stripe/webhook",
     "test": "bun test",
+    "test:integration": "bun run test/postgres.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

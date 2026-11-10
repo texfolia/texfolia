@@ -64,7 +64,13 @@ export interface JobQueue {
 }
 export type Engine = (
   project: Project,
-  context: { jobId: string; attempt: number; plan: z.infer<typeof planSchema> },
+  context: {
+    jobId: string;
+    attempt: number;
+    plan: z.infer<typeof planSchema>;
+    projectId?: string;
+    signal?: AbortSignal;
+  },
 ) => Promise<{ pdf: Uint8Array; log: string; timing: EngineTiming }>;
 const maxAttempts = 4;
 const redeliverAfterMs = 60 * 60_000;

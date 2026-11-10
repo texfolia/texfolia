@@ -131,6 +131,12 @@ const components = {
   markdown: MarkdownPreview,
 };
 const tabComponents = { file: FileTab };
+const projectBuildMetadata = z.object({
+  revision: z.number(),
+  latestBuild: z
+    .object({ revision: z.number(), status: z.string() })
+    .nullable(),
+});
 const savedSourcesSchema = z.record(z.string(), z.string());
 
 export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
@@ -177,7 +183,30 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const storageKey = `texfolia.project.${projectId}.sources`;
   const compilation = useRef<AbortController | null>(null);
   const lastEditAt = useRef<number | null>(null);
-  useEffect(() => () => compilation.current?.abort(), [projectId]);
+  const editorId = useRef(crypto.randomUUID());
+  const editSequence = useRef(0);
+  const [buildMetadata, setBuildMetadata] = useState<{
+    revision: number;
+    latestBuild: { revision: number; status: string } | null;
+  } | null>(null);
+  const [sourceChanged, setSourceChanged] = useState(false);
+  useEffect(() => {
+    const events = new EventSource(
+      `/api/compile/${encodeURIComponent(projectId)}?events=1`,
+    );
+    events.onmessage = (event) => {
+      try {
+        const parsed = projectBuildMetadata.safeParse(JSON.parse(event.data));
+        if (parsed.success) setBuildMetadata(parsed.data);
+      } catch {
+        // EventSource reconnects with a fresh snapshot after a broken stream.
+      }
+    };
+    return () => {
+      events.close();
+      compilation.current?.abort();
+    };
+  }, [projectId]);
 
   const allProblems = useMemo(
     () => [
@@ -204,7 +233,8 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     [...paths.values()].find((path) => path.endsWith(".tex"));
 
   async function compileProject() {
-    if (!main || compilation.current) return;
+    if (!main) return;
+    compilation.current?.abort();
     const startedAt = performance.now();
     const editedAt = lastEditAt.current;
     try {
@@ -240,6 +270,10 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     try {
       const result = await requestCompilation({
         projectId,
+        editorVersion: {
+          editorId: editorId.current,
+          sequence: ++editSequence.current,
+        },
         startedAt,
         lastEditAt: editedAt,
         mainFile: main,
@@ -249,8 +283,11 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           AbortSignal.timeout(10 * 60_000),
         ]),
       });
-      if ("pdf" in result) setPdf(result.pdf);
-      else setCompileError(result.error);
+      if (controller.signal.aborted) return;
+      if ("pdf" in result) {
+        setPdf(result.pdf);
+        setSourceChanged(revision.current !== snapshot);
+      } else setCompileError(result.error);
       const diagnostics = parseCompileLog(result.log, filenames, main);
       if (revision.current === snapshot) {
         setCompileProblems(diagnostics);
@@ -264,8 +301,10 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           : "The compiler could not be reached. Try again.",
       );
     } finally {
-      compilation.current = null;
-      setCompiling(false);
+      if (compilation.current === controller) {
+        compilation.current = null;
+        setCompiling(false);
+      }
     }
   }
 
@@ -332,6 +371,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     const path = paths.get(id);
     if (path && previous.value !== value) {
       lastEditAt.current = performance.now();
+      setSourceChanged(true);
       update(path, value);
       setCompileProblems((current) => (current.length ? [] : current));
     }
@@ -488,10 +528,16 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           >
             {name}
           </h1>
-          <Button
-            disabled={!main || compiling}
-            onClick={() => void compileProject()}
-          >
+          {pdf &&
+            (sourceChanged ||
+              (buildMetadata?.latestBuild &&
+                buildMetadata.latestBuild.revision <
+                  buildMetadata.revision)) && (
+              <span role="status" className="text-muted-foreground text-xs">
+                Preview is out of date
+              </span>
+            )}
+          <Button disabled={!main} onClick={() => void compileProject()}>
             {compiling ? "Compiling…" : "Save & compile"}
           </Button>
         </header>

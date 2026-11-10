@@ -4,7 +4,6 @@
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
-  "observability": { "enabled": true, "traces": { "enabled": true } },
   "services": [
     {
       "binding": "COMPILER",

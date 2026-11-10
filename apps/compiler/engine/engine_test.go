@@ -237,3 +237,71 @@ func TestStageTiming(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectOwnershipAndCancellation(t *testing.T) {
+	handler, temp, marker := testEngine(t, 10*time.Second)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	send := func(project, id, source string) *http.Response {
+		req, _ := http.NewRequest("POST", server.URL+"/compile", strings.NewReader(`{"files":{"main.tex":"`+source+`"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Project-Id", project)
+		req.Header.Set("X-Compilation-Id", id)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+			return nil
+		}
+		return res
+	}
+	finished := make(chan *http.Response, 1)
+	go func() { finished <- send("project-a", "old", "slow") }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("engine did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel, _ := http.NewRequest("DELETE", server.URL+"/compilations/old", nil)
+	stopped, err := http.DefaultClient.Do(cancel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = stopped.Body.Close()
+	if stopped.StatusCode != 204 {
+		t.Fatalf("cancel: %d", stopped.StatusCode)
+	}
+	prior := <-finished
+	if prior == nil {
+		t.Fatal("missing response")
+	}
+	_ = prior.Body.Close()
+	assertClean(t, temp)
+	next := send("project-a", "new", "hello")
+	_ = next.Body.Close()
+	if next.StatusCode != 200 {
+		t.Fatalf("replacement: %d", next.StatusCode)
+	}
+	other := send("project-b", "other", "hello")
+	_ = other.Body.Close()
+	if other.StatusCode != 409 {
+		t.Fatalf("engine reused by other project: %d", other.StatusCode)
+	}
+	// A DELETE may overtake POST on a separate connection.
+	early, _ := http.NewRequest("DELETE", server.URL+"/compilations/early", nil)
+	res, err := http.DefaultClient.Do(early)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	late := send("project-a", "early", "hello")
+	_ = late.Body.Close()
+	if late.StatusCode != 409 {
+		t.Fatalf("early cancellation lost: %d", late.StatusCode)
+	}
+	assertClean(t, temp)
+}
