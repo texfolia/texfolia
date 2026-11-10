@@ -21,6 +21,7 @@ const path = z
   .max(240)
   .refine(
     (value) =>
+      // oxlint-disable-next-line no-control-regex -- Project paths must reject control characters.
       !/[\\:\x00-\x1f]/.test(value) &&
       !value.startsWith("/") &&
       value

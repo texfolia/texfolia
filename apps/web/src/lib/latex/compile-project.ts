@@ -14,7 +14,8 @@ const status = z.discriminatedUnion("status", [
 ]);
 
 type CompileResult =
-  { pdf: File; log: string } | { error: string; log: string };
+  | { pdf: File; log: string }
+  | { error: string; log: string };
 
 async function failureResult(response: Response): Promise<CompileResult> {
   const result = failure.safeParse(await response.json().catch(() => null));

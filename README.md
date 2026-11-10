@@ -140,9 +140,14 @@ and diagnostics. Neither connection requires an internal token.
 Open an issue for a bug or feature request. For editor or compiler bugs, include the steps to reproduce the issue and a small source sample. Run these checks before opening a pull request.
 
 ```sh
+bun run lint
+bun run format:check
 bun run typecheck
 bun run test
 ```
+
+Run `bun run format` to apply Oxfmt formatting. Oxlint and Oxfmt use the root
+`.oxlintrc.json` and `.oxfmtrc.json` configurations.
 
 ## License
 

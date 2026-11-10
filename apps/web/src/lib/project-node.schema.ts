@@ -6,6 +6,7 @@ export const nodeNameSchema = z
   .min(1, "Please enter a name.")
   .max(255)
   .refine(
+    // oxlint-disable-next-line no-control-regex -- File names must reject control characters.
     (name) => !/[\\/\u0000-\u001f]/.test(name) && name !== "." && name !== "..",
     {
       message: "Enter a name without slashes or control characters.",

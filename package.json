@@ -11,14 +11,16 @@
     "build": "turbo run build",
     "db:push": "bun run --cwd packages/db db:push",
     "dev": "turbo run dev",
-    "format": "turbo run format",
-    "format:check": "turbo run format:check",
-    "lint": "turbo run lint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "@texfolia/typescript-config": "workspace:*",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
     "turbo": "latest"
   },
   "devEngines": {

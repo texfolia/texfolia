@@ -11,7 +11,10 @@ import {
 import { createBrowserSettingsStore } from "#/lib/settings.functions";
 import { defaultSettings, type Settings } from "#/lib/settings.schema";
 export type SettingsSection =
-  "Appearance" | "Editor" | "Formatting" | "Keyboard shortcuts";
+  | "Appearance"
+  | "Editor"
+  | "Formatting"
+  | "Keyboard shortcuts";
 
 function useSettingsState() {
   const [store] = useState(() => createBrowserSettingsStore(window));

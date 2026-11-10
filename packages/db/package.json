@@ -10,9 +10,9 @@
   "scripts": {
     "check": "bun check",
     "db:push": "drizzle-kit push",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "bun lint"
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.7.14",

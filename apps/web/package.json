@@ -6,13 +6,13 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "auth:schema": "bun x --bun auth@1.7.15 generate --output ../../packages/db/src/db/auth-schema.ts --config ./auth.config.ts --yes && bun fmt ../../packages/db/src/db/auth-schema.ts",
+    "auth:schema": "bun x --bun auth@1.7.15 generate --output ../../packages/db/src/db/auth-schema.ts --config ./auth.config.ts --yes && oxfmt ../../packages/db/src/db/auth-schema.ts",
     "build": "bun run latex:assets && vite build",
-    "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --include-runtime=false --strict-vars=false && bun fmt worker-configuration.d.ts",
+    "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --include-runtime=false --strict-vars=false && oxfmt worker-configuration.d.ts",
     "deploy": "bun run build && wrangler deploy",
     "dev": "bun run latex:assets && vite dev --port 3000",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "generate-routes": "tsr generate",
     "latex:assets": "wasm-latex-tools copy-assets ./public/core",
     "preview": "vite preview",

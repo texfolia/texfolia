@@ -320,7 +320,7 @@ function isDark(color: string) {
   const hex = color.slice(1);
   const channels =
     hex.length <= 4
-      ? [...hex.slice(0, 3)].map((c) => parseInt(c + c, 16))
+      ? Array.from(hex.slice(0, 3), (c) => parseInt(c + c, 16))
       : [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
   return (
     ((channels[0] ?? 0) * 299 +

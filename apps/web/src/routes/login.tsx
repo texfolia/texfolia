@@ -31,6 +31,7 @@ import { authClient } from "#/lib/auth-client";
 export const loginSearchSchema = z.object({
   redirectTo: z
     .string()
+    // oxlint-disable-next-line no-control-regex -- Redirect targets must reject control characters.
     .regex(/^\/(?!\/)[^\u0000-\u0020\\]*$/)
     .catch("/projects")
     .optional(),

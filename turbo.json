@@ -11,12 +11,6 @@
       "cache": false,
       "persistent": true
     },
-    "format": {
-      "cache": false
-    },
-    "lint": {
-      "outputs": []
-    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": []
