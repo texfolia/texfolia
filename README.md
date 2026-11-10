@@ -38,12 +38,32 @@ The example files already point to the local web app, database, and compiler. If
 ### Start the stack
 
 ```sh
-docker compose up -d --build db compiler
-bun run --cwd packages/db push
-bun run --cwd apps/web dev
+bun run dev
 ```
 
-Run the schema command once Postgres is ready. For an existing database, see the [database upgrade instructions](packages/db/README.md#existing-object-sizes).
+Turbo builds the compiler images, starts Postgres and the compiler, waits for
+service health, applies the database schema, and starts the web app at
+`http://localhost:3000`. The compiler reloads when its source changes.
+
+To run the compiler in the local Workers runtime instead:
+
+```sh
+bun run dev:workers
+```
+
+This starts Postgres, the compiler Worker at `http://localhost:8787`, and the web
+app configured to use it. Both modes use Docker for project engines. Stop the
+current mode before switching. Press Ctrl+C to stop the development processes;
+`bun run dev:stop` stops the Compose services that remain running.
+
+Development, build, and verification commands delegate to Turbo. Filtering the web task also starts its
+compiler companion and setup dependencies:
+
+```sh
+bunx turbo run dev --filter=web
+```
+
+See the [database guide](packages/db/README.md) for standalone schema operations.
 
 ### Compile your first PDF
 
@@ -78,7 +98,7 @@ flowchart TD
     Web <-->|Submit jobs, check status, and fetch PDFs| Compiler["Hono compiler API"]
 ```
 
-**Save & compile** saves text drafts in the current browser and sends a copy to the compiler. PostgreSQL stores the file tree and job records.
+**Save & compile**, or Cmd/Ctrl+S, saves text drafts in the current browser and sends a snapshot to the project coordinator. Typing marks the preview stale. Compilation runs on save. PostgreSQL stores the file tree and job records.
 
 Browser workers check references as you edit and format LaTeX on request.
 
@@ -91,43 +111,33 @@ Compile stage boundaries and the p50/p95 query are documented in
 sequenceDiagram
     participant B as Browser
     participant W as Web app
-    participant C as Compiler Worker
-    participant R as R2
-    participant Q as Queue
-    participant T as Tectonic container
+    participant P as Project coordinator
+    participant T as Project container
+    participant R as Artifact storage
 
-    B->>W: Submit project sources
-    Note over W: Verify project owner and record job in Postgres
-    W->>C: Submit sources and job ID
-    C->>R: Store sources
-    C->>Q: Enqueue job ID
-    C-->>W: Job accepted
-    W-->>B: Return status URL
-
-    Q->>C: Deliver job ID
-    C->>R: Read sources
-    C->>T: Run LaTeX
-    T-->>C: Return result and log
-    C->>R: Store PDF on success and record diagnostics
-    C->>R: Remove temporary sources
-
-    B->>W: Poll job status
-    W->>C: Check job status
-    C->>R: Read job state
-    C-->>W: Job state and available diagnostics
-    W-->>B: Return status and diagnostics when ready
-    B->>W: Request PDF after success
-    W->>C: Fetch PDF
-    C->>R: Read PDF
-    C-->>W: PDF bytes
+    B->>W: Open project event stream
+    W->>P: Attach after verifying ownership
+    P-->>B: Current revision and latest build metadata
+    B->>W: Send source snapshot on save
+    W->>P: Accept a new project revision
+    P->>P: Replace pending snapshot and debounce 300 ms
+    P->>T: Cancel superseded run and wait for exit
+    P->>T: Compile newest revision
+    T-->>P: PDF and diagnostics
+    P->>R: Store artifact for this revision
+    P-->>B: Push latest build metadata
+    B->>W: Fetch job status and PDF
+    W->>R: Read through authenticated compiler API
     W-->>B: PDF bytes for the preview
 ```
 
-On Cloudflare, the web app calls the compiler through a private service binding.
-The compiler Worker uses R2 for job data and PDFs, and Cloudflare Queues to
-dispatch jobs. Locally, the same Hono API uses loopback HTTP with SQLite. Both
-runtimes call a separate Go engine image that runs Tectonic and returns the PDF
-and diagnostics. Neither connection requires an internal token.
+On Cloudflare, the web app calls the private compiler through a service binding.
+One SQLite-backed Durable Object coordinates each project and routes to a
+container that serves only that project. Locally, Bun runs the same coordinator
+logic with SQLite and creates dedicated Docker containers. Both runtimes use the
+same Go engine image. R2 stores production artifacts; SQLite stores them locally.
+Queues handle infrastructure retries and legacy jobs. See the
+[compiler guide](apps/compiler/README.md) for the shared contract test.
 
 ## Repository layout
 
@@ -140,7 +150,7 @@ and diagnostics. Neither connection requires an internal token.
 
 ## Contributing
 
-Open an issue for a bug or feature request. For editor or compiler bugs, include the steps to reproduce the issue and a small source sample. Run these checks before opening a pull request.
+Open an issue for a bug or feature request. For editor or compiler bugs, include the steps to reproduce the issue and a small source sample. Install Go 1.26 or later for the engine checks. Run these checks before opening a pull request.
 
 ```sh
 bun run lint
@@ -149,8 +159,21 @@ bun run typecheck
 bun run test
 ```
 
-Run `bun run format` to apply Oxfmt formatting. Oxlint and Oxfmt use the root
-`.oxlintrc.json` and `.oxfmtrc.json` configurations.
+These Turbo tasks include the Bun tests, Go race tests, Go vet, TypeScript
+checks, Oxlint, and formatting checks. Run `bun run format` to apply Oxfmt and
+Gofmt. Oxlint and Oxfmt use the root `.oxlintrc.json` and `.oxfmtrc.json`
+configurations. `bun run build` builds the web app and compiler images.
+
+With either development mode running, verify actual compilation through Turbo:
+
+```sh
+bun run smoke          # Local Bun compiler
+bun run smoke:workers  # Local Workers compiler
+```
+
+`bun run db:push`, `bun run auth:schema`, `bun run cf:typegen`, and
+`bun run deploy` also run through Turbo. Deploy builds the web app and deploys
+the compiler before the web Worker.
 
 ## License
 

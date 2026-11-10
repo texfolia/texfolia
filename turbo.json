@@ -9,15 +9,144 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["*"]
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [],
+      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
       "outputs": []
+    },
+    "compiler#build": {
+      "cache": false,
+      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
+    },
+    "//#db:setup": {
+      "cache": false,
+      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
+    },
+    "compiler#dev:setup": {
+      "dependsOn": ["compiler#build", "//#db:setup"],
+      "cache": false,
+      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
+    },
+    "compiler#dev": {
+      "dependsOn": ["compiler#dev:setup"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "web#dev": {
+      "dependsOn": ["compiler#dev:setup", "@texfolia/db#db:push"],
+      "with": ["compiler#dev"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "dev:workers": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "web#dev:workers": {
+      "dependsOn": ["@texfolia/db#db:push", "compiler#ready:workers"],
+      "with": ["compiler#dev:workers"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "ready:workers": {
+      "cache": false
+    },
+    "dev:stop": {
+      "cache": false,
+      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
+    },
+    "db:push": {
+      "dependsOn": ["//#db:setup"],
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
+    },
+    "smoke": {
+      "cache": false,
+      "passThroughEnv": ["COMPILER_URL"]
+    },
+    "smoke:workers": {
+      "cache": false
+    },
+    "start": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "preview": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["build"],
+      "passThroughEnv": ["*"]
+    },
+    "cf:typegen": {
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "auth:schema": {
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "deploy": {
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "web#deploy": {
+      "dependsOn": ["web#build", "compiler#deploy"],
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "lint": {
+      "dependsOn": ["//#lint:repo"],
+      "outputs": [],
+      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"]
+    },
+    "//#lint:repo": {
+      "cache": false
+    },
+    "format": {
+      "dependsOn": ["//#format:repo"],
+      "cache": false
+    },
+    "//#format:repo": {
+      "cache": false
+    },
+    "format:check": {
+      "dependsOn": ["//#format:check:repo"],
+      "outputs": []
+    },
+    "//#format:check:repo": {
+      "cache": false
+    },
+    "compiler#start": {
+      "dependsOn": ["compiler#build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "smoke:legacy": {
+      "cache": false,
+      "passThroughEnv": ["COMPILER_URL"]
+    },
+    "web#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".wrangler/deploy/**"]
+    },
+    "generate-routes": {
+      "cache": false
+    },
+    "latex:assets": {
+      "cache": false
     }
   }
 }

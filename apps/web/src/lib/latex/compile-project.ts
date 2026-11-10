@@ -34,6 +34,7 @@ export async function requestCompilation(options: {
   signal: AbortSignal;
   startedAt?: number;
   lastEditAt?: number | null;
+  editorVersion?: { editorId: string; sequence: number };
 }): Promise<CompileResult> {
   const { projectId, mainFile, files, signal } = options;
   const startedAt = options.startedAt ?? performance.now();
@@ -45,6 +46,12 @@ export async function requestCompilation(options: {
       headers: {
         "Content-Type": "application/json",
         "X-Compilation-Id": jobId,
+        ...(options.editorVersion
+          ? {
+              "X-Editor-Id": options.editorVersion.editorId,
+              "X-Editor-Sequence": String(options.editorVersion.sequence),
+            }
+          : {}),
       },
       body: JSON.stringify({ mainFile, files }),
       signal,

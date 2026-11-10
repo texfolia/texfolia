@@ -1,38 +1,38 @@
-# db
+# Database
 
-To install dependencies:
+The database package owns the Drizzle schema and PostgreSQL client. All commands
+below run from the repository root through Turbo.
 
-```bash
-bun install
+## Start development
+
+Copy `.env.example` to `.env` in this directory and set `DATABASE_URL`. The
+example points to the Postgres service in `compose.yaml`.
+
+```sh
+bun run dev
 ```
 
-To run:
+Turbo starts Postgres, waits for its health check, applies the schema, and then
+starts the web app and compiler. `bun run dev:workers` applies the same database
+setup before starting the app with the Workers compiler.
 
-```bash
-bun run index.ts
+## Apply the schema
+
+```sh
+bun run db:push
 ```
 
-To type check:
+This task starts Postgres if needed and runs `drizzle-kit push` from this
+package. The task is uncached because it changes database state. Application
+development depends on this task, so a fresh database has its tables before the
+web app starts.
 
-```bash
-bun check
+## Generate auth tables and check types
+
+```sh
+bun run auth:schema
+bun run typecheck
 ```
 
-Run `bun run format` to format the code with Oxfmt.
-
-This project was created using `bun init` in bun v1.4.4. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
-
-## Existing object sizes
-
-For an existing database created with `drizzle-kit push`, run
-`bunx drizzle-kit migrate` from this directory to add the size columns. Then run
-`bun run backfill:object-sizes --finalize` with `DATABASE_URL`, `S3_ENDPOINT`,
-`S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and `R2_PDF_BUCKET` set. Set
-`R2_FILE_BUCKET` if project files use a separate bucket. The script checks
-existing keys with R2 HEAD, can be rerun, and leaves the columns nullable if
-any referenced object cannot be measured. On a fresh database, `bun run push`
-creates the final schema directly.
-
-The backfill also checks unfinished compile jobs older than five minutes for a
-PDF under their reserved job ID. Run it without `--finalize` to reconcile these
-jobs after a compiler transport failure.
+Auth schema generation runs in the web package and writes
+`src/db/auth-schema.ts`. The typecheck task includes this package.

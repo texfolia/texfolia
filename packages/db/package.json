@@ -8,11 +8,11 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
-    "check": "bun check",
     "db:push": "drizzle-kit push",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.7.14",
