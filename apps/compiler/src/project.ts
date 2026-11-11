@@ -13,6 +13,7 @@ export class HttpError extends Error {
     message: string,
     public log = "",
     public timing: EngineTiming = unknownEngineTiming,
+    public logFile?: { path: string; base64: string },
   ) {
     super(message);
   }
@@ -29,7 +30,7 @@ export class EngineError extends Error {
   }
 }
 
-const path = z
+export const artifactPathSchema = z
   .string()
   .min(1)
   .max(240)
@@ -42,24 +43,25 @@ const path = z
         .split("/")
         .every((part) => part !== "" && part !== "." && part !== ".."),
   );
+const path = artifactPathSchema.refine(
+  (value) => value !== "out" && !value.startsWith("out/"),
+);
+export const artifactContentSchema = z.object({
+  base64: z
+    .string()
+    .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+});
+export const artifactFilesSchema = z.record(
+  artifactPathSchema,
+  artifactContentSchema,
+);
+
 const projectSchema = z
   .object({
     mainFile: path
       .refine((value) => value.endsWith(".tex"))
       .default("main.tex"),
-    files: z.record(
-      path,
-      z.union([
-        z.string(),
-        z.object({
-          base64: z
-            .string()
-            .regex(
-              /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
-            ),
-        }),
-      ]),
-    ),
+    files: z.record(path, z.union([z.string(), artifactContentSchema])),
   })
   .superRefine(({ mainFile, files }, ctx) => {
     const paths = Object.keys(files);

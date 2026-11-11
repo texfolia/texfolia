@@ -131,7 +131,7 @@ export function createLocalRuntime(options: {
             void schedule(Date.now() + 1000);
           });
         },
-        Math.max(0, at - Date.now()),
+        Math.min(24 * 60 * 60_000, Math.max(0, at - Date.now())),
       );
     };
     const core = new ProjectCoordinatorCore({

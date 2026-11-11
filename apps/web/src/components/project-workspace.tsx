@@ -1,5 +1,9 @@
 import "dockview-react/dist/styles/dockview.css";
-import { IconAlertCircle, IconArrowLeft } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconArrowLeft,
+  IconRefresh,
+} from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
@@ -24,6 +28,7 @@ import {
 import { z } from "zod";
 
 import { Editor } from "#/components/editor";
+import { GeneratedFile } from "#/components/generated-file";
 import {
   MarkdownPreview,
   type MarkdownPreviewParams,
@@ -32,6 +37,11 @@ import { ProjectSidebar } from "#/components/project-sidebar";
 import { Button } from "#/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
+import {
+  buildSnapshotSchema,
+  buildFileUrl,
+  type BuildSnapshot,
+} from "#/lib/build";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
@@ -115,28 +125,33 @@ function FileTab(props: IDockviewPanelHeaderProps<FilePanelParams>) {
 }
 
 function CompiledPdf() {
-  const { pdf } = useWorkspace();
+  const { pdf, stale } = useWorkspace();
   return (
-    <div className="h-full overflow-auto">
-      <Suspense fallback={<p className="p-4">Loading PDF viewer…</p>}>
-        <PdfViewer file={pdf} />
-      </Suspense>
+    <div className="flex h-full min-h-0 flex-col">
+      {pdf && stale && (
+        <p
+          role="status"
+          className="text-muted-foreground border-b px-3 py-2 text-xs"
+        >
+          Out of date, recompile
+        </p>
+      )}
+      <div className="min-h-0 flex-1">
+        <Suspense fallback={<p className="p-4">Loading PDF viewer…</p>}>
+          <PdfViewer file={pdf} />
+        </Suspense>
+      </div>
     </div>
   );
 }
 
 const components = {
   editor: FileEditor,
+  generated: GeneratedFile,
   pdf: CompiledPdf,
   markdown: MarkdownPreview,
 };
 const tabComponents = { file: FileTab };
-const projectBuildMetadata = z.object({
-  revision: z.number(),
-  latestBuild: z
-    .object({ revision: z.number(), status: z.string() })
-    .nullable(),
-});
 const savedSourcesSchema = z.record(z.string(), z.string());
 
 export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
@@ -185,28 +200,122 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const lastEditAt = useRef<number | null>(null);
   const editorId = useRef(crypto.randomUUID());
   const editSequence = useRef(0);
-  const [buildMetadata, setBuildMetadata] = useState<{
-    revision: number;
-    latestBuild: { revision: number; status: string } | null;
-  } | null>(null);
+  const [buildMetadata, setBuildMetadata] = useState<BuildSnapshot | null>(
+    null,
+  );
+  const sharedArtifacts = useRef<BuildSnapshot["artifacts"]>(null);
+  const displayedPdfUrl = useRef<string | null>(null);
+  const notifiedSequence = useRef(0);
+  const notificationClosed = useRef(false);
+  const notification = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const [sourceChanged, setSourceChanged] = useState(false);
   useEffect(() => {
+    notificationClosed.current = false;
     const events = new EventSource(
       `/api/compile/${encodeURIComponent(projectId)}?events=1`,
     );
     events.onmessage = (event) => {
       try {
-        const parsed = projectBuildMetadata.safeParse(JSON.parse(event.data));
-        if (parsed.success) setBuildMetadata(parsed.data);
+        const parsed = buildSnapshotSchema.safeParse(JSON.parse(event.data));
+        if (parsed.success) {
+          sharedArtifacts.current = parsed.data.artifacts;
+          setBuildMetadata(parsed.data);
+          if (
+            !parsed.data.stale &&
+            notifiedSequence.current >= editSequence.current
+          )
+            setSourceChanged(false);
+        }
       } catch {
         // EventSource reconnects with a fresh snapshot after a broken stream.
       }
     };
     return () => {
+      notificationClosed.current = true;
       events.close();
+      clearTimeout(notification.current);
       compilation.current?.abort();
     };
   }, [projectId]);
+
+  const sharedPdf = buildMetadata?.artifacts?.files.find(
+    (file) => file.path === buildMetadata.artifacts?.pdf,
+  );
+  const sharedPdfUrl = sharedPdf ? buildFileUrl(projectId, sharedPdf) : null;
+  useEffect(() => {
+    if (!sharedPdfUrl) {
+      displayedPdfUrl.current = null;
+      setPdf(null);
+      return;
+    }
+    if (compiling || displayedPdfUrl.current === sharedPdfUrl) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(sharedPdfUrl, {
+          signal: controller.signal,
+        });
+        if (!response.ok)
+          throw new Error(
+            "Could not load the shared PDF. Recompile to try again.",
+          );
+        const file = new File([await response.blob()], "output.pdf", {
+          type: "application/pdf",
+        });
+        if (!controller.signal.aborted) {
+          displayedPdfUrl.current = sharedPdfUrl;
+          setPdf(file);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setCompileError(
+            error instanceof Error
+              ? error.message
+              : "Could not load the shared PDF.",
+          );
+      }
+    })();
+    return () => controller.abort();
+  }, [sharedPdfUrl, compiling]);
+  const stale = sourceChanged || (buildMetadata?.stale ?? false);
+  const structure = JSON.stringify(
+    nodes
+      .map(({ id, name, parentId, kind }) => ({ id, name, parentId, kind }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  );
+  const previousStructure = useRef(structure);
+  useEffect(() => {
+    if (previousStructure.current === structure) return;
+    previousStructure.current = structure;
+    setSourceChanged(true);
+    notifySourceEdit();
+  }, [structure]);
+
+  function notifySourceEdit() {
+    const sequence = ++editSequence.current;
+    clearTimeout(notification.current);
+    const send = async () => {
+      try {
+        const response = await fetch(
+          `/api/compile/${encodeURIComponent(projectId)}?changed=1`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ editorId: editorId.current, sequence }),
+            keepalive: true,
+          },
+        );
+        if (!response.ok) throw new Error("Could not report source changes");
+        notifiedSequence.current = Math.max(notifiedSequence.current, sequence);
+      } catch {
+        if (!notificationClosed.current && sequence === editSequence.current)
+          notification.current = setTimeout(() => void send(), 2000);
+      }
+    };
+    notification.current = setTimeout(() => void send(), 150);
+  }
 
   const allProblems = useMemo(
     () => [
@@ -232,7 +341,18 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     [...paths.values()].find((path) => path === "main.tex") ??
     [...paths.values()].find((path) => path.endsWith(".tex"));
 
-  async function compileProject() {
+  function sourceFiles() {
+    return Object.fromEntries(
+      nodes.flatMap((node) => {
+        const path = paths.get(node.id);
+        return node.kind === "text" && path
+          ? [[path, drafts.current.get(node.id)?.value ?? ""]]
+          : [];
+      }),
+    );
+  }
+
+  async function compileProject(clean = false) {
     if (!main) return;
     compilation.current?.abort();
     const startedAt = performance.now();
@@ -259,21 +379,14 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     setCompileError("");
     setCompileProblems([]);
     const snapshot = revision.current;
-    const files = Object.fromEntries(
-      nodes.flatMap((node) => {
-        const path = paths.get(node.id);
-        return node.kind === "text" && path
-          ? [[path, drafts.current.get(node.id)?.value ?? ""]]
-          : [];
-      }),
-    );
+    const files = sourceFiles();
+    const sequence = ++editSequence.current;
+    clearTimeout(notification.current);
     try {
       const result = await requestCompilation({
         projectId,
-        editorVersion: {
-          editorId: editorId.current,
-          sequence: ++editSequence.current,
-        },
+        clean,
+        editorVersion: { editorId: editorId.current, sequence },
         startedAt,
         lastEditAt: editedAt,
         mainFile: main,
@@ -285,7 +398,13 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
       });
       if (controller.signal.aborted) return;
       if ("pdf" in result) {
-        setPdf(result.pdf);
+        const latest = sharedArtifacts.current;
+        const pdfFile = latest?.files.find((file) => file.path === latest.pdf);
+        if (latest?.id === result.jobId && pdfFile) {
+          displayedPdfUrl.current = buildFileUrl(projectId, pdfFile);
+          setPdf(result.pdf);
+        }
+        notifiedSequence.current = Math.max(notifiedSequence.current, sequence);
         setSourceChanged(revision.current !== snapshot);
       } else setCompileError(result.error);
       const diagnostics = parseCompileLog(result.log, filenames, main);
@@ -372,6 +491,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     if (path && previous.value !== value) {
       lastEditAt.current = performance.now();
       setSourceChanged(true);
+      notifySourceEdit();
       update(path, value);
       setCompileProblems((current) => (current.length ? [] : current));
     }
@@ -446,6 +566,29 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     }
   }
 
+  function openGenerated(path: string) {
+    const dock = api.current;
+    if (!dock) return;
+    const id = `out:${path}`;
+    const existing = dock.getPanel(id);
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+    const reference = dock.panels.find(
+      (panel) => panel.api.component === "editor",
+    );
+    dock.addPanel({
+      id,
+      component: "generated",
+      title: `out/${path}`,
+      params: { path },
+      position: reference
+        ? { referencePanel: reference.id, direction: "within" }
+        : undefined,
+    });
+  }
+
   function onReady({ api: dock }: DockviewReadyEvent) {
     api.current = dock;
     try {
@@ -468,7 +611,12 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     subscriptions.current.forEach((subscription) => subscription.dispose());
     subscriptions.current = [
       dock.onDidActivePanelChange(({ panel }) => {
-        if (panel?.api.component === "editor") setActiveId(panel.id);
+        if (
+          panel &&
+          (panel.api.component === "editor" ||
+            panel.api.component === "generated")
+        )
+          setActiveId(panel.id);
       }),
       dock.onDidRemovePanel((panel) => {
         if (previewId.current === panel.id) previewId.current = null;
@@ -493,6 +641,9 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   return (
     <WorkspaceProvider
       value={{
+        projectId,
+        build: buildMetadata,
+        stale,
         drafts: drafts.current,
         keepOpen,
         openMarkdownPreview,
@@ -528,15 +679,21 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           >
             {name}
           </h1>
-          {pdf &&
-            (sourceChanged ||
-              (buildMetadata?.latestBuild &&
-                buildMetadata.latestBuild.revision <
-                  buildMetadata.revision)) && (
-              <span role="status" className="text-muted-foreground text-xs">
-                Preview is out of date
-              </span>
-            )}
+          {pdf && stale && (
+            <span role="status" className="text-muted-foreground text-xs">
+              Out of date, recompile
+            </span>
+          )}
+          <Button
+            variant="outline"
+            disabled={!main || compiling}
+            aria-label="Clean build"
+            title="Clean build"
+            onClick={() => void compileProject(true)}
+          >
+            <IconRefresh />
+            <span className="hidden md:inline">Clean build</span>
+          </Button>
           <Button disabled={!main} onClick={() => void compileProject()}>
             {compiling ? "Compiling…" : "Save & compile"}
           </Button>
@@ -548,6 +705,8 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
             activeId={activeId}
             ready={ready}
             onOpen={openFile}
+            onOpenGenerated={openGenerated}
+            sources={sourceFiles}
             showProblems={showProblems}
             onToggleProblems={() => setShowProblems(!showProblems)}
           />

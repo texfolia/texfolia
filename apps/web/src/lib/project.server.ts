@@ -3,6 +3,7 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import type { z } from "zod";
 
+import { fetchCompiler } from "./compiler.server";
 import type { createProjectSchema } from "./project.schema";
 
 type ProjectOwner = { db: Db; ownerId: string };
@@ -88,6 +89,16 @@ export async function deleteProject({
     .returning({ id: project.id });
 
   if (!deletedProject) throw new Error("Project not found");
+  try {
+    const response = await fetchCompiler(`/projects/${projectId}/build`, {
+      method: "DELETE",
+    });
+    if (!response.ok)
+      throw new Error(`Build cleanup returned ${response.status}`);
+  } catch (error) {
+    // The coordinator's retention alarm also removes artifacts if immediate cleanup is unavailable.
+    console.error("Deleted project build cleanup failed", { projectId, error });
+  }
   return deletedProject.id;
 }
 
@@ -99,7 +110,6 @@ export async function getProject({
   const result = await db.query.project.findFirst({
     where: {
       id: projectId,
-      ownerId,
       deletedAt: { isNull: true },
     },
     with: {
@@ -116,5 +126,11 @@ export async function getProject({
     },
   });
   if (!result) throw new Error("Project not found");
+  if (result.ownerId !== ownerId) {
+    const access = await db.query.projectCollaborator.findFirst({
+      where: { projectId, userId: ownerId },
+    });
+    if (!access) throw new Error("Project not found");
+  }
   return result;
 }

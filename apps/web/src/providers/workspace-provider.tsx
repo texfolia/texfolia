@@ -1,11 +1,15 @@
 import { createContext, type ReactNode, useContext } from "react";
 
+import type { BuildSnapshot } from "#/lib/build";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import type { latexCompletion } from "#/lib/latex/completion";
 import type { FormatSettings } from "#/lib/latex/format";
 
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {
+  projectId: string;
+  build: BuildSnapshot | null;
+  stale: boolean;
   drafts: Map<string, FileState>;
   paths: ReadonlyMap<string, string>;
   completion: ReturnType<typeof latexCompletion>;

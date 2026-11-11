@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -15,6 +16,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -30,9 +33,10 @@ func writeError(w http.ResponseWriter, err error) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(failure.status)
 	_ = json.NewEncoder(w).Encode(struct {
-		Error string `json:"error"`
-		Log   string `json:"log"`
-	}{failure.message, failure.log})
+		Error   string       `json:"error"`
+		Log     string       `json:"log"`
+		LogFile *logArtifact `json:"logFile,omitempty"`
+	}{failure.message, failure.log, failure.logFile})
 }
 
 type engineRun struct {
@@ -119,7 +123,7 @@ func newHandler(timeout time.Duration) http.Handler {
 			writeError(w, &httpError{status: 415, message: "Expected application/json"})
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxProjectBytes)
+		r.Body = http.MaxBytesReader(w, r.Body, 64*1024*1024)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			var tooLarge *http.MaxBytesError
@@ -160,6 +164,28 @@ func newHandler(timeout time.Duration) http.Handler {
 		}
 		if err == nil {
 			err = form.WriteField("log", result.log)
+		}
+		for _, path := range result.artifacts {
+			if err != nil {
+				break
+			}
+			if path == filepath.Base(result.pdf.Name()) {
+				continue
+			}
+			var part io.Writer
+			part, err = form.CreatePart(textproto.MIMEHeader{
+				"Content-Disposition": {fmt.Sprintf(`form-data; name="%s"; filename="%s"`, strings.ReplaceAll("artifact:"+path, `"`, `\"`), strings.ReplaceAll(filepath.Base(path), `"`, `\"`))},
+				"Content-Type":        {"application/octet-stream"},
+			})
+			if err != nil {
+				break
+			}
+			var file *os.File
+			file, err = os.Open(filepath.Join(result.root, "source", "out", filepath.FromSlash(path)))
+			if err == nil {
+				_, err = io.Copy(part, file)
+				_ = file.Close()
+			}
 		}
 		if err == nil {
 			err = form.Close()

@@ -27,6 +27,12 @@ test("engine client sends sources and reads multipart PDF and diagnostics", asyn
       "output.pdf",
     );
     form.set("log", "TeX transcript");
+    form.set("artifact:main.aux", new Blob(["aux cache"]), "main.aux");
+    form.set(
+      "artifact:nested/custom.data",
+      new Blob([new Uint8Array([0, 1, 2, 255])]),
+      "custom.data",
+    );
     return new Response(form, {
       headers: {
         "X-Compile-Timing": JSON.stringify({
@@ -42,6 +48,10 @@ test("engine client sends sources and reads multipart PDF and diagnostics", asyn
   const result = await engine(project, context);
   expect(new TextDecoder().decode(result.pdf)).toBe("%PDF-1.5");
   expect(result.log).toBe("TeX transcript");
+  expect(await result.files?.["main.aux"]?.text()).toBe("aux cache");
+  expect(
+    new Uint8Array(await result.files!["nested/custom.data"]!.arrayBuffer()),
+  ).toEqual(new Uint8Array([0, 1, 2, 255]));
   expect(result.timing).toEqual({
     engine: "tectonic",
     temperature: "cold",
