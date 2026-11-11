@@ -10,10 +10,12 @@ import (
 )
 
 const maxProjectBytes = 10 * 1024 * 1024
+const maxArtifactBytes = 32 * 1024 * 1024
 
 type project struct {
 	mainFile string
 	files    map[string][]byte
+	cache    map[string][]byte
 }
 
 func validPath(path string) bool {
@@ -43,6 +45,9 @@ func parseProject(body []byte) (project, error) {
 	var wire struct {
 		MainFile json.RawMessage            `json:"mainFile"`
 		Files    map[string]json.RawMessage `json:"files"`
+		Cache    map[string]struct {
+			Base64 string `json:"base64"`
+		} `json:"cache"`
 	}
 	if err := json.Unmarshal(body, &wire); err != nil || len(wire.Files) < 1 || len(wire.Files) > 200 {
 		return invalid()
@@ -60,7 +65,7 @@ func parseProject(body []byte) (project, error) {
 		return invalid()
 	}
 	for path, raw := range wire.Files {
-		if !validPath(path) {
+		if !validPath(path) || path == "out" || strings.HasPrefix(path, "out/") {
 			return invalid()
 		}
 		for parent := path; strings.Contains(parent, "/"); {
@@ -86,6 +91,29 @@ func parseProject(body []byte) (project, error) {
 		}
 		p.files[path] = content
 	}
+	var sourceBytes int
+	for _, content := range p.files {
+		sourceBytes += len(content)
+	}
+	if sourceBytes >= maxProjectBytes {
+		return project{}, &httpError{status: 413, message: "Project exceeds 10 MiB"}
+	}
+	p.cache = make(map[string][]byte, len(wire.Cache))
+	var cacheBytes int
+	for path, asset := range wire.Cache {
+		if !validPath(path) {
+			return invalid()
+		}
+		content, err := base64.StdEncoding.DecodeString(asset.Base64)
+		if err != nil {
+			return invalid()
+		}
+		cacheBytes += len(content)
+		if cacheBytes > maxArtifactBytes {
+			return invalid()
+		}
+		p.cache[path] = content
+	}
 	return p, nil
 }
 
@@ -93,6 +121,12 @@ type httpError struct {
 	status  int
 	message string
 	log     string
+	logFile *logArtifact
 }
 
 func (e *httpError) Error() string { return fmt.Sprintf("%d: %s", e.status, e.message) }
+
+type logArtifact struct {
+	Path   string `json:"path"`
+	Base64 string `json:"base64"`
+}

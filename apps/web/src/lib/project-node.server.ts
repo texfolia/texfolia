@@ -3,6 +3,7 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import type { z } from "zod";
 
+import { fetchCompiler } from "./compiler.server";
 import type { createNodeSchema } from "./project-node.schema";
 
 export async function createProjectNode({
@@ -14,7 +15,7 @@ export async function createProjectNode({
   ownerId: string;
   data: z.infer<typeof createNodeSchema>;
 }) {
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     // Serialize structure changes with deletion and verify ownership before
     // accepting a parent supplied by the client.
     const [ownedProject] = await tx
@@ -38,6 +39,8 @@ export async function createProjectNode({
       },
     });
     if (!parent) throw new Error("Folder not found");
+    if (parent.parentId === null && data.name.toLowerCase() === "out")
+      throw new Error("out/ is reserved for generated build files");
     const [node] = await tx
       .insert(projectNode)
       .values({ ...data, sizeBytes: 0n })
@@ -55,4 +58,22 @@ export async function createProjectNode({
       .where(eq(project.id, data.projectId));
     return node;
   });
+  try {
+    const response = await fetchCompiler(
+      `/projects/${data.projectId}/changed`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ editorId: crypto.randomUUID(), sequence: 0 }),
+      },
+    );
+    if (!response.ok)
+      throw new Error(`Build invalidation returned ${response.status}`);
+  } catch (error) {
+    console.error("Source created but build invalidation failed", {
+      projectId: data.projectId,
+      error,
+    });
+  }
+  return created;
 }

@@ -65,16 +65,26 @@ async function checkProject(
   if (!idSchema.safeParse(projectId).success)
     return json({ error: "Project not found" }, 404);
   const project = await db.query.project.findFirst({
-    columns: { id: true },
+    columns: { id: true, ownerId: true },
     where: {
       id: projectId,
-      ownerId: session.user.id,
       deletedAt: { isNull: true },
     },
   });
-  return project
-    ? { userId: session.user.id }
-    : json({ error: "Project not found" }, 404);
+  if (!project) return json({ error: "Project not found" }, 404);
+  if (project.ownerId !== session.user.id) {
+    const collaborator = await db.query.projectCollaborator.findFirst({
+      where: { projectId, userId: session.user.id },
+    });
+    if (
+      !collaborator ||
+      (request.method !== "GET" &&
+        request.method !== "PATCH" &&
+        collaborator.role !== "editor")
+    )
+      return json({ error: "Project not found" }, 404);
+  }
+  return { userId: session.user.id, name: session.user.name };
 }
 
 async function readSources(request: Request) {
@@ -132,6 +142,36 @@ async function compilePlan(db: Db, userId: string) {
   }
 }
 
+async function readPreviewBody(request: Request) {
+  const text = await readLimitedBody(request);
+  if (text === null) return null;
+  try {
+    return z
+      .object({ editorId: z.uuid(), sequence: z.number().int().nonnegative() })
+      .parse(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+async function readLimitedBody(request: Request) {
+  const reader = request.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > 4096) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(new Uint8Array(value));
+  }
+  return new Blob(chunks).text();
+}
+
 async function readPreviewTiming(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return null;
@@ -165,6 +205,15 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         const { db } = context;
         const denied = await checkProject(request, params.projectId, context);
         if (denied instanceof Response) return denied;
+        if (new URL(request.url).searchParams.get("changed") === "1") {
+          const body = await readPreviewBody(request);
+          if (!body) return json({ error: "Invalid editor revision" }, 400);
+          return fetchCompiler(`/projects/${params.projectId}/changed`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        }
         if (
           !request.headers.get("Content-Type")?.startsWith("application/json")
         )
@@ -192,6 +241,9 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                 "Content-Type": "application/json",
                 "X-Compilation-Id": id,
                 "X-Compile-Plan": plan,
+                "X-Build-User": encodeURIComponent(denied.name),
+                "X-Clean-Build":
+                  request.headers.get("X-Clean-Build") === "1" ? "1" : "0",
                 ...(request.headers.has("X-Editor-Id") ||
                 request.headers.has("X-Editor-Sequence")
                   ? {
@@ -318,6 +370,11 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         const url = new URL(request.url);
         if (!url.searchParams.has("job")) {
           try {
+            const file = url.searchParams.get("file");
+            if (file !== null)
+              return await fetchCompiler(
+                `/projects/${params.projectId}/build/files?path=${encodeURIComponent(file)}&version=${encodeURIComponent(url.searchParams.get("version") ?? "")}`,
+              );
             const events = url.searchParams.get("events") === "1";
             return await fetchCompiler(
               `/projects/${params.projectId}${events ? "/events" : ""}`,

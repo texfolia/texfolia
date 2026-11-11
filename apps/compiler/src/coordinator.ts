@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import {
+  artifactManifestSchema,
+  decodeBase64,
+  readCache,
+  storeArtifacts,
+  type ArtifactManifest,
+} from "./artifacts";
 import type { Engine, ObjectStore } from "./jobs";
 import {
   EngineError,
@@ -22,6 +29,8 @@ const common = {
   createdAt: z.string(),
   plan: planSchema,
   log: z.string().default(""),
+  builtBy: z.string().default("Unknown"),
+  clean: z.boolean().default(false),
   timing: jobTimingSchema.optional(),
 };
 const buildSchema = z.discriminatedUnion("status", [
@@ -37,6 +46,8 @@ const buildSchema = z.discriminatedUnion("status", [
 ]);
 export const coordinatorSnapshotSchema = z.object({
   revision: z.number().int().nonnegative(),
+  artifacts: artifactManifestSchema.nullable().default(null),
+  stale: z.boolean().default(false),
   current: buildSchema.nullable(),
   latestBuild: buildSchema.nullable(),
 });
@@ -47,6 +58,8 @@ export const editorVersionSchema = z.object({
   sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
 });
 const savedSchema = coordinatorSnapshotSchema.extend({
+  lastActivity: z.number().default(Date.now),
+  cacheValid: z.boolean().default(true),
   editors: z.record(jobIdSchema, z.number().int().nonnegative()).default({}),
   pending: z
     .object({
@@ -56,6 +69,8 @@ const savedSchema = coordinatorSnapshotSchema.extend({
     })
     .nullable(),
 });
+
+const retentionMs = 30 * 24 * 60 * 60_000;
 
 // All state transitions use this implementation in both SQLite and Durable Objects.
 // Engine I/O runs outside the writer so a newer edit can cancel it immediately.
@@ -84,6 +99,10 @@ export class ProjectCoordinatorCore {
       ? savedSchema.parse(JSON.parse(options.saved))
       : {
           revision: 0,
+          artifacts: null,
+          stale: false,
+          lastActivity: Date.now(),
+          cacheValid: true,
           current: null,
           latestBuild: null,
           pending: null,
@@ -92,8 +111,14 @@ export class ProjectCoordinatorCore {
   }
 
   snapshot(): CoordinatorSnapshot {
-    const { revision, current, latestBuild } = this.state;
-    return structuredClone({ revision, current, latestBuild });
+    const { revision, current, latestBuild, artifacts, stale } = this.state;
+    return structuredClone({
+      revision,
+      current,
+      latestBuild,
+      artifacts,
+      stale,
+    });
   }
 
   private exclusive<T>(action: () => Promise<T>): Promise<T> {
@@ -115,6 +140,10 @@ export class ProjectCoordinatorCore {
     project: Project,
     plan: z.infer<typeof planSchema>,
     version?: z.infer<typeof editorVersionSchema>,
+    buildOptions: { clean: boolean; builtBy: string } = {
+      clean: false,
+      builtBy: "Unknown",
+    },
   ) {
     return this.exclusive(async () => {
       const digest = Array.from(
@@ -166,10 +195,14 @@ export class ProjectCoordinatorCore {
         createdAt: new Date().toISOString(),
         plan,
         log: "",
+        ...buildOptions,
       };
       this.state = {
         ...this.state,
         revision: current.revision,
+        stale: this.state.stale || this.state.artifacts?.digest !== digest,
+        cacheValid: buildOptions.clean ? false : this.state.cacheValid,
+        lastActivity: Date.now(),
         current,
         pending: { project, due: Date.now() + 300, attempt: 0 },
       };
@@ -178,6 +211,58 @@ export class ProjectCoordinatorCore {
       await this.options.schedule(Date.now() + 300);
       return { ...current, supersededId };
     });
+  }
+
+  async changed(version?: z.infer<typeof editorVersionSchema>) {
+    return this.exclusive(async () => {
+      if (
+        version &&
+        version.sequence <= (this.state.editors[version.editorId] ?? -1)
+      )
+        return;
+      if (version) this.state.editors[version.editorId] = version.sequence;
+      this.state.revision++;
+      this.state.stale = true;
+      this.state.lastActivity = Date.now();
+      this.persist();
+      if (!this.state.pending)
+        await this.options.schedule(Date.now() + retentionMs);
+    });
+  }
+
+  async clear() {
+    this.active?.controller.abort();
+    await this.active?.done;
+    await this.exclusive(async () => {
+      this.state.artifacts = null;
+      this.state.latestBuild = null;
+      this.state.current = null;
+      this.state.pending = null;
+      this.persist();
+      for await (const key of this.options.store.keys(
+        `projects/${this.options.projectId}/`,
+      ))
+        await this.options.store.remove(key);
+    });
+  }
+
+  private async pruneArtifacts() {
+    const keep = new Set(this.state.artifacts?.files.map((file) => file.key));
+    for await (const key of this.options.store.keys(
+      `projects/${this.options.projectId}/builds/`,
+    ))
+      if (!keep.has(key)) await this.options.store.remove(key);
+    for await (const key of this.options.store.keys(
+      `projects/${this.options.projectId}/compilations/`,
+    ))
+      await this.options.store.remove(key);
+  }
+
+  async file(path: string, version?: string) {
+    const file = this.state.artifacts?.files.find((file) => file.path === path);
+    return file && (!version || file.key === version)
+      ? this.options.store.read(file.key)
+      : null;
   }
 
   private resultKey(id: string) {
@@ -195,6 +280,10 @@ export class ProjectCoordinatorCore {
   }
 
   async artifact(id: string) {
+    const manifest = this.state.artifacts;
+    if (manifest?.id === id)
+      return manifest.pdf ? this.file(manifest.pdf) : null;
+    if (manifest) return null;
     const build = await this.get(id);
     return build?.status === "succeeded"
       ? this.options.store.read(this.pdfKey(id))
@@ -202,9 +291,20 @@ export class ProjectCoordinatorCore {
   }
 
   async wake() {
+    if (
+      !this.state.pending &&
+      Date.now() - this.state.lastActivity >= retentionMs
+    ) {
+      await this.clear();
+      return;
+    }
     const execution = await this.exclusive(async () => {
       const { pending, current } = this.state;
-      if (!pending || !current) return null;
+      if (!pending || !current) {
+        if (this.state.artifacts)
+          await this.options.schedule(this.state.lastActivity + retentionMs);
+        return null;
+      }
       if (this.active) {
         await this.options.schedule(Date.now() + 1000);
         return null;
@@ -245,6 +345,7 @@ export class ProjectCoordinatorCore {
         await this.options.schedule(
           Math.max(Date.now() + 1, this.state.pending.due),
         );
+      else await this.options.schedule(this.state.lastActivity + retentionMs);
     }
   }
 
@@ -258,25 +359,57 @@ export class ProjectCoordinatorCore {
     const queueWaitMs = Math.max(0, Date.now() - Date.parse(build.createdAt));
     let engineTiming = unknownEngineTiming;
     let result: Build;
-    let pdf: Uint8Array | undefined;
+    let output: Awaited<ReturnType<Engine>> | undefined;
+    let cacheUsed = false;
+    let cleanRetried = false;
+    let logFile: HttpError["logFile"];
+    let compileMs = 0;
     try {
-      const output = await this.options.engine(project, {
+      const manifest = this.state.artifacts;
+      const cache =
+        !build.clean && this.state.cacheValid && manifest?.engine === "tectonic"
+          ? await readCache(this.options.store, manifest)
+          : {};
+      cacheUsed = Object.keys(cache).length > 0;
+      const context = {
         projectId: this.options.projectId,
         jobId: build.id,
         attempt,
         plan: build.plan,
         signal,
-      });
+      };
+      try {
+        output = await this.options.engine(project, {
+          ...context,
+          ...(cacheUsed ? { cache } : {}),
+        });
+      } catch (error) {
+        if (
+          !cacheUsed ||
+          signal.aborted ||
+          !(error instanceof HttpError) ||
+          ![408, 422].includes(error.status)
+        )
+          throw error;
+        compileMs += error.timing.compileMs ?? 0;
+        cleanRetried = true;
+        await this.exclusive(async () => {
+          this.state.cacheValid = false;
+          this.persist();
+        });
+        output = await this.options.engine(project, context);
+      }
       engineTiming = output.timing;
-      pdf = output.pdf;
+      compileMs += output.timing.compileMs ?? 0;
       result = {
         ...build,
         status: "succeeded",
         log: output.log,
-        sizeBytes: pdf.byteLength,
+        sizeBytes: output.pdf.byteLength,
         artifactUrl: `/${this.pdfKey(build.id)}`,
       };
     } catch (error) {
+      if (error instanceof HttpError) logFile = error.logFile;
       if (error instanceof HttpError || error instanceof EngineError)
         engineTiming = error.timing;
       result = {
@@ -306,7 +439,55 @@ export class ProjectCoordinatorCore {
     await this.exclusive(async () => {
       if (signal.aborted || this.state.current?.id !== build.id) return;
       const publishStarted = performance.now();
-      if (pdf) await this.options.store.create(this.pdfKey(build.id), pdf);
+      let manifest: ArtifactManifest | null = this.state.artifacts;
+      if (output && result.status === "succeeded") {
+        manifest = await storeArtifacts({
+          store: this.options.store,
+          projectId: this.options.projectId,
+          mainFile: project.mainFile,
+          build: {
+            id: build.id,
+            revision: build.revision,
+            digest: build.digest,
+            builtBy: build.builtBy,
+          },
+          output,
+        });
+      } else if (result.status === "failed") {
+        const path = `${project.mainFile
+          .split("/")
+          .at(-1)!
+          .replace(/\.tex$/, "")}.log`;
+        const key = `projects/${this.options.projectId}/builds/${crypto.randomUUID()}/${path}`;
+        const data =
+          logFile?.path === path
+            ? decodeBase64(logFile.base64)
+            : new TextEncoder().encode(result.log);
+        await this.options.store.create(key, data);
+        const file = {
+          path,
+          key,
+          sizeBytes: data.length,
+        };
+        manifest = manifest
+          ? {
+              ...manifest,
+              files: [
+                ...manifest.files.filter((entry) => entry.path !== path),
+                file,
+              ],
+            }
+          : {
+              id: build.id,
+              revision: build.revision,
+              digest: build.digest,
+              builtAt: new Date().toISOString(),
+              builtBy: build.builtBy,
+              engine: engineTiming.engine,
+              pdf: null,
+              files: [file],
+            };
+      }
       result.timing = {
         ...engineTiming,
         plan: build.plan,
@@ -328,12 +509,26 @@ export class ProjectCoordinatorCore {
         projectId: this.options.projectId,
         revision: build.revision,
         status: result.status,
+        cacheUsed,
+        cleanRetried,
+        weightedCompileSeconds:
+          engineTiming.compileMs === null
+            ? null
+            : (compileMs + (output ? 0 : engineTiming.compileMs)) / 1000,
         ...result.timing,
       });
       this.state.current = result;
-      this.state.latestBuild = result;
+      if (result.status === "succeeded") {
+        this.state.latestBuild = result;
+        this.state.cacheValid = true;
+      }
+      this.state.artifacts = manifest;
+      if (result.status === "succeeded")
+        this.state.stale = this.state.revision !== build.revision;
+      this.state.lastActivity = Date.now();
       this.state.pending = null;
       this.persist();
+      await this.pruneArtifacts();
     });
   }
 

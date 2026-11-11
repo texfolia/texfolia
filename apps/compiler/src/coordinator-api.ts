@@ -23,6 +23,35 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
   app.get("/projects/:projectId/events", (c) =>
     coordinator.events(c.req.raw.signal),
   );
+  app.post("/projects/:projectId/changed", async (c) => {
+    const body: unknown = await c.req.json();
+    const version = editorVersionSchema.safeParse(body);
+    if (!version.success)
+      return c.json({ error: "Invalid editor revision" }, 400);
+    await coordinator.changed(version.data);
+    return c.json(coordinator.snapshot());
+  });
+  app.delete("/projects/:projectId/build", async (c) => {
+    await coordinator.clear();
+    return c.body(null, 204);
+  });
+  app.get("/projects/:projectId/build/files", async (c) => {
+    const path = c.req.query("path");
+    const file = path
+      ? await coordinator.file(path, c.req.query("version"))
+      : null;
+    return file
+      ? new Response(file, {
+          headers: {
+            "Content-Type": path?.endsWith(".pdf")
+              ? "application/pdf"
+              : "application/octet-stream",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+          },
+        })
+      : c.json({ error: "Build file not found" }, 404);
+  });
   app.post(
     "/projects/:projectId/compile",
     bodyLimit({
@@ -58,6 +87,12 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
         parseProject(body),
         planSchema.catch("unknown").parse(c.req.header("X-Compile-Plan")),
         version?.data,
+        {
+          clean: c.req.header("X-Clean-Build") === "1",
+          builtBy: decodeURIComponent(
+            c.req.header("X-Build-User") ?? "Unknown",
+          ),
+        },
       );
       return c.json(
         {

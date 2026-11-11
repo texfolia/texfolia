@@ -81,6 +81,13 @@ export function CreateNodeForm({
           return;
         }
         if (
+          nodes.find((node) => node.id === parentId)?.parentId === null &&
+          parsed.data.toLowerCase() === "out"
+        ) {
+          setError("out/ is reserved for generated build files.");
+          return;
+        }
+        if (
           nodes.some(
             (node) =>
               node.parentId === parentId &&

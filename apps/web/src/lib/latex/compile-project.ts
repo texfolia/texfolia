@@ -16,7 +16,7 @@ const status = z.discriminatedUnion("status", [
 ]);
 
 type CompileResult =
-  | { pdf: File; log: string }
+  | { pdf: File; log: string; jobId: string }
   | { error: string; log: string };
 
 async function failureResult(response: Response): Promise<CompileResult> {
@@ -34,6 +34,7 @@ export async function requestCompilation(options: {
   signal: AbortSignal;
   startedAt?: number;
   lastEditAt?: number | null;
+  clean?: boolean;
   editorVersion?: { editorId: string; sequence: number };
 }): Promise<CompileResult> {
   const { projectId, mainFile, files, signal } = options;
@@ -46,6 +47,7 @@ export async function requestCompilation(options: {
       headers: {
         "Content-Type": "application/json",
         "X-Compilation-Id": jobId,
+        "X-Clean-Build": options.clean ? "1" : "0",
         ...(options.editorVersion
           ? {
               "X-Editor-Id": options.editorVersion.editorId,
@@ -98,7 +100,7 @@ export async function requestCompilation(options: {
           pollingMs: downloadAt - submittedAt,
           downloadMs: performance.now() - downloadAt,
         });
-        return { pdf: file, log: result.log };
+        return { pdf: file, log: result.log, jobId };
       }
     }
   }

@@ -76,6 +76,7 @@ name="${5##*/}"
 name="${name%.tex}"
 text=$(cat "$5")
 case "$text" in
+cache) [ "$(cat out/main.aux)" = "cached aux" ]; mkdir -p "$out/custom"; printf '\000\001\002\377' > "$out/custom/data.bin"; printf '%%PDF-1.5' > "$out/$name.pdf"; echo transcript > "$out/$name.log" ;;
 slow) touch '` + marker + `'; exec sleep 5 ;;
 bad) echo 'undefined control sequence' >&2; echo 'invalidcommand' > "$out/$name.log"; exit 1 ;;
 missing) exit 0 ;;
@@ -169,8 +170,27 @@ func TestFailuresAndLimits(t *testing.T) {
 		t.Fatalf("oversized body: %d", response.Code)
 	}
 	response = post(handler, `{"files":{"main.tex":"logs"}}`)
-	if response.Code != 200 || response.Body.Len() > 3*maxLogBytes+2048 || !strings.Contains(response.Body.String(), "START") || !strings.Contains(response.Body.String(), "END") {
-		t.Fatalf("logs unbounded or lost transcript endpoints: %d (%d bytes)", response.Code, response.Body.Len())
+	if response.Code != 200 {
+		t.Fatalf("log compile failed: %d", response.Code)
+	}
+	request = httptest.NewRequest("POST", "/", nil)
+	request.Header = response.Header()
+	request.Body = io.NopCloser(bytes.NewReader(response.Body.Bytes()))
+	if err := request.ParseMultipartForm(1024 * 1024); err != nil {
+		t.Fatal(err)
+	}
+	diagnostic := request.FormValue("log")
+	if len(diagnostic) > 3*maxLogBytes+32 || !strings.Contains(diagnostic, "START") || !strings.Contains(diagnostic, "END") {
+		t.Fatalf("diagnostic is unbounded or lost endpoints: %d bytes", len(diagnostic))
+	}
+	file, _, err := request.FormFile("artifact:main.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	rawLog, err := io.ReadAll(file)
+	if err != nil || len(rawLog) != 100008 {
+		t.Fatalf("full generated log was truncated: %d, %v", len(rawLog), err)
 	}
 	assertClean(t, temp)
 }
@@ -304,4 +324,41 @@ func TestProjectOwnershipAndCancellation(t *testing.T) {
 		t.Fatalf("early cancellation lost: %d", late.StatusCode)
 	}
 	assertClean(t, temp)
+}
+
+func TestCacheAndAllArtifacts(t *testing.T) {
+	handler, temp, _ := testEngine(t, time.Second)
+	response := post(handler, `{"files":{"main.tex":"cache"},"cache":{"main.aux":{"base64":"Y2FjaGVkIGF1eA=="},"custom.unknown":{"base64":"AAEC/w=="}}}`)
+	if response.Code != 200 {
+		t.Fatalf("cached compile failed: %d %s", response.Code, response.Body)
+	}
+	request := httptest.NewRequest("POST", "/", nil)
+	request.Header = response.Header()
+	request.Body = io.NopCloser(bytes.NewReader(response.Body.Bytes()))
+	if err := request.ParseMultipartForm(1024 * 1024); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"pdf", "artifact:main.log", "artifact:main.aux", "artifact:custom.unknown", "artifact:custom/data.bin"} {
+		if len(request.MultipartForm.File[name]) != 1 {
+			t.Fatalf("missing artifact %s", name)
+		}
+	}
+	file, _, err := request.FormFile("artifact:custom/data.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil || !bytes.Equal(data, []byte{0, 1, 2, 255}) {
+		t.Fatalf("binary artifact changed: %v %v", data, err)
+	}
+	assertClean(t, temp)
+	for _, body := range []string{
+		`{"files":{"main.tex":"ok","out/forbidden.tex":"bad"}}`,
+		`{"files":{"main.tex":"ok"},"cache":{"../escape":{"base64":"YQ=="}}}`,
+	} {
+		if response := post(handler, body); response.Code != 400 {
+			t.Fatalf("unsafe cache/source accepted: %d", response.Code)
+		}
+	}
 }

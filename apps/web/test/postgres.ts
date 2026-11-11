@@ -66,9 +66,27 @@ try {
     projects.find((item) => item.id === created.id)?.collaborators[0]?.user?.id,
     teammateId,
   );
+  assert.equal(
+    (await getProject({ db, ownerId: teammateId, projectId: created.id })).id,
+    created.id,
+  );
   await assert.rejects(
-    getProject({ db, ownerId: teammateId, projectId: created.id }),
+    getProject({ db, ownerId: crypto.randomUUID(), projectId: created.id }),
     /Project not found/,
+  );
+  await assert.rejects(
+    createProjectNode({
+      db,
+      ownerId,
+      data: {
+        id: crypto.randomUUID(),
+        projectId: created.id,
+        parentId: folder.id,
+        name: "out",
+        kind: "folder",
+      },
+    }),
+    /reserved for generated build files/,
   );
 
   const node = await createProjectNode({

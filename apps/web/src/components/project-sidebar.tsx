@@ -2,6 +2,8 @@ import { IconAlertCircle, IconFiles } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 
 import { CreateNodeForm } from "#/components/create-node-form";
+import { GeneratedFiles } from "#/components/generated-files";
+import { ProjectExport } from "#/components/project-export";
 import { ProjectFileTree } from "#/components/project-file-tree";
 import { SettingsDialog } from "#/components/settings-dialog";
 import {
@@ -28,6 +30,8 @@ export function ProjectSidebar({
   onOpen,
   showProblems,
   onToggleProblems,
+  onOpenGenerated,
+  sources,
 }: {
   name: string;
   nodes: ProjectNode[];
@@ -36,6 +40,8 @@ export function ProjectSidebar({
   onOpen: (node: ProjectNode, permanent: boolean) => void;
   showProblems: boolean;
   onToggleProblems: () => void;
+  onOpenGenerated: (path: string) => void;
+  sources: () => Record<string, string>;
 }) {
   const files = useProjectFiles();
   const { setOpen, toggleSidebar } = useSidebar();
@@ -117,9 +123,16 @@ export function ProjectSidebar({
                   }
                   onOpen={onOpen}
                 />
+                <GeneratedFiles
+                  onOpen={onOpenGenerated}
+                  activePath={
+                    activeId?.startsWith("out:") ? activeId.slice(4) : undefined
+                  }
+                />
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <ProjectExport name={name} sources={sources} />
         </Sidebar>
       </div>
     </Sidebar>

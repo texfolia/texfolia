@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { artifactFilesSchema } from "./project";
 import {
   EngineError,
   HttpError,
@@ -70,8 +71,14 @@ export type Engine = (
     plan: z.infer<typeof planSchema>;
     projectId?: string;
     signal?: AbortSignal;
+    cache?: z.infer<typeof artifactFilesSchema>;
   },
-) => Promise<{ pdf: Uint8Array; log: string; timing: EngineTiming }>;
+) => Promise<{
+  pdf: Uint8Array;
+  log: string;
+  timing: EngineTiming;
+  files?: Record<string, Blob>;
+}>;
 const maxAttempts = 4;
 const redeliverAfterMs = 60 * 60_000;
 
