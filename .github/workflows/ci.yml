@@ -33,7 +33,7 @@ jobs:
       - name: Apply database schema
         run: bun run db:push
       - name: Exercise app database operations
-        run: bun run test:integration
+        run: bun run apps/web/test/postgres.ts
   checks:
     name: Checks
     runs-on: ubuntu-latest

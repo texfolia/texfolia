@@ -33,7 +33,7 @@ Log the Stripe CLI into the same sandbox as the app's Stripe API key. In a separ
 
 ```sh
 stripe login
-bun run stripe:listen
+stripe listen --forward-to localhost:3000/api/auth/stripe/webhook
 ```
 
 The listener forwards events to `localhost:3000/api/auth/stripe/webhook`. Copy its signing secret into `STRIPE_WEBHOOK_SECRET` in `apps/web/.env`, then start or restart the app. Keep the listener running while testing subscriptions. Use the listener's signing secret for local forwarding, rather than a dashboard webhook endpoint's secret. This follows [Better Auth's local webhook setup](https://better-auth.com/docs/plugins/stripe#testing-webhooks-locally).
@@ -51,19 +51,11 @@ changes. The first run downloads container images and caches the compiler's
 base LaTeX packages. Additional packages may need a network connection when
 first used.
 
-To run the compiler in the local Workers runtime instead:
+Press Ctrl+C to stop the development processes. To stop any remaining Compose
+services, run `docker compose stop`. Database and compiler volumes persist
+between runs.
 
-```sh
-bun run dev:workers
-```
-
-This starts Postgres, the compiler Worker at `http://localhost:8787`, and the web
-app configured to use it. Both modes use Docker for project engines. Stop the
-current mode before switching. Press Ctrl+C to stop the development processes;
-`bun run dev:stop` stops the Compose services that remain running. Database and
-compiler volumes persist between runs.
-
-Development, build, and verification commands delegate to Turbo. Filtering the
+Development and build commands delegate to Turbo. Filtering the
 web task also starts its compiler companion and setup dependencies:
 
 ```sh
@@ -180,17 +172,12 @@ bun run typecheck
 bun run test
 ```
 
-These Turbo tasks include the Bun tests, Go race tests, Go vet, TypeScript
+These commands include the Bun tests, Go race tests, Go vet, TypeScript
 checks, Oxlint, and formatting checks. Run `bun run format` to apply Oxfmt and
 Gofmt. Oxlint and Oxfmt use the root `.oxlintrc.json` and `.oxfmtrc.json`
 configurations. `bun run build` builds the web app and compiler images.
 
-With either development mode running, verify actual compilation through Turbo:
-
-```sh
-bun run smoke          # Local Bun compiler
-bun run smoke:workers  # Local Workers compiler
-```
+Run `bun run lint:fix` to apply automatic Oxlint fixes.
 
 `bun run db:push`, `bun run auth:schema`, `bun run cf:typegen`, and
 `bun run deploy` also run through Turbo. Deploy builds the web app and deploys

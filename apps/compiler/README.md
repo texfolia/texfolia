@@ -29,21 +29,9 @@ Postgres and the compiler, waits for health checks, applies the schema, and then
 starts the web app. The compiler listens at `http://localhost:8080`. Docker
 Compose reloads its Bun process when the compiler source changes.
 
-To run the compiler as a Worker with local Durable Objects and R2:
-
-```sh
-bun run dev:workers
-```
-
-Turbo starts the compiler at `http://localhost:8787` and waits for its health
-endpoint before starting the web app with that compiler URL. The installed
-workerd binary needs `--compatibility-date 2026-10-30`; the Turbo task includes
-this local override. The production configuration remains unchanged.
-
-Stop the current mode before switching. Ctrl+C stops the development processes.
-`bun run dev:stop` stops the remaining Compose services. You can select the web
-package with `bunx turbo run dev --filter=web` or
-`bunx turbo run dev:workers --filter=web`; the compiler companion still starts.
+Ctrl+C stops the development processes. To stop any remaining Compose services,
+run `docker compose stop` from the repository root. You can select the web
+package with `bunx turbo run dev --filter=web`; the compiler companion still starts.
 
 Compose mounts the Docker socket into the compiler API. The API creates
 containers named `texfolia-project-<projectId>` on the Compose network. The
@@ -171,7 +159,7 @@ and runs as an unprivileged user.
 
 ## Verify the compiler
 
-All checks run through Turbo from the repository root. Go 1.26 or later is
+Run checks from the repository root. Go 1.26 or later is
 required for the engine tests, vet, and formatting checks.
 
 ```sh
@@ -187,20 +175,6 @@ To run only the compiler's tests, including the Go race tests:
 bunx turbo run test --filter=compiler
 ```
 
-With the corresponding development mode running, test the same API contract in
-either runtime:
-
-```sh
-bun run smoke
-bun run smoke:workers
-```
-
-These uncached tasks run `coordinator-smoke.ts`. The script builds PDFs for two
-temporary projects and checks attach, debounce, in-flight cancellation, revision
-metadata, push updates, and artifact isolation. It prints the project IDs so you
-can remove its local project containers. `coordinator.test.ts` also verifies
+`coordinator.test.ts` verifies
 late-response rejection, serialization, independent engines, idempotency,
 request ordering, and SQLite restart recovery.
-
-For the legacy compiler smoke test, run
-`bunx turbo run smoke:legacy --filter=compiler` with local development running.

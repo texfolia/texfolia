@@ -25,12 +25,8 @@
       "cache": false,
       "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
     },
-    "//#db:setup": {
-      "cache": false,
-      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
-    },
     "compiler#dev:setup": {
-      "dependsOn": ["compiler#build", "//#db:setup"],
+      "dependsOn": ["compiler#build"],
       "cache": false,
       "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
     },
@@ -47,35 +43,9 @@
       "persistent": true,
       "passThroughEnv": ["*"]
     },
-    "dev:workers": {
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "web#dev:workers": {
-      "dependsOn": ["@texfolia/db#dev:setup", "compiler#ready:workers"],
-      "with": ["compiler#dev:workers"],
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "ready:workers": {
-      "cache": false
-    },
-    "dev:stop": {
-      "cache": false,
-      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
-    },
     "db:push": {
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]
-    },
-    "smoke": {
-      "cache": false,
-      "passThroughEnv": ["COMPILER_URL"]
-    },
-    "smoke:workers": {
-      "cache": false
     },
     "start": {
       "cache": false,
@@ -106,36 +76,20 @@
       "passThroughEnv": ["*"]
     },
     "lint": {
-      "dependsOn": ["//#lint:repo"],
       "outputs": [],
       "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"]
     },
-    "//#lint:repo": {
-      "cache": false
-    },
     "format": {
-      "dependsOn": ["//#format:repo"],
-      "cache": false
-    },
-    "//#format:repo": {
       "cache": false
     },
     "format:check": {
-      "dependsOn": ["//#format:check:repo"],
       "outputs": []
-    },
-    "//#format:check:repo": {
-      "cache": false
     },
     "compiler#start": {
       "dependsOn": ["compiler#build"],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
-    },
-    "smoke:legacy": {
-      "cache": false,
-      "passThroughEnv": ["COMPILER_URL"]
     },
     "web#build": {
       "dependsOn": ["^build"],
@@ -150,9 +104,8 @@
       "cache": false
     },
     "@texfolia/db#dev:setup": {
-      "dependsOn": ["//#db:setup"],
       "cache": false,
-      "passThroughEnv": ["DATABASE_URL"]
+      "passThroughEnv": ["DATABASE_URL", "DOCKER_*", "COMPOSE_*"]
     },
     "db:generate": {
       "cache": false,
@@ -161,23 +114,6 @@
     "db:migrate": {
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]
-    },
-    "test:integration": {
-      "cache": false,
-      "passThroughEnv": ["INTEGRATION_DATABASE_URL"]
-    },
-    "stripe:listen": {
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["STRIPE_*"]
-    },
-    "build:production": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".wrangler/deploy/**"]
-    },
-    "build:staging": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".wrangler/deploy/**"]
     }
   }
 }

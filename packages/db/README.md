@@ -5,10 +5,10 @@ The app uses Drizzle and `pg` against PostgreSQL. Workers receive their connecti
 ## Run locally
 
 Configure `packages/db/.env` and `apps/web/.env` as described in the root README.
-The default database is `db` on `localhost:5432`. Run `bun run dev` or
-`bun run dev:workers` from the repository root. Turbo starts local Postgres,
+The default database is `db` on `localhost:5432`. Run `bun run dev`
+from the repository root. Turbo starts local Postgres,
 waits for its health check, applies the schema, and then starts the web app.
-All commands in this guide run through Turbo from the repository root.
+Run commands in this guide from the repository root.
 
 For standalone schema commands, copy `.env.example` to `.env` in this directory and set `DATABASE_URL`. Use a direct Postgres connection string for schema commands, including on Neon. `DATABASE_URL` must be configured; there is no fallback connection string.
 
@@ -17,9 +17,9 @@ bun run db:push
 ```
 
 Standalone schema tasks use the configured database without starting Docker.
-Local development applies the same schema through a separate setup task that
-depends on the local database service. There are currently no generated migration
-files or snapshots in the repository.
+Local development starts Postgres and applies the schema in its internal setup
+task. There are currently no generated migration files or snapshots in the
+repository.
 
 ## Change the schema
 
@@ -40,7 +40,7 @@ Keep transactions limited to related database operations. Call email, billing, a
 Create an isolated database with `test` in its name, apply the schema to it with `DATABASE_URL` set using `bun run db:push`, and run this command from the repository root:
 
 ```sh
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run test:integration
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/postgres.ts
 ```
 
 This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, binary text state, constraint rollback, and ownership checks. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
