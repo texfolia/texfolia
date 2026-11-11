@@ -37,15 +37,12 @@ import { ProjectSidebar } from "#/components/project-sidebar";
 import { Button } from "#/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
-import {
-  buildSnapshotSchema,
-  buildFileUrl,
-  type BuildSnapshot,
-} from "#/lib/build";
+import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
+import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
 import { projectPaths } from "#/lib/project-paths";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
@@ -203,7 +200,12 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const [buildMetadata, setBuildMetadata] = useState<BuildSnapshot | null>(
     null,
   );
-  const sharedArtifacts = useRef<BuildSnapshot["artifacts"]>(null);
+  const buildEvents = useRef<ProjectBuildEvents | null>(null);
+  const sharedBuild = useRef<BuildSnapshot | null>(null);
+  const completedJob = useRef<{
+    id: string;
+    revision: number | undefined;
+  } | null>(null);
   const displayedPdfUrl = useRef<string | null>(null);
   const notifiedSequence = useRef(0);
   const notificationClosed = useRef(false);
@@ -213,28 +215,17 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const [sourceChanged, setSourceChanged] = useState(false);
   useEffect(() => {
     notificationClosed.current = false;
-    const events = new EventSource(
-      `/api/compile/${encodeURIComponent(projectId)}?events=1`,
-    );
-    events.onmessage = (event) => {
-      try {
-        const parsed = buildSnapshotSchema.safeParse(JSON.parse(event.data));
-        if (parsed.success) {
-          sharedArtifacts.current = parsed.data.artifacts;
-          setBuildMetadata(parsed.data);
-          if (
-            !parsed.data.stale &&
-            notifiedSequence.current >= editSequence.current
-          )
-            setSourceChanged(false);
-        }
-      } catch {
-        // EventSource reconnects with a fresh snapshot after a broken stream.
-      }
-    };
+    const events = new ProjectBuildEvents(projectId, (snapshot) => {
+      sharedBuild.current = snapshot;
+      setBuildMetadata(snapshot);
+      if (!snapshot.stale && notifiedSequence.current >= editSequence.current)
+        setSourceChanged(false);
+    });
+    buildEvents.current = events;
     return () => {
       notificationClosed.current = true;
       events.close();
+      buildEvents.current = null;
       clearTimeout(notification.current);
       compilation.current?.abort();
     };
@@ -245,7 +236,23 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   );
   const sharedPdfUrl = sharedPdf ? buildFileUrl(projectId, sharedPdf) : null;
   useEffect(() => {
+    const completed = completedJob.current;
+    if (completed) {
+      // A recovery read may deliver the PDF before the SSE snapshot catches up.
+      if (
+        (completed.revision !== undefined &&
+          (buildMetadata?.revision ?? -1) < completed.revision) ||
+        (buildMetadata?.current?.id === completed.id &&
+          ["queued", "running"].includes(buildMetadata.current.status))
+      )
+        return;
+      if (buildMetadata?.artifacts?.id === completed.id && sharedPdfUrl) {
+        displayedPdfUrl.current = sharedPdfUrl;
+        return;
+      }
+    }
     if (!sharedPdfUrl) {
+      completedJob.current = null;
       displayedPdfUrl.current = null;
       setPdf(null);
       return;
@@ -265,6 +272,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           type: "application/pdf",
         });
         if (!controller.signal.aborted) {
+          completedJob.current = null;
           displayedPdfUrl.current = sharedPdfUrl;
           setPdf(file);
         }
@@ -278,7 +286,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
       }
     })();
     return () => controller.abort();
-  }, [sharedPdfUrl, compiling]);
+  }, [sharedPdfUrl, compiling, buildMetadata]);
   const stale = sourceChanged || (buildMetadata?.stale ?? false);
   const structure = JSON.stringify(
     nodes
@@ -353,7 +361,8 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   }
 
   async function compileProject(clean = false) {
-    if (!main) return;
+    const events = buildEvents.current;
+    if (!main || !events) return;
     compilation.current?.abort();
     const startedAt = performance.now();
     const editedAt = lastEditAt.current;
@@ -385,6 +394,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     try {
       const result = await requestCompilation({
         projectId,
+        events,
         clean,
         editorVersion: { editorId: editorId.current, sequence },
         startedAt,
@@ -398,10 +408,16 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
       });
       if (controller.signal.aborted) return;
       if ("pdf" in result) {
-        const latest = sharedArtifacts.current;
-        const pdfFile = latest?.files.find((file) => file.path === latest.pdf);
-        if (latest?.id === result.jobId && pdfFile) {
-          displayedPdfUrl.current = buildFileUrl(projectId, pdfFile);
+        const latest = sharedBuild.current;
+        if (
+          latest?.current?.id === result.jobId ||
+          (result.revision !== undefined &&
+            (latest?.current?.revision ?? -1) <= result.revision)
+        ) {
+          completedJob.current = {
+            id: result.jobId,
+            revision: result.revision,
+          };
           setPdf(result.pdf);
         }
         notifiedSequence.current = Math.max(notifiedSequence.current, sequence);
