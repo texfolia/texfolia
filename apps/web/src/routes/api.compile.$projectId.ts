@@ -24,6 +24,7 @@ const pending = z.object({
   id: idSchema,
   status: z.enum(["queued", "running"]),
   supersededId: idSchema.optional(),
+  revision: z.number().int().nonnegative().optional(),
 });
 const status = z.union([
   pending,
@@ -232,6 +233,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           sizeBytes: 0n,
         });
 
+        let revision: number | undefined;
         try {
           const response = await fetchCompiler(
             `/projects/${params.projectId}/compile`,
@@ -259,6 +261,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           if (response.status === 202) {
             const accepted = pending.parse(await response.json());
             if (accepted.id !== id) throw new Error("Invalid compiler job ID");
+            revision = accepted.revision;
             if (accepted.supersededId)
               await db
                 .update(projectJob)
@@ -317,7 +320,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           submissionMs: performance.now() - started,
         });
         const statusUrl = `/api/compile/${params.projectId}?job=${id}`;
-        return json({ id, status: "queued", statusUrl }, 202, {
+        return json({ id, revision, status: "queued", statusUrl }, 202, {
           ...noStore,
           Location: statusUrl,
           "Retry-After": "1",

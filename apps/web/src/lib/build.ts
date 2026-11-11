@@ -1,8 +1,15 @@
 import { z } from "zod";
 
+const buildStateSchema = z.object({
+  id: z.uuid(),
+  revision: z.number().int().nonnegative(),
+  status: z.enum(["queued", "running", "succeeded", "failed"]),
+});
+
 export const buildSnapshotSchema = z.object({
-  revision: z.number(),
-  current: z.object({ status: z.string() }).nullable().default(null),
+  revision: z.number().int().nonnegative(),
+  current: buildStateSchema.nullable().default(null),
+  latestBuild: buildStateSchema.nullable().default(null),
   stale: z.boolean().default(false),
   artifacts: z
     .object({
