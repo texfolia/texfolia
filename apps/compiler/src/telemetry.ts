@@ -8,6 +8,7 @@ export const engineTimingSchema = z.object({
   inputPrepMs: duration.nullable(),
   compileMs: duration.nullable(),
   outputMs: duration.nullable(),
+  firstPdfByteMs: duration.nullable().optional(),
 });
 export type EngineTiming = z.infer<typeof engineTimingSchema>;
 export const unknownEngineTiming: EngineTiming = {
@@ -51,6 +52,7 @@ export const previewTimingSchema = z.object({
   previewMs: duration,
   actionToPdfMs: duration,
   keystrokeToPdfMs: duration.nullable(),
+  firstPdfByteMs: duration.nullable().optional(),
 });
 export type PreviewTiming = z.infer<typeof previewTimingSchema>;
 

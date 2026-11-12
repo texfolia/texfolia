@@ -9,6 +9,7 @@ const submission = z.object({
   id: z.uuid(),
   revision: z.number().int().nonnegative().optional(),
   statusUrl: z.string(),
+  previewUrl: z.string().optional(),
 });
 const status = z.discriminatedUnion("status", [
   z.object({ id: z.uuid(), status: z.literal("queued") }),
@@ -158,6 +159,11 @@ export async function requestCompilation(options: {
   lastEditAt?: number | null;
   clean?: boolean;
   editorVersion?: { editorId: string; sequence: number };
+  onPreview?: (preview: {
+    pdf: File;
+    jobId: string;
+    revision: number | undefined;
+  }) => void;
 }): Promise<CompileResult> {
   const { projectId, mainFile, files, signal } = options;
   const startedAt = options.startedAt ?? performance.now();
@@ -182,36 +188,93 @@ export async function requestCompilation(options: {
     },
   );
   if (!response.ok) return failureResult(response);
-  const { id, revision, statusUrl } = submission.parse(await response.json());
+  const { id, revision, statusUrl, previewUrl } = submission.parse(
+    await response.json(),
+  );
   if (id !== jobId) throw new Error("Invalid compiler job ID");
   const submittedAt = performance.now();
-  const result = await waitForCompletion({
+  const completion = waitForCompletion({
     events: options.events,
     jobId,
     revision,
     statusUrl,
     signal,
   });
+  const readPdf = async (response: Response, downloadAt: number) => {
+    if (!response.ok || !response.body) return null;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let firstPdfByteMs: number | undefined;
+    let size = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value.length) continue;
+        firstPdfByteMs ??= performance.now() - startedAt;
+        size += value.length;
+        if (size > 20 * 1024 * 1024) throw new Error("PDF exceeds 20 MiB");
+        chunks.push(new Uint8Array(value));
+      }
+    } finally {
+      void reader.cancel().catch(() => {});
+    }
+    if (!size) return null;
+    const file = new File(chunks, "output.pdf", { type: "application/pdf" });
+    trackCompilePreview({
+      file,
+      statusUrl,
+      startedAt,
+      firstPdfByteMs,
+      completion,
+      lastEditAt: options.lastEditAt ?? null,
+      submissionMs: submittedAt - startedAt,
+      pollingMs: downloadAt - submittedAt,
+      downloadMs: performance.now() - downloadAt,
+    });
+    return file;
+  };
+  const previewController = new AbortController();
+  const downloadPreview = async (url: string) => {
+    const downloadAt = performance.now();
+    return readPdf(
+      await fetch(url, {
+        signal: AbortSignal.any([signal, previewController.signal]),
+      }),
+      downloadAt,
+    );
+  };
+  const preview = previewUrl
+    ? downloadPreview(previewUrl)
+        .then((pdf) => {
+          if (pdf && !signal.aborted && !previewController.signal.aborted)
+            options.onPreview?.({ pdf, jobId, revision });
+          return pdf;
+        })
+        .catch(() => null)
+    : Promise.resolve(null);
+  const [result, streamedPdf] = await Promise.all([
+    completion,
+    preview,
+  ]).finally(() => previewController.abort());
   signal.throwIfAborted();
   switch (result.status) {
     case "failed":
       return { error: result.error, log: result.log };
     case "succeeded": {
+      if (streamedPdf)
+        return {
+          pdf: streamedPdf,
+          log: result.log,
+          jobId,
+          revision: result.revision ?? revision,
+        };
       const downloadAt = performance.now();
       const pdf = await fetch(result.artifactUrl, { signal });
       if (!pdf.ok) return failureResult(pdf);
-      const file = new File([await pdf.blob()], "output.pdf", {
-        type: "application/pdf",
-      });
-      trackCompilePreview({
-        file,
-        statusUrl,
-        startedAt,
-        lastEditAt: options.lastEditAt ?? null,
-        submissionMs: submittedAt - startedAt,
-        pollingMs: downloadAt - submittedAt,
-        downloadMs: performance.now() - downloadAt,
-      });
+      const file = await readPdf(pdf, downloadAt);
+      if (!file)
+        return { error: "The compiler returned an empty PDF", log: result.log };
       return {
         pdf: file,
         log: result.log,

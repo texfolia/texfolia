@@ -167,15 +167,19 @@ function FileTab(props: IDockviewPanelHeaderProps<FilePanelParams>) {
 }
 
 function CompiledPdf() {
-  const { pdf, stale } = useWorkspace();
+  const { pdf, stale, pdfSaveState } = useWorkspace();
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {pdf && stale && (
+      {pdf && (stale || pdfSaveState !== "saved") && (
         <p
           role="status"
           className="text-muted-foreground border-b px-3 py-2 text-xs"
         >
-          Out of date, recompile
+          {pdfSaveState === "not-saved"
+            ? "PDF not saved. Recompile to try again."
+            : pdfSaveState === "saving"
+              ? "Saving build…"
+              : "Out of date, recompile"}
         </p>
       )}
       <div className="min-h-0 flex-1">
@@ -234,6 +238,10 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   }, []);
   const [compileProblems, setCompileProblems] = useState<LatexProblem[]>([]);
   const [pdf, setPdf] = useState<File | null>(null);
+  const [streamedBuild, setStreamedBuild] = useState<{
+    id: string;
+    revision: number | undefined;
+  } | null>(null);
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
   const [jump, setJump] = useState<Workspace["jump"]>();
@@ -288,6 +296,14 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   useEffect(() => {
     const completed = completedJob.current;
     if (completed) {
+      if (
+        streamedBuild?.id === completed.id &&
+        buildMetadata?.current &&
+        buildMetadata?.artifacts?.id !== completed.id &&
+        (buildMetadata?.artifacts?.revision ?? -1) <=
+          (completed.revision ?? Infinity)
+      )
+        return;
       // A recovery read may deliver the PDF before the SSE snapshot catches up.
       if (
         (completed.revision !== undefined &&
@@ -305,6 +321,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
       completedJob.current = null;
       displayedPdfUrl.current = null;
       setPdf(null);
+      setStreamedBuild(null);
       return;
     }
     if (compiling || displayedPdfUrl.current === sharedPdfUrl) return;
@@ -325,6 +342,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           completedJob.current = null;
           displayedPdfUrl.current = sharedPdfUrl;
           setPdf(file);
+          setStreamedBuild(null);
         }
       } catch (error) {
         if (!controller.signal.aborted)
@@ -336,8 +354,15 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
       }
     })();
     return () => controller.abort();
-  }, [sharedPdfUrl, compiling, buildMetadata]);
+  }, [sharedPdfUrl, compiling, buildMetadata, streamedBuild]);
   const stale = sourceChanged || (buildMetadata?.stale ?? false);
+  const pdfSaveState =
+    !streamedBuild || buildMetadata?.artifacts?.id === streamedBuild.id
+      ? "saved"
+      : buildMetadata?.current?.id === streamedBuild.id &&
+          ["queued", "running"].includes(buildMetadata.current.status)
+        ? "saving"
+        : "not-saved";
   const structure = JSON.stringify(
     nodes
       .map(({ id, name, parentId, kind }) => ({ id, name, parentId, kind }))
@@ -529,6 +554,20 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           controller.signal,
           AbortSignal.timeout(10 * 60_000),
         ]),
+        onPreview: ({ pdf, jobId, revision }) => {
+          if (controller.signal.aborted) return;
+          const latest = sharedBuild.current;
+          if (
+            latest?.current?.id !== jobId &&
+            (revision === undefined ||
+              (latest?.current?.revision ?? -1) > revision)
+          )
+            return;
+          const build = { id: jobId, revision };
+          completedJob.current = build;
+          setStreamedBuild(build);
+          setPdf(pdf);
+        },
       });
       if (controller.signal.aborted) return;
       if ("pdf" in result) {
@@ -852,6 +891,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
         reportSyntax,
         jump,
         pdf,
+        pdfSaveState,
         formatSettings,
       }}
     >

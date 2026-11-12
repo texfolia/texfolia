@@ -140,6 +140,34 @@ func TestCompileHTTP(t *testing.T) {
 	assertClean(t, temp)
 }
 
+type flushRecorder struct {
+	*httptest.ResponseRecorder
+	flushedBodies []string
+}
+
+func (w *flushRecorder) Flush() {
+	w.flushedBodies = append(w.flushedBodies, w.Body.String())
+	w.ResponseRecorder.Flush()
+}
+
+func TestPDFIsFlushedBeforeLogAndArtifacts(t *testing.T) {
+	handler, temp, _ := testEngine(t, time.Second)
+	request := httptest.NewRequest(http.MethodPost, "/compile", strings.NewReader(`{"files":{"main.tex":"hello"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := &flushRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler.ServeHTTP(response, request)
+	if response.Code != 200 || len(response.flushedBodies) < 2 {
+		t.Fatalf("missing PDF/log flushes: %d %v", response.Code, response.flushedBodies)
+	}
+	if !strings.Contains(response.flushedBodies[0], "%PDF-1.5") || strings.Contains(response.flushedBodies[0], `name="log"`) {
+		t.Fatalf("PDF was not flushed first: %q", response.flushedBodies[0])
+	}
+	if !strings.Contains(response.flushedBodies[1], `name="log"`) || strings.Contains(response.flushedBodies[1], `name="artifact:`) {
+		t.Fatalf("log was not flushed before artifacts: %q", response.flushedBodies[1])
+	}
+	assertClean(t, temp)
+}
+
 func TestFailuresAndLimits(t *testing.T) {
 	handler, temp, _ := testEngine(t, time.Second)
 	for _, test := range []struct {

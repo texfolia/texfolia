@@ -72,6 +72,7 @@ export type Engine = (
     projectId?: string;
     signal?: AbortSignal;
     cache?: z.infer<typeof artifactFilesSchema>;
+    onPdf?: (body: ReadableStream<Uint8Array>) => void;
   },
 ) => Promise<{
   pdf: Uint8Array;

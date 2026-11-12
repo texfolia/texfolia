@@ -308,9 +308,16 @@ test("publication stays atomic through a storage failure; retention removes aban
     expect(core.snapshot().artifacts).toBeNull();
     expect(await core.artifact(id)).toBeNull();
     release.resolve();
-    await expect(running).rejects.toThrow("Storage unavailable");
+    await running;
     expect(core.snapshot().artifacts).toBeNull();
+    expect(core.snapshot().current).toMatchObject({ status: "failed" });
     fail = false;
+    await core.submit(
+      crypto.randomUUID(),
+      { mainFile: "main.tex", files: { "main.tex": "atomic" } },
+      "free",
+    );
+    await Bun.sleep(310);
     await core.wake();
     expect(core.snapshot().artifacts?.files).toHaveLength(4);
     expect(

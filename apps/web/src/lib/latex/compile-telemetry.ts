@@ -9,6 +9,7 @@ export const previewTimingSchema = z.object({
   previewMs: duration,
   actionToPdfMs: duration,
   keystrokeToPdfMs: duration.nullable(),
+  firstPdfByteMs: duration.nullable().optional(),
 });
 export type PreviewTiming = z.infer<typeof previewTimingSchema>;
 
@@ -26,6 +27,8 @@ export function trackCompilePreview(options: {
   submissionMs: number;
   pollingMs: number;
   downloadMs: number;
+  firstPdfByteMs?: number;
+  completion?: Promise<unknown>;
 }) {
   const readyAt = performance.now();
   previews.set(options.file, (outcome) => {
@@ -40,13 +43,18 @@ export function trackCompilePreview(options: {
       actionToPdfMs: now - options.startedAt,
       keystrokeToPdfMs:
         options.lastEditAt === null ? null : now - options.lastEditAt,
+      firstPdfByteMs: options.firstPdfByteMs,
     };
-    void fetch(options.statusUrl, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(report),
-      keepalive: true,
-    }).catch(() => undefined);
+    void (options.completion ?? Promise.resolve())
+      .then(() =>
+        fetch(options.statusUrl, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(report),
+          keepalive: true,
+        }),
+      )
+      .catch(() => undefined);
   });
 }
 

@@ -162,8 +162,14 @@ func newHandler(timeout time.Duration) http.Handler {
 		if err == nil {
 			_, err = io.Copy(part, result.pdf)
 		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
 		if err == nil {
 			err = form.WriteField("log", result.log)
+		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
 		}
 		for _, path := range result.artifacts {
 			if err != nil {

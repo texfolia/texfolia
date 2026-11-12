@@ -83,6 +83,20 @@ export class ProjectCoordinatorCore {
     done: Promise<void>;
   } | null = null;
   private listeners = new Set<(snapshot: CoordinatorSnapshot) => void>();
+  private previews = new Map<
+    string,
+    (body: ReadableStream<Uint8Array>) => void
+  >();
+  private pendingPreview: {
+    id: string;
+    body: ReadableStream<Uint8Array>;
+  } | null = null;
+
+  private discardPreview() {
+    if (this.pendingPreview)
+      void this.pendingPreview.body.cancel().catch(() => {});
+    this.pendingPreview = null;
+  }
 
   constructor(
     private options: {
@@ -186,6 +200,7 @@ export class ProjectCoordinatorCore {
           }),
         );
       }
+      this.discardPreview();
       // Persist the new revision and its wake-up before returning acceptance.
       const current: Build = {
         id,
@@ -233,6 +248,7 @@ export class ProjectCoordinatorCore {
   async clear() {
     this.active?.controller.abort();
     await this.active?.done;
+    this.discardPreview();
     await this.exclusive(async () => {
       this.state.artifacts = null;
       this.state.latestBuild = null;
@@ -288,6 +304,77 @@ export class ProjectCoordinatorCore {
     return build?.status === "succeeded"
       ? this.options.store.read(this.pdfKey(id))
       : null;
+  }
+
+  async preview(id: string, signal: AbortSignal): Promise<Response> {
+    signal.throwIfAborted();
+    const job = await this.get(id);
+    if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
+    const pdfResponse = (body: ReadableStream<Uint8Array>) =>
+      new Response(body, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Cache-Control": "no-store",
+        },
+      });
+    if (this.pendingPreview?.id === id) {
+      const { body } = this.pendingPreview;
+      this.pendingPreview = null;
+      return pdfResponse(body);
+    }
+    const saved = async () => {
+      const body = await this.artifact(id);
+      return body
+        ? pdfResponse(body)
+        : Response.json({ error: "PDF not found" }, { status: 404 });
+    };
+    if (job.status === "succeeded") return saved();
+    if (job.status === "failed")
+      return Response.json({ error: job.error, log: job.log }, { status: 409 });
+    if (this.previews.has(id))
+      return Response.json(
+        { error: "PDF stream already requested" },
+        { status: 409 },
+      );
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        this.previews.delete(id);
+        this.listeners.delete(check);
+        signal.removeEventListener("abort", abort);
+      };
+      const abort = () => {
+        cleanup();
+        reject(signal.reason);
+      };
+      const check = (snapshot: CoordinatorSnapshot) => {
+        const current = snapshot.current;
+        if (current?.id !== id || current.status === "failed") {
+          cleanup();
+          resolve(
+            Response.json(
+              {
+                error:
+                  current?.id === id && current.status === "failed"
+                    ? current.error
+                    : "Compilation superseded",
+              },
+              { status: 409 },
+            ),
+          );
+        } else if (current.status === "succeeded") {
+          cleanup();
+          void saved().then(resolve, reject);
+        }
+      };
+      this.previews.set(id, (body) => {
+        cleanup();
+        resolve(pdfResponse(body));
+      });
+      this.listeners.add(check);
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+      else check(this.snapshot());
+    });
   }
 
   async wake() {
@@ -377,6 +464,21 @@ export class ProjectCoordinatorCore {
         attempt,
         plan: build.plan,
         signal,
+        onPdf: (body: ReadableStream<Uint8Array>) => {
+          const preview =
+            !signal.aborted && this.state.current?.id === build.id
+              ? this.previews.get(build.id)
+              : undefined;
+          if (preview) preview(body);
+          else if (!signal.aborted && this.state.current?.id === build.id) {
+            this.discardPreview();
+            const [pending, drain] = body.tee();
+            this.pendingPreview = { id: build.id, body: pending };
+            void drain
+              .pipeTo(new WritableStream({ write() {} }))
+              .catch(() => {});
+          } else void body.cancel().catch(() => {});
+        },
       };
       try {
         output = await this.options.engine(project, {
@@ -441,18 +543,32 @@ export class ProjectCoordinatorCore {
       const publishStarted = performance.now();
       let manifest: ArtifactManifest | null = this.state.artifacts;
       if (output && result.status === "succeeded") {
-        manifest = await storeArtifacts({
-          store: this.options.store,
-          projectId: this.options.projectId,
-          mainFile: project.mainFile,
-          build: {
-            id: build.id,
-            revision: build.revision,
-            digest: build.digest,
-            builtBy: build.builtBy,
-          },
-          output,
-        });
+        try {
+          manifest = await storeArtifacts({
+            store: this.options.store,
+            projectId: this.options.projectId,
+            mainFile: project.mainFile,
+            build: {
+              id: build.id,
+              revision: build.revision,
+              digest: build.digest,
+              builtBy: build.builtBy,
+            },
+            output,
+          });
+        } catch (error) {
+          console.error("Build artifact persistence failed", {
+            jobId: build.id,
+            error,
+          });
+          result = {
+            ...build,
+            status: "failed",
+            log: output.log,
+            error:
+              "PDF compiled but could not be saved. Recompile to try again.",
+          };
+        }
       } else if (result.status === "failed") {
         const path = `${project.mainFile
           .split("/")
@@ -499,10 +615,25 @@ export class ProjectCoordinatorCore {
         publishMs: performance.now() - publishStarted,
         backendMs: Date.now() - Date.parse(build.createdAt),
       };
-      await this.options.store.write(
-        this.resultKey(build.id),
-        JSON.stringify(result),
-      );
+      try {
+        await this.options.store.write(
+          this.resultKey(build.id),
+          JSON.stringify(result),
+        );
+      } catch (error) {
+        console.error("Build result persistence failed", {
+          jobId: build.id,
+          error,
+        });
+        manifest = this.state.artifacts;
+        result = {
+          ...build,
+          status: "failed",
+          log: result.log,
+          timing: result.timing,
+          error: "PDF compiled but could not be saved. Recompile to try again.",
+        };
+      }
       emitCompileEvent({
         event: "compile_backend",
         jobId: build.id,
@@ -521,6 +652,7 @@ export class ProjectCoordinatorCore {
       if (result.status === "succeeded") {
         this.state.latestBuild = result;
         this.state.cacheValid = true;
+        this.discardPreview();
       }
       this.state.artifacts = manifest;
       if (result.status === "succeeded")
@@ -578,6 +710,7 @@ export class ProjectCoordinatorCore {
   async close() {
     this.active?.controller.abort();
     await this.active?.done;
+    this.discardPreview();
     await this.writer;
   }
 }
