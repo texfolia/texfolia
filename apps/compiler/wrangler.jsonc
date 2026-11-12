@@ -20,12 +20,14 @@
       { "name": "COMPILER", "class_name": "TectonicContainer" },
       { "name": "PROJECTS", "class_name": "ProjectCoordinator" },
       { "name": "POOL", "class_name": "PoolManager" },
+      { "name": "COMPILE_USAGE", "class_name": "UserCompileUsage" },
     ],
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TectonicContainer"] },
     { "tag": "v2", "new_sqlite_classes": ["ProjectCoordinator"] },
     { "tag": "v3", "new_sqlite_classes": ["PoolManager"] },
+    { "tag": "v4", "new_sqlite_classes": ["UserCompileUsage"] },
   ],
   "r2_buckets": [{ "binding": "PDFS", "bucket_name": "texfolia-compilations" }],
   "queues": {
@@ -68,8 +70,8 @@
   "ratelimits": [
     {
       "name": "COMPILE_LIMIT",
-      "namespace_id": "208",
-      "simple": { "limit": 10, "period": 60 },
+      "namespace_id": "243",
+      "simple": { "limit": 2, "period": 10 },
     },
   ],
   "triggers": { "crons": ["*/5 * * * *"] },

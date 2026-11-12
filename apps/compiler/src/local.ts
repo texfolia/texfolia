@@ -6,6 +6,12 @@ import { type ApiBindings, createApp } from "./api";
 import { ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
 import { createJobs, type Engine, type ObjectStore } from "./jobs";
+import {
+  CompileUsageCore,
+  checkCompileAdmission,
+  withCompileUsage,
+  type CompileUsage,
+} from "./limits";
 import { jobIdSchema } from "./project";
 import {
   compileQueue,
@@ -26,6 +32,7 @@ export function createLocalRuntime(options: {
     CREATE TABLE IF NOT EXISTS queue (
       id TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS compile_usage (userId TEXT PRIMARY KEY, state TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS coordinators (projectId TEXT PRIMARY KEY, state TEXT NOT NULL, alarm INTEGER);
     CREATE TABLE IF NOT EXISTS deliveries (
       id TEXT PRIMARY KEY, lane TEXT NOT NULL, body TEXT NOT NULL,
@@ -135,9 +142,63 @@ export function createLocalRuntime(options: {
     "UPDATE deliveries SET attempts = attempts + 1, due = ? WHERE id = ?",
   );
   const ack = db.query("DELETE FROM deliveries WHERE id = ?");
+  const readUsage = db.query<{ state: string }, [string]>(
+    "SELECT state FROM compile_usage WHERE userId = ?",
+  );
+  const writeUsage = db.query(
+    "INSERT OR REPLACE INTO compile_usage VALUES (?, ?)",
+  );
+  const usageFor = (userId: string): CompileUsage => {
+    const core = new CompileUsageCore({
+      read: () => readUsage.get(userId)?.state ?? null,
+      write: (value) => {
+        writeUsage.run(userId, value);
+      },
+    });
+    return {
+      async check(plan) {
+        return core.check(plan);
+      },
+      async start(plan) {
+        return core.start(plan);
+      },
+      async finish(id, ms) {
+        core.finish(id, ms);
+      },
+    };
+  };
+  const rateWindows = new Map<string, { count: number; resetsAt: number }>();
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      let window = rateWindows.get(key);
+      if (!window || Date.now() >= window.resetsAt) {
+        window = { count: 0, resetsAt: Date.now() + 10_000 };
+        rateWindows.set(key, window);
+      }
+      return { success: ++window.count <= 2 };
+    },
+  };
+  let anonymousCount = 0;
+  let anonymousResetsAt = 0;
+  const admit = async (request: Request) => {
+    if (request.headers.has("X-Compile-User"))
+      return checkCompileAdmission(request, limiter, usageFor);
+    // Local scripts predate authenticated compilation. Production always requires identity.
+    if (new URL(request.url).pathname !== "/compile") return null;
+    if (Date.now() >= anonymousResetsAt) {
+      anonymousCount = 0;
+      anonymousResetsAt = Date.now() + 60_000;
+    }
+    return ++anonymousCount <= 10
+      ? null
+      : Response.json(
+          { error: "Too many compile requests" },
+          { status: 429, headers: { "Retry-After": "60" } },
+        );
+  };
   const jobs = createJobs({
     store,
-    engine: options.engine,
+    engine: withCompileUsage(options.engine, usageFor),
     queue: {
       async send({ id }, plan) {
         await send(compileQueue(plan), { projectId: id, revision: 0 });
@@ -197,13 +258,16 @@ export function createLocalRuntime(options: {
       background: (message, delaySeconds) =>
         send("background", message, delaySeconds),
       store,
-      engine: options.projectEngine(projectId, store),
+      engine: withCompileUsage(
+        options.projectEngine(projectId, store),
+        usageFor,
+      ),
     });
     const entry: {
       core: ProjectCoordinatorCore;
       app: ReturnType<typeof createCoordinatorApp>;
       alarm: ReturnType<typeof setTimeout> | undefined;
-    } = { core, app: createCoordinatorApp(core), alarm: undefined };
+    } = { core, app: createCoordinatorApp(core, admit), alarm: undefined };
     coordinators.set(projectId, entry);
     if (saved?.alarm) void schedule(saved.alarm);
     return entry;
@@ -212,20 +276,7 @@ export function createLocalRuntime(options: {
     .query<{ projectId: string }, []>("SELECT projectId FROM coordinators")
     .all())
     coordinatorFor(row.projectId);
-  let count = 0;
-  let resetsAt = 0;
-  const bindings: ApiBindings = {
-    jobs,
-    limiter: {
-      async limit() {
-        if (Date.now() >= resetsAt) {
-          count = 0;
-          resetsAt = Date.now() + 60_000;
-        }
-        return { success: ++count <= 10 };
-      },
-    },
-  };
+  const bindings: ApiBindings = { jobs, admit };
   let recoverAt = 0;
   async function drain(lane: string, concurrency: number) {
     await Promise.all(

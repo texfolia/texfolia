@@ -239,7 +239,7 @@ test("compile consumers have independent priority, one retry, and a shared DLQ; 
 });
 
 test("interactive success stays direct; X-Compile-Plan selects only the overflow lane", async () => {
-  for (const plan of ["pro", "free", "unknown", "invalid"]) {
+  for (const plan of ["pro", "team", "free", "unknown", "invalid"]) {
     let runs = 0;
     const fixture = harness(async () => {
       runs++;
@@ -263,7 +263,8 @@ test("interactive success stays direct; X-Compile-Plan selects only the overflow
       await failing.core.wake();
       expect(failing.messages).toEqual([
         {
-          queue: plan === "pro" ? "compile-pro" : "compile-free",
+          queue:
+            plan === "pro" || plan === "team" ? "compile-pro" : "compile-free",
           body: { projectId: failing.projectId, revision: 1 },
         },
       ]);

@@ -12,7 +12,7 @@ import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema } from "#/lib/latex/source-sync";
 
 const compilerTimingSchema = z.looseObject({
-  plan: z.enum(["free", "pro", "unknown"]),
+  plan: z.enum(["free", "pro", "team", "unknown"]),
   engine: z.enum(["tectonic", "texlive", "unknown"]),
   temperature: z.enum(["cold", "warm", "unknown"]),
 });
@@ -127,19 +127,28 @@ function updateJob(
 }
 
 async function compilePlan(db: Db, userId: string) {
-  try {
-    const subscription = await db.query.subscription.findFirst({
-      columns: { id: true },
-      where: {
-        referenceId: userId,
-        plan: "pro",
-        status: { in: ["active", "trialing"] },
+  const memberships = await db.query.member.findMany({
+    columns: { organizationId: true },
+    where: { userId },
+  });
+  const subscriptions = await db.query.subscription.findMany({
+    columns: { plan: true, referenceId: true },
+    where: {
+      referenceId: {
+        in: [userId, ...memberships.map((member) => member.organizationId)],
       },
-    });
-    return subscription ? "pro" : "free";
-  } catch {
-    return "unknown";
-  }
+      plan: { in: ["pro", "team"] },
+      status: { in: ["active", "trialing"] },
+    },
+  });
+  if (
+    subscriptions.some(
+      (subscription) =>
+        subscription.plan === "team" || subscription.referenceId !== userId,
+    )
+  )
+    return "team";
+  return subscriptions.length ? "pro" : "free";
 }
 
 async function readPreviewBody(request: Request) {
@@ -242,6 +251,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                 "Content-Type": "application/json",
                 "X-Compilation-Id": id,
                 "X-Compile-Plan": plan,
+                "X-Compile-User": denied.userId,
                 "X-Build-User": encodeURIComponent(denied.name),
                 "X-Clean-Build":
                   request.headers.get("X-Clean-Build") === "1" ? "1" : "0",

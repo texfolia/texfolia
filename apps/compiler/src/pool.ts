@@ -66,7 +66,7 @@ export class PoolCore {
     const existing = this.options.lookup(key);
     if (existing) return existing;
     // Pro can claim immediately; Free contenders yield one arbitration window.
-    if (plan !== "pro") await this.options.pause();
+    if (plan !== "pro" && plan !== "team") await this.options.pause();
     const retried = this.options.lookup(key);
     if (retried) return retried;
     const spare = this.state.spares.find((entry) => entry.status === "ready");

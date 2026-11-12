@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { compileUserSchema } from "./limits";
 import type { artifactFilesSchema } from "./project";
 import {
   EngineError,
@@ -25,6 +26,7 @@ const common = {
   digest: z.string(),
   createdAt: z.string(),
   plan: planSchema.default("unknown"),
+  userId: compileUserSchema.optional(),
   timing: jobTimingSchema.optional(),
 };
 const queuedSchema = z.object({ ...common, status: z.literal("queued") });
@@ -72,6 +74,8 @@ export type Engine = ((
   project: Project | SyncedProject,
   context: {
     jobId: string;
+    userId?: string;
+    timeoutMs?: number;
     attempt: number;
     plan: z.infer<typeof planSchema>;
     projectId?: string;
@@ -165,6 +169,7 @@ export function createJobs(options: {
       id: string,
       project: Project,
       plan: z.infer<typeof planSchema> = "unknown",
+      userId?: string,
     ): Promise<Job> {
       const body = JSON.stringify(project);
       const digest = Array.from(
@@ -176,6 +181,7 @@ export function createJobs(options: {
       const job: Job = {
         id,
         plan,
+        userId,
         digest,
         status: "queued",
         createdAt: new Date().toISOString(),
@@ -290,6 +296,7 @@ export function createJobs(options: {
               jobId: id,
               attempt,
               plan: job.plan,
+              userId: job.userId,
             });
             engineTiming = output.timing;
           } finally {

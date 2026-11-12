@@ -43,7 +43,12 @@ function submit(
   return runtime.fetch(
     request(`/projects/${projectId}/compile`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Compilation-Id": id },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Compilation-Id": id,
+        "X-Compile-User": "coordinator-user",
+        "X-Compile-Plan": "pro",
+      },
       body: JSON.stringify(source(text)),
     }),
   );

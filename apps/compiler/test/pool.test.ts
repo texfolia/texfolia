@@ -69,26 +69,27 @@ function fixture() {
 }
 
 describe("prewarmed pool", () => {
-  test("Pro wins a scarce spare over an earlier concurrent Free claim", async () => {
-    const f = fixture();
-    try {
-      const pool = f.open();
-      await pool.maintain();
-      const free = pool.claim("free-project", "free", "1");
-      const pro = await pool.claim("pro-project", "pro", "1");
-      expect(pro.outcome).toBe("hit");
-      expect((await free).outcome).toBe("miss");
-      expect(pool.snapshot()).toMatchObject({ hits: 1, misses: 1 });
-      expect(await f.open().claim("pro-project", "pro", "1")).toEqual(pro);
-      expect(f.open().snapshot()).toMatchObject({ hits: 1, misses: 1 });
-      await pool.maintain();
-      const other = await pool.claim("other", "free", "1");
-      expect(other.outcome).toBe("hit");
-      expect(other.container).not.toBe(pro.container);
-    } finally {
-      f.close();
-    }
-  });
+  for (const plan of ["pro", "team"] as const)
+    test(`${plan} wins a scarce spare over an earlier concurrent Free claim`, async () => {
+      const f = fixture();
+      try {
+        const pool = f.open();
+        await pool.maintain();
+        const free = pool.claim("free-project", "free", "1");
+        const pro = await pool.claim("pro-project", plan, "1");
+        expect(pro.outcome).toBe("hit");
+        expect((await free).outcome).toBe("miss");
+        expect(pool.snapshot()).toMatchObject({ hits: 1, misses: 1 });
+        expect(await f.open().claim("pro-project", "pro", "1")).toEqual(pro);
+        expect(f.open().snapshot()).toMatchObject({ hits: 1, misses: 1 });
+        await pool.maintain();
+        const other = await pool.claim("other", "free", "1");
+        expect(other.outcome).toBe("hit");
+        expect(other.container).not.toBe(pro.container);
+      } finally {
+        f.close();
+      }
+    });
 
   test("miss rate grows target, idle hysteresis shrinks only unassigned spares", async () => {
     const f = fixture();
