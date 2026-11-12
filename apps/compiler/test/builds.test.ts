@@ -20,6 +20,7 @@ const output = (text: string) => ({
   pdf: new TextEncoder().encode(`%PDF-${text}`),
   log: `log-${text}`,
   timing,
+  cacheArchive: encode(`archive-${text}`),
   files: {
     "main.pdf": encode(`%PDF-${text}`),
     "main.log": encode(`log-${text}`),
@@ -28,17 +29,17 @@ const output = (text: string) => ({
   },
 });
 
-test("shared latest build survives failure/restart, restores every cache file, and cleans old generations", async () => {
+test("shared build and archive survive failure/restart; clean retries bypass cache and old generations are removed", async () => {
   const root = await mkdtemp(join(tmpdir(), "builds-"));
   const path = join(root, "store.sqlite");
   const projectId = crypto.randomUUID();
-  const calls: { text: string; cached: string[] }[] = [];
+  const calls: { text: string; clean: boolean }[] = [];
   const engine: Engine = async (project, context) => {
     const text = String(project.files["main.tex"]);
-    calls.push({ text, cached: Object.keys(context.cache ?? {}).sort() });
+    calls.push({ text, clean: context.clean ?? false });
     if (text === "broken")
       throw new HttpError(422, "Bad TeX", "new failure log", timing);
-    if (text === "cache fails" && context.cache)
+    if (text === "cache fails" && !context.clean)
       throw new HttpError(422, "Bad cache", "bad cache", timing);
     return text === "foreign engine"
       ? { ...output(text), timing: { ...timing, engine: "texlive" } }
@@ -116,10 +117,8 @@ test("shared latest build survives failure/restart, restores every cache file, a
     expect(await (await file("main.aux")).text()).toBe("aux-first");
     expect(await (await file("main.log")).text()).toBe("new failure log");
     expect(
-      calls
-        .filter((call) => call.text === "broken")
-        .map((call) => call.cached.length),
-    ).toEqual([4, 0]);
+      calls.filter((call) => call.text === "broken").map((call) => call.clean),
+    ).toEqual([false, true]);
     expect(
       (await request("/build/files?path=../../other-project/main.pdf")).status,
     ).toBe(404);
@@ -134,21 +133,21 @@ test("shared latest build survives failure/restart, restores every cache file, a
     runtime = createLocalRuntime({ path, engine, projectEngine: () => engine });
     expect(await (await file("main.pdf")).text()).toBe("%PDF-first");
     await compile("recovered");
-    expect(calls.at(-1)?.cached).toEqual([]);
+    expect(calls.at(-1)?.clean).toBe(true);
     const second = await compile("cache fails");
     expect(second.current?.status).toBe("succeeded");
     expect(second.stale).toBe(false);
     expect(
       calls
         .filter((call) => call.text === "cache fails")
-        .map((call) => call.cached.length),
-    ).toEqual([4, 0]);
+        .map((call) => call.clean),
+    ).toEqual([false, true]);
     expect((await request(`/compilations/${firstId}.pdf`)).status).toBe(404);
     await compile("clean", true);
-    expect(calls.at(-1)).toEqual({ text: "clean", cached: [] });
+    expect(calls.at(-1)).toEqual({ text: "clean", clean: true });
     await compile("foreign engine");
     await compile("after engine change");
-    expect(calls.at(-1)?.cached).toEqual([]);
+    expect(calls.at(-1)?.clean).toBe(true);
     await runtime.close();
     const db = new Database(path, { readonly: true });
     const artifacts = db
@@ -157,6 +156,14 @@ test("shared latest build survives failure/restart, restores every cache file, a
       )
       .all();
     expect(artifacts).toHaveLength(4);
+    const archive = db
+      .query<{ body: Uint8Array }, [string]>(
+        "SELECT body FROM objects WHERE key = ?",
+      )
+      .get(`projects/${projectId}/cache.tar.zst`);
+    expect(new TextDecoder().decode(archive?.body)).toBe(
+      "archive-after engine change",
+    );
     db.close();
     runtime = createLocalRuntime({ path, engine, projectEngine: () => engine });
     expect((await request("/build", { method: "DELETE" })).status).toBe(204);
@@ -274,7 +281,10 @@ test("publication stays atomic through a storage failure; retention removes aban
       return true;
     },
     async write(key, value) {
-      objects.set(key, new TextEncoder().encode(value));
+      objects.set(
+        key,
+        typeof value === "string" ? new TextEncoder().encode(value) : value,
+      );
     },
     async remove(key) {
       objects.delete(key);

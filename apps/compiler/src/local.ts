@@ -11,7 +11,7 @@ import { jobIdSchema } from "./project";
 export function createLocalRuntime(options: {
   path: string;
   engine: Engine;
-  projectEngine: (projectId: string) => Engine;
+  projectEngine: (projectId: string, store: ObjectStore) => Engine;
 }) {
   mkdirSync(dirname(options.path), { recursive: true });
   const db = new Database(options.path, { strict: true });
@@ -65,7 +65,7 @@ export function createLocalRuntime(options: {
       );
     },
     async write(key, value) {
-      write.run(key, encoder.encode(value));
+      write.run(key, typeof value === "string" ? encoder.encode(value) : value);
     },
     async remove(key) {
       remove.run(key);
@@ -143,7 +143,7 @@ export function createLocalRuntime(options: {
       schedule,
       overflow: async () => {},
       store,
-      engine: options.projectEngine(projectId),
+      engine: options.projectEngine(projectId, store),
     });
     const entry: {
       core: ProjectCoordinatorCore;

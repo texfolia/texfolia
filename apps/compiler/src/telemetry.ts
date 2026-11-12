@@ -9,6 +9,18 @@ export const engineTimingSchema = z.object({
   compileMs: duration.nullable(),
   outputMs: duration.nullable(),
   firstPdfByteMs: duration.nullable().optional(),
+  cacheUsed: z.boolean().optional(),
+  containerStartMs: duration.optional(),
+  containerBootId: z.string().optional(),
+  bootMs: duration.nullable().optional(),
+  imageSizeBytes: z.number().int().nonnegative().nullable().optional(),
+  archiveFetchMs: duration.optional(),
+  archiveUnpackMs: duration.optional(),
+  archiveBytes: z.number().int().nonnegative().optional(),
+  archiveStatus: z
+    .enum(["restored", "missing", "invalid", "warm", "unavailable"])
+    .optional(),
+  prewarmed: z.boolean().optional(),
 });
 export type EngineTiming = z.infer<typeof engineTimingSchema>;
 export const unknownEngineTiming: EngineTiming = {

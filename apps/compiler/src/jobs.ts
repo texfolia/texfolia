@@ -57,14 +57,14 @@ export interface ObjectStore {
     value: string | Uint8Array,
     metadata?: string,
   ): Promise<boolean>;
-  write(key: string, value: string): Promise<void>;
+  write(key: string, value: string | Uint8Array): Promise<void>;
   remove(key: string): Promise<void>;
   keys(prefix: string): AsyncIterable<string>;
 }
 export interface JobQueue {
   send(message: { id: string }): Promise<void>;
 }
-export type Engine = (
+export type Engine = ((
   project: Project | SyncedProject,
   context: {
     jobId: string;
@@ -73,6 +73,7 @@ export type Engine = (
     projectId?: string;
     signal?: AbortSignal;
     cache?: z.infer<typeof artifactFilesSchema>;
+    clean?: boolean;
     onPdf?: (body: ReadableStream<Uint8Array>) => void;
     readSource?: (
       file: SyncedProject["files"][string],
@@ -83,7 +84,8 @@ export type Engine = (
   log: string;
   timing: EngineTiming;
   files?: Record<string, Blob>;
-}>;
+  cacheArchive?: Blob;
+}>) & { prewarm?: () => Promise<void> };
 const maxAttempts = 4;
 const redeliverAfterMs = 60 * 60_000;
 

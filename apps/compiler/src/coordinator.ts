@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   artifactManifestSchema,
   decodeBase64,
-  readCache,
   storeArtifacts,
   type ArtifactManifest,
 } from "./artifacts";
@@ -122,6 +121,7 @@ export class ProjectCoordinatorCore {
       overflow: () => Promise<void>;
       store: ObjectStore;
       engine: Engine;
+      waitUntil?: (promise: Promise<void>) => void;
     },
   ) {
     this.state = options.saved
@@ -499,17 +499,17 @@ export class ProjectCoordinatorCore {
     let compileMs = 0;
     try {
       const manifest = this.state.artifacts;
-      const cache =
-        !build.clean && this.state.cacheValid && manifest?.engine === "tectonic"
-          ? await readCache(this.options.store, manifest)
-          : {};
-      cacheUsed = Object.keys(cache).length > 0;
+      cacheUsed =
+        !build.clean &&
+        this.state.cacheValid &&
+        manifest?.engine === "tectonic";
       const context = {
         projectId: this.options.projectId,
         jobId: build.id,
         attempt,
         plan: build.plan,
         signal,
+        clean: !cacheUsed,
         readSource: (file: SyncedProject["files"][string]) =>
           readSource(this.options.store, this.options.projectId, file),
         onPdf: (body: ReadableStream<Uint8Array>) => {
@@ -531,13 +531,13 @@ export class ProjectCoordinatorCore {
       try {
         output = await this.options.engine(project, {
           ...context,
-          ...(cacheUsed ? { cache } : {}),
         });
       } catch (error) {
         if (
           !cacheUsed ||
           signal.aborted ||
           !(error instanceof HttpError) ||
+          error.timing.cacheUsed === false ||
           ![408, 422].includes(error.status)
         )
           throw error;
@@ -547,9 +547,13 @@ export class ProjectCoordinatorCore {
           this.state.cacheValid = false;
           this.persist();
         });
-        output = await this.options.engine(project, context);
+        output = await this.options.engine(project, {
+          ...context,
+          clean: true,
+        });
       }
       engineTiming = output.timing;
+      cacheUsed = output.timing.cacheUsed ?? cacheUsed;
       compileMs += output.timing.compileMs ?? 0;
       result = {
         ...build,
@@ -604,11 +608,17 @@ export class ProjectCoordinatorCore {
             },
             output,
           });
+          if (output.cacheArchive)
+            await this.options.store.write(
+              `projects/${this.options.projectId}/cache.tar.zst`,
+              new Uint8Array(await output.cacheArchive.arrayBuffer()),
+            );
         } catch (error) {
           console.error("Build artifact persistence failed", {
             jobId: build.id,
             error,
           });
+          manifest = this.state.artifacts;
           result = {
             ...build,
             status: "failed",
@@ -713,6 +723,13 @@ export class ProjectCoordinatorCore {
   }
 
   events(signal: AbortSignal) {
+    const prewarm = this.options.engine.prewarm?.().catch((error) => {
+      console.warn("Editor container prewarm failed", {
+        projectId: this.options.projectId,
+        error,
+      });
+    });
+    if (prewarm) this.options.waitUntil?.(prewarm);
     const encoder = new TextEncoder();
     let dispose = () => {};
     const body = new ReadableStream<Uint8Array>(

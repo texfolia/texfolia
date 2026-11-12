@@ -1,6 +1,7 @@
 FROM golang:1.26.10-bookworm AS build
 WORKDIR /build
-COPY apps/compiler/engine/go.mod ./
+COPY apps/compiler/engine/go.mod apps/compiler/engine/go.sum ./
+RUN go mod download
 COPY apps/compiler/engine/*.go ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /latex-engine .
 
@@ -19,6 +20,9 @@ WORKDIR /home/engine
 RUN mkdir /tmp/warmup && printf '\\documentclass{article}\n\\begin{document}Ready\\end{document}\n' > /tmp/warmup/main.tex \
     && tectonic --untrusted /tmp/warmup/main.tex && rm -rf /tmp/warmup
 COPY --from=build /latex-engine /usr/local/bin/latex-engine
+USER root
+RUN du -sx --block-size=1 / > /etc/texfolia-image-size
+USER engine
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --start-interval=1s CMD ["latex-engine", "healthcheck"]
 CMD ["latex-engine"]

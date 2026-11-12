@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { Engine, ObjectStore } from "./jobs";
-import { artifactPathSchema, type artifactFilesSchema } from "./project";
+import { artifactPathSchema } from "./project";
 
 export const artifactManifestSchema = z.object({
   id: z.string(),
@@ -29,23 +29,6 @@ export function encodeBase64(bytes: Uint8Array) {
 }
 export const decodeBase64 = (value: string) =>
   Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-
-export async function readCache(
-  store: ObjectStore,
-  manifest: ArtifactManifest | null,
-) {
-  const files: z.infer<typeof artifactFilesSchema> = {};
-  for (const file of manifest?.files ?? []) {
-    const body = await store.read(file.key);
-    if (!body) continue;
-    files[file.path] = {
-      base64: encodeBase64(
-        new Uint8Array(await new Response(body).arrayBuffer()),
-      ),
-    };
-  }
-  return files;
-}
 
 export async function storeArtifacts(options: {
   store: ObjectStore;

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +26,8 @@ import (
 	"syscall"
 	"time"
 )
+
+var processStarted = time.Now()
 
 func writeError(w http.ResponseWriter, err error) {
 	failure := &httpError{status: 500, message: "Compilation service failed"}
@@ -63,6 +67,19 @@ func newHandler(timeout time.Duration) *engineHandler {
 	var mu sync.Mutex
 	var active *engineRun
 	var owner string
+	var cache map[string][]byte
+	var cacheReady bool
+	bootID := fmt.Sprintf("%x", makeBootID())
+	bootMs := elapsedMs(processStarted)
+	var imageSize *int64
+	if data, err := os.ReadFile("/etc/texfolia-image-size"); err == nil {
+		fields := strings.Fields(string(data))
+		if len(fields) > 0 {
+			if size, err := strconv.ParseInt(fields[0], 10, 64); err == nil && size >= 0 {
+				imageSize = &size
+			}
+		}
+	}
 	var sources workingCopy
 	cancelled := make(map[string]bool)
 	mux.HandleFunc("DELETE /compilations/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -85,8 +102,48 @@ func newHandler(timeout time.Duration) *engineHandler {
 	})
 	var warmed atomic.Bool
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"ready"}`)
+		_ = json.NewEncoder(w).Encode(struct {
+			Status         string   `json:"status"`
+			BootID         string   `json:"bootId"`
+			CacheReady     bool     `json:"cacheReady"`
+			BootMs         *float64 `json:"bootMs"`
+			ImageSizeBytes *int64   `json:"imageSizeBytes"`
+		}{"ready", bootID, cacheReady, bootMs, imageSize})
+	})
+	mux.HandleFunc("PUT /cache", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		projectID := r.Header.Get("X-Project-Id")
+		if projectID == "" || (owner != "" && owner != projectID) {
+			writeError(w, &httpError{status: 409, message: "Engine belongs to another project"})
+			return
+		}
+		if active != nil {
+			writeError(w, &httpError{status: 503, message: "Compiler busy; retry shortly"})
+			return
+		}
+		owner = projectID
+		if cacheReady {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		unpackStarted := time.Now()
+		if r.Header.Get("X-Cache-Missing") != "1" {
+			var err error
+			cache, err = unpackCache(http.MaxBytesReader(w, r.Body, maxCacheArchiveBytes))
+			if err != nil {
+				writeError(w, &httpError{status: 422, message: "Invalid cache archive"})
+				return
+			}
+		}
+		cacheReady = true
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(struct {
+			UnpackMs *float64 `json:"archiveUnpackMs"`
+		}{elapsedMs(unpackStarted)})
 	})
 	mux.HandleFunc("POST /compile", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -124,7 +181,7 @@ func newHandler(timeout time.Duration) *engineHandler {
 			close(run.done)
 			mu.Unlock()
 		}()
-		timing := engineTiming{Engine: "tectonic", Temperature: "unknown"}
+		timing := engineTiming{Engine: "tectonic", Temperature: "unknown", BootMs: bootMs, ImageSizeBytes: imageSize}
 		jobID := r.Header.Get("X-Compilation-Id")
 		jobID = jobID[:min(len(jobID), 64)]
 		defer func() {
@@ -169,19 +226,43 @@ func newHandler(timeout time.Duration) *engineHandler {
 			writeError(w, err)
 			return
 		}
+		if r.Header.Get("X-Clean-Compile") == "1" {
+			p.cache = nil
+		} else if projectID != "" && len(p.cache) == 0 {
+			p.cache = cache
+		}
+		timing.CacheUsed = len(p.cache) > 0
 		timing.Temperature = "cold"
 		if warmed.Swap(true) {
 			timing.Temperature = "warm"
 		}
 		result, err := compile(ctx, p, timeout, &timing)
-		if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
-			w.Header().Set("X-Compile-Timing", string(encoded))
-		}
 		if err != nil {
+			if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
+				w.Header().Set("X-Compile-Timing", string(encoded))
+			}
 			writeError(w, err)
 			return
 		}
 		defer result.close()
+		nextCache, err := resultCache(result)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		archive, err := packCache(nextCache)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if projectID != "" {
+			mu.Lock()
+			cache, cacheReady = nextCache, true
+			mu.Unlock()
+		}
+		if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
+			w.Header().Set("X-Compile-Timing", string(encoded))
+		}
 		form := multipart.NewWriter(w)
 		w.Header().Set("Content-Type", form.FormDataContentType())
 		w.Header().Set("Cache-Control", "no-store")
@@ -197,6 +278,12 @@ func newHandler(timeout time.Duration) *engineHandler {
 		}
 		if err == nil {
 			err = form.WriteField("log", result.log)
+		}
+		if err == nil {
+			part, err = form.CreateFormFile("cache", "cache.tar.zst")
+			if err == nil {
+				_, err = io.Copy(part, bytes.NewReader(archive))
+			}
 		}
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
@@ -231,6 +318,14 @@ func newHandler(timeout time.Duration) *engineHandler {
 		}
 	})
 	return &engineHandler{Handler: mux, sources: &sources}
+}
+
+func makeBootID() []byte {
+	identity := make([]byte, 16)
+	if _, err := rand.Read(identity); err != nil {
+		panic(err)
+	}
+	return identity
 }
 
 func main() {

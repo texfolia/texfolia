@@ -144,7 +144,17 @@ the generated `.log` keeps its full contents within the build output limit.
 Source quotas, source history, and file creation use the project file table;
 build files use the compiler object store and never enter that table.
 
-Each compile restores the full latest cache. Tectonic reads auxiliaries beside
+Each successful project build also replaces `projects/<projectId>/cache.tar.zst`
+with one zstd-compressed tar archive of generated files other than the main PDF.
+This disposable cache is separate from the immutable download generations.
+The engine retains its cache in memory between builds; warm compiles do not
+download output files. On a new engine process, the coordinator fetches one
+archive and uploads it to the private `PUT /cache` endpoint. Source downloads
+run concurrently with archive fetch/unpack after container readiness.
+Missing, corrupt, or unavailable archives fall back to an uncached compile.
+Older projects without an archive acquire one after their next successful build.
+
+Tectonic reads auxiliaries beside
 its primary input, so the engine restores those files there and under `out/`.
 Real source paths take priority. Sources can reference generated files through
 `\input{out/generated.tex}`. The engine keeps all intermediate files and SyncTeX.
@@ -167,7 +177,16 @@ the same policy, with long alarms checked in daily intervals.
 `GET /projects/<projectId>/events` streams the same snapshot on attach and after
 every transition. It sends heartbeat comments every 15 seconds. EventSource
 reconnects with the current snapshot, so no replay cursor is needed. The editor
-attaches when the project opens. **Save & compile** saves sources to the web
+attaches when the project opens. Attachment starts that project's own container
+and restores its archive in the background without delaying the first SSE
+snapshot. Simultaneous attachments and compiles share an in-flight preparation.
+If the container has slept, its new boot identity triggers another restore;
+a ready process keeps its in-memory cache even if the coordinator restarted.
+Prewarm failures do not break SSE and can be retried by the next compile.
+There are no snapshots or spare-container claims in this path. See
+[cold-start measurements](cold-start-measurements.md) for timings and limitations.
+
+**Save & compile** saves sources to the web
 Worker's R2 bucket, then POSTs a revisioned delta. Save and
 Cmd/Ctrl+S persist without compiling. Typing marks the preview stale and leaves
 the saved build running. Browser storage is only an unsaved/offline draft cache;
@@ -211,7 +230,10 @@ The legacy `/compile`, `/jobs/<id>`, and `/compilations/<id>.pdf` endpoints rema
 available for existing jobs. They retain their queue and rate limit.
 
 Limits: 10 MiB of source JSON, 200 source files, 60 seconds per TeX run,
-a 20 MiB PDF, and 32 MiB of generated files per build. The engine accepts up to
+a 20 MiB PDF, and 32 MiB of generated files per build. Cache archives are bounded
+to 33 MiB compressed, 32 MiB of file contents, and 1,024 regular files. Restore
+rejects traversal, links, duplicate paths, conflicting paths, and invalid zstd
+frames before using any contents. The engine accepts up to
 64 MiB of internal JSON to carry resync sources and the restored cache. The
 coordinator also permits 64 MiB for internal resync JSON; decoded delta projects
 retain the 10 MiB source limit even when each individual delta is small.
@@ -248,10 +270,13 @@ times, with queue delivery as a fallback. The scheduled event recovers legacy
 queue jobs. The `v2` migration adds the coordinator without replacing existing
 container identities.
 
-The engine's private HTTP interface provides `GET /health` returns
-readiness, and `POST /compile` accepts the same project JSON as Hono. A successful
+The engine's private HTTP interface provides `GET /health` for readiness,
+boot identity, process boot duration, cache readiness, and baked image filesystem
+size. `PUT /cache` restores one archive and binds the process to a project;
+repeated restores on a ready process are no-ops. `POST /compile` accepts the
+same project JSON as Hono. A successful
 engine response is multipart form data with an `application/pdf` file named
-`pdf`, a text field named `log`, and binary fields named `artifact:<path>` for
+`pdf`, a text field named `log`, a zstd file named `cache`, and binary fields named `artifact:<path>` for
 all other generated files. Failures return JSON with `error`, `log`, and the
 full generated log in `logFile` when available.
 `DELETE /compilations/<id>` cancels that run and responds after it exits.
@@ -299,6 +324,19 @@ both cases to recover through a full resync. `ENGINE_IMAGE` overrides the image.
 
 `builds.test.ts` checks full artifact retention, cache restoration, clean retry,
 source invalidation, atomic publication through a storage failure, and expiry.
+`project-engine.test.ts` checks SSE prewarm, shared preparation, concurrent source
+download, single-archive restore after restart, missing/corrupt archives, startup
+failure recovery, and atomic publication when an archive write fails. Go cache
+tests check real zstd/tar round trips, rejection of unsafe entries, project
+ownership, clean bypass, and anonymous-job isolation.
+
+`compile_engine_request` and `compile_backend` include `containerStartMs`,
+`containerBootId`, `bootMs`, `imageSizeBytes`, `archiveFetchMs`, `archiveUnpackMs`,
+`archiveBytes`, `archiveStatus`, and `prewarmed`. Optional fields keep old timing
+records readable. Prewarm measurements are attached to the first compile on the
+same boot; they are not time spent waiting in that compile request. Detailed
+field definitions and local measurements are in
+[cold-start measurements](cold-start-measurements.md).
 
 `streaming.test.ts` holds back the engine response tail and verifies that the
 complete PDF reaches the Hono client first. SQLite faults on artifact and result
