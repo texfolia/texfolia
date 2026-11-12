@@ -18,6 +18,7 @@ export type Workspace = {
   reportSyntax: (path: string, problems: LatexProblem[]) => void;
   jump: { id: string; line: number } | undefined;
   pdf: File | null;
+  pdfSaveState: "saved" | "saving" | "not-saved";
   formatSettings: FormatSettings;
   keepOpen: (id: string) => void;
   openMarkdownPreview: (id: string) => void;

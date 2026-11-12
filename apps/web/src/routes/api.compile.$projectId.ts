@@ -324,11 +324,21 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           submissionMs: performance.now() - started,
         });
         const statusUrl = `/api/compile/${params.projectId}?job=${id}`;
-        return json({ id, revision, status: "queued", statusUrl }, 202, {
-          ...noStore,
-          Location: statusUrl,
-          "Retry-After": "1",
-        });
+        return json(
+          {
+            id,
+            revision,
+            status: "queued",
+            statusUrl,
+            previewUrl: `${statusUrl}&preview=pdf`,
+          },
+          202,
+          {
+            ...noStore,
+            Location: statusUrl,
+            "Retry-After": "1",
+          },
+        );
       },
       PATCH: async ({ request, params, context }) => {
         const denied = await checkProject(request, params.projectId, context);
@@ -341,7 +351,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           columns: { id: true, status: true },
           where: { id: id.data, projectId: params.projectId },
         });
-        if (!job || job.status !== "succeeded")
+        if (!job || !["succeeded", "failed"].includes(job.status))
           return json({ error: "Job not found" }, 404);
         const body = await readPreviewTiming(request);
         if (!body) return json({ error: "Invalid preview timing" }, 400);
@@ -354,7 +364,8 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           if (
             result.success &&
             result.data.id === id.data &&
-            result.data.status === "succeeded"
+            (result.data.status === "succeeded" ||
+              result.data.status === "failed")
           )
             timing = result.data.timing;
         } catch {
@@ -401,6 +412,27 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         if (!job) return json({ error: "Job not found" }, 404);
         const pdfPath = `/projects/${params.projectId}/compilations/${id}.pdf`;
         try {
+          if (url.searchParams.get("preview") === "pdf") {
+            const response = await fetchCompiler(
+              `/projects/${params.projectId}/jobs/${id}/pdf`,
+              {
+                signal: AbortSignal.any([
+                  request.signal,
+                  AbortSignal.timeout(10 * 60_000),
+                ]),
+              },
+            );
+            if (!response.ok) return response;
+            if (response.headers.get("Content-Type") !== "application/pdf")
+              throw new Error("Invalid compiler PDF stream");
+            return new Response(response.body, {
+              headers: {
+                ...noStore,
+                "Content-Type": "application/pdf",
+                "X-Accel-Buffering": "no",
+              },
+            });
+          }
           if (url.searchParams.get("artifact") === "pdf") {
             if (job.status !== "succeeded")
               return json({ error: "PDF not found" }, 404);

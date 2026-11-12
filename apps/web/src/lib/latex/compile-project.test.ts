@@ -51,6 +51,88 @@ afterEach(() => {
   else Reflect.deleteProperty(globalThis, "EventSource");
 });
 
+for (const saveStatus of ["succeeded", "failed"] as const) {
+  test(`streamed preview renders before ${saveStatus} persistence completes`, async () => {
+    const { events, source } = openEvents();
+    const previewReady = Promise.withResolvers<File>();
+    const reportReady = Promise.withResolvers<unknown>();
+    let jobId = "";
+    let completed = false;
+    let downloads = 0;
+    let reports = 0;
+    globalThis.fetch = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "POST") {
+          jobId = new Headers(init.headers).get("X-Compilation-Id")!;
+          return Response.json({
+            id: jobId,
+            revision: 1,
+            statusUrl: "/status",
+            previewUrl: "/preview",
+          });
+        }
+        if (init?.method === "PATCH") {
+          reports++;
+          reportReady.resolve(JSON.parse(String(init.body)));
+          return new Response(null, { status: 204 });
+        }
+        if (url === "/preview") {
+          downloads++;
+          return new Response("%PDF-streamed", {
+            headers: { "Content-Type": "application/pdf" },
+          });
+        }
+        if (url === "/status")
+          return Response.json({
+            id: jobId,
+            revision: 1,
+            status: saveStatus,
+            log: "streamed log",
+            error: "PDF could not be saved",
+            artifactUrl: "/must-not-download",
+          });
+        throw new Error(`Unexpected request: ${url}`);
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+    const result = requestCompilation({
+      projectId: "project",
+      events,
+      mainFile: "main.tex",
+      files: {},
+      signal: new AbortController().signal,
+      onPreview: ({ pdf }) => {
+        previewReady.resolve(pdf);
+        reportCompilePreview(pdf, "rendered");
+      },
+    });
+    void result.then(() => {
+      completed = true;
+    });
+    const preview = await previewReady.promise;
+    expect(await preview.text()).toBe("%PDF-streamed");
+    expect(completed).toBe(false);
+    expect(reports).toBe(0);
+    source.message(snapshot(jobId, saveStatus));
+    const final = await result;
+    expect(
+      previewTimingSchema.parse(await reportReady.promise).firstPdfByteMs,
+    ).toBeNumber();
+    expect(reports).toBe(1);
+    if (saveStatus === "succeeded") {
+      expect(final).toMatchObject({ pdf: preview, log: "streamed log" });
+    } else {
+      expect(final).toEqual({
+        error: "PDF could not be saved",
+        log: "streamed log",
+      });
+      expect(await preview.text()).toBe("%PDF-streamed");
+    }
+    expect(downloads).toBe(1);
+  });
+}
+
 function snapshot(
   id: string,
   status: NonNullable<BuildSnapshot["current"]>["status"],
@@ -158,6 +240,7 @@ test("submission carries the browser job ID and preview reports only once after 
   const originalFetch = globalThis.fetch;
   const { events, source } = openEvents();
   const reports: unknown[] = [];
+  const reportReady = Promise.withResolvers<void>();
   let jobId = "";
   const startedAt = performance.now();
   const lastEditAt = startedAt - 100;
@@ -194,6 +277,7 @@ test("submission carries the browser job ID and preview reports only once after 
       if (request.method === "PATCH") {
         expect(new URL(request.url).searchParams.get("job")).toBe(jobId);
         reports.push(await request.json());
+        reportReady.resolve();
         return new Response(null, { status: 204 });
       }
       if (request.url.includes("artifact=pdf"))
@@ -226,7 +310,7 @@ test("submission carries the browser job ID and preview reports only once after 
     reportCompilePreview(result.pdf, "rendered");
     reportCompilePreview(result.pdf, "rendered");
     reportCompilePreview(new File(["manual"], "manual.pdf"), "rendered");
-    await Promise.resolve();
+    await reportReady.promise;
     expect(reports).toHaveLength(1);
     const timing = previewTimingSchema.parse(reports[0]);
     expect(timing.outcome).toBe("rendered");

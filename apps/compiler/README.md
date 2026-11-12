@@ -92,6 +92,20 @@ and diagnostics. Invalid LaTeX and timeouts are terminal failures.
 artifact URL is relative to the compiler and uses the same private connection as
 the job URL. The browser retrieves both through the web app's authenticated API.
 
+`GET /projects/<projectId>/jobs/<id>/pdf` waits for the engine's first multipart
+part and streams that PDF without waiting for the log, remaining artifacts, or
+storage. The web submission response includes an authenticated `previewUrl` for
+this stream. The browser renders it while SSE continues to track publication.
+Disconnecting the preview does not cancel the persistence branch.
+
+The engine flushes the PDF first, then the log, then the other artifacts. Hono
+tees the multipart body: one branch extracts only the PDF; the background branch
+parses and saves the complete build under an immutable generation. Only after
+every artifact and the job result are saved does the coordinator publish `out/`
+and `latestBuild`. A save failure keeps the previous manifest and successful
+build; the requesting editor retains its streamed PDF with a “not saved” label.
+This transient preview is not durable across coordinator restarts.
+
 `GET /projects/<projectId>` returns `revision`, `current`, `latestBuild`,
 `artifacts`, and `stale`. `current` describes the newest compile attempt.
 `latestBuild` describes the last successful compile. `artifacts` lists the shared
@@ -232,6 +246,22 @@ request ordering, and SQLite restart recovery.
 
 `builds.test.ts` checks full artifact retention, cache restoration, clean retry,
 source invalidation, atomic publication through a storage failure, and expiry.
+
+`streaming.test.ts` holds back the engine response tail and verifies that the
+complete PDF reaches the Hono client first. SQLite faults on artifact and result
+writes verify that neither failure publishes the new generation. The parser
+tests include byte-by-byte chunks, binary content, false boundary prefixes, and
+truncated responses.
+
+`firstPdfByteMs` records engine-request-to-first-PDF-byte in engine/backend events
+and compile-action-to-first-PDF-byte in browser preview events. The browser
+records this for both streamed and persisted downloads; the percentile script
+includes it and omits missing values from older events. Compare like-for-like
+warm project cohorts before and after deployment; the gated tests prove ordering,
+not a production latency improvement.
+Browser render timings are captured immediately but sent after the terminal
+status is reconciled, so reports retain the engine, plan, and temperature cohort
+even when the preview renders before persistence or saving fails.
 
 To verify real Tectonic output, point the scripts at an isolated engine:
 

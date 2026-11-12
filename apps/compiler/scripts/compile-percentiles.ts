@@ -22,6 +22,7 @@ const metrics = [
   "pollingMs",
   "downloadMs",
   "previewMs",
+  "firstPdfByteMs",
 ] as const;
 
 function* events(value: unknown): Generator<z.infer<typeof sampleSchema>> {
@@ -72,7 +73,7 @@ export function summarizeCompileEvents(values: Iterable<unknown>) {
         metrics.map((metric) => {
           const values = samples
             .flatMap((sample) =>
-              sample[metric] === null ? [] : [sample[metric]],
+              sample[metric] == null ? [] : [sample[metric]],
             )
             .sort((a, b) => a - b);
           return [

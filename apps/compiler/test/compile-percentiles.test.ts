@@ -29,16 +29,18 @@ test("percentiles split cohorts, deduplicate jobs, and exclude failed or absent 
     },
     { ...sample(1000), outcome: "preview_failed" },
     { ...sample(0), keystrokeToPdfMs: null },
+    { ...sample(0), firstPdfByteMs: 7 },
     { event: "compile_backend" },
   ]);
   expect(result).toHaveLength(2);
   expect(result[0]).toMatchObject({
     plan: "pro",
     temperature: "warm",
-    jobs: 21,
+    jobs: 22,
     metrics: {
-      keystrokeToPdfMs: { samples: 20, p50: 10, p95: 19 },
-      actionToPdfMs: { samples: 21, p50: 25, p95: 25 },
+      keystrokeToPdfMs: { samples: 21, p50: 10, p95: 19 },
+      actionToPdfMs: { samples: 22, p50: 25, p95: 25 },
+      firstPdfByteMs: { samples: 1, p50: 7, p95: 7 },
     },
   });
   expect(result[1]).toMatchObject({

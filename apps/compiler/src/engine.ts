@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { Engine } from "./jobs";
+import { firstPdfPart } from "./pdf-stream";
 import {
   artifactPathSchema,
   artifactContentSchema,
@@ -86,7 +87,27 @@ export function createEngineClient(
         );
       }
       if (!response.ok) throw new Error(`TeX host returned ${response.status}`);
-      const form = await response.formData();
+      let persistedResponse = response;
+      if (context.onPdf && response.body) {
+        const [preview, persistence] = response.body.tee();
+        persistedResponse = new Response(persistence, {
+          headers: response.headers,
+        });
+        try {
+          const pdf = await firstPdfPart(
+            preview,
+            response.headers.get("Content-Type") ?? "",
+            () => {
+              timing = {
+                ...timing,
+                firstPdfByteMs: performance.now() - started,
+              };
+            },
+          );
+          context.onPdf(pdf);
+        } catch {}
+      }
+      const form = await persistedResponse.formData();
       const pdf = form.get("pdf");
       const log = form.get("log");
       if (!(pdf instanceof Blob) || typeof log !== "string")

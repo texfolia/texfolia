@@ -108,6 +108,12 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
     const job = id.success ? await coordinator.get(id.data) : null;
     return job ? c.json(job) : c.json({ error: "Job not found" }, 404);
   });
+  app.get("/projects/:projectId/jobs/:id/pdf", async (c) => {
+    const id = jobIdSchema.safeParse(c.req.param("id"));
+    return id.success
+      ? coordinator.preview(id.data, c.req.raw.signal)
+      : c.json({ error: "Job not found" }, 404);
+  });
   app.get("/projects/:projectId/compilations/:file", async (c) => {
     const id = jobIdSchema.safeParse(c.req.param("file").replace(/\.pdf$/, ""));
     const pdf = id.success ? await coordinator.artifact(id.data) : null;

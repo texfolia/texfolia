@@ -70,7 +70,8 @@ export async function storeArtifacts(options: {
   for (const [path, value] of Object.entries(data)) {
     const bytes = new Uint8Array(await value.arrayBuffer());
     const key = `projects/${projectId}/builds/${generation}/${path}`;
-    await store.create(key, bytes);
+    if (!(await store.create(key, bytes)))
+      throw new Error("Build artifact was not saved");
     files.push({ path, key, sizeBytes: bytes.byteLength });
   }
   return {
