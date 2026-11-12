@@ -44,6 +44,7 @@ import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
 import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
 import type { CompileSources } from "#/lib/latex/source-sync";
+import { addLatexPackage, packageInsertion } from "#/lib/latex/symbols";
 import {
   reconcileSourceDrafts,
   serializeSourceDrafts,
@@ -79,6 +80,11 @@ function FileEditor({
   const editor = useRef<EditorView | null>(null);
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const { registerEditor } = workspace;
+  useEffect(() => {
+    if (editor.current) registerEditor(params.node.id, editor.current);
+    return () => registerEditor(params.node.id, null);
+  }, [params.node.id, registerEditor]);
   useEffect(() => {
     let frame = 0;
     const subscription = panelApi.onDidActiveChange(({ isActive }) => {
@@ -135,6 +141,7 @@ function FileEditor({
       readOnly={!workspace.canWrite}
       onCreateEditor={(view) => {
         editor.current = view;
+        registerEditor(params.node.id, view);
         if (panelApi.isActive) view.focus();
       }}
       filename={params.node.name}
@@ -146,6 +153,12 @@ function FileEditor({
       onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
+      preamble={
+        workspace.symbolPreamble && {
+          ...workspace.symbolPreamble,
+          addPackage: workspace.addSymbolPackage,
+        }
+      }
       onChange={(value) => workspace.change(params.node.id, value)}
       onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
     />
@@ -208,6 +221,11 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const container = useRef<HTMLDivElement>(null);
   const previewId = useRef<string | null>(null);
   const drafts = useRef(new Map<string, FileState>());
+  const editors = useRef(new Map<string, EditorView>());
+  const registerEditor = useCallback((id: string, view: EditorView | null) => {
+    if (view) editors.current.set(id, view);
+    else editors.current.delete(id);
+  }, []);
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const [activeId, setActiveId] = useState<string>();
   const [ready, setReady] = useState(false);
@@ -424,6 +442,27 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const main =
     [...paths.values()].find((path) => path === "main.tex") ??
     [...paths.values()].find((path) => path.endsWith(".tex"));
+  const mainId = [...paths].find(([, path]) => path === main)?.[0];
+  const mainDraft = mainId ? drafts.current.get(mainId) : undefined;
+
+  function addSymbolPackage(packageName: string) {
+    if (!project.canWrite || Object.keys(recovery).length || !mainId) return;
+    const view = editors.current.get(mainId);
+    if (view) {
+      addLatexPackage(packageName)(view);
+      return;
+    }
+    const draft = drafts.current.get(mainId);
+    if (!draft) return;
+    const insertion = packageInsertion(draft.value, packageName);
+    if (insertion)
+      change(
+        mainId,
+        draft.value.slice(0, insertion.from) +
+          insertion.insert +
+          draft.value.slice(insertion.from),
+      );
+  }
 
   async function sourceFiles(): Promise<SourceFiles>;
   async function sourceFiles(mode: "compile"): Promise<CompileSources>;
@@ -895,6 +934,12 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
         keepOpen,
         openMarkdownPreview,
         change,
+        registerEditor,
+        symbolPreamble:
+          main && mainDraft
+            ? { source: mainDraft.value, filename: main }
+            : undefined,
+        addSymbolPackage,
         paths,
         completion,
         problems,

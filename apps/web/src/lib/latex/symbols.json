@@ -1,0 +1,1394 @@
+[
+  {
+    "name": "Alpha",
+    "command": "\\alpha",
+    "glyph": "α",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Beta",
+    "command": "\\beta",
+    "glyph": "β",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Gamma",
+    "command": "\\gamma",
+    "glyph": "γ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Delta",
+    "command": "\\delta",
+    "glyph": "δ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Epsilon",
+    "command": "\\epsilon",
+    "glyph": "ϵ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Variant epsilon",
+    "command": "\\varepsilon",
+    "glyph": "ε",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Zeta",
+    "command": "\\zeta",
+    "glyph": "ζ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Eta",
+    "command": "\\eta",
+    "glyph": "η",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Theta",
+    "command": "\\theta",
+    "glyph": "θ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Variant theta",
+    "command": "\\vartheta",
+    "glyph": "ϑ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Iota",
+    "command": "\\iota",
+    "glyph": "ι",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Kappa",
+    "command": "\\kappa",
+    "glyph": "κ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Lambda",
+    "command": "\\lambda",
+    "glyph": "λ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Mu",
+    "command": "\\mu",
+    "glyph": "μ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Nu",
+    "command": "\\nu",
+    "glyph": "ν",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Xi",
+    "command": "\\xi",
+    "glyph": "ξ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Pi",
+    "command": "\\pi",
+    "glyph": "π",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Variant pi",
+    "command": "\\varpi",
+    "glyph": "ϖ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Rho",
+    "command": "\\rho",
+    "glyph": "ρ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Variant rho",
+    "command": "\\varrho",
+    "glyph": "ϱ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Sigma",
+    "command": "\\sigma",
+    "glyph": "σ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Final sigma",
+    "command": "\\varsigma",
+    "glyph": "ς",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Tau",
+    "command": "\\tau",
+    "glyph": "τ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Upsilon",
+    "command": "\\upsilon",
+    "glyph": "υ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Phi",
+    "command": "\\phi",
+    "glyph": "ϕ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Variant phi",
+    "command": "\\varphi",
+    "glyph": "φ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Chi",
+    "command": "\\chi",
+    "glyph": "χ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Psi",
+    "command": "\\psi",
+    "glyph": "ψ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Omega",
+    "command": "\\omega",
+    "glyph": "ω",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital gamma",
+    "command": "\\Gamma",
+    "glyph": "Γ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital delta",
+    "command": "\\Delta",
+    "glyph": "Δ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital theta",
+    "command": "\\Theta",
+    "glyph": "Θ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital lambda",
+    "command": "\\Lambda",
+    "glyph": "Λ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital xi",
+    "command": "\\Xi",
+    "glyph": "Ξ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital pi",
+    "command": "\\Pi",
+    "glyph": "Π",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital sigma",
+    "command": "\\Sigma",
+    "glyph": "Σ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital upsilon",
+    "command": "\\Upsilon",
+    "glyph": "Υ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital phi",
+    "command": "\\Phi",
+    "glyph": "Φ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital psi",
+    "command": "\\Psi",
+    "glyph": "Ψ",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Capital omega",
+    "command": "\\Omega",
+    "glyph": "Ω",
+    "category": "Greek letters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Left arrow",
+    "command": "\\leftarrow",
+    "glyph": "←",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right arrow",
+    "command": "\\rightarrow",
+    "glyph": "→",
+    "category": "Arrows",
+    "package": null,
+    "keywords": ["to"]
+  },
+  {
+    "name": "Left right arrow",
+    "command": "\\leftrightarrow",
+    "glyph": "↔",
+    "category": "Arrows",
+    "package": null,
+    "keywords": ["bidirectional"]
+  },
+  {
+    "name": "Double left arrow",
+    "command": "\\Leftarrow",
+    "glyph": "⇐",
+    "category": "Arrows",
+    "package": null,
+    "keywords": ["implied by"]
+  },
+  {
+    "name": "Double right arrow",
+    "command": "\\Rightarrow",
+    "glyph": "⇒",
+    "category": "Arrows",
+    "package": null,
+    "keywords": ["implies"]
+  },
+  {
+    "name": "Double left right arrow",
+    "command": "\\Leftrightarrow",
+    "glyph": "⇔",
+    "category": "Arrows",
+    "package": null,
+    "keywords": ["if and only if"]
+  },
+  {
+    "name": "Long left arrow",
+    "command": "\\longleftarrow",
+    "glyph": "⟵",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Long right arrow",
+    "command": "\\longrightarrow",
+    "glyph": "⟶",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Long left right arrow",
+    "command": "\\longleftrightarrow",
+    "glyph": "⟷",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Long double left arrow",
+    "command": "\\Longleftarrow",
+    "glyph": "⟸",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Long double right arrow",
+    "command": "\\Longrightarrow",
+    "glyph": "⟹",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Long double left right arrow",
+    "command": "\\Longleftrightarrow",
+    "glyph": "⟺",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Maps to arrow",
+    "command": "\\mapsto",
+    "glyph": "↦",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Long maps to arrow",
+    "command": "\\longmapsto",
+    "glyph": "⟼",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Hook left arrow",
+    "command": "\\hookleftarrow",
+    "glyph": "↩",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Hook right arrow",
+    "command": "\\hookrightarrow",
+    "glyph": "↪",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Up arrow",
+    "command": "\\uparrow",
+    "glyph": "↑",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Down arrow",
+    "command": "\\downarrow",
+    "glyph": "↓",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Up down arrow",
+    "command": "\\updownarrow",
+    "glyph": "↕",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Double up arrow",
+    "command": "\\Uparrow",
+    "glyph": "⇑",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Double down arrow",
+    "command": "\\Downarrow",
+    "glyph": "⇓",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Double up down arrow",
+    "command": "\\Updownarrow",
+    "glyph": "⇕",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Northeast arrow",
+    "command": "\\nearrow",
+    "glyph": "↗",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Southeast arrow",
+    "command": "\\searrow",
+    "glyph": "↘",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Southwest arrow",
+    "command": "\\swarrow",
+    "glyph": "↙",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Northwest arrow",
+    "command": "\\nwarrow",
+    "glyph": "↖",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Left harpoon up",
+    "command": "\\leftharpoonup",
+    "glyph": "↼",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right harpoon up",
+    "command": "\\rightharpoonup",
+    "glyph": "⇀",
+    "category": "Arrows",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right left harpoons",
+    "command": "\\rightleftharpoons",
+    "glyph": "⇌",
+    "category": "Arrows",
+    "package": null,
+    "keywords": ["equilibrium"]
+  },
+  {
+    "name": "Two headed right arrow",
+    "command": "\\twoheadrightarrow",
+    "glyph": "↠",
+    "category": "Arrows",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Two headed left arrow",
+    "command": "\\twoheadleftarrow",
+    "glyph": "↞",
+    "category": "Arrows",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Negated right arrow",
+    "command": "\\nrightarrow",
+    "glyph": "↛",
+    "category": "Arrows",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Negated left arrow",
+    "command": "\\nleftarrow",
+    "glyph": "↚",
+    "category": "Arrows",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Left right arrows",
+    "command": "\\leftrightarrows",
+    "glyph": "⇆",
+    "category": "Arrows",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Less than or equal",
+    "command": "\\leq",
+    "glyph": "≤",
+    "category": "Relations",
+    "package": null,
+    "keywords": ["less equal"]
+  },
+  {
+    "name": "Greater than or equal",
+    "command": "\\geq",
+    "glyph": "≥",
+    "category": "Relations",
+    "package": null,
+    "keywords": ["greater equal"]
+  },
+  {
+    "name": "Not equal",
+    "command": "\\neq",
+    "glyph": "≠",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Approximately equal",
+    "command": "\\approx",
+    "glyph": "≈",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Similar",
+    "command": "\\sim",
+    "glyph": "∼",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Similar or equal",
+    "command": "\\simeq",
+    "glyph": "≃",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Congruent",
+    "command": "\\cong",
+    "glyph": "≅",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Equivalent",
+    "command": "\\equiv",
+    "glyph": "≡",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Proportional to",
+    "command": "\\propto",
+    "glyph": "∝",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Much less than",
+    "command": "\\ll",
+    "glyph": "≪",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Much greater than",
+    "command": "\\gg",
+    "glyph": "≫",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Precedes",
+    "command": "\\prec",
+    "glyph": "≺",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Succeeds",
+    "command": "\\succ",
+    "glyph": "≻",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Precedes or equal",
+    "command": "\\preceq",
+    "glyph": "⪯",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Succeeds or equal",
+    "command": "\\succeq",
+    "glyph": "⪰",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Perpendicular",
+    "command": "\\perp",
+    "glyph": "⊥",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Parallel",
+    "command": "\\parallel",
+    "glyph": "∥",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Divides",
+    "command": "\\mid",
+    "glyph": "∣",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Element of",
+    "command": "\\in",
+    "glyph": "∈",
+    "category": "Relations",
+    "package": null,
+    "keywords": ["belongs"]
+  },
+  {
+    "name": "Not an element of",
+    "command": "\\notin",
+    "glyph": "∉",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Contains as member",
+    "command": "\\ni",
+    "glyph": "∋",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Subset",
+    "command": "\\subset",
+    "glyph": "⊂",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Superset",
+    "command": "\\supset",
+    "glyph": "⊃",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Subset or equal",
+    "command": "\\subseteq",
+    "glyph": "⊆",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Superset or equal",
+    "command": "\\supseteq",
+    "glyph": "⊇",
+    "category": "Relations",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Less than or similar",
+    "command": "\\lesssim",
+    "glyph": "≲",
+    "category": "Relations",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Greater than or similar",
+    "command": "\\gtrsim",
+    "glyph": "≳",
+    "category": "Relations",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Slanted less than or equal",
+    "command": "\\leqslant",
+    "glyph": "⩽",
+    "category": "Relations",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Slanted greater than or equal",
+    "command": "\\geqslant",
+    "glyph": "⩾",
+    "category": "Relations",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Not a subset or equal",
+    "command": "\\nsubseteq",
+    "glyph": "⊈",
+    "category": "Relations",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Not a superset or equal",
+    "command": "\\nsupseteq",
+    "glyph": "⊉",
+    "category": "Relations",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Plus or minus",
+    "command": "\\pm",
+    "glyph": "±",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Minus or plus",
+    "command": "\\mp",
+    "glyph": "∓",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Multiplication",
+    "command": "\\times",
+    "glyph": "×",
+    "category": "Operators",
+    "package": null,
+    "keywords": ["cross product"]
+  },
+  {
+    "name": "Division",
+    "command": "\\div",
+    "glyph": "÷",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Centered dot",
+    "command": "\\cdot",
+    "glyph": "⋅",
+    "category": "Operators",
+    "package": null,
+    "keywords": ["multiply"]
+  },
+  {
+    "name": "Asterisk",
+    "command": "\\ast",
+    "glyph": "∗",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Star",
+    "command": "\\star",
+    "glyph": "⋆",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Composition",
+    "command": "\\circ",
+    "glyph": "∘",
+    "category": "Operators",
+    "package": null,
+    "keywords": ["circle"]
+  },
+  {
+    "name": "Bullet",
+    "command": "\\bullet",
+    "glyph": "∙",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Direct sum",
+    "command": "\\oplus",
+    "glyph": "⊕",
+    "category": "Operators",
+    "package": null,
+    "keywords": ["circled plus"]
+  },
+  {
+    "name": "Tensor product",
+    "command": "\\otimes",
+    "glyph": "⊗",
+    "category": "Operators",
+    "package": null,
+    "keywords": ["circled times"]
+  },
+  {
+    "name": "Circled minus",
+    "command": "\\ominus",
+    "glyph": "⊖",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Circled slash",
+    "command": "\\oslash",
+    "glyph": "⊘",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Circled dot",
+    "command": "\\odot",
+    "glyph": "⊙",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Sum",
+    "command": "\\sum",
+    "glyph": "∑",
+    "category": "Operators",
+    "package": null,
+    "keywords": ["summation"]
+  },
+  {
+    "name": "Product",
+    "command": "\\prod",
+    "glyph": "∏",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Coproduct",
+    "command": "\\coprod",
+    "glyph": "∐",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Integral",
+    "command": "\\int",
+    "glyph": "∫",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Contour integral",
+    "command": "\\oint",
+    "glyph": "∮",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Big union",
+    "command": "\\bigcup",
+    "glyph": "⋃",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Big intersection",
+    "command": "\\bigcap",
+    "glyph": "⋂",
+    "category": "Operators",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Double integral",
+    "command": "\\iint",
+    "glyph": "∬",
+    "category": "Operators",
+    "package": "amsmath",
+    "keywords": []
+  },
+  {
+    "name": "Triple integral",
+    "command": "\\iiint",
+    "glyph": "∭",
+    "category": "Operators",
+    "package": "amsmath",
+    "keywords": []
+  },
+  {
+    "name": "For all",
+    "command": "\\forall",
+    "glyph": "∀",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["universal quantifier"]
+  },
+  {
+    "name": "Exists",
+    "command": "\\exists",
+    "glyph": "∃",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["existential quantifier"]
+  },
+  {
+    "name": "Logical not",
+    "command": "\\neg",
+    "glyph": "¬",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["negation"]
+  },
+  {
+    "name": "Logical and",
+    "command": "\\land",
+    "glyph": "∧",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["wedge"]
+  },
+  {
+    "name": "Logical or",
+    "command": "\\lor",
+    "glyph": "∨",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["vee"]
+  },
+  {
+    "name": "Empty set",
+    "command": "\\emptyset",
+    "glyph": "∅",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Union",
+    "command": "\\cup",
+    "glyph": "∪",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Intersection",
+    "command": "\\cap",
+    "glyph": "∩",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Set difference",
+    "command": "\\setminus",
+    "glyph": "∖",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Infinity",
+    "command": "\\infty",
+    "glyph": "∞",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Aleph",
+    "command": "\\aleph",
+    "glyph": "ℵ",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Proves",
+    "command": "\\vdash",
+    "glyph": "⊢",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Models",
+    "command": "\\models",
+    "glyph": "⊨",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["entails"]
+  },
+  {
+    "name": "Top",
+    "command": "\\top",
+    "glyph": "⊤",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["true"]
+  },
+  {
+    "name": "Bottom",
+    "command": "\\bot",
+    "glyph": "⊥",
+    "category": "Sets and logic",
+    "package": null,
+    "keywords": ["false"]
+  },
+  {
+    "name": "Does not exist",
+    "command": "\\nexists",
+    "glyph": "∄",
+    "category": "Sets and logic",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Variant empty set",
+    "command": "\\varnothing",
+    "glyph": "∅",
+    "category": "Sets and logic",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Therefore",
+    "command": "\\therefore",
+    "glyph": "∴",
+    "category": "Sets and logic",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Because",
+    "command": "\\because",
+    "glyph": "∵",
+    "category": "Sets and logic",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Partial derivative",
+    "command": "\\partial",
+    "glyph": "∂",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Nabla",
+    "command": "\\nabla",
+    "glyph": "∇",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["gradient del"]
+  },
+  {
+    "name": "Script ell",
+    "command": "\\ell",
+    "glyph": "ℓ",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Reduced Planck constant",
+    "command": "\\hbar",
+    "glyph": "ℏ",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Real part",
+    "command": "\\Re",
+    "glyph": "ℜ",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Imaginary part",
+    "command": "\\Im",
+    "glyph": "ℑ",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Angle",
+    "command": "\\angle",
+    "glyph": "∠",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Triangle",
+    "command": "\\triangle",
+    "glyph": "△",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Prime",
+    "command": "\\prime",
+    "glyph": "′",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["derivative"]
+  },
+  {
+    "name": "Radical",
+    "command": "\\surd",
+    "glyph": "√",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["root"]
+  },
+  {
+    "name": "Horizontal dots",
+    "command": "\\ldots",
+    "glyph": "…",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["ellipsis"]
+  },
+  {
+    "name": "Centered dots",
+    "command": "\\cdots",
+    "glyph": "⋯",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["ellipsis"]
+  },
+  {
+    "name": "Vertical dots",
+    "command": "\\vdots",
+    "glyph": "⋮",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["ellipsis"]
+  },
+  {
+    "name": "Diagonal dots",
+    "command": "\\ddots",
+    "glyph": "⋱",
+    "category": "Calculus and geometry",
+    "package": null,
+    "keywords": ["ellipsis"]
+  },
+  {
+    "name": "Square",
+    "command": "\\square",
+    "glyph": "□",
+    "category": "Calculus and geometry",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Filled square",
+    "command": "\\blacksquare",
+    "glyph": "■",
+    "category": "Calculus and geometry",
+    "package": "amssymb",
+    "keywords": ["qed"]
+  },
+  {
+    "name": "Check mark",
+    "command": "\\checkmark",
+    "glyph": "✓",
+    "category": "Calculus and geometry",
+    "package": "amssymb",
+    "keywords": []
+  },
+  {
+    "name": "Left angle bracket",
+    "command": "\\langle",
+    "glyph": "⟨",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right angle bracket",
+    "command": "\\rangle",
+    "glyph": "⟩",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Left ceiling",
+    "command": "\\lceil",
+    "glyph": "⌈",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right ceiling",
+    "command": "\\rceil",
+    "glyph": "⌉",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Left floor",
+    "command": "\\lfloor",
+    "glyph": "⌊",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right floor",
+    "command": "\\rfloor",
+    "glyph": "⌋",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Left brace",
+    "command": "\\lbrace",
+    "glyph": "{",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Right brace",
+    "command": "\\rbrace",
+    "glyph": "}",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Vertical bar",
+    "command": "\\vert",
+    "glyph": "∣",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  },
+  {
+    "name": "Double vertical bar",
+    "command": "\\Vert",
+    "glyph": "∥",
+    "category": "Delimiters",
+    "package": null,
+    "keywords": []
+  }
+]

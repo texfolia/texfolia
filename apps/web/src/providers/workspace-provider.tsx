@@ -1,3 +1,4 @@
+import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
 import type { BuildSnapshot } from "#/lib/build";
@@ -23,6 +24,9 @@ export type Workspace = {
   keepOpen: (id: string) => void;
   openMarkdownPreview: (id: string) => void;
   change: (id: string, value: string) => void;
+  symbolPreamble: { source: string; filename: string } | undefined;
+  addSymbolPackage: (packageName: string) => void;
+  registerEditor: (id: string, view: EditorView | null) => void;
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
