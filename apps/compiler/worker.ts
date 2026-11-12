@@ -6,13 +6,103 @@ import { createApp } from "./src/api";
 import { ProjectCoordinatorCore } from "./src/coordinator";
 import { createCoordinatorApp } from "./src/coordinator-api";
 import { createEngineClient } from "./src/engine";
-import { createJobs, type ObjectStore } from "./src/jobs";
+import { createJobs, type Engine, type ObjectStore } from "./src/jobs";
+import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
 import { jobIdSchema } from "./src/project";
 import { createProjectEngineClient } from "./src/project-engine";
+import { planSchema, emitCompileEvent } from "./src/telemetry";
 
 export class TectonicContainer extends Container<Env> {
   override defaultPort = 8080;
   override sleepAfter = "10m";
+}
+
+export class PoolManager extends DurableObject<Env> {
+  private pool: PoolCore;
+  private pendingAssignment: { key: string; claim: PoolClaim } | undefined;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS pool_state (id INTEGER PRIMARY KEY, value TEXT NOT NULL)",
+    );
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    );
+    const saved = ctx.storage.sql
+      .exec<{ value: string }>("SELECT value FROM pool_state WHERE id = 1")
+      .toArray()[0];
+    this.pool = new PoolCore({
+      saved: saved?.value ?? null,
+      save: (value) =>
+        ctx.storage.transactionSync(() => {
+          if (this.pendingAssignment) {
+            ctx.storage.sql.exec(
+              "INSERT INTO claims VALUES (?, ?)",
+              this.pendingAssignment.key,
+              JSON.stringify(this.pendingAssignment.claim),
+            );
+            this.pendingAssignment = undefined;
+          }
+          ctx.storage.sql.exec(
+            "INSERT OR REPLACE INTO pool_state VALUES (1, ?)",
+            value,
+          );
+        }),
+      lookup: (key) => {
+        const row = ctx.storage.sql
+          .exec<{ value: string }>(
+            "SELECT value FROM claims WHERE key = ?",
+            key,
+          )
+          .toArray()[0];
+        return row ? poolClaimSchema.parse(JSON.parse(row.value)) : undefined;
+      },
+      assign: (key, claim) => {
+        this.pendingAssignment = { key, claim };
+      },
+      start: async (name) => {
+        const container = getContainer(env.COMPILER, name);
+        await container.startAndWaitForPorts();
+        const response = await container.fetch(
+          new Request("http://container/health"),
+        );
+        await response.body?.cancel();
+        if (!response.ok) throw new Error("Spare health check failed");
+      },
+      stop: async (name) => {
+        await getContainer(env.COMPILER, name).stop();
+      },
+      now: Date.now,
+      pause: () => new Promise((resolve) => setTimeout(resolve, 25)),
+    });
+  }
+
+  async ensure() {
+    const at = Date.now() + 100;
+    const scheduled = await this.ctx.storage.getAlarm();
+    if (scheduled === null || scheduled > at)
+      await this.ctx.storage.setAlarm(at);
+  }
+
+  async claim(
+    projectId: string,
+    plan: z.infer<typeof planSchema>,
+    claimId: string,
+  ) {
+    jobIdSchema.parse(projectId);
+    jobIdSchema.parse(claimId);
+    planSchema.parse(plan);
+    await this.ensure();
+    return this.pool.claim(projectId, plan, claimId);
+  }
+
+  override async alarm() {
+    // Schedule first so failures cannot leave the pool permanently asleep.
+    await this.ctx.storage.setAlarm(Date.now() + 60_000);
+    await this.pool.maintain();
+    console.info({ event: "compile_pool", ...this.pool.snapshot() });
+  }
 }
 
 export class ProjectCoordinator extends DurableObject<Env> {
@@ -20,6 +110,9 @@ export class ProjectCoordinator extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS container_assignment (id INTEGER PRIMARY KEY, claimId TEXT NOT NULL, name TEXT)",
+    );
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS identity (projectId TEXT PRIMARY KEY)",
     );
@@ -37,6 +130,95 @@ export class ProjectCoordinator extends DurableObject<Env> {
     ]
       .map((row) => row.value)
       .join("");
+    let engine:
+      | { name: string; compile: ReturnType<typeof createProjectEngineClient> }
+      | undefined;
+    let selecting: ReturnType<typeof selectEngine> | undefined;
+    const selectEngine = async (plan: z.infer<typeof planSchema>) => {
+      let assignment = this.ctx.storage.sql
+        .exec<{ claimId: string; name: string | null }>(
+          "SELECT claimId, name FROM container_assignment WHERE id = 1",
+        )
+        .toArray()[0];
+      let outcome: "hit" | "miss" | "reused" | "error" = "reused";
+      if (assignment?.name) {
+        const state = await getContainer(
+          this.env.COMPILER,
+          assignment.name,
+        ).getState();
+        if (state.status !== "running") assignment = undefined;
+      }
+      if (!assignment) {
+        assignment = { claimId: crypto.randomUUID(), name: null };
+        this.ctx.storage.sql.exec(
+          "INSERT OR REPLACE INTO container_assignment VALUES (1, ?, NULL)",
+          assignment.claimId,
+        );
+      }
+      let name = assignment.name;
+      if (!name) {
+        try {
+          const claim = await this.env.POOL.getByName("global").claim(
+            projectId,
+            plan,
+            assignment.claimId,
+          );
+          name = claim.container;
+          outcome = claim.outcome;
+        } catch (error) {
+          console.error("Container pool claim failed", { projectId, error });
+          name = `project:${projectId}:${assignment.claimId}`;
+          outcome = "error";
+        }
+        this.ctx.storage.sql.exec(
+          "UPDATE container_assignment SET name = ? WHERE id = 1",
+          name,
+        );
+      }
+      if (engine?.name !== name) {
+        const container = getContainer(this.env.COMPILER, name);
+        engine = {
+          name,
+          compile: createProjectEngineClient({
+            projectId,
+            store: r2Store(this.env.PDFS),
+            fetch: (request) => container.fetch(request),
+          }),
+        };
+      }
+      return { ...engine, outcome };
+    };
+    const assignedEngine = (plan: z.infer<typeof planSchema>) => {
+      if (selecting) return selecting;
+      const pending = selectEngine(plan).finally(() => {
+        selecting = undefined;
+      });
+      selecting = pending;
+      return pending;
+    };
+    let prewarming: ReturnType<typeof selectEngine> | undefined;
+    const compile: Engine = async (project, context) => {
+      const selected = await (prewarming ?? assignedEngine(context.plan));
+      emitCompileEvent({
+        event: "compile_pool_claim",
+        jobId: context.jobId,
+        projectId,
+        plan: context.plan,
+        outcome: selected.outcome,
+        container: selected.name,
+      });
+      return selected.compile(project, context);
+    };
+    compile.prewarm = async () => {
+      const pending = prewarming ?? assignedEngine("unknown");
+      prewarming = pending;
+      try {
+        const selected = await pending;
+        await selected.compile.prewarm?.();
+      } finally {
+        if (prewarming === pending) prewarming = undefined;
+      }
+    };
     this.core = new ProjectCoordinatorCore({
       projectId,
       saved: saved || null,
@@ -70,14 +252,7 @@ export class ProjectCoordinator extends DurableObject<Env> {
       },
       store: r2Store(this.env.PDFS),
       waitUntil: (promise) => this.ctx.waitUntil(promise),
-      engine: createProjectEngineClient({
-        projectId,
-        store: r2Store(this.env.PDFS),
-        fetch: (request) =>
-          getContainer(this.env.COMPILER, `project:${projectId}`).fetch(
-            request,
-          ),
-      }),
+      engine: compile,
     });
     return this.core;
   }
@@ -210,6 +385,11 @@ export default {
     }
   },
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(jobsFor(env).recover());
+    ctx.waitUntil(
+      Promise.all([
+        jobsFor(env).recover(),
+        env.POOL.getByName("global").ensure(),
+      ]),
+    );
   },
 } satisfies ExportedHandler<Env>;
