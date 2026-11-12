@@ -19,8 +19,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "#/components/ui/sidebar";
+import { UploadSource } from "#/components/upload-source";
+import type { SourceFiles } from "#/lib/project-source";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
+import { useWorkspace } from "#/providers/workspace-provider";
 
 export function ProjectSidebar({
   name,
@@ -41,9 +44,10 @@ export function ProjectSidebar({
   showProblems: boolean;
   onToggleProblems: () => void;
   onOpenGenerated: (path: string) => void;
-  sources: () => Record<string, string>;
+  sources: () => Promise<SourceFiles>;
 }) {
   const files = useProjectFiles();
+  const { canWrite } = useWorkspace();
   const { setOpen, toggleSidebar } = useSidebar();
 
   useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
@@ -107,8 +111,15 @@ export function ProjectSidebar({
           <SidebarContent>
             <SidebarGroup>
               <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
-              {ready && (
+              {ready && canWrite && (
                 <CreateNodeForm
+                  nodes={nodes}
+                  activeId={activeId}
+                  onCreated={onOpen}
+                />
+              )}
+              {ready && canWrite && (
+                <UploadSource
                   nodes={nodes}
                   activeId={activeId}
                   onCreated={onOpen}

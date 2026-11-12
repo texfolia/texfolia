@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { ensureSession } from "./auth.functions";
@@ -45,6 +46,7 @@ export const getProject = createServerFn({ method: "GET" })
       db: context.db,
       ownerId: session.user.id,
       projectId: data.projectId,
+      bucket: env.SOURCES,
     });
   });
 

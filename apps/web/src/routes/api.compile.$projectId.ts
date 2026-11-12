@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { createAuth } from "#/lib/auth";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
+import { sourceContentSchema } from "#/lib/project-source";
 
 const compilerTimingSchema = z.looseObject({
   plan: z.enum(["free", "pro", "unknown"]),
@@ -17,7 +18,10 @@ type CompilerTiming = z.infer<typeof compilerTimingSchema>;
 
 const payload = z.object({
   mainFile: z.string(),
-  files: z.record(z.string(), z.string()),
+  files: z.record(
+    z.string(),
+    z.union([z.string(), z.object({ base64: sourceContentSchema })]),
+  ),
 });
 const idSchema = z.uuid();
 const pending = z.object({

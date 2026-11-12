@@ -52,6 +52,7 @@ import { useSettings } from "#/providers/settings-provider";
 import { useTheme } from "#/providers/theme-provider";
 
 type EditorProps = {
+  readOnly?: boolean;
   defaultValue?: string;
   savedValue?: string;
   filename?: string;
@@ -67,6 +68,7 @@ type EditorProps = {
 };
 
 export function Editor({
+  readOnly = false,
   defaultValue = "",
   savedValue,
   filename = "main.tex",
@@ -135,7 +137,12 @@ export function Editor({
         },
       })),
     ],
-    { target: container, capture: true, ignoreInputs: false, enabled: isLatex },
+    {
+      target: container,
+      capture: true,
+      ignoreInputs: false,
+      enabled: isLatex && !readOnly,
+    },
   );
 
   useEffect(() => {
@@ -181,18 +188,23 @@ export function Editor({
         ".cm-scroller": { overflow: "auto" },
       }),
       EditorState.tabSize.of(formatSettings.indent),
+      EditorState.transactionFilter.of((transaction) =>
+        readOnly && transaction.docChanged ? [] : transaction,
+      ),
       indentUnit.of(" ".repeat(formatSettings.indent)),
       ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
       Prec.high(
         keymap.of([
           { key: "Tab", run: acceptCompletion },
-          ...(isLatex
+          ...(isLatex && !readOnly
             ? [{ key: "Mod-b", run: toggleLatexCommand("textbf") }]
             : []),
         ]),
       ),
       keymap.of([
-        ...(canFormat ? [{ key: "Mod-Shift-f", run: format }] : []),
+        ...(canFormat && !readOnly
+          ? [{ key: "Mod-Shift-f", run: format }]
+          : []),
         { key: "Mod-h", mac: "Mod-Shift-h", run: openSearchPanel },
         { key: "Mod-]", run: indentMore },
         { key: "Mod-[", run: indentLess },
@@ -200,6 +212,7 @@ export function Editor({
     ],
     [
       preferences,
+      readOnly,
       formatSettings.indent,
       isLatex,
       isMarkdown,
@@ -279,7 +292,7 @@ export function Editor({
           </PanelAction>
           <PanelAction
             label="Undo"
-            disabled={!status.undo}
+            disabled={readOnly || !status.undo}
             onClick={() => {
               const view = editor.current?.view;
               if (view) {
@@ -292,7 +305,7 @@ export function Editor({
           </PanelAction>
           <PanelAction
             label="Redo"
-            disabled={!status.redo}
+            disabled={readOnly || !status.redo}
             onClick={() => {
               const view = editor.current?.view;
               if (view) {
@@ -315,7 +328,7 @@ export function Editor({
           {canFormat && (
             <PanelAction
               label="Format document (⌘/Ctrl+Shift+F)"
-              disabled={formatting}
+              disabled={readOnly || formatting}
               onClick={() => {
                 const view = editor.current?.view;
                 if (view) {
@@ -359,6 +372,8 @@ export function Editor({
         </p>
       )}
       <CodeMirror
+        readOnly={readOnly}
+        editable={!readOnly}
         ref={editor}
         onCreateEditor={onCreateEditor}
         value={value}

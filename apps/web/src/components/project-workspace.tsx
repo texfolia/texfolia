@@ -25,7 +25,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { z } from "zod";
 
 import { Editor } from "#/components/editor";
 import { GeneratedFile } from "#/components/generated-file";
@@ -38,12 +37,20 @@ import { Button } from "#/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
+import { downloadFile } from "#/lib/download-file";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
 import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
+import {
+  reconcileSourceDrafts,
+  serializeSourceDrafts,
+  type SourceDraft,
+} from "#/lib/project-drafts";
 import { projectPaths } from "#/lib/project-paths";
+import { encodeSource, type SourceFiles } from "#/lib/project-source";
+import { saveProjectSource } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
@@ -54,7 +61,11 @@ import {
   WorkspaceProvider,
 } from "#/providers/workspace-provider";
 
-type FilePanelParams = { node: ProjectNode; preview: boolean };
+type FilePanelParams = {
+  node: ProjectNode;
+  preview: boolean;
+  recoveredAt?: number;
+};
 const noProblems: LatexProblem[] = [];
 
 const PdfViewer = lazy(() => import("#/components/pdf"));
@@ -65,6 +76,8 @@ function FileEditor({
 }: IDockviewPanelProps<FilePanelParams>) {
   const workspace = useWorkspace();
   const editor = useRef<EditorView | null>(null);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState(false);
   useEffect(() => {
     let frame = 0;
     const subscription = panelApi.onDidActiveChange(({ isActive }) => {
@@ -81,12 +94,44 @@ function FileEditor({
   const path = workspace.paths.get(params.node.id) ?? params.node.name;
   if (params.node.kind === "binary")
     return (
-      <p className="text-muted-foreground p-4 text-sm">
-        Preview is not available for this file type.
-      </p>
+      <div className="space-y-3 p-4 text-sm">
+        <p className="text-muted-foreground">
+          Preview is not available for this file type.
+        </p>
+        <Button
+          variant="outline"
+          disabled={downloading}
+          onClick={async () => {
+            setDownloadError("");
+            setDownloading(true);
+            try {
+              const response = await fetch(
+                `/api/sources/${workspace.projectId}/${params.node.id}`,
+              );
+              if (!response.ok) throw new Error("Could not download source");
+              downloadFile(await response.blob(), params.node.name);
+            } catch {
+              setDownloadError(
+                "The file could not be downloaded. Try again when online.",
+              );
+            } finally {
+              setDownloading(false);
+            }
+          }}
+        >
+          {downloading ? "Downloading…" : "Download file"}
+        </Button>
+        {downloadError && (
+          <p role="alert" className="text-destructive">
+            {downloadError}
+          </p>
+        )}
+      </div>
     );
   return (
     <Editor
+      key={params.recoveredAt}
+      readOnly={!workspace.canWrite}
       onCreateEditor={(view) => {
         editor.current = view;
         if (panelApi.isActive) view.focus();
@@ -149,7 +194,6 @@ const components = {
   markdown: MarkdownPreview,
 };
 const tabComponents = { file: FileTab };
-const savedSourcesSchema = z.record(z.string(), z.string());
 
 export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const files = useProjectFiles();
@@ -162,6 +206,12 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const [activeId, setActiveId] = useState<string>();
   const [ready, setReady] = useState(false);
+  const versions = useRef({ ...project.sourceVersions });
+  const localDrafts = useRef<Record<string, SourceDraft>>({});
+  const [recovery, setRecovery] = useState<Record<string, SourceDraft>>({});
+  const [sourceError, setSourceError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const saveInProgress = useRef(false);
   const paths = useMemo(() => projectPaths(nodes), [nodes]);
   const filenames = useMemo(() => [...paths.values()], [paths]);
   const { result, update, revision } = useLatexAnalysis(filenames);
@@ -349,49 +399,123 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     [...paths.values()].find((path) => path === "main.tex") ??
     [...paths.values()].find((path) => path.endsWith(".tex"));
 
-  function sourceFiles() {
-    return Object.fromEntries(
+  async function sourceFiles(saved = false): Promise<SourceFiles> {
+    const sources: SourceFiles = Object.fromEntries(
       nodes.flatMap((node) => {
         const path = paths.get(node.id);
         return node.kind === "text" && path
-          ? [[path, drafts.current.get(node.id)?.value ?? ""]]
+          ? [
+              [
+                path,
+                (saved
+                  ? drafts.current.get(node.id)?.savedValue
+                  : drafts.current.get(node.id)?.value) ?? "",
+              ],
+            ]
           : [];
       }),
     );
+    for (const node of nodes) {
+      const path = paths.get(node.id);
+      if (node.kind !== "binary" || !path) continue;
+      const response = await fetch(`/api/sources/${projectId}/${node.id}`);
+      if (!response.ok) throw new Error(`Could not load ${path}`);
+      sources[path] = {
+        base64: encodeSource(new Uint8Array(await response.arrayBuffer())),
+      };
+    }
+    return sources;
   }
 
-  async function compileProject(clean = false) {
-    const events = buildEvents.current;
-    if (!main || !events) return;
-    compilation.current?.abort();
-    const startedAt = performance.now();
-    const editedAt = lastEditAt.current;
+  function cacheDrafts() {
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify(
-          Object.fromEntries(
-            [...drafts.current].map(([id, draft]) => [id, draft.value]),
-          ),
-        ),
+        serializeSourceDrafts(localDrafts.current),
       );
-      for (const [id, draft] of drafts.current) change(id, draft.value, true);
     } catch {
-      setCompileError(
-        "Could not save sources in this browser. Download your files to keep a copy, then free browser storage and try again.",
+      setSourceError(
+        "Offline drafts could not be cached. Save to the server before closing this page.",
       );
-      return;
     }
+  }
+
+  async function saveSources() {
+    if (
+      !project.canWrite ||
+      !ready ||
+      Object.keys(recovery).length ||
+      saveInProgress.current
+    )
+      return false;
+    saveInProgress.current = true;
+    setSaving(true);
+    setSourceError("");
+    try {
+      const pending = [...drafts.current]
+        .filter(
+          ([id, draft]) =>
+            draft.value !== draft.savedValue ||
+            versions.current[id]?.objectKey == null,
+        )
+        .map(([id, draft]) => ({ id, value: draft.value }));
+      for (const { id, value } of pending) {
+        const version = await saveProjectSource({
+          data: {
+            projectId,
+            nodeId: id,
+            expectedObjectKey: versions.current[id]?.objectKey ?? null,
+            content: encodeSource(new TextEncoder().encode(value)),
+          },
+        });
+        versions.current[id] = version;
+        const current = drafts.current.get(id);
+        if (current) {
+          drafts.current.set(id, { value: current.value, savedValue: value });
+          if (current.value === value) delete localDrafts.current[id];
+          else if (localDrafts.current[id])
+            localDrafts.current[id].baseObjectKey = version.objectKey;
+          const node = nodes.find((node) => node.id === id);
+          if (node)
+            api.current
+              ?.getPanel(id)
+              ?.api.setTitle(
+                `${node.name}${current.value !== value ? " ●" : ""}`,
+              );
+          api.current?.getPanel(id)?.api.updateParameters({});
+        }
+        cacheDrafts();
+      }
+      return true;
+    } catch (error) {
+      setSourceError(
+        error instanceof Error
+          ? error.message
+          : "Sources could not be saved. Your local draft is still available.",
+      );
+      return false;
+    } finally {
+      saveInProgress.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function compileProject(clean = false) {
+    const snapshot = revision.current;
+    const events = buildEvents.current;
+    if (!main || !events || !project.canWrite || !(await saveSources())) return;
+    compilation.current?.abort();
+    const startedAt = performance.now();
+    const editedAt = lastEditAt.current;
     const controller = new AbortController();
     compilation.current = controller;
     setCompiling(true);
     setCompileError("");
     setCompileProblems([]);
-    const snapshot = revision.current;
-    const files = sourceFiles();
     const sequence = ++editSequence.current;
     clearTimeout(notification.current);
     try {
+      const files = await sourceFiles(true);
       const result = await requestCompilation({
         projectId,
         events,
@@ -458,7 +582,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
 
   useHotkeys(
     [
-      { hotkey: "Mod+S", callback: () => void compileProject() },
+      { hotkey: "Mod+S", callback: () => void saveSources() },
       { hotkey: "Control+PageDown", callback: () => cycleTab(1) },
       { hotkey: "Control+PageUp", callback: () => cycleTab(-1) },
     ],
@@ -472,6 +596,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
 
   useEffect(
     () => () => {
+      api.current = null;
       subscriptions.current.forEach((subscription) => subscription.dispose());
     },
     [],
@@ -496,10 +621,17 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     api.current?.getPanel(id)?.api.updateParameters({ preview: false });
   }
 
-  function change(id: string, value: string, saved = false) {
+  function change(id: string, value: string) {
+    if (!project.canWrite) return;
     const previous = drafts.current.get(id) ?? { value: "", savedValue: "" };
-    const savedValue = saved ? value : previous.savedValue;
+    const savedValue = previous.savedValue;
     drafts.current.set(id, { value, savedValue });
+    localDrafts.current[id] = {
+      value,
+      updatedAt: Date.now(),
+      baseObjectKey: versions.current[id]?.objectKey ?? null,
+    };
+    cacheDrafts();
     api.current
       ?.getPanel(`markdown:${id}`)
       ?.api.updateParameters({ source: value });
@@ -543,6 +675,22 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   }
 
   function openFile(node: ProjectNode, permanent: boolean) {
+    const created = files.createdSources.get(node.id);
+    if (created) {
+      versions.current[node.id] = created.version;
+      drafts.current.set(node.id, {
+        value: created.content,
+        savedValue: created.content,
+      });
+      files.createdSources.delete(node.id);
+      const path =
+        paths.get(node.id) ??
+        projectPaths([
+          ...nodes.filter((existing) => existing.id !== node.id),
+          node,
+        ]).get(node.id);
+      if (path) update(path, created.content);
+    }
     const dock = api.current;
     if (!dock) return;
     const existing = dock.getPanel(node.id);
@@ -605,24 +753,57 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     });
   }
 
-  function onReady({ api: dock }: DockviewReadyEvent) {
+  async function onReady({ api: dock }: DockviewReadyEvent) {
     api.current = dock;
+    for (const [id, value] of Object.entries(project.sourceContents)) {
+      drafts.current.set(id, { value, savedValue: value });
+      const path = paths.get(id);
+      if (path) update(path, value);
+    }
     try {
-      const saved = savedSourcesSchema.safeParse(
-        JSON.parse(localStorage.getItem(storageKey) ?? "null"),
-      );
-      if (saved.success) {
-        for (const node of nodes) {
-          const value = saved.data[node.id];
-          const path = paths.get(node.id);
-          if (node.kind === "text" && value !== undefined && path) {
-            drafts.current.set(node.id, { value, savedValue: value });
-            update(path, value);
-          }
+      const { migrate, recover } = reconcileSourceDrafts({
+        raw: localStorage.getItem(storageKey),
+        contents: project.sourceContents,
+        versions: project.sourceVersions,
+      });
+      localDrafts.current = { ...migrate, ...recover };
+      for (const [id, draft] of Object.entries(migrate)) {
+        if (api.current !== dock) return;
+        if (!project.canWrite) {
+          recover[id] = draft;
+          continue;
+        }
+        try {
+          const version = await saveProjectSource({
+            data: {
+              projectId,
+              nodeId: id,
+              expectedObjectKey: null,
+              content: encodeSource(new TextEncoder().encode(draft.value)),
+            },
+          });
+          versions.current[id] = version;
+          drafts.current.set(id, {
+            value: draft.value,
+            savedValue: draft.value,
+          });
+          const path = paths.get(id);
+          if (path) update(path, draft.value);
+          delete localDrafts.current[id];
+        } catch {
+          recover[id] = draft;
+          setSourceError(
+            "Some browser drafts could not be migrated. Recover them below and save when online.",
+          );
         }
       }
+      if (api.current !== dock) return;
+      setRecovery(recover);
+      cacheDrafts();
     } catch {
-      setCompileError("Saved sources could not be read from this browser.");
+      setSourceError(
+        "Browser drafts could not be read. The server copy is open; the original browser cache has not been changed.",
+      );
     }
     subscriptions.current.forEach((subscription) => subscription.dispose());
     subscriptions.current = [
@@ -658,6 +839,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     <WorkspaceProvider
       value={{
         projectId,
+        canWrite: project.canWrite && Object.keys(recovery).length === 0,
         build: buildMetadata,
         stale,
         drafts: drafts.current,
@@ -702,7 +884,14 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
           )}
           <Button
             variant="outline"
-            disabled={!main || compiling}
+            disabled={
+              !main ||
+              compiling ||
+              saving ||
+              !ready ||
+              !project.canWrite ||
+              Object.keys(recovery).length > 0
+            }
             aria-label="Clean build"
             title="Clean build"
             onClick={() => void compileProject(true)}
@@ -710,7 +899,28 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
             <IconRefresh />
             <span className="hidden md:inline">Clean build</span>
           </Button>
-          <Button disabled={!main} onClick={() => void compileProject()}>
+          <Button
+            variant="outline"
+            disabled={
+              saving ||
+              !ready ||
+              !project.canWrite ||
+              Object.keys(recovery).length > 0
+            }
+            onClick={() => void saveSources()}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button
+            disabled={
+              !main ||
+              saving ||
+              !ready ||
+              !project.canWrite ||
+              Object.keys(recovery).length > 0
+            }
+            onClick={() => void compileProject()}
+          >
             {compiling ? "Compiling…" : "Save & compile"}
           </Button>
         </header>
@@ -727,6 +937,72 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
             onToggleProblems={() => setShowProblems(!showProblems)}
           />
           <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {!ready && (
+              <p role="status" className="border-b px-3 py-2 text-sm">
+                Loading server sources and checking browser drafts…
+              </p>
+            )}
+            {sourceError && (
+              <p
+                role="alert"
+                className="text-destructive border-b px-3 py-2 text-sm"
+              >
+                {sourceError}
+              </p>
+            )}
+            {Object.keys(recovery).length > 0 && (
+              <div
+                className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-sm"
+                role="status"
+              >
+                <span>
+                  Unsaved browser drafts are available for{" "}
+                  {Object.keys(recovery).length} file(s). The server copy is
+                  open.
+                </span>
+                <Button
+                  size="sm"
+                  disabled={!project.canWrite}
+                  onClick={() => {
+                    for (const [id, draft] of Object.entries(recovery)) {
+                      change(id, draft.value);
+                      api.current
+                        ?.getPanel(id)
+                        ?.api.updateParameters({ recoveredAt: Date.now() });
+                    }
+                    setRecovery({});
+                  }}
+                >
+                  Recover drafts
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    downloadFile(
+                      new Blob([serializeSourceDrafts(recovery)], {
+                        type: "application/json",
+                      }),
+                      `${name}-browser-drafts.json`,
+                    );
+                  }}
+                >
+                  Download drafts
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    for (const id of Object.keys(recovery))
+                      delete localDrafts.current[id];
+                    cacheDrafts();
+                    setRecovery({});
+                  }}
+                >
+                  Keep server copy
+                </Button>
+              </div>
+            )}
             {compileError && (
               <p
                 role="alert"

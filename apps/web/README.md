@@ -17,6 +17,71 @@ To build this application for production:
 bun --bun run build
 ```
 
+## Project source storage
+
+Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed
+by `project_node.object_key` and `size_bytes`. Keys are
+`projects/{projectId}/sources/{sha256}`. Save and Cmd/Ctrl+S persist to the server;
+**Save & compile** persists first and submits the acknowledged source snapshot.
+Uploads use the same storage and quota checks. Text uploads (including `.bib`)
+remain editable; binary sources can be downloaded, exported, and compiled.
+
+Owners and editor collaborators can write. Viewer collaborators can read and
+export. Writes compare the previous object key to reject stale overwrites.
+Limits are 10 MiB per file and 50 MiB per active project, using actual UTF-8 or
+binary byte counts. Compilation has its separate 10 MiB JSON payload limit,
+including base64 overhead for binary assets.
+
+Postgres and R2 cannot share a distributed transaction. Each write locks the
+project row, checks access, version, and aggregate quota, uploads the immutable
+object, then commits `object_key`, `size_bytes`, and `updated_at` together in a
+Postgres transaction. A failed R2 write leaves metadata unchanged. A failed SQL
+commit can leave an unreferenced object, never a committed pointer to an object
+that was not uploaded. The same lock serializes node/project deletion and GC.
+
+The web Worker's hourly scheduled handler deletes unreferenced source objects,
+including superseded versions, failed-write orphans, deleted descendants, and
+deleted projects. Shared hashes are retained while any live node references
+them. It uses SQL references, not an age-based bucket lifecycle that could erase
+old but still-current files. Source reads also hold the project lock in shared
+mode so GC cannot remove a version while it is being read.
+
+On open, sources come from the server. Legacy local-storage drafts are uploaded
+automatically only for text nodes without a server object. Other differing drafts
+are offered for recovery, download, or discard; they never silently replace the
+server copy. The timestamped version-1 cache retains unsaved drafts and the
+object key they were based on. Conflicting drafts remain recoverable even if
+device clocks disagree. Local storage is optional for a successful server save.
+Before clearing storage in an old browser, open each legacy project there once
+and let migration finish. Drafts in browsers that have not reopened a project
+still exist only in those browsers.
+
+### Local development and rollout
+
+The R2 binding in `wrangler.jsonc` uses Wrangler's local simulation during
+`bun run dev`. No R2 credentials are required locally, and local bucket data is
+stored under `.wrangler/state`. Production uses `texfolia-sources`; staging uses
+`texfolia-sources-staging`. Provision those buckets before deploying, retain
+their independent bindings, and enable the configured hourly cron.
+
+Apply the schema change before deploying the Worker. Local `bun run db:push`
+updates the constraint. For an existing deployment, the reviewed SQL is
+`../../packages/db/sql/20261111_project_sources.sql`; it allows text nodes to
+reference R2 objects without changing existing drafts or Yjs state.
+
+Run from the repository root against an isolated, schema-initialized database:
+
+```sh
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/source-storage.ts
+```
+
+This uses the configured R2 binding with isolated temporary local storage and
+real Postgres. It tests text/binary round trips, byte counts, authorization,
+stale versions, rollback, deduplication, garbage collection, recursive deletion,
+and concurrent aggregate quotas. The existing compiler invalidation calls are
+best-effort and log failures when the compiler Worker is unavailable in this
+standalone check. CI runs this check after applying the database schema.
+
 ## Editor libraries
 
 The editor uses [codemirror-lang-latex](https://github.com/TeXlyre/codemirror-lang-latex) for parsing, highlighting, folding, indentation, environment closing, completion, tooltips, and syntax diagnostics. `src/lib/latex/language.ts` combines its completion source with project labels, citations, file paths, and package commands. A single linter merges syntax diagnostics with project and compiler diagnostics so neither replaces the other.

@@ -4,6 +4,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { z } from "zod";
 
 import { fetchCompiler } from "./compiler.server";
+import { lockProject } from "./project-access.server";
+import type { SourceBucket } from "./project-source.server";
 import type { createProjectSchema } from "./project.schema";
 
 type ProjectOwner = { db: Db; ownerId: string };
@@ -106,31 +108,59 @@ export async function getProject({
   db,
   ownerId,
   projectId,
-}: ProjectOwner & { projectId: string }) {
-  const result = await db.query.project.findFirst({
-    where: {
-      id: projectId,
-      deletedAt: { isNull: true },
-    },
-    with: {
-      nodes: {
-        where: { deletedAt: { isNull: true } },
-        columns: {
-          id: true,
-          projectId: true,
-          parentId: true,
-          name: true,
-          kind: true,
+  bucket,
+}: ProjectOwner & { projectId: string; bucket?: SourceBucket }) {
+  return db.transaction(async (tx) => {
+    const { canWrite } = await lockProject({
+      tx,
+      projectId,
+      userId: ownerId,
+      access: "read",
+    });
+    const result = await tx.query.project.findFirst({
+      where: {
+        id: projectId,
+        deletedAt: { isNull: true },
+      },
+      with: {
+        nodes: {
+          where: { deletedAt: { isNull: true } },
         },
       },
-    },
-  });
-  if (!result) throw new Error("Project not found");
-  if (result.ownerId !== ownerId) {
-    const access = await db.query.projectCollaborator.findFirst({
-      where: { projectId, userId: ownerId },
     });
-    if (!access) throw new Error("Project not found");
-  }
-  return result;
+    if (!result) throw new Error("Project not found");
+    const sourceVersions: Record<
+      string,
+      { objectKey: string | null; updatedAt: number }
+    > = {};
+    const sourceContents: Record<string, string> = {};
+    for (const node of result.nodes) {
+      if (node.kind === "folder") continue;
+      sourceVersions[node.id] = {
+        objectKey: node.objectKey,
+        updatedAt: node.updatedAt.getTime(),
+      };
+      if (node.kind === "text") {
+        if (node.objectKey) {
+          if (!bucket) throw new Error("Source storage unavailable");
+          const object = await bucket.get(node.objectKey);
+          if (!object) throw new Error("Saved source is missing from storage");
+          sourceContents[node.id] = await object.text();
+        } else sourceContents[node.id] = "";
+      }
+    }
+    return {
+      ...result,
+      nodes: result.nodes.map(({ id, projectId, parentId, name, kind }) => ({
+        id,
+        projectId,
+        parentId,
+        name,
+        kind,
+      })),
+      canWrite,
+      sourceVersions,
+      sourceContents,
+    };
+  });
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { SourceFiles } from "../project-source";
 import { trackCompilePreview } from "./compile-telemetry";
 import type { ProjectBuildEvents } from "./project-build-events";
 
@@ -151,7 +152,7 @@ export async function requestCompilation(options: {
   projectId: string;
   events: ProjectBuildEvents;
   mainFile: string;
-  files: Record<string, string>;
+  files: SourceFiles;
   signal: AbortSignal;
   startedAt?: number;
   lastEditAt?: number | null;
