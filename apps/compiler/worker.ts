@@ -8,6 +8,7 @@ import { createCoordinatorApp } from "./src/coordinator-api";
 import { createEngineClient } from "./src/engine";
 import { createJobs, type ObjectStore } from "./src/jobs";
 import { jobIdSchema } from "./src/project";
+import { createProjectEngineClient } from "./src/project-engine";
 
 export class TectonicContainer extends Container<Env> {
   override defaultPort = 8080;
@@ -68,9 +69,15 @@ export class ProjectCoordinator extends DurableObject<Env> {
         await this.env.COMPILE_QUEUE.send({ projectId });
       },
       store: r2Store(this.env.PDFS),
-      engine: createEngineClient((request) =>
-        getContainer(this.env.COMPILER, `project:${projectId}`).fetch(request),
-      ),
+      waitUntil: (promise) => this.ctx.waitUntil(promise),
+      engine: createProjectEngineClient({
+        projectId,
+        store: r2Store(this.env.PDFS),
+        fetch: (request) =>
+          getContainer(this.env.COMPILER, `project:${projectId}`).fetch(
+            request,
+          ),
+      }),
     });
     return this.core;
   }
