@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { createEngineClient } from "./engine";
-import type { Engine } from "./jobs";
+import type { Engine, ObjectStore } from "./jobs";
 import { jobIdSchema } from "./project";
+import { createProjectEngineClient } from "./project-engine";
 
 const inspection = z.object({
   State: z.object({ Running: z.boolean() }),
@@ -21,6 +21,7 @@ export function localProjectEngine(
   options: {
     socket: string;
     image: string;
+    store: ObjectStore;
     network?: string;
   },
 ): Engine {
@@ -92,19 +93,26 @@ export function localProjectEngine(
     }
     throw new Error("Project engine did not become ready");
   }
-  return createEngineClient(async (request) => {
-    endpoint ??= start().catch((error) => {
-      endpoint = undefined;
-      throw error;
-    });
-    const url = await endpoint;
-    try {
-      return await fetch(
-        new Request(new URL(new URL(request.url).pathname, url).href, request),
-      );
-    } catch (error) {
-      endpoint = undefined;
-      throw error;
-    }
+  return createProjectEngineClient({
+    projectId,
+    store: options.store,
+    fetch: async (request) => {
+      endpoint ??= start().catch((error) => {
+        endpoint = undefined;
+        throw error;
+      });
+      const url = await endpoint;
+      try {
+        return await fetch(
+          new Request(
+            new URL(new URL(request.url).pathname, url).href,
+            request,
+          ),
+        );
+      } catch (error) {
+        endpoint = undefined;
+        throw error;
+      }
+    },
   });
 }

@@ -38,6 +38,7 @@ for (let pair = -1; pair < Number(process.env.PAIRS ?? 5); pair++) {
         jobId: crypto.randomUUID(),
         attempt: 1,
         plan: "free",
+        clean: mode === "clean",
         ...(mode === "cached" && cache ? { cache } : {}),
       },
     );

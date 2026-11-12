@@ -6,9 +6,10 @@ import { createApp } from "./src/api";
 import { ProjectCoordinatorCore } from "./src/coordinator";
 import { createCoordinatorApp } from "./src/coordinator-api";
 import { createEngineClient } from "./src/engine";
-import { createJobs, type ObjectStore } from "./src/jobs";
+import { createJobs, type Engine, type ObjectStore } from "./src/jobs";
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
 import { jobIdSchema } from "./src/project";
+import { createProjectEngineClient } from "./src/project-engine";
 import { planSchema, emitCompileEvent } from "./src/telemetry";
 
 export class TectonicContainer extends Container<Env> {
@@ -130,8 +131,94 @@ export class ProjectCoordinator extends DurableObject<Env> {
       .map((row) => row.value)
       .join("");
     let engine:
-      | { name: string; compile: ReturnType<typeof createEngineClient> }
+      | { name: string; compile: ReturnType<typeof createProjectEngineClient> }
       | undefined;
+    let selecting: ReturnType<typeof selectEngine> | undefined;
+    const selectEngine = async (plan: z.infer<typeof planSchema>) => {
+      let assignment = this.ctx.storage.sql
+        .exec<{ claimId: string; name: string | null }>(
+          "SELECT claimId, name FROM container_assignment WHERE id = 1",
+        )
+        .toArray()[0];
+      let outcome: "hit" | "miss" | "reused" | "error" = "reused";
+      if (assignment?.name) {
+        const state = await getContainer(
+          this.env.COMPILER,
+          assignment.name,
+        ).getState();
+        if (state.status !== "running") assignment = undefined;
+      }
+      if (!assignment) {
+        assignment = { claimId: crypto.randomUUID(), name: null };
+        this.ctx.storage.sql.exec(
+          "INSERT OR REPLACE INTO container_assignment VALUES (1, ?, NULL)",
+          assignment.claimId,
+        );
+      }
+      let name = assignment.name;
+      if (!name) {
+        try {
+          const claim = await this.env.POOL.getByName("global").claim(
+            projectId,
+            plan,
+            assignment.claimId,
+          );
+          name = claim.container;
+          outcome = claim.outcome;
+        } catch (error) {
+          console.error("Container pool claim failed", { projectId, error });
+          name = `project:${projectId}:${assignment.claimId}`;
+          outcome = "error";
+        }
+        this.ctx.storage.sql.exec(
+          "UPDATE container_assignment SET name = ? WHERE id = 1",
+          name,
+        );
+      }
+      if (engine?.name !== name) {
+        const container = getContainer(this.env.COMPILER, name);
+        engine = {
+          name,
+          compile: createProjectEngineClient({
+            projectId,
+            store: r2Store(this.env.PDFS),
+            fetch: (request) => container.fetch(request),
+          }),
+        };
+      }
+      return { ...engine, outcome };
+    };
+    const assignedEngine = (plan: z.infer<typeof planSchema>) => {
+      if (selecting) return selecting;
+      const pending = selectEngine(plan).finally(() => {
+        selecting = undefined;
+      });
+      selecting = pending;
+      return pending;
+    };
+    let prewarming: ReturnType<typeof selectEngine> | undefined;
+    const compile: Engine = async (project, context) => {
+      const selected = await (prewarming ?? assignedEngine(context.plan));
+      emitCompileEvent({
+        event: "compile_pool_claim",
+        jobId: context.jobId,
+        projectId,
+        plan: context.plan,
+        outcome: selected.outcome,
+        container: selected.name,
+      });
+      return selected.compile(project, context);
+    };
+    compile.prewarm = async () => {
+      const pending = prewarming ?? assignedEngine("unknown");
+      prewarming = pending;
+      try {
+        const selected = await pending;
+        await selected.compile.prewarm?.();
+      } finally {
+        if (prewarming === pending) prewarming = undefined;
+      }
+    };
     this.core = new ProjectCoordinatorCore({
       projectId,
       saved: saved || null,
@@ -164,64 +251,8 @@ export class ProjectCoordinator extends DurableObject<Env> {
         await this.env.COMPILE_QUEUE.send({ projectId });
       },
       store: r2Store(this.env.PDFS),
-      engine: async (project, context) => {
-        let assignment = this.ctx.storage.sql
-          .exec<{ claimId: string; name: string | null }>(
-            "SELECT claimId, name FROM container_assignment WHERE id = 1",
-          )
-          .toArray()[0];
-        let outcome: "hit" | "miss" | "reused" | "error" = "reused";
-        if (assignment?.name) {
-          const state = await getContainer(
-            this.env.COMPILER,
-            assignment.name,
-          ).getState();
-          if (state.status !== "running") assignment = undefined;
-        }
-        if (!assignment) {
-          assignment = { claimId: crypto.randomUUID(), name: null };
-          this.ctx.storage.sql.exec(
-            "INSERT OR REPLACE INTO container_assignment VALUES (1, ?, NULL)",
-            assignment.claimId,
-          );
-        }
-        let name = assignment.name;
-        if (!name) {
-          try {
-            const claim = await this.env.POOL.getByName("global").claim(
-              projectId,
-              context.plan,
-              assignment.claimId,
-            );
-            name = claim.container;
-            outcome = claim.outcome;
-          } catch (error) {
-            console.error("Container pool claim failed", { projectId, error });
-            name = `project:${projectId}:${assignment.claimId}`;
-            outcome = "error";
-          }
-          this.ctx.storage.sql.exec(
-            "UPDATE container_assignment SET name = ? WHERE id = 1",
-            name,
-          );
-        }
-        emitCompileEvent({
-          event: "compile_pool_claim",
-          jobId: context.jobId,
-          projectId,
-          plan: context.plan,
-          outcome,
-          container: name,
-        });
-        if (engine?.name !== name) {
-          const container = getContainer(this.env.COMPILER, name);
-          engine = {
-            name,
-            compile: createEngineClient((request) => container.fetch(request)),
-          };
-        }
-        return engine.compile(project, context);
-      },
+      waitUntil: (promise) => this.ctx.waitUntil(promise),
+      engine: compile,
     });
     return this.core;
   }

@@ -1,3 +1,4 @@
 **
 !apps/compiler/engine/*.go
 !apps/compiler/engine/go.mod
+!apps/compiler/engine/go.sum

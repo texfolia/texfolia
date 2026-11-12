@@ -14,6 +14,7 @@ import {
   unknownEngineTiming,
   emitCompileEvent,
 } from "./telemetry";
+import type { EngineTiming } from "./telemetry";
 
 const failure = z.object({
   error: z.string(),
@@ -26,11 +27,16 @@ const failure = z.object({
 export function createEngineClient(
   fetchEngine: (request: Request) => Promise<Response>,
   baseUrl = "http://container",
+  prepare?: () => {
+    ready: Promise<unknown>;
+    timing: Promise<Partial<EngineTiming>>;
+  },
 ): Engine {
   let working: SyncedProject | null = null;
   return async (project, context) => {
     const started = performance.now();
     let timing = unknownEngineTiming;
+    let startup: Partial<EngineTiming> = {};
     try {
       context.signal?.throwIfAborted();
       let cancellation: Promise<void> | undefined;
@@ -107,6 +113,7 @@ export function createEngineClient(
                 "X-Compilation-Id": context.jobId,
                 "X-Compile-Attempt": String(context.attempt),
                 "X-Compile-Plan": context.plan,
+                ...(context.clean ? { "X-Clean-Compile": "1" } : {}),
                 ...(context.projectId
                   ? { "X-Project-Id": context.projectId }
                   : {}),
@@ -119,7 +126,15 @@ export function createEngineClient(
             }),
           );
         };
-        response = await send(sync ? await delta(!working) : project);
+        const preparation = prepare?.();
+        if (preparation) void preparation.timing.catch(() => {});
+        await preparation?.ready;
+        const [prepared, sources] = await Promise.all([
+          preparation?.timing,
+          sync ? delta(!working) : project,
+        ]);
+        startup = prepared ?? {};
+        response = await send(sources);
         if (
           sync &&
           response.status === 409 &&
@@ -144,7 +159,10 @@ export function createEngineClient(
         await response.body?.cancel();
         context.signal.throwIfAborted();
       }
-      timing = parseEngineTiming(response.headers.get("X-Compile-Timing"));
+      timing = {
+        ...parseEngineTiming(response.headers.get("X-Compile-Timing")),
+        ...startup,
+      };
       if ([400, 408, 413, 422].includes(response.status)) {
         const detail = failure.parse(await response.json());
         throw new HttpError(
@@ -179,6 +197,7 @@ export function createEngineClient(
       const form = await persistedResponse.formData();
       const pdf = form.get("pdf");
       const log = form.get("log");
+      const cacheArchive = form.get("cache");
       if (!(pdf instanceof Blob) || typeof log !== "string")
         throw new Error("TeX host returned an invalid result");
       const files: Record<string, Blob> = {};
@@ -200,6 +219,7 @@ export function createEngineClient(
         log,
         timing,
         files,
+        ...(cacheArchive instanceof Blob ? { cacheArchive } : {}),
       };
     } catch (error) {
       if (error instanceof HttpError) throw error;
