@@ -1,0 +1,94 @@
+--- a/src/driver.rs
++++ b/src/driver.rs
+@@ -38,6 +38,9 @@
+     InputHandle, IoProvider, OpenResult, OutputHandle,
+ };
+
++#[path = "bibtex_cache.rs"]
++mod bibtex_cache;
++
+ use crate::{
+     ctry, errmsg,
+     errors::{ChainErrCompatExt, ErrorKind, Result},
+@@ -1672,9 +1675,12 @@
+         // auto-detect whether we need to run bibtex, possibly run it, and
+         // then go ahead.
+
++        let cache_path = self.output_path.as_ref().map(|root| root.join(".texfolia-bibtex-v1"));
++        let mut bibliography = cache_path.as_ref().and_then(|path| std::fs::read_to_string(path).ok());
+         let mut warnings = None;
+         let mut rerun_result = if bibtex_first {
+             self.bibtex_pass(status)?;
++            bibliography = self.bibtex_fingerprint(status);
+             Some(RerunReason::Bibtex)
+         } else {
+             warnings = self.tex_pass(None, status)?;
+@@ -1684,8 +1690,15 @@
+                 self.bs.external_tool_pass(&biber, status)?;
+                 Some(RerunReason::Biber)
+             } else if self.is_bibtex_needed() {
+-                self.bibtex_pass(status)?;
+-                Some(RerunReason::Bibtex)
++                let current = self.bibtex_fingerprint(status);
++                if current.is_some() && current == bibliography {
++                    tt_note!(status, "Reusing cached BibTeX bibliography (citation inputs unchanged)");
++                    self.is_rerun_needed(status)
++                } else {
++                    self.bibtex_pass(status)?;
++                    bibliography = self.bibtex_fingerprint(status);
++                    Some(RerunReason::Bibtex)
++                }
+             } else {
+                 self.is_rerun_needed(status)
+             }
+@@ -1724,6 +1737,14 @@
+
+             if !reruns_fixed {
+                 rerun_result = self.is_rerun_needed(status);
++                if bibliography.is_some() && self.is_bibtex_needed() {
++                    let current = self.bibtex_fingerprint(status);
++                    if current != bibliography {
++                        self.bibtex_pass(status)?;
++                        bibliography = self.bibtex_fingerprint(status);
++                        rerun_result = Some(RerunReason::Bibtex);
++                    }
++                }
+
+                 if rerun_result.is_some() && i == DEFAULT_MAX_TEX_PASSES - 1 {
+                     tt_warning!(
+@@ -1747,11 +1768,23 @@
+             self.xdvipdfmx_pass(status)?;
+         } else if let OutputFormat::Html = self.output_format {
+             self.spx2html_pass(status)?;
++        }
++
++        if let Some(path) = cache_path {
++            if let Some(key) = bibliography {
++                std::fs::write(path, key)?;
++            } else {
++                let _ = std::fs::remove_file(path);
++            }
+         }
+
+         Ok(0)
+     }
+
++    fn bibtex_fingerprint(&mut self, status: &mut dyn StatusBackend) -> Option<String> {
++        bibtex_cache::fingerprint(&self.tex_aux_path, &mut self.bs, status)
++    }
++
+     fn is_bibtex_needed(&self) -> bool {
+         const BIBDATA: &[u8] = b"\\bibdata";
+
+@@ -1950,6 +1983,11 @@
+
+         for f in aux_files {
+             let _r = self.bibtex_pass_for_one_aux_file(status, &f)?;
++            let bbl = Path::new(&f).with_extension("bbl");
++            if let Some(summary) = self.bs.events.get_mut(bbl.to_string_lossy().as_ref()) {
++                summary.access_pattern = AccessPattern::Written;
++                summary.read_digest = None;
++            }
+         }
+
+         Ok(0)
