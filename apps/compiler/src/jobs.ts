@@ -8,6 +8,7 @@ import {
   parseProject,
   type Project,
 } from "./project";
+import { deadLetterError } from "./queues";
 import type { SourceContent, SyncedProject } from "./source-sync";
 import {
   emitCompileEvent,
@@ -59,10 +60,13 @@ export interface ObjectStore {
   ): Promise<boolean>;
   write(key: string, value: string | Uint8Array): Promise<void>;
   remove(key: string): Promise<void>;
-  keys(prefix: string): AsyncIterable<string>;
+  keys(prefix: string, before?: number): AsyncIterable<string>;
 }
 export interface JobQueue {
-  send(message: { id: string }): Promise<void>;
+  send(
+    message: { id: string },
+    plan: z.infer<typeof planSchema>,
+  ): Promise<void>;
 }
 export type Engine = ((
   project: Project | SyncedProject,
@@ -86,7 +90,6 @@ export type Engine = ((
   files?: Record<string, Blob>;
   cacheArchive?: Blob;
 }>) & { prewarm?: () => Promise<void> };
-const maxAttempts = 4;
 const redeliverAfterMs = 60 * 60_000;
 
 export function createJobs(options: {
@@ -125,18 +128,39 @@ export function createJobs(options: {
     await store.remove(`sent/${id}`);
     await store.remove(sourceKey(id));
     await store.remove(`running/${id}`);
+    await store.remove(`attempts/${id}/1`);
+    await store.remove(`attempts/${id}/2`);
   };
   const dispatch = async (id: string) => {
     const sentAt = await readJson(`sent/${id}`);
     if (typeof sentAt === "number" && Date.now() - sentAt < redeliverAfterMs)
       return;
-    await queue.send({ id });
+    const job = await pending(id);
+    if (!job) return;
+    await queue.send({ id }, job.plan);
     await store.write(`sent/${id}`, String(Date.now()));
     if (await terminal(id)) await store.remove(`sent/${id}`);
   };
 
   return {
     get,
+    async fail(id: string) {
+      if (!(await terminal(id))) {
+        const job = await pending(id);
+        if (job)
+          await store.create(
+            `results/${id}.json`,
+            JSON.stringify({
+              ...job,
+              status: "failed",
+              error: deadLetterError,
+              log: "",
+              errorStatus: 502,
+            }),
+          );
+      }
+      await cleanup(id);
+    },
     async submit(
       id: string,
       project: Project,
@@ -206,7 +230,6 @@ export function createJobs(options: {
       }
     },
     // Returns false for infrastructure faults that need another delivery.
-    // Run serially in both adapters, matching the singleton TeX host.
     async consume(id: string, attempt: number): Promise<boolean> {
       if (await terminal(id)) {
         await cleanup(id);
@@ -214,6 +237,11 @@ export function createJobs(options: {
       }
       const job = await pending(id);
       if (!job) return true;
+      if (
+        !(await store.create(`attempts/${id}/1`, "claimed")) &&
+        !(await store.create(`attempts/${id}/2`, "claimed"))
+      )
+        return false;
       const consumedAt = performance.now();
       const jobAgeMs = Math.max(0, Date.now() - Date.parse(job.createdAt));
       const firstQueueWait = z.object({
@@ -284,7 +312,7 @@ export function createJobs(options: {
       } catch (error) {
         if (error instanceof HttpError || error instanceof EngineError)
           engineTiming = error.timing;
-        if (!(error instanceof HttpError) && attempt < maxAttempts) {
+        if (!(error instanceof HttpError)) {
           emitCompileEvent({
             event: "compile_retry",
             jobId: id,
@@ -300,12 +328,9 @@ export function createJobs(options: {
         result = {
           ...job,
           status: "failed",
-          error:
-            error instanceof HttpError
-              ? error.message
-              : "Compilation service failed",
-          log: error instanceof HttpError ? error.log : "",
-          errorStatus: error instanceof HttpError ? error.status : 502,
+          error: error.message,
+          log: error.log,
+          errorStatus: error.status,
         };
       }
       result.timing = {
