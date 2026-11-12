@@ -62,6 +62,21 @@ func (handler *engineHandler) Close() error {
 	return os.RemoveAll(handler.sources.project.sourceDir)
 }
 
+func requestCompileTimeout(headers http.Header, maximum time.Duration) (time.Duration, error) {
+	planTimeout := 15 * time.Second
+	if plan := headers.Get("X-Compile-Plan"); plan == "pro" || plan == "team" {
+		planTimeout = 300 * time.Second
+	}
+	if value := headers.Get("X-Compile-Timeout-Ms"); value != "" {
+		ms, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || ms <= 0 || ms > planTimeout.Milliseconds() {
+			return 0, &httpError{status: 400, message: "Invalid compile timeout"}
+		}
+		planTimeout = time.Duration(ms) * time.Millisecond
+	}
+	return min(planTimeout, maximum), nil
+}
+
 func newHandler(timeout time.Duration) *engineHandler {
 	mux := http.NewServeMux()
 	var mu sync.Mutex
@@ -236,7 +251,12 @@ func newHandler(timeout time.Duration) *engineHandler {
 		if warmed.Swap(true) {
 			timing.Temperature = "warm"
 		}
-		result, err := compile(ctx, p, timeout, &timing)
+		compileTimeout, err := requestCompileTimeout(r.Header, timeout)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		result, err := compile(ctx, p, compileTimeout, &timing)
 		if err != nil {
 			if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
 				w.Header().Set("X-Compile-Timing", string(encoded))
@@ -352,14 +372,14 @@ func main() {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	handler := newHandler(60 * time.Second)
+	handler := newHandler(300 * time.Second)
 	defer handler.Close()
 	server := &http.Server{
 		Addr:              net.JoinHostPort(host, port),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      90 * time.Second,
+		WriteTimeout:      390 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    16 * 1024,
 	}
@@ -369,7 +389,7 @@ func main() {
 	go func() {
 		defer close(shutdownDone)
 		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+		shutdown, cancel := context.WithTimeout(context.Background(), 390*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdown); err != nil {
 			log.Printf("Engine shutdown failed: %v", err)

@@ -7,6 +7,7 @@ import {
   type ArtifactManifest,
 } from "./artifacts";
 import type { Engine, ObjectStore } from "./jobs";
+import { compilePolicy, compileUserSchema } from "./limits";
 import {
   EngineError,
   HttpError,
@@ -42,6 +43,7 @@ const common = {
   digest: z.string(),
   createdAt: z.string(),
   plan: planSchema,
+  userId: compileUserSchema.optional(),
   log: z.string().default(""),
   builtBy: z.string().default("Unknown"),
   clean: z.boolean().default(false),
@@ -191,7 +193,7 @@ export class ProjectCoordinatorCore {
     submission: Project | SourceDelta,
     plan: z.infer<typeof planSchema>,
     version?: z.infer<typeof editorVersionSchema>,
-    buildOptions: { clean: boolean; builtBy: string } = {
+    buildOptions: { clean: boolean; builtBy: string; userId?: string } = {
       clean: false,
       builtBy: "Unknown",
     },
@@ -671,7 +673,9 @@ export class ProjectCoordinatorCore {
       }
       // A watchdog recovers a process/DO restart during engine I/O.
       if (revision === undefined)
-        await this.options.schedule(Date.now() + 100_000);
+        await this.options.schedule(
+          Date.now() + compilePolicy(current.plan).timeoutMs + 120_000,
+        );
       pending.attempt++;
       this.state.current = { ...current, status: "running" };
       this.persist();
@@ -737,6 +741,7 @@ export class ProjectCoordinatorCore {
         jobId: build.id,
         attempt,
         plan: build.plan,
+        userId: build.userId,
         signal,
         clean: !cacheUsed,
         readSource: (file: SyncedProject["files"][string]) =>

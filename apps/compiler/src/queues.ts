@@ -22,7 +22,7 @@ export type BackgroundMessage = z.infer<typeof backgroundMessageSchema>;
 export const deadLetterError =
   "Compilation service failed after one queue retry; moved to compile-dlq. Recompile to try again.";
 export const compileQueue = (plan: z.infer<typeof planSchema>) =>
-  plan === "pro" ? "compile-pro" : "compile-free";
+  plan === "pro" || plan === "team" ? "compile-pro" : "compile-free";
 export const backgroundDelay = (at: number) =>
   Math.min(86_400, Math.max(0, Math.ceil((at - Date.now()) / 1000)));
 

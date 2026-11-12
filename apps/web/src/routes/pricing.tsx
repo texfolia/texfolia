@@ -38,7 +38,6 @@ const PLANS = [
       "100 projects",
       "4 editors per project",
       "1 GB storage",
-      "1,000 compile-seconds / month",
       "15-second compile timeout",
     ],
   },
@@ -53,7 +52,6 @@ const PLANS = [
       "Unlimited projects",
       "10 editors per project",
       "10 GB storage",
-      "10,000 compile-seconds / month",
       "5-minute compile timeout",
     ],
   },
@@ -61,14 +59,14 @@ const PLANS = [
     name: "Team",
     description: "",
     price: 20,
-    priceUnit: "/user/month",
+    priceUnit: "/seat/month",
     buttonVariant: "outline",
     buttonText: "Contact Sales",
     features: [
       "Unlimited projects",
       "Unlimited editors per project",
       "100 GB storage / user",
-      "Unlimited compile-seconds / month",
+      "5-minute compile timeout",
     ],
   },
 ] satisfies readonly {
@@ -94,6 +92,14 @@ function RouteComponent() {
               <CardHeader>
                 <CardTitle>{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
+                <p className="text-3xl font-semibold">
+                  ${plan.price}
+                  {"priceUnit" in plan && (
+                    <span className="text-base font-normal">
+                      {plan.priceUnit}
+                    </span>
+                  )}
+                </p>
               </CardHeader>
               <CardContent>
                 <Button size="lg" variant={plan.buttonVariant}>

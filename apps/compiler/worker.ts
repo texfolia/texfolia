@@ -7,6 +7,12 @@ import { ProjectCoordinatorCore } from "./src/coordinator";
 import { createCoordinatorApp } from "./src/coordinator-api";
 import { createEngineClient } from "./src/engine";
 import { createJobs, type Engine, type ObjectStore } from "./src/jobs";
+import {
+  CompileUsageCore,
+  checkCompileAdmission,
+  compilePolicy,
+  withCompileUsage,
+} from "./src/limits";
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
 import { jobIdSchema } from "./src/project";
 import { createProjectEngineClient } from "./src/project-engine";
@@ -19,8 +25,69 @@ import { planSchema, emitCompileEvent } from "./src/telemetry";
 
 export class TectonicContainer extends Container<Env> {
   override defaultPort = 8080;
-  override sleepAfter = "10m";
+  override sleepAfter: string | number = "10m";
+
+  override async fetch(request: Request) {
+    if (
+      request.method === "POST" &&
+      new URL(request.url).pathname === "/compile"
+    ) {
+      const plan = planSchema
+        .catch("unknown")
+        .parse(request.headers.get("X-Compile-Plan"));
+      this.sleepAfter = compilePolicy(plan).idleMs / 1000;
+      await this.ctx.storage.put("compilePlan", plan);
+    } else {
+      this.sleepAfter =
+        compilePolicy(
+          (await this.ctx.storage.get<"free" | "pro" | "team" | "unknown">(
+            "compilePlan",
+          )) ?? "free",
+        ).idleMs / 1000;
+    }
+    return super.fetch(request);
+  }
 }
+
+export class UserCompileUsage extends DurableObject<Env> {
+  private usage: CompileUsageCore;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
+    );
+    this.usage = new CompileUsageCore({
+      read: () =>
+        [
+          ...ctx.storage.sql.exec<{ value: string }>(
+            "SELECT value FROM usage WHERE id = 1",
+          ),
+        ][0]?.value ?? null,
+      write: (value) => {
+        ctx.storage.sql.exec(
+          "INSERT OR REPLACE INTO usage VALUES (1, ?)",
+          value,
+        );
+      },
+    });
+  }
+
+  async check(plan: z.infer<typeof planSchema>) {
+    return this.usage.check(plan);
+  }
+  async start(plan: z.infer<typeof planSchema>) {
+    return this.usage.start(plan);
+  }
+  async finish(id: string, compileMs: number) {
+    this.usage.finish(id, compileMs);
+  }
+}
+
+const usageFor = (env: Env) => (userId: string) =>
+  env.COMPILE_USAGE.getByName(userId);
+const admit = (env: Env) => (request: Request) =>
+  checkCompileAdmission(request, env.COMPILE_LIMIT, usageFor(env));
 
 export class PoolManager extends DurableObject<Env> {
   private pool: PoolCore;
@@ -265,14 +332,16 @@ export class ProjectCoordinator extends DurableObject<Env> {
       },
       store: r2Store(this.env.PDFS),
       waitUntil: (promise) => this.ctx.waitUntil(promise),
-      engine: compile,
+      engine: withCompileUsage(compile, usageFor(this.env)),
     });
     return this.core;
   }
 
   override fetch(request: Request) {
     const id = jobIdSchema.parse(new URL(request.url).pathname.split("/")[2]);
-    return createCoordinatorApp(this.coordinator(id)).fetch(request);
+    return createCoordinatorApp(this.coordinator(id), admit(this.env)).fetch(
+      request,
+    );
   }
 
   override async alarm() {
@@ -370,10 +439,13 @@ const jobsFor = (env: Env) =>
         ).send({ projectId: id, revision: 0 });
       },
     },
-    engine: (project, context) =>
-      createEngineClient((request) =>
-        getContainer(env.COMPILER, `legacy:${context.jobId}`).fetch(request),
-      )(project, { ...context, projectId: context.jobId }),
+    engine: withCompileUsage(
+      (project, context) =>
+        createEngineClient((request) =>
+          getContainer(env.COMPILER, `legacy:${context.jobId}`).fetch(request),
+        )(project, { ...context, projectId: context.jobId }),
+      usageFor(env),
+    ),
   });
 
 export default {
@@ -389,7 +461,7 @@ export default {
       request,
       {
         jobs: jobsFor(env),
-        limiter: env.COMPILE_LIMIT,
+        admit: admit(env),
       },
       ctx,
     );

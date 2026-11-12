@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { Engine } from "./jobs";
+import { compilePolicy } from "./limits";
 import { firstPdfPart } from "./pdf-stream";
 import {
   artifactPathSchema,
@@ -35,6 +36,10 @@ export function createEngineClient(
   let working: SyncedProject | null = null;
   return async (project, context) => {
     const started = performance.now();
+    const timeoutMs = Math.min(
+      context.timeoutMs ?? Infinity,
+      compilePolicy(context.plan).timeoutMs,
+    );
     let timing = unknownEngineTiming;
     let startup: Partial<EngineTiming> = {};
     try {
@@ -114,6 +119,7 @@ export function createEngineClient(
                 "X-Compile-Attempt": String(context.attempt),
                 "X-Compile-Plan": context.plan,
                 ...(context.clean ? { "X-Clean-Compile": "1" } : {}),
+                "X-Compile-Timeout-Ms": String(timeoutMs),
                 ...(context.projectId
                   ? { "X-Project-Id": context.projectId }
                   : {}),
@@ -122,7 +128,7 @@ export function createEngineClient(
                 ...sources,
                 ...(context.cache ? { cache: context.cache } : {}),
               }),
-              signal: AbortSignal.timeout(90_000),
+              signal: AbortSignal.timeout(timeoutMs + 90_000),
             }),
           );
         };
@@ -155,14 +161,14 @@ export function createEngineClient(
         context.signal?.removeEventListener("abort", cancel);
         await cancellation;
       }
-      if (context.signal?.aborted) {
-        await response.body?.cancel();
-        context.signal.throwIfAborted();
-      }
       timing = {
         ...parseEngineTiming(response.headers.get("X-Compile-Timing")),
         ...startup,
       };
+      if (context.signal?.aborted) {
+        await response.body?.cancel();
+        context.signal.throwIfAborted();
+      }
       if ([400, 408, 413, 422].includes(response.status)) {
         const detail = failure.parse(await response.json());
         throw new HttpError(

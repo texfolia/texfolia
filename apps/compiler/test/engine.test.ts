@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { createEngineClient } from "../src/engine";
-import { HttpError } from "../src/project";
+import { EngineError, HttpError } from "../src/project";
 import { unknownEngineTiming } from "../src/telemetry";
 
 const context = {
@@ -18,6 +18,7 @@ test("engine client sends sources and reads multipart PDF and diagnostics", asyn
     expect(request.headers.get("X-Compilation-Id")).toBe(context.jobId);
     expect(request.headers.get("X-Compile-Attempt")).toBe("1");
     expect(request.headers.get("X-Compile-Plan")).toBe("free");
+    expect(request.headers.get("X-Compile-Timeout-Ms")).toBe("15000");
     expect(request.headers.get("Content-Type")).toBe("application/json");
     expect(await request.json()).toEqual(project);
     const form = new FormData();
@@ -98,5 +99,59 @@ test("absent or malformed timing from older engines does not reject valid output
     expect((await engine(project, context)).timing).toEqual(
       unknownEngineTiming,
     );
+  }
+});
+
+test("paid plans send a five-minute engine timeout; fair use can shorten it", async () => {
+  for (const plan of ["pro", "team", "unknown"] as const) {
+    const engine = createEngineClient(async (request) => {
+      expect(request.headers.get("X-Compile-Timeout-Ms")).toBe(
+        plan === "unknown" ? "15000" : "300000",
+      );
+      const form = new FormData();
+      form.set("pdf", new Blob(["%PDF-1.5"]));
+      form.set("log", "ok");
+      return new Response(form);
+    });
+    await engine(project, { ...context, plan });
+  }
+  const engine = createEngineClient(async (request) => {
+    expect(request.headers.get("X-Compile-Timeout-Ms")).toBe("2000");
+    return Response.json({ error: "Compilation timed out" }, { status: 408 });
+  });
+  await expect(
+    engine(project, { ...context, plan: "pro", timeoutMs: 2000 }),
+  ).rejects.toThrow("Compilation timed out");
+});
+
+test("cancelled compiles retain engine timing for fair-use accounting", async () => {
+  const controller = new AbortController();
+  const stopped = Promise.withResolvers<void>();
+  const engine = createEngineClient(async (request) => {
+    if (request.method === "DELETE") {
+      stopped.resolve();
+      return new Response(null, { status: 204 });
+    }
+    controller.abort();
+    await stopped.promise;
+    return Response.json(
+      { error: "Compilation timed out" },
+      {
+        status: 408,
+        headers: {
+          "X-Compile-Timing": JSON.stringify({
+            ...unknownEngineTiming,
+            compileMs: 125,
+          }),
+        },
+      },
+    );
+  });
+  try {
+    await engine(project, { ...context, signal: controller.signal });
+    throw new Error("Expected cancellation");
+  } catch (error) {
+    expect(error).toBeInstanceOf(EngineError);
+    if (error instanceof EngineError) expect(error.timing.compileMs).toBe(125);
   }
 });

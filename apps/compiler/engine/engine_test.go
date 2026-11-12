@@ -392,3 +392,47 @@ func TestCacheAndAllArtifacts(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanTimeouts(t *testing.T) {
+	for _, tc := range []struct {
+		plan, requested string
+		want            time.Duration
+		invalid         bool
+	}{
+		{"free", "", 15 * time.Second, false},
+		{"pro", "", 300 * time.Second, false},
+		{"team", "300000", 300 * time.Second, false},
+		{"unknown", "", 15 * time.Second, false},
+		{"", "", 15 * time.Second, false},
+		{"free", "300000", 0, true},
+		{"pro", "300001", 0, true},
+		{"pro", "-1", 0, true},
+		{"pro", "invalid", 0, true},
+		{"free", "0", 0, true},
+		{"pro", "2000", 2 * time.Second, false},
+	} {
+		headers := http.Header{}
+		headers.Set("X-Compile-Plan", tc.plan)
+		headers.Set("X-Compile-Timeout-Ms", tc.requested)
+		got, err := requestCompileTimeout(headers, 300*time.Second)
+		if (err != nil) != tc.invalid || got != tc.want {
+			t.Fatalf("%+v: got %s, %v", tc, got, err)
+		}
+	}
+}
+
+func TestCoordinatorTimeoutKillsProcess(t *testing.T) {
+	handler, temp, _ := testEngine(t, 300*time.Second)
+	for _, plan := range []string{"free", "pro", "team"} {
+		request := httptest.NewRequest(http.MethodPost, "/compile", strings.NewReader(`{"files":{"main.tex":"slow"}}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Compile-Plan", plan)
+		request.Header.Set("X-Compile-Timeout-Ms", "20")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != 408 {
+			t.Fatalf("%s: %d %s", plan, response.Code, response.Body)
+		}
+		assertClean(t, temp)
+	}
+}

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const duration = z.number().finite().nonnegative();
-export const planSchema = z.enum(["free", "pro", "unknown"]);
+export const planSchema = z.enum(["free", "pro", "team", "unknown"]);
 export const engineTimingSchema = z.object({
   engine: z.enum(["tectonic", "texlive", "unknown"]),
   temperature: z.enum(["cold", "warm", "unknown"]),

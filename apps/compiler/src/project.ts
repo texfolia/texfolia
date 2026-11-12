@@ -14,6 +14,7 @@ export class HttpError extends Error {
     public log = "",
     public timing: EngineTiming = unknownEngineTiming,
     public logFile?: { path: string; base64: string },
+    public retryAfter?: number,
   ) {
     super(message);
   }

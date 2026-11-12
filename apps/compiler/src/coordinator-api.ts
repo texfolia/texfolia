@@ -6,6 +6,7 @@ import {
   editorVersionSchema,
   type ProjectCoordinatorCore,
 } from "./coordinator";
+import { compileUserSchema } from "./limits";
 import { HttpError, jobIdSchema, parseProject } from "./project";
 import {
   maxSourceSyncBytes,
@@ -14,7 +15,10 @@ import {
 } from "./source-sync";
 import { planSchema } from "./telemetry";
 
-export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
+export function createCoordinatorApp(
+  coordinator: ProjectCoordinatorCore,
+  admit?: (request: Request) => Promise<Response | null>,
+) {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.header("Cache-Control", "no-store");
@@ -55,6 +59,11 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
   });
   app.post(
     "/projects/:projectId/compile",
+    async (c, next) => {
+      const denied = await admit?.(c.req.raw);
+      if (denied) return denied;
+      await next();
+    },
     bodyLimit({
       maxSize: maxSourceSyncBytes,
       onError: (c) => c.json({ error: "Source sync exceeds 64 MiB" }, 413),
@@ -91,6 +100,9 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
         planSchema.catch("unknown").parse(c.req.header("X-Compile-Plan")),
         version?.data,
         {
+          userId: compileUserSchema
+            .optional()
+            .parse(c.req.header("X-Compile-User")),
           clean: c.req.header("X-Clean-Build") === "1",
           builtBy: decodeURIComponent(
             c.req.header("X-Build-User") ?? "Unknown",
@@ -142,7 +154,12 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
         JSON.stringify({ error: error.message, log: error.log }),
         {
           status: error.status,
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(error.retryAfter
+              ? { "Retry-After": String(error.retryAfter) }
+              : {}),
+          },
         },
       );
     console.error("Project coordinator failed", { error });

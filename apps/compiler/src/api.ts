@@ -3,6 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 
 import type { Jobs } from "./jobs";
+import { compileUserSchema } from "./limits";
 import {
   HttpError,
   jobIdSchema,
@@ -13,7 +14,7 @@ import { emitCompileEvent, planSchema } from "./telemetry";
 
 export interface ApiBindings {
   jobs: Jobs;
-  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  admit: (request: Request) => Promise<Response | null>;
 }
 
 export function createApp() {
@@ -26,10 +27,8 @@ export function createApp() {
   app.post(
     "/compile",
     async (c, next) => {
-      if (!(await c.env.limiter.limit({ key: "compile" })).success) {
-        c.header("Retry-After", "60");
-        return c.json({ error: "Too many compile requests" }, 429);
-      }
+      const denied = await c.env.admit(c.req.raw);
+      if (denied) return denied;
       await next();
     },
     bodyLimit({
@@ -55,6 +54,7 @@ export function createApp() {
         parsedId.data,
         parseProject(body),
         planSchema.catch("unknown").parse(c.req.header("X-Compile-Plan")),
+        compileUserSchema.optional().parse(c.req.header("X-Compile-User")),
       );
       emitCompileEvent({
         event: "compile_submission",
@@ -103,6 +103,9 @@ export function createApp() {
           headers: {
             "Content-Type": "application/json",
             "Cache-Control": "no-store",
+            ...(error.retryAfter
+              ? { "Retry-After": String(error.retryAfter) }
+              : {}),
           },
         },
       );
