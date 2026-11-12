@@ -138,6 +138,7 @@ test("SSE attach prewarms without blocking snapshots; compile shares restore and
     save() {},
     schedule: async () => {},
     overflow: async () => {},
+    background: async () => {},
     store: runtime.store,
     engine: runtime.engine,
     waitUntil: (promise) => background.push(promise),
@@ -268,6 +269,7 @@ test("an archive write failure keeps the last published PDF and manifest", async
     save() {},
     schedule: async () => {},
     overflow: async () => {},
+    background: async () => {},
     store: runtime.store,
     engine: runtime.engine,
   });

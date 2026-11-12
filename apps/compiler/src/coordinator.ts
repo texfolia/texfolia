@@ -15,6 +15,12 @@ import {
   type Project,
 } from "./project";
 import {
+  backgroundDelay,
+  deadLetterError,
+  type BackgroundMessage,
+  type CompileMessage,
+} from "./queues";
+import {
   applySourceDelta,
   readSource,
   sourceDeltaSchema,
@@ -72,6 +78,8 @@ const savedSchema = coordinatorSnapshotSchema.extend({
   cacheValid: z.boolean().default(true),
   editors: z.record(jobIdSchema, z.number().int().nonnegative()).default({}),
   sources: syncedProjectSchema.nullable().default(null),
+  maintenanceAt: z.number().nullable().default(null),
+  maintenanceSent: z.boolean().default(false),
   pending: z
     .object({
       project: z.union([
@@ -80,6 +88,7 @@ const savedSchema = coordinatorSnapshotSchema.extend({
       ]),
       due: z.number(),
       attempt: z.number(),
+      delivery: z.enum(["direct", "queued", "sent"]).default("direct"),
     })
     .nullable(),
 });
@@ -91,10 +100,13 @@ const retentionMs = 30 * 24 * 60 * 60_000;
 export class ProjectCoordinatorCore {
   private state: z.infer<typeof savedSchema>;
   private writer = Promise.resolve();
+  private submissions = 0;
+  private sourceDeletes = new Map<string, Promise<void>>();
   private active: {
     id: string;
+    queued: boolean;
     controller: AbortController;
-    done: Promise<void>;
+    done: Promise<boolean>;
   } | null = null;
   private listeners = new Set<(snapshot: CoordinatorSnapshot) => void>();
   private previews = new Map<
@@ -118,7 +130,14 @@ export class ProjectCoordinatorCore {
       saved: string | null;
       save: (value: string) => void;
       schedule: (at: number) => Promise<void>;
-      overflow: () => Promise<void>;
+      overflow: (
+        message: CompileMessage,
+        plan: z.infer<typeof planSchema>,
+      ) => Promise<void>;
+      background: (
+        message: BackgroundMessage,
+        delaySeconds: number,
+      ) => Promise<void>;
       store: ObjectStore;
       engine: Engine;
       waitUntil?: (promise: Promise<void>) => void;
@@ -137,6 +156,8 @@ export class ProjectCoordinatorCore {
           pending: null,
           editors: {},
           sources: null,
+          maintenanceAt: null,
+          maintenanceSent: false,
         };
   }
 
@@ -175,6 +196,7 @@ export class ProjectCoordinatorCore {
       builtBy: "Unknown",
     },
   ) {
+    this.submissions++;
     return this.exclusive(async () => {
       const submissionDigest = await sourceHash(
         new TextEncoder().encode(JSON.stringify(submission)),
@@ -198,7 +220,17 @@ export class ProjectCoordinatorCore {
           ? await applySourceDelta({
               delta: sourceDeltaSchema.parse(submission),
               previous: this.state.sources,
-              store: this.options.store,
+              store: {
+                ...this.options.store,
+                head: async (key) => {
+                  await this.sourceDeletes.get(key);
+                  return this.options.store.head(key);
+                },
+                create: async (key, value, metadata) => {
+                  await this.sourceDeletes.get(key);
+                  return this.options.store.create(key, value, metadata);
+                },
+              },
               projectId: this.options.projectId,
             })
           : submission;
@@ -255,13 +287,20 @@ export class ProjectCoordinatorCore {
         cacheValid: buildOptions.clean ? false : this.state.cacheValid,
         lastActivity: Date.now(),
         current,
-        pending: { project, due: Date.now() + 300, attempt: 0 },
+        pending: {
+          project,
+          due: Date.now() + 300,
+          attempt: 0,
+          delivery: "direct",
+        },
         sources: "kind" in project ? project : this.state.sources,
       };
       this.persist();
       this.active?.controller.abort();
       await this.options.schedule(Date.now() + 300);
       return { ...current, supersededId };
+    }).finally(() => {
+      this.submissions--;
     });
   }
 
@@ -277,8 +316,7 @@ export class ProjectCoordinatorCore {
       this.state.stale = true;
       this.state.lastActivity = Date.now();
       this.persist();
-      if (!this.state.pending)
-        await this.options.schedule(Date.now() + retentionMs);
+      if (!this.state.pending) await this.requestMaintenance();
     });
   }
 
@@ -300,24 +338,156 @@ export class ProjectCoordinatorCore {
     });
   }
 
-  private async pruneArtifacts() {
+  private async pruneArtifacts(before: number, revision: number) {
     const keep = new Set(this.state.artifacts?.files.map((file) => file.key));
     for await (const key of this.options.store.keys(
       `projects/${this.options.projectId}/builds/`,
+      before,
     ))
-      if (!keep.has(key)) await this.options.store.remove(key);
+      if (this.state.revision !== revision || this.state.pending) return;
+      else if (!keep.has(key)) await this.options.store.remove(key);
     for await (const key of this.options.store.keys(
       `projects/${this.options.projectId}/compilations/`,
+      before,
     ))
-      await this.options.store.remove(key);
+      if (this.state.revision !== revision || this.state.pending) return;
+      else await this.options.store.remove(key);
     const sources = new Set(
       Object.values(this.state.sources?.files ?? {}).map((file) => file.hash),
     );
     for await (const key of this.options.store.keys(
       `projects/${this.options.projectId}/source-objects/`,
-    ))
+      before,
+    )) {
+      if (
+        this.submissions ||
+        this.state.revision !== revision ||
+        this.state.pending
+      )
+        return;
       if (!sources.has(key.split("/").at(-1)!))
-        await this.options.store.remove(key);
+        await this.removeBackgroundObject(key);
+    }
+  }
+
+  private async removeBackgroundObject(key: string) {
+    const existing = this.sourceDeletes.get(key);
+    if (existing) return existing;
+    const removal = this.options.store.remove(key);
+    if (!key.includes("/source-objects/")) return removal;
+    this.sourceDeletes.set(key, removal);
+    try {
+      await removal;
+    } finally {
+      this.sourceDeletes.delete(key);
+    }
+  }
+
+  private async requestMaintenance(at = Date.now() + 1000, redeliver = false) {
+    if (
+      this.state.maintenanceAt === null ||
+      at < this.state.maintenanceAt ||
+      (!redeliver && this.state.maintenanceAt < Date.now())
+    ) {
+      this.state.maintenanceAt = at;
+      this.state.maintenanceSent = false;
+      this.persist();
+    }
+    if (this.state.maintenanceSent && !redeliver) return;
+    const maintenanceAt = this.state.maintenanceAt;
+    try {
+      await this.options.background(
+        {
+          kind: "maintenance",
+          projectId: this.options.projectId,
+          at: maintenanceAt,
+        },
+        backgroundDelay(maintenanceAt),
+      );
+      if (this.state.maintenanceAt === maintenanceAt) {
+        this.state.maintenanceSent = true;
+        this.persist();
+        if (!this.state.pending && !this.active)
+          await this.options.schedule(maintenanceAt + 60_000);
+      }
+    } catch (error) {
+      console.error("Background maintenance dispatch failed", {
+        projectId: this.options.projectId,
+        error,
+      });
+      await this.options.schedule(Date.now() + 5000);
+    }
+  }
+
+  async maintain(at: number) {
+    if (this.state.maintenanceAt !== at) return;
+    if (at > Date.now()) {
+      await this.requestMaintenance(at, true);
+      return;
+    }
+    if (this.state.pending || this.active) {
+      this.state.maintenanceAt = null;
+      await this.requestMaintenance();
+      return;
+    }
+    const before = Date.now();
+    const revision = this.state.revision;
+    if (before - this.state.lastActivity >= retentionMs) {
+      await this.exclusive(async () => {
+        if (
+          this.state.pending ||
+          Date.now() - this.state.lastActivity < retentionMs
+        )
+          return;
+        this.state.artifacts = null;
+        this.state.latestBuild = null;
+        this.state.current = null;
+        this.state.sources = null;
+        this.persist();
+      });
+      for await (const key of this.options.store.keys(
+        `projects/${this.options.projectId}/`,
+        before,
+      )) {
+        if (
+          this.submissions ||
+          this.state.revision !== revision ||
+          this.state.pending
+        )
+          break;
+        await this.removeBackgroundObject(key);
+      }
+    } else {
+      await this.pruneArtifacts(before, revision);
+    }
+    if (this.state.maintenanceAt !== at) return;
+    this.state.maintenanceAt = null;
+    this.persist();
+    if (this.state.current || this.state.sources || this.state.artifacts)
+      await this.requestMaintenance(this.state.lastActivity + retentionMs);
+  }
+
+  async fail(revision: number) {
+    await this.exclusive(async () => {
+      const current = this.state.current;
+      if (!current || current.revision !== revision || !this.state.pending)
+        return;
+      this.active?.controller.abort();
+      this.discardPreview();
+      const result: Build = {
+        ...current,
+        status: "failed",
+        error: deadLetterError,
+      };
+      await this.options.store.write(
+        this.resultKey(current.id),
+        JSON.stringify(result),
+      );
+      this.state.current = result;
+      this.state.pending = null;
+      this.persist();
+      await this.requestMaintenance();
+    });
   }
 
   async file(path: string, version?: string) {
@@ -424,30 +594,84 @@ export class ProjectCoordinatorCore {
   }
 
   async wake() {
-    if (
-      !this.state.pending &&
-      Date.now() - this.state.lastActivity >= retentionMs
-    ) {
-      await this.clear();
-      return;
-    }
+    await this.start();
+  }
+
+  async consume(revision: number) {
+    return this.start(revision);
+  }
+
+  private async dispatchOverflow() {
+    const { pending, current } = this.state;
+    if (!pending || !current || pending.delivery === "sent") return;
+    pending.delivery = "queued";
+    this.persist();
+    await this.options.schedule(Date.now() + 5000);
+    await this.options.overflow(
+      { projectId: this.options.projectId, revision: current.revision },
+      current.plan,
+    );
+    pending.delivery = "sent";
+    this.persist();
+  }
+
+  private async start(revision?: number): Promise<boolean> {
     const execution = await this.exclusive(async () => {
       const { pending, current } = this.state;
+      if (revision !== undefined && (!current || current.revision !== revision))
+        return null;
       if (!pending || !current) {
-        if (this.state.artifacts)
-          await this.options.schedule(this.state.lastActivity + retentionMs);
+        if (
+          revision === undefined &&
+          (this.state.maintenanceAt !== null ||
+            current ||
+            this.state.artifacts ||
+            this.state.sources)
+        )
+          await this.requestMaintenance();
         return null;
       }
       if (this.active) {
+        if (
+          revision !== undefined &&
+          (!this.active.queued || this.active.id !== current.id)
+        )
+          return {
+            done: this.active.done.then(
+              () => this.start(revision),
+              () => this.start(revision),
+            ),
+          };
+        if (revision !== undefined)
+          return {
+            done: this.active.done.then(
+              () =>
+                this.state.current?.revision !== revision ||
+                !this.state.pending,
+            ),
+          };
         await this.options.schedule(Date.now() + 1000);
         return null;
       }
-      if (pending.due > Date.now()) {
+      if (
+        revision === undefined &&
+        (pending.delivery !== "direct" || pending.attempt > 0)
+      ) {
+        await this.dispatchOverflow();
+        return null;
+      }
+      if (
+        revision !== undefined &&
+        (pending.delivery === "direct" || pending.attempt >= 3)
+      )
+        return { done: Promise.resolve(false) };
+      if (revision === undefined && pending.due > Date.now()) {
         await this.options.schedule(pending.due);
         return null;
       }
       // A watchdog recovers a process/DO restart during engine I/O.
-      await this.options.schedule(Date.now() + 100_000);
+      if (revision === undefined)
+        await this.options.schedule(Date.now() + 100_000);
       pending.attempt++;
       this.state.current = { ...current, status: "running" };
       this.persist();
@@ -458,10 +682,15 @@ export class ProjectCoordinatorCore {
         pending.attempt,
         controller.signal,
       );
-      this.active = { id: current.id, controller, done };
+      this.active = {
+        id: current.id,
+        queued: revision !== undefined,
+        controller,
+        done,
+      };
       return { done };
     });
-    await execution?.done;
+    return execution ? execution.done : true;
   }
 
   private async execute(
@@ -471,14 +700,14 @@ export class ProjectCoordinatorCore {
     signal: AbortSignal,
   ) {
     try {
-      await this.runEngine(build, project, attempt, signal);
+      return await this.runEngine(build, project, attempt, signal);
     } finally {
       this.active = null;
-      if (this.state.pending)
+      if (this.state.pending?.delivery === "direct")
         await this.options.schedule(
           Math.max(Date.now() + 1, this.state.pending.due),
         );
-      else await this.options.schedule(this.state.lastActivity + retentionMs);
+      else if (!this.state.pending) await this.requestMaintenance();
     }
   }
 
@@ -575,23 +804,34 @@ export class ProjectCoordinatorCore {
             : "Compilation service failed",
         log: error instanceof HttpError ? error.log : "",
       };
-      if (!signal.aborted && !(error instanceof HttpError) && attempt < 4) {
+      if (!signal.aborted && !(error instanceof HttpError)) {
+        console.error("Compile infrastructure failure", {
+          projectId: this.options.projectId,
+          jobId: build.id,
+          revision: build.revision,
+          attempt,
+          error,
+        });
         await this.exclusive(async () => {
           if (this.state.current?.id !== build.id || !this.state.pending)
             return;
           this.state.current = { ...this.state.current, status: "queued" };
-          this.state.pending.due = Date.now() + 1000;
+          this.discardPreview();
           this.persist();
-          await this.options.schedule(this.state.pending.due);
-          // Queue only infrastructure/overflow work; the warm path is direct.
-          await this.options.overflow();
+          if (this.state.pending.delivery === "direct")
+            await this.dispatchOverflow();
         });
-        return;
+        return false;
       }
     }
     const engineRequestMs = performance.now() - started;
     await this.exclusive(async () => {
-      if (signal.aborted || this.state.current?.id !== build.id) return;
+      if (
+        signal.aborted ||
+        this.state.current?.id !== build.id ||
+        !this.state.pending
+      )
+        return;
       const publishStarted = performance.now();
       let manifest: ArtifactManifest | null = this.state.artifacts;
       if (output && result.status === "succeeded") {
@@ -718,8 +958,8 @@ export class ProjectCoordinatorCore {
       this.state.lastActivity = Date.now();
       this.state.pending = null;
       this.persist();
-      await this.pruneArtifacts();
     });
+    return true;
   }
 
   events(signal: AbortSignal) {

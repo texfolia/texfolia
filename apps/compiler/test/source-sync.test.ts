@@ -197,6 +197,16 @@ test("delta submissions persist only changed objects, compose debounced edits, a
       .get()!.state;
     expect(saved).not.toContain('"content":');
     expect(saved).not.toContain('"base64":');
+    const cleanupDeadline = Date.now() + 3000;
+    while (
+      Date.now() < cleanupDeadline &&
+      inspect
+        .query<{ count: number }, []>(
+          "SELECT COUNT(*) AS count FROM objects WHERE key LIKE '%/source-objects/%'",
+        )
+        .get()!.count !== 3
+    )
+      await Bun.sleep(25);
     const objects = inspect
       .query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM objects WHERE key LIKE '%/source-objects/%'",

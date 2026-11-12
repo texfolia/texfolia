@@ -29,14 +29,39 @@
   ],
   "r2_buckets": [{ "binding": "PDFS", "bucket_name": "texfolia-compilations" }],
   "queues": {
-    "producers": [{ "binding": "COMPILE_QUEUE", "queue": "texfolia-compile" }],
+    "producers": [
+      { "binding": "COMPILE_PRO", "queue": "compile-pro" },
+      { "binding": "COMPILE_FREE", "queue": "compile-free" },
+      { "binding": "BACKGROUND", "queue": "background" },
+    ],
     "consumers": [
       {
-        "queue": "texfolia-compile",
+        "queue": "compile-pro",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 4,
+        "max_retries": 1,
+        "dead_letter_queue": "compile-dlq",
+      },
+      {
+        "queue": "compile-free",
         "max_batch_size": 1,
         "max_batch_timeout": 0,
         "max_concurrency": 1,
-        "max_retries": 3,
+        "max_retries": 1,
+        "dead_letter_queue": "compile-dlq",
+      },
+      {
+        "queue": "compile-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_concurrency": 2,
+      },
+      {
+        "queue": "background",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_concurrency": 1,
       },
     ],
   },

@@ -10,6 +10,11 @@ import { createJobs, type Engine, type ObjectStore } from "./src/jobs";
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
 import { jobIdSchema } from "./src/project";
 import { createProjectEngineClient } from "./src/project-engine";
+import {
+  compileQueue,
+  createLegacyConsumer,
+  processQueueMessage,
+} from "./src/queues";
 import { planSchema, emitCompileEvent } from "./src/telemetry";
 
 export class TectonicContainer extends Container<Env> {
@@ -107,6 +112,7 @@ export class PoolManager extends DurableObject<Env> {
 
 export class ProjectCoordinator extends DurableObject<Env> {
   private core: ProjectCoordinatorCore | undefined;
+  private legacy: ReturnType<typeof createLegacyConsumer> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -247,8 +253,15 @@ export class ProjectCoordinator extends DurableObject<Env> {
         });
       },
       schedule: (at) => this.ctx.storage.setAlarm(at),
-      overflow: async () => {
-        await this.env.COMPILE_QUEUE.send({ projectId });
+      overflow: async (message, plan) => {
+        await (
+          compileQueue(plan) === "compile-pro"
+            ? this.env.COMPILE_PRO
+            : this.env.COMPILE_FREE
+        ).send(message);
+      },
+      background: async (message, delaySeconds) => {
+        await this.env.BACKGROUND.send(message, { delaySeconds });
       },
       store: r2Store(this.env.PDFS),
       waitUntil: (promise) => this.ctx.waitUntil(promise),
@@ -266,11 +279,37 @@ export class ProjectCoordinator extends DurableObject<Env> {
     await this.run();
   }
 
-  async run() {
+  private project() {
     const projectId = this.ctx.storage.sql
       .exec<{ projectId: string }>("SELECT projectId FROM identity LIMIT 1")
       .one().projectId;
-    await this.coordinator(projectId).wake();
+    return this.coordinator(projectId);
+  }
+
+  async run() {
+    await this.project().wake();
+  }
+
+  async consume(revision: number) {
+    return this.project().consume(revision);
+  }
+
+  async fail(revision: number) {
+    await this.project().fail(revision);
+  }
+
+  async maintain(at: number) {
+    await this.project().maintain(at);
+  }
+
+  async consumeLegacy(id: string, attempt: number) {
+    this.legacy ??= createLegacyConsumer(jobsFor(this.env));
+    return this.legacy.consume(id, attempt);
+  }
+
+  async failLegacy(id: string) {
+    this.legacy ??= createLegacyConsumer(jobsFor(this.env));
+    await this.legacy.fail(id);
   }
 }
 
@@ -305,11 +344,13 @@ function r2Store(bucket: R2Bucket): ObjectStore {
       await bucket.put(key, value);
     },
     remove: (key) => bucket.delete(key),
-    async *keys(prefix) {
+    async *keys(prefix, before) {
       let cursor: string | undefined;
       do {
         const page = await bucket.list({ prefix, cursor });
-        for (const object of page.objects) yield object.key;
+        for (const object of page.objects)
+          if (before === undefined || object.uploaded.getTime() < before)
+            yield object.key;
         cursor = page.truncated ? page.cursor : undefined;
       } while (cursor);
     },
@@ -317,18 +358,22 @@ function r2Store(bucket: R2Bucket): ObjectStore {
 }
 
 const app = createApp();
-const queueMessage = z.object({ id: jobIdSchema });
 const jobsFor = (env: Env) =>
   createJobs({
     store: r2Store(env.PDFS),
     queue: {
-      async send(message) {
-        await env.COMPILE_QUEUE.send(message);
+      async send({ id }, plan) {
+        await (
+          compileQueue(plan) === "compile-pro"
+            ? env.COMPILE_PRO
+            : env.COMPILE_FREE
+        ).send({ projectId: id, revision: 0 });
       },
     },
-    engine: createEngineClient((request) =>
-      getContainer(env.COMPILER, "compiler").fetch(request),
-    ),
+    engine: (project, context) =>
+      createEngineClient((request) =>
+        getContainer(env.COMPILER, `legacy:${context.jobId}`).fetch(request),
+      )(project, { ...context, projectId: context.jobId }),
   });
 
 export default {
@@ -352,32 +397,32 @@ export default {
   async queue(batch, env) {
     const jobs = jobsFor(env);
     for (const message of batch.messages) {
-      const overflow = z
-        .object({ projectId: jobIdSchema })
-        .safeParse(message.body);
-      if (overflow.success) {
-        try {
-          await env.PROJECTS.getByName(overflow.data.projectId).run();
-          message.ack();
-        } catch {
-          message.retry({ delaySeconds: 5 });
-        }
-        continue;
-      }
-      const job = queueMessage.safeParse(message.body);
-      if (!job.success) {
-        console.error("Invalid compile queue message", {
-          messageId: message.id,
-        });
-        message.ack();
-        continue;
-      }
       try {
-        if (await jobs.consume(job.data.id, message.attempts)) message.ack();
+        if (
+          await processQueueMessage({
+            queue: batch.queue,
+            body: message.body,
+            attempts: message.attempts,
+            jobs,
+            legacy: {
+              consume: (id, attempt) =>
+                env.PROJECTS.getByName(`legacy:${id}`).consumeLegacy(
+                  id,
+                  attempt,
+                ),
+              fail: (id) =>
+                env.PROJECTS.getByName(`legacy:${id}`).failLegacy(id),
+            },
+            coordinator: (projectId) => env.PROJECTS.getByName(projectId),
+          })
+        )
+          message.ack();
         else message.retry({ delaySeconds: 5 });
       } catch (error) {
         console.error("Compile queue processing failed", {
-          jobId: job.data.id,
+          queue: batch.queue,
+          messageId: message.id,
+          attempts: message.attempts,
           error,
         });
         message.retry({ delaySeconds: 5 });
@@ -387,7 +432,7 @@ export default {
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(
       Promise.all([
-        jobsFor(env).recover(),
+        env.BACKGROUND.send({ kind: "recover" }, { delaySeconds: 5 }),
         env.POOL.getByName("global").ensure(),
       ]),
     );

@@ -135,7 +135,7 @@ result stale. A successful compile for the current revision clears the indicator
 
 The coordinator writes every generated file under an immutable generation in
 `projects/<projectId>/builds/`. It publishes the manifest only after every write
-succeeds. It then deletes unreferenced generations and older PDFs. Job status
+succeeds. A delayed background task then deletes unreferenced generations and older PDFs. Job status
 records remain available, but their older artifact URLs return `404`.
 
 A failed compile replaces only its generated `.log`, while the last successful
@@ -168,11 +168,20 @@ The file tree exposes generated files through a separate read-only viewer.
 Generated text supports search, and all files support download. **Export project**
 excludes `out/` unless **Include generated out/ files** is checked.
 
-A persisted coordinator alarm removes all project artifacts and job objects
-30 days after the last source notification or build. The web backend also calls
+A delayed `background` message removes all project artifacts and job objects
+30 days after the last source notification or build. Retention messages use
+at most daily delay hops until their persisted deadline. A coordinator alarm
+re-enqueues overdue maintenance if background delivery exhausts its retries;
+the alarm itself never runs a sweep. Sweeps skip
+active compiles, stop when a new revision arrives, and only inspect objects
+older than the sweep. Sweeps do not hold the coordinator's compile/source writer
+during R2 I/O. A delta that reuses the exact obsolete source hash being deleted
+waits for that deletion before reading or recreating the object; unrelated
+submissions do not wait for cleanup.
+The web backend also calls
 `DELETE /projects/<projectId>/build` when a project is deleted. If immediate
-cleanup fails, the retention alarm still removes the objects. Local SQLite uses
-the same policy, with long alarms checked in daily intervals.
+cleanup fails, background retention still removes the objects. Local SQLite uses
+the same durable message policy with independent queue lanes.
 
 `GET /projects/<projectId>/events` streams the same snapshot on attach and after
 every transition. It sends heartbeat comments every 15 seconds. EventSource
@@ -250,7 +259,10 @@ the repository root. With Docker running, create the required resources from `ap
 ```sh
 bunx wrangler login
 bunx wrangler r2 bucket create texfolia-compilations
-bunx wrangler queues create texfolia-compile
+bunx wrangler queues create compile-pro
+bunx wrangler queues create compile-free
+bunx wrangler queues create compile-dlq
+bunx wrangler queues create background
 ```
 
 Then deploy from the repository root:
@@ -259,15 +271,42 @@ Then deploy from the repository root:
 bun run deploy
 ```
 
-Reuse the bucket and queue if they already exist. Turbo builds the web app and deploys the compiler before the web app. The web app's Wrangler configuration binds `COMPILER` to
+Reuse the bucket and queues if they already exist. When upgrading from
+`texfolia-compile`, stop new submissions and drain its backlog with the old
+consumer before deploying the replacement configuration. Do not delete a queue
+that still contains pending jobs. Turbo builds the web app and deploys the compiler before the web app. The web app's Wrangler configuration binds `COMPILER` to
 `texfolia-compiler`; production does not use `COMPILER_URL` or an internal token.
 The Worker calls the container through its private Durable Object binding.
 
 The configuration allows up to 20 active containers. Each project coordinator
 routes only to `project:<projectId>`. An alarm retains the newest pending
-snapshot during capacity shortages. Infrastructure failures retry up to four
-times, with queue delivery as a fallback. The scheduled event recovers legacy
-queue jobs. The `v2` migration adds the coordinator without replacing existing
+snapshot during capacity shortages. The interactive hot path never enters a
+queue. After a direct infrastructure failure, the coordinator hands its revision
+to `compile-pro` for `X-Compile-Plan: pro`, or `compile-free` for Free, unknown,
+or missing plans. Pro and Free consumers have concurrency limits of 4 and 1,
+respectively, and process one message per batch. A queued compile gets one
+delivery and one retry, then moves to `compile-dlq`; alarms do not independently
+retry a handed-off revision. TeX input errors fail directly, without a queue retry.
+
+Compile messages contain only `{ projectId, revision }`. Revisions start at 1;
+revision 0 identifies a legacy `/compile` job by its job UUID. Source snapshots
+stay in coordinator storage or R2. Legacy jobs use a container named by their
+job UUID, rather than sharing a single container across both priority lanes.
+Their per-job coordinator coalesces concurrent redeliveries, so queue concurrency
+does not start the same legacy compile twice or let a DLQ delivery beat a running success.
+A stale queue or DLQ delivery cannot change
+a newer build. The DLQ consumer logs `Compile dead-letter message` with the
+project/job UUID, revision, and failure reason, then persists a terminal failure
+and notifies the editor through the normal coordinator event stream. It never
+runs TeX. Inspect these structured events in Workers Logs or with
+`bunx wrangler tail --format json`; the active DLQ consumer acknowledges a
+message only after the failure is recorded, so acknowledged messages are no
+longer in the queue.
+
+The separate `background` consumer batches up to 20 messages with concurrency 1.
+The scheduled event enqueues legacy
+job recovery on `background` rather than running a sweep itself.
+The `v2` migration adds the coordinator without replacing existing
 container identities.
 
 The engine's private HTTP interface provides `GET /health` for readiness,

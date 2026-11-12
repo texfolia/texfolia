@@ -148,8 +148,17 @@ test("shared build and archive survive failure/restart; clean retries bypass cac
     await compile("foreign engine");
     await compile("after engine change");
     expect(calls.at(-1)?.clean).toBe(true);
-    await runtime.close();
     const db = new Database(path, { readonly: true });
+    const cleanupDeadline = Date.now() + 3000;
+    while (
+      Date.now() < cleanupDeadline &&
+      db
+        .query<{ count: number }, []>(
+          "SELECT COUNT(*) AS count FROM objects WHERE key LIKE '%/builds/%'",
+        )
+        .get()!.count !== 4
+    )
+      await Bun.sleep(25);
     const artifacts = db
       .query<{ key: string }, []>(
         "SELECT key FROM objects WHERE key LIKE '%/builds/%'",
@@ -165,6 +174,7 @@ test("shared build and archive survive failure/restart; clean retries bypass cac
       "archive-after engine change",
     );
     db.close();
+    await runtime.close();
     runtime = createLocalRuntime({ path, engine, projectEngine: () => engine });
     expect((await request("/build", { method: "DELETE" })).status).toBe(204);
     expect((await snapshot()).artifacts).toBeNull();
@@ -301,6 +311,7 @@ test("publication stays atomic through a storage failure; retention removes aban
     },
     schedule: async () => {},
     overflow: async () => {},
+    background: async () => {},
     store,
     engine: async () => output("atomic"),
   };
@@ -330,16 +341,25 @@ test("publication stays atomic through a storage failure; retention removes aban
     await Bun.sleep(310);
     await core.wake();
     expect(core.snapshot().artifacts?.files).toHaveLength(4);
+    const maintenanceState = JSON.parse(persisted.value!);
+    maintenanceState.maintenanceAt = Date.now() - 1;
+    const maintenance = new ProjectCoordinatorCore({
+      ...options,
+      saved: JSON.stringify(maintenanceState),
+    });
+    await maintenance.maintain(maintenanceState.maintenanceAt);
+    await maintenance.close();
     expect(
       [...objects.keys()].filter((key) => key.includes("/builds/")),
     ).toHaveLength(4);
     const saved = JSON.parse(persisted.value!);
     saved.lastActivity = Date.now() - 31 * 24 * 60 * 60_000;
+    saved.maintenanceAt = Date.now() - 1;
     const expired = new ProjectCoordinatorCore({
       ...options,
       saved: JSON.stringify(saved),
     });
-    await expired.wake();
+    await expired.maintain(saved.maintenanceAt);
     expect(expired.snapshot().artifacts).toBeNull();
     expect(objects.size).toBe(0);
     await expired.close();

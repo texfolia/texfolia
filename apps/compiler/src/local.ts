@@ -7,6 +7,11 @@ import { ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
 import { createJobs, type Engine, type ObjectStore } from "./jobs";
 import { jobIdSchema } from "./project";
+import {
+  compileQueue,
+  createLegacyConsumer,
+  processQueueMessage,
+} from "./queues";
 
 export function createLocalRuntime(options: {
   path: string;
@@ -22,20 +27,35 @@ export function createLocalRuntime(options: {
       id TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS coordinators (projectId TEXT PRIMARY KEY, state TEXT NOT NULL, alarm INTEGER);
+    CREATE TABLE IF NOT EXISTS deliveries (
+      id TEXT PRIMARY KEY, lane TEXT NOT NULL, body TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL
+    );
   `);
+  if (
+    !db
+      .query<{ name: string }, []>("PRAGMA table_info(objects)")
+      .all()
+      .some((column) => column.name === "uploaded")
+  )
+    db.exec(
+      "ALTER TABLE objects ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0",
+    );
   const read = db.query<{ body: Uint8Array }, [string]>(
     "SELECT body FROM objects WHERE key = ?",
   );
   const head = db.query<{ size: number; metadata: string | null }, [string]>(
     "SELECT length(body) AS size, metadata FROM objects WHERE key = ?",
   );
-  const create = db.query("INSERT OR IGNORE INTO objects VALUES (?, ?, ?)");
+  const create = db.query(
+    "INSERT OR IGNORE INTO objects (key, body, metadata, uploaded) VALUES (?, ?, ?, ?)",
+  );
   const write = db.query(
-    "INSERT OR REPLACE INTO objects (key, body) VALUES (?, ?)",
+    "INSERT OR REPLACE INTO objects (key, body, uploaded) VALUES (?, ?, ?)",
   );
   const remove = db.query("DELETE FROM objects WHERE key = ?");
-  const keys = db.query<{ key: string }, [string]>(
-    "SELECT key FROM objects WHERE key GLOB ?",
+  const keys = db.query<{ key: string }, [string, number]>(
+    "SELECT key FROM objects WHERE key GLOB ? AND uploaded < ?",
   );
   const encoder = new TextEncoder();
   const store: ObjectStore = {
@@ -61,39 +81,71 @@ export function createLocalRuntime(options: {
           key,
           typeof value === "string" ? encoder.encode(value) : value,
           metadata ?? null,
+          Date.now(),
         ).changes > 0
       );
     },
     async write(key, value) {
-      write.run(key, typeof value === "string" ? encoder.encode(value) : value);
+      write.run(
+        key,
+        typeof value === "string" ? encoder.encode(value) : value,
+        Date.now(),
+      );
     },
     async remove(key) {
       remove.run(key);
     },
-    async *keys(prefix) {
-      for (const row of keys.all(`${prefix}*`)) yield row.key;
+    async *keys(prefix, before = Number.MAX_SAFE_INTEGER) {
+      for (const row of keys.all(`${prefix}*`, before)) yield row.key;
     },
   };
   const enqueue = db.query(
-    "INSERT OR IGNORE INTO queue (id, due) VALUES (?, ?)",
+    "INSERT OR IGNORE INTO deliveries (id, lane, body, due, attempts) VALUES (?, ?, ?, ?, ?)",
   );
-  const next = db.query<{ id: string; attempts: number }, [number]>(
-    "SELECT id, attempts FROM queue WHERE due <= ? ORDER BY due, rowid LIMIT 1",
+  const send = async (lane: string, body: unknown, delaySeconds = 0) => {
+    enqueue.run(
+      crypto.randomUUID(),
+      lane,
+      JSON.stringify(body),
+      Date.now() + delaySeconds * 1000,
+      0,
+    );
+  };
+  for (const row of db
+    .query<{ id: string; attempts: number; due: number }, []>(
+      "SELECT * FROM queue",
+    )
+    .all()) {
+    enqueue.run(
+      row.id,
+      "compile-free",
+      JSON.stringify({ projectId: row.id, revision: 0 }),
+      row.due,
+      Math.min(row.attempts, 1),
+    );
+    db.query("DELETE FROM queue WHERE id = ?").run(row.id);
+  }
+  const next = db.query<
+    { id: string; body: string; attempts: number },
+    [string, number, number]
+  >(
+    "SELECT id, body, attempts FROM deliveries WHERE lane = ? AND due <= ? ORDER BY due, rowid LIMIT ?",
   );
   const retry = db.query(
-    "UPDATE queue SET attempts = attempts + 1, due = ? WHERE id = ?",
+    "UPDATE deliveries SET attempts = attempts + 1, due = ? WHERE id = ?",
   );
-  const ack = db.query("DELETE FROM queue WHERE id = ?");
+  const ack = db.query("DELETE FROM deliveries WHERE id = ?");
   const jobs = createJobs({
     store,
     engine: options.engine,
     queue: {
-      async send({ id }) {
-        enqueue.run(id, Date.now());
+      async send({ id }, plan) {
+        await send(compileQueue(plan), { projectId: id, revision: 0 });
       },
     },
   });
   const app = createApp();
+  const legacy = createLegacyConsumer(jobs);
   let closed = false;
   const loadCoordinator = db.query<
     { state: string; alarm: number | null },
@@ -141,7 +193,9 @@ export function createLocalRuntime(options: {
         saveCoordinator.run(projectId, value);
       },
       schedule,
-      overflow: async () => {},
+      overflow: (message, plan) => send(compileQueue(plan), message),
+      background: (message, delaySeconds) =>
+        send("background", message, delaySeconds),
       store,
       engine: options.projectEngine(projectId, store),
     });
@@ -173,35 +227,58 @@ export function createLocalRuntime(options: {
     },
   };
   let recoverAt = 0;
-  async function drain() {
+  async function drain(lane: string, concurrency: number) {
+    await Promise.all(
+      next.all(lane, Date.now(), concurrency).map(async (row) => {
+        let completed = false;
+        try {
+          completed = await processQueueMessage({
+            queue: lane,
+            body: JSON.parse(row.body),
+            attempts: row.attempts + 1,
+            jobs,
+            legacy,
+            coordinator: (projectId) => coordinatorFor(projectId).core,
+          });
+        } catch (error) {
+          console.error("Local compile queue processing failed", {
+            jobId: row.id,
+            error,
+          });
+        }
+        if (completed) ack.run(row.id);
+        else if (
+          (lane === "compile-pro" || lane === "compile-free") &&
+          row.attempts >= 1
+        ) {
+          await send("compile-dlq", JSON.parse(row.body));
+          ack.run(row.id);
+        } else retry.run(Date.now() + 5_000, row.id);
+      }),
+    );
+  }
+  const active = new Map<string, Promise<void>>();
+  const timer = setInterval(() => {
     if (Date.now() >= recoverAt) {
-      await jobs.recover();
+      void send("background", { kind: "recover" });
       recoverAt = Date.now() + 5 * 60_000;
     }
-    let row = next.get(Date.now());
-    while (row) {
-      try {
-        if (await jobs.consume(row.id, row.attempts + 1)) ack.run(row.id);
-        else retry.run(Date.now() + 5_000, row.id);
-      } catch (error) {
-        console.error("Local compile queue processing failed", {
-          jobId: row.id,
-          error,
+    for (const [lane, concurrency] of [
+      ["compile-pro", 4],
+      ["compile-free", 1],
+      ["compile-dlq", 2],
+      ["background", 1],
+    ] satisfies [string, number][]) {
+      if (active.has(lane)) continue;
+      const work = drain(lane, concurrency)
+        .catch((error) => {
+          console.error("Local compile queue failed", { error });
+        })
+        .finally(() => {
+          active.delete(lane);
         });
-        retry.run(Date.now() + 5_000, row.id);
-      }
-      row = next.get(Date.now());
+      active.set(lane, work);
     }
-  }
-  let active: Promise<void> | undefined;
-  const timer = setInterval(() => {
-    active ??= drain()
-      .catch((error) => {
-        console.error("Local compile queue failed", { error });
-      })
-      .finally(() => {
-        active = undefined;
-      });
   }, 250);
   return {
     fetch: (request: Request) => {
@@ -223,7 +300,7 @@ export function createLocalRuntime(options: {
       await Promise.all(
         [...coordinators.values()].map((entry) => entry.core.close()),
       );
-      await active;
+      await Promise.all(active.values());
       db.close();
     },
   };
