@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,11 +46,24 @@ type engineRun struct {
 	done   chan struct{}
 }
 
-func newHandler(timeout time.Duration) http.Handler {
+type engineHandler struct {
+	http.Handler
+	sources *workingCopy
+}
+
+func (handler *engineHandler) Close() error {
+	if handler.sources.project.sourceDir == "" {
+		return nil
+	}
+	return os.RemoveAll(handler.sources.project.sourceDir)
+}
+
+func newHandler(timeout time.Duration) *engineHandler {
 	mux := http.NewServeMux()
 	var mu sync.Mutex
 	var active *engineRun
 	var owner string
+	var sources workingCopy
 	cancelled := make(map[string]bool)
 	mux.HandleFunc("DELETE /compilations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
@@ -134,7 +148,23 @@ func newHandler(timeout time.Duration) http.Handler {
 			}
 			return
 		}
-		p, err := parseProject(body)
+		var envelope struct {
+			BaseRevision *int64 `json:"baseRevision"`
+		}
+		_ = json.Unmarshal(body, &envelope)
+		var p project
+		if envelope.BaseRevision != nil {
+			p, err = sources.apply(body)
+			if err == nil {
+				w.Header().Set("X-Source-Revision", strconv.FormatInt(sources.revision, 10))
+			}
+			var failure *httpError
+			if errors.As(err, &failure) && failure.status == 409 {
+				w.Header().Set("X-Source-Resync", "1")
+			}
+		} else {
+			p, err = parseProject(body)
+		}
 		if err != nil {
 			writeError(w, err)
 			return
@@ -200,7 +230,7 @@ func newHandler(timeout time.Duration) http.Handler {
 			log.Printf("Sending compilation result failed: %v", err)
 		}
 	})
-	return mux
+	return &engineHandler{Handler: mux, sources: &sources}
 }
 
 func main() {
@@ -227,9 +257,11 @@ func main() {
 	if host == "" {
 		host = "127.0.0.1"
 	}
+	handler := newHandler(60 * time.Second)
+	defer handler.Close()
 	server := &http.Server{
 		Addr:              net.JoinHostPort(host, port),
-		Handler:           newHandler(60 * time.Second),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      90 * time.Second,

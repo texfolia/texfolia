@@ -9,6 +9,7 @@ import { projectCollaborator, projectNode, user } from "@texfolia/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getPlatformProxy } from "wrangler";
 
+import { compileResync } from "../src/lib/compile-source.server";
 import { createProjectNode } from "../src/lib/project-node.server";
 import {
   encodeSource,
@@ -204,6 +205,39 @@ try {
   assert.equal(
     binary.sourceVersion.objectKey,
     duplicate.sourceVersion.objectKey,
+  );
+  const resync = await compileResync({
+    db,
+    bucket,
+    projectId,
+    userId: editorId,
+    mainFile: "main.tex",
+    sourceRevision: 7,
+  });
+  assert.equal(resync.baseRevision, 7);
+  assert.equal(resync.revision, 8);
+  assert.equal(resync.resync, true);
+  assert.equal(
+    resync.files["main.tex"]?.hash,
+    edited.objectKey.split("/").at(-1),
+  );
+  assert.equal(
+    resync.files["image.png"]?.hash,
+    binary.sourceVersion.objectKey?.split("/").at(-1),
+  );
+  assert.deepEqual(resync.files["image.png"]?.content, {
+    base64: encodeSource(binaryBytes),
+  });
+  await assert.rejects(
+    compileResync({
+      db,
+      bucket,
+      projectId,
+      userId: viewerId,
+      mainFile: "main.tex",
+      sourceRevision: 7,
+    }),
+    /Project not found/,
   );
   assert.deepEqual(
     await readProjectSource({

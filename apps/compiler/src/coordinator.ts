@@ -16,6 +16,15 @@ import {
   type Project,
 } from "./project";
 import {
+  applySourceDelta,
+  readSource,
+  sourceDeltaSchema,
+  sourceHash,
+  syncedProjectSchema,
+  type SourceDelta,
+  type SyncedProject,
+} from "./source-sync";
+import {
   emitCompileEvent,
   jobTimingSchema,
   planSchema,
@@ -32,6 +41,8 @@ const common = {
   builtBy: z.string().default("Unknown"),
   clean: z.boolean().default(false),
   timing: jobTimingSchema.optional(),
+  sourceRevision: z.number().int().nonnegative().optional(),
+  submissionDigest: z.string().optional(),
 };
 const buildSchema = z.discriminatedUnion("status", [
   z.object({ ...common, status: z.literal("queued") }),
@@ -61,9 +72,13 @@ const savedSchema = coordinatorSnapshotSchema.extend({
   lastActivity: z.number().default(Date.now),
   cacheValid: z.boolean().default(true),
   editors: z.record(jobIdSchema, z.number().int().nonnegative()).default({}),
+  sources: syncedProjectSchema.nullable().default(null),
   pending: z
     .object({
-      project: z.unknown().transform(parseProject),
+      project: z.union([
+        syncedProjectSchema,
+        z.unknown().transform(parseProject),
+      ]),
       due: z.number(),
       attempt: z.number(),
     })
@@ -121,6 +136,7 @@ export class ProjectCoordinatorCore {
           latestBuild: null,
           pending: null,
           editors: {},
+          sources: null,
         };
   }
 
@@ -151,7 +167,7 @@ export class ProjectCoordinatorCore {
 
   async submit(
     id: string,
-    project: Project,
+    submission: Project | SourceDelta,
     plan: z.infer<typeof planSchema>,
     version?: z.infer<typeof editorVersionSchema>,
     buildOptions: { clean: boolean; builtBy: string } = {
@@ -160,18 +176,12 @@ export class ProjectCoordinatorCore {
     },
   ) {
     return this.exclusive(async () => {
-      const digest = Array.from(
-        new Uint8Array(
-          await crypto.subtle.digest(
-            "SHA-256",
-            new TextEncoder().encode(JSON.stringify(project)),
-          ),
-        ),
-        (b) => b.toString(16).padStart(2, "0"),
-      ).join("");
+      const submissionDigest = await sourceHash(
+        new TextEncoder().encode(JSON.stringify(submission)),
+      );
       const existing = await this.get(id);
       if (existing) {
-        if (existing.digest !== digest)
+        if ((existing.submissionDigest ?? existing.digest) !== submissionDigest)
           throw new HttpError(
             409,
             "Compilation ID already used for different sources",
@@ -183,6 +193,30 @@ export class ProjectCoordinatorCore {
         version.sequence < (this.state.editors[version.editorId] ?? -1)
       )
         throw new HttpError(409, "Source revision superseded by a newer edit");
+      const project =
+        "baseRevision" in submission
+          ? await applySourceDelta({
+              delta: sourceDeltaSchema.parse(submission),
+              previous: this.state.sources,
+              store: this.options.store,
+              projectId: this.options.projectId,
+            })
+          : submission;
+      const digest =
+        "kind" in project
+          ? await sourceHash(
+              new TextEncoder().encode(
+                JSON.stringify({
+                  mainFile: project.mainFile,
+                  files: Object.fromEntries(
+                    Object.keys(project.files)
+                      .sort()
+                      .map((path) => [path, project.files[path]!.hash]),
+                  ),
+                }),
+              ),
+            )
+          : submissionDigest;
       if (version) this.state.editors[version.editorId] = version.sequence;
       const previous = this.state.current;
       const supersededId =
@@ -206,11 +240,13 @@ export class ProjectCoordinatorCore {
         id,
         revision: this.state.revision + 1,
         digest,
+        submissionDigest,
         status: "queued",
         createdAt: new Date().toISOString(),
         plan,
         log: "",
         ...buildOptions,
+        ...("kind" in project ? { sourceRevision: project.revision } : {}),
       };
       this.state = {
         ...this.state,
@@ -220,6 +256,7 @@ export class ProjectCoordinatorCore {
         lastActivity: Date.now(),
         current,
         pending: { project, due: Date.now() + 300, attempt: 0 },
+        sources: "kind" in project ? project : this.state.sources,
       };
       this.persist();
       this.active?.controller.abort();
@@ -254,6 +291,7 @@ export class ProjectCoordinatorCore {
       this.state.latestBuild = null;
       this.state.current = null;
       this.state.pending = null;
+      this.state.sources = null;
       this.persist();
       for await (const key of this.options.store.keys(
         `projects/${this.options.projectId}/`,
@@ -272,6 +310,14 @@ export class ProjectCoordinatorCore {
       `projects/${this.options.projectId}/compilations/`,
     ))
       await this.options.store.remove(key);
+    const sources = new Set(
+      Object.values(this.state.sources?.files ?? {}).map((file) => file.hash),
+    );
+    for await (const key of this.options.store.keys(
+      `projects/${this.options.projectId}/source-objects/`,
+    ))
+      if (!sources.has(key.split("/").at(-1)!))
+        await this.options.store.remove(key);
   }
 
   async file(path: string, version?: string) {
@@ -420,7 +466,7 @@ export class ProjectCoordinatorCore {
 
   private async execute(
     build: Build,
-    project: Project,
+    project: Project | SyncedProject,
     attempt: number,
     signal: AbortSignal,
   ) {
@@ -438,7 +484,7 @@ export class ProjectCoordinatorCore {
 
   private async runEngine(
     build: Build,
-    project: Project,
+    project: Project | SyncedProject,
     attempt: number,
     signal: AbortSignal,
   ) {
@@ -464,6 +510,8 @@ export class ProjectCoordinatorCore {
         attempt,
         plan: build.plan,
         signal,
+        readSource: (file: SyncedProject["files"][string]) =>
+          readSource(this.options.store, this.options.projectId, file),
         onPdf: (body: ReadableStream<Uint8Array>) => {
           const preview =
             !signal.aborted && this.state.current?.id === build.id

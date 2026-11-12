@@ -1,16 +1,17 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { z } from "zod";
 
 import {
   editorVersionSchema,
   type ProjectCoordinatorCore,
 } from "./coordinator";
+import { HttpError, jobIdSchema, parseProject } from "./project";
 import {
-  HttpError,
-  jobIdSchema,
-  maxProjectBytes,
-  parseProject,
-} from "./project";
+  maxSourceSyncBytes,
+  sourceDeltaSchema,
+  SourceResyncError,
+} from "./source-sync";
 import { planSchema } from "./telemetry";
 
 export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
@@ -55,8 +56,8 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
   app.post(
     "/projects/:projectId/compile",
     bodyLimit({
-      maxSize: maxProjectBytes,
-      onError: (c) => c.json({ error: "Project exceeds 10 MiB" }, 413),
+      maxSize: maxSourceSyncBytes,
+      onError: (c) => c.json({ error: "Source sync exceeds 64 MiB" }, 413),
     }),
     async (c) => {
       if (!c.req.header("Content-Type")?.startsWith("application/json"))
@@ -84,7 +85,9 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
         return c.json({ error: "Invalid editor revision" }, 400);
       const job = await coordinator.submit(
         id.data,
-        parseProject(body),
+        typeof body === "object" && body !== null && "baseRevision" in body
+          ? sourceDeltaSchema.parse(body)
+          : parseProject(body),
         planSchema.catch("unknown").parse(c.req.header("X-Compile-Plan")),
         version?.data,
         {
@@ -127,6 +130,13 @@ export function createCoordinatorApp(coordinator: ProjectCoordinatorCore) {
       : c.json({ error: "PDF not found" }, 404);
   });
   app.onError((error, c) => {
+    if (error instanceof SourceResyncError)
+      return c.json(
+        { error: error.message, resync: true, sourceRevision: error.revision },
+        409,
+      );
+    if (error instanceof z.ZodError)
+      return c.json({ error: "Invalid source delta" }, 400);
     if (error instanceof HttpError)
       return new Response(
         JSON.stringify({ error: error.message, log: error.log }),

@@ -1,7 +1,7 @@
 # Compiler
 
 Each project has one coordinator and one dedicated Tectonic container. The
-coordinator serializes builds, waits 300 ms after the latest snapshot, cancels
+coordinator serializes builds, waits 300 ms after the latest source update, cancels
 superseded work, and publishes revision metadata over server-sent events.
 
 `ProjectCoordinatorCore` owns these transitions in both runtimes. Workers use a
@@ -37,7 +37,7 @@ Compose mounts the Docker socket into the compiler API. The API creates
 containers named `texfolia-project-<projectId>` on the Compose network. The
 socket requires a trusted Docker host. Local project containers keep their
 project names across API restarts and retain their image until removed.
-The `compiler-data` volume keeps pending snapshots, revision metadata, and PDFs.
+The `compiler-data` volume keeps source objects, pending manifests, revisions, and PDFs.
 
 `bun run build` builds both compiler images and the web app through Turbo.
 `bunx turbo run build --filter=compiler` builds only the compiler images.
@@ -63,23 +63,32 @@ compile and report edits. Viewer collaborators have read access.
 ```json
 {
   "mainFile": "main.tex",
+  "baseRevision": 7,
+  "revision": 8,
   "files": {
-    "main.tex": "\\documentclass{article}\\begin{document}\\input{sections/hello}\\end{document}",
-    "sections/hello.tex": "Hello from Texfolia!"
-  }
+    "sections/hello.tex": {
+      "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+      "content": "hello"
+    }
+  },
+  "deleted": []
 }
 ```
 
-`mainFile` defaults to `main.tex`. File paths are relative to the project root.
-Text files are strings. Binary assets use `{ "base64": "..." }`.
+`mainFile` is required for deltas. File paths are relative to the project root.
+Changed entries contain a SHA-256 hash and optional `content` (text or
+`{ "base64": "..." }`). Unchanged paths are omitted. A hash-only entry must
+already exist in the project's durable source store, or a resync is required.
+Legacy full-snapshot requests remain supported; they default to `main.tex` and
+are not used by the interactive editor.
 
 A successful submission returns `202 Accepted` with `id`, `status`, and
-`statusUrl`. The `Location` header also contains the status URL. To retry the
+`statusUrl`, and `sourceRevision` for delta requests. To retry the
 same submission, send the same sources and UUID in `X-Compilation-Id`. Reusing
 the UUID with different sources returns `409 Conflict`.
 
 Editors send a stable `X-Editor-Id` UUID and increasing `X-Editor-Sequence` with
-snapshots. The coordinator persists that sequence and rejects delayed older
+deltas. The coordinator persists that sequence and rejects delayed older
 requests with `409`, including after a restart. The server revision is shared
 across editors; the editor sequence only orders requests from one session.
 
@@ -159,24 +168,53 @@ the same policy, with long alarms checked in daily intervals.
 every transition. It sends heartbeat comments every 15 seconds. EventSource
 reconnects with the current snapshot, so no replay cursor is needed. The editor
 attaches when the project opens. **Save & compile** saves sources to the web
-Worker's R2 bucket, then submits a full acknowledged source snapshot. Save and
+Worker's R2 bucket, then POSTs a revisioned delta. Save and
 Cmd/Ctrl+S persist without compiling. Typing marks the preview stale and leaves
 the saved build running. Browser storage is only an unsaved/offline draft cache;
 opening a project reads saved sources from the server, with explicit recovery
-for conflicting browser drafts. Binary assets use base64 entries in compiler
-snapshots. Live source collaboration and delta sync are separate work.
+for conflicting browser drafts. The interactive request is
+`{ mainFile, baseRevision, revision, files: { path: { hash, content? } }, deleted }`.
+Only changed paths are included; changed text includes its content, while binary
+assets reference their saved SHA-256 hash and are never fetched or uploaded by
+the browser's compile action. Source revisions are separate from build revisions
+and typing notifications. Acceptance returns `sourceRevision`; results still use
+the existing SSE stream, not a WebSocket.
+
+The coordinator keeps a source manifest and content-addressed objects at
+`projects/<id>/source-objects/<sha256>` in its R2 store (SQLite locally).
+This compiler-side mirror lets alarms, retries, and container restarts recover
+without a browser or a request back to the web Worker. Each changed object is
+written once; pending builds persist only hashes, encodings, and sizes, never a
+full source snapshot. Unreferenced mirror objects are pruned after publication.
+The web Worker's source bucket and file table remain authoritative.
+
+A missing coordinator manifest, unknown hash, or mismatched source revision
+returns `409 { resync: true, sourceRevision }`. The web Worker reads the saved
+project under its source-storage lock and retries once with a full resync; it
+does not ask the browser to upload a snapshot. Concurrent conflicts return an
+explicit failure rather than leaving a queued job waiting indefinitely.
+
+The engine retains a verified working copy. Warm compiles receive only the
+delta from the last applied engine revision; debounced edits are combined.
+Unchanged files are hard-linked into each isolated build directory rather than
+rewritten. Binary renames and duplicate hashes reuse existing content. A missing
+working copy or disk hash mismatch returns `X-Source-Resync: 1`; the coordinator's
+engine client reloads the full source set from its durable mirror and retries
+once, using the same job ID. Full source JSON is only a cold/resync fallback.
 
 New revisions terminate superseded jobs with `status: "failed"` and an explicit
 superseded error. Cancellation waits for the Go engine to stop the old TeX
 process. Late responses cannot publish a build for an older revision. The
-coordinator keeps one pending snapshot, replacing it on each submission.
+coordinator keeps one pending source manifest, replacing it on each submission.
 
 The legacy `/compile`, `/jobs/<id>`, and `/compilations/<id>.pdf` endpoints remain
 available for existing jobs. They retain their queue and rate limit.
 
 Limits: 10 MiB of source JSON, 200 source files, 60 seconds per TeX run,
 a 20 MiB PDF, and 32 MiB of generated files per build. The engine accepts up to
-64 MiB of internal JSON to carry sources and the restored cache.
+64 MiB of internal JSON to carry resync sources and the restored cache. The
+coordinator also permits 64 MiB for internal resync JSON; decoded delta projects
+retain the 10 MiB source limit even when each individual delta is small.
 The legacy API rate limits submissions to 10 per minute per Cloudflare location,
 or 10 per minute per local process. Project snapshots use debounce instead of
 that submission limit. It returns `429` with `Retry-After` when the
@@ -243,6 +281,21 @@ bunx turbo run test --filter=compiler
 `coordinator.test.ts` verifies
 late-response rejection, serialization, independent engines, idempotency,
 request ordering, and SQLite restart recovery.
+
+`source-sync.test.ts` verifies delta transfer, binary references, duplicate job
+IDs, composed debounced edits, source-only object persistence, and recovery
+across coordinator/container restarts. Go sync tests exercise real HTTP compiles,
+deletion, immutable binary reuse, hash failures, and cross-project rejection.
+To verify against real Tectonic in an isolated, automatically cleaned container:
+
+```sh
+docker build --platform linux/amd64 -t texfolia-latex-engine:local -f apps/compiler/Dockerfile .
+bun apps/compiler/scripts/verify-source-sync.ts
+```
+
+The check generates PDFs through the SQLite coordinator, verifies changed-only
+engine requests, restarts its container, corrupts its working copy, and requires
+both cases to recover through a full resync. `ENGINE_IMAGE` overrides the image.
 
 `builds.test.ts` checks full artifact retention, cache restoration, clean retry,
 source invalidation, atomic publication through a storage failure, and expiry.

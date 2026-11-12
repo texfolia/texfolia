@@ -43,6 +43,7 @@ import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
 import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
+import type { CompileSources } from "#/lib/latex/source-sync";
 import {
   reconcileSourceDrafts,
   serializeSourceDrafts,
@@ -424,8 +425,11 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     [...paths.values()].find((path) => path === "main.tex") ??
     [...paths.values()].find((path) => path.endsWith(".tex"));
 
-  async function sourceFiles(saved = false): Promise<SourceFiles> {
-    const sources: SourceFiles = Object.fromEntries(
+  async function sourceFiles(): Promise<SourceFiles>;
+  async function sourceFiles(mode: "compile"): Promise<CompileSources>;
+  async function sourceFiles(mode?: "compile"): Promise<CompileSources> {
+    const saved = mode === "compile";
+    const sources: CompileSources = Object.fromEntries(
       nodes.flatMap((node) => {
         const path = paths.get(node.id);
         return node.kind === "text" && path
@@ -443,11 +447,17 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     for (const node of nodes) {
       const path = paths.get(node.id);
       if (node.kind !== "binary" || !path) continue;
-      const response = await fetch(`/api/sources/${projectId}/${node.id}`);
-      if (!response.ok) throw new Error(`Could not load ${path}`);
-      sources[path] = {
-        base64: encodeSource(new Uint8Array(await response.arrayBuffer())),
-      };
+      if (mode === "compile") {
+        const hash = versions.current[node.id]?.objectKey?.split("/").at(-1);
+        if (!hash) throw new Error(`Save ${path} before compiling`);
+        sources[path] = { hash };
+      } else {
+        const response = await fetch(`/api/sources/${projectId}/${node.id}`);
+        if (!response.ok) throw new Error(`Could not load ${path}`);
+        sources[path] = {
+          base64: encodeSource(new Uint8Array(await response.arrayBuffer())),
+        };
+      }
     }
     return sources;
   }
@@ -540,7 +550,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     const sequence = ++editSequence.current;
     clearTimeout(notification.current);
     try {
-      const files = await sourceFiles(true);
+      const files = await sourceFiles("compile");
       const result = await requestCompilation({
         projectId,
         events,

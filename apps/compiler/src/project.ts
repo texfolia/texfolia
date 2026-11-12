@@ -43,13 +43,14 @@ export const artifactPathSchema = z
         .split("/")
         .every((part) => part !== "" && part !== "." && part !== ".."),
   );
-const path = artifactPathSchema.refine(
+export const sourcePathSchema = artifactPathSchema.refine(
   (value) => value !== "out" && !value.startsWith("out/"),
 );
 export const artifactContentSchema = z.object({
   base64: z
     .string()
-    .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+    .regex(/^[A-Za-z0-9+/]*={0,2}$/)
+    .refine((value) => value.length % 4 === 0, "Invalid base64 content"),
 });
 export const artifactFilesSchema = z.record(
   artifactPathSchema,
@@ -58,10 +59,13 @@ export const artifactFilesSchema = z.record(
 
 const projectSchema = z
   .object({
-    mainFile: path
+    mainFile: sourcePathSchema
       .refine((value) => value.endsWith(".tex"))
       .default("main.tex"),
-    files: z.record(path, z.union([z.string(), artifactContentSchema])),
+    files: z.record(
+      sourcePathSchema,
+      z.union([z.string(), artifactContentSchema]),
+    ),
   })
   .superRefine(({ mainFile, files }, ctx) => {
     const paths = Object.keys(files);
