@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
 
 import { ensureSession } from "./auth.functions";
 import { createNodeSchema } from "./project-node.schema";
@@ -12,5 +13,6 @@ export const createProjectNode = createServerFn({ method: "POST" })
       db: context.db,
       ownerId: session.user.id,
       data,
+      bucket: env.SOURCES,
     });
   });

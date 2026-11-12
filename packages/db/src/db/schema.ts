@@ -148,7 +148,8 @@ export const projectNode = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
     check(
       "nodes_kind_payload_check",
-      sql`(${t.kind} IN ('folder', 'text') AND ${t.objectKey} IS NULL)
+      sql`(${t.kind} = 'folder' AND ${t.objectKey} IS NULL AND ${t.sizeBytes} = 0)
+        OR ${t.kind} = 'text'
         OR (${t.kind} = 'binary' AND ${t.objectKey} IS NOT NULL)`,
     ),
   ],

@@ -35,6 +35,13 @@ The `db:generate` and `db:migrate` commands remain available when reviewed migra
 
 Keep transactions limited to related database operations. Call email, billing, and compiler services outside transactions. Hyperdrive uses transaction pooling, so do not depend on session-level advisory locks, `SET` state across transactions, or a persistent connection identity.
 
+Source storage deliberately uploads immutable R2 objects while holding the
+project row lock. This serializes byte quotas, source versions, deletion, and
+garbage collection. Metadata commits only after the upload succeeds; the source
+sweep removes objects left by rolled-back SQL transactions. See
+`apps/web/README.md` for storage behavior and verification. Existing deployments
+must apply `sql/20261111_project_sources.sql` before the source-storage Worker.
+
 ## Verify plain Postgres
 
 Create an isolated database with `test` in its name, apply the schema to it with `DATABASE_URL` set using `bun run db:push`, and run this command from the repository root:

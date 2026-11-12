@@ -3,7 +3,9 @@
   "name": "tanstack-start-app",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
+  "main": "src/worker.ts",
+  "r2_buckets": [{ "binding": "SOURCES", "bucket_name": "texfolia-sources" }],
+  "triggers": { "crons": ["17 * * * *"] },
   "services": [
     {
       "binding": "COMPILER",
@@ -33,6 +35,9 @@
   "env": {
     "production": {
       "name": "texfolia-web",
+      "r2_buckets": [
+        { "binding": "SOURCES", "bucket_name": "texfolia-sources" },
+      ],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "<production hyperdrive id>" },
       ],
@@ -45,6 +50,9 @@
     },
     "staging": {
       "name": "texfolia-web-staging",
+      "r2_buckets": [
+        { "binding": "SOURCES", "bucket_name": "texfolia-sources-staging" },
+      ],
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "<staging hyperdrive id>" },
       ],

@@ -20,6 +20,7 @@ import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accep
 import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api.compile.$projectId'
+import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api.sources.$projectId.$nodeId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -77,6 +78,12 @@ const ApiCompileProjectIdRoute = ApiCompileProjectIdRouteImport.update({
   path: '/api/compile/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSourcesProjectIdNodeIdRoute =
+  ApiSourcesProjectIdNodeIdRouteImport.update({
+    id: '/api/sources/$projectId/$nodeId',
+    path: '/api/sources/$projectId/$nodeId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/project/$projectId': typeof ProjectProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -103,6 +111,7 @@ export interface FileRoutesByTo {
   '/project/$projectId': typeof ProjectProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -117,6 +126,7 @@ export interface FileRoutesById {
   '/project/$projectId': typeof ProjectProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/project/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
+    | '/api/sources/$projectId/$nodeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/project/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
+    | '/api/sources/$projectId/$nodeId'
   id:
     | '__root__'
     | '/'
@@ -158,6 +170,7 @@ export interface FileRouteTypes {
     | '/project/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
+    | '/api/sources/$projectId/$nodeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -172,6 +185,7 @@ export interface RootRouteChildren {
   ProjectProjectIdRoute: typeof ProjectProjectIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
+  ApiSourcesProjectIdNodeIdRoute: typeof ApiSourcesProjectIdNodeIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -253,6 +267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompileProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sources/$projectId/$nodeId': {
+      id: '/api/sources/$projectId/$nodeId'
+      path: '/api/sources/$projectId/$nodeId'
+      fullPath: '/api/sources/$projectId/$nodeId'
+      preLoaderRoute: typeof ApiSourcesProjectIdNodeIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -268,6 +289,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectProjectIdRoute: ProjectProjectIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
+  ApiSourcesProjectIdNodeIdRoute: ApiSourcesProjectIdNodeIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -8,6 +8,7 @@ import type { FormatSettings } from "#/lib/latex/format";
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {
   projectId: string;
+  canWrite: boolean;
   build: BuildSnapshot | null;
   stale: boolean;
   drafts: Map<string, FileState>;
@@ -20,7 +21,7 @@ export type Workspace = {
   formatSettings: FormatSettings;
   keepOpen: (id: string) => void;
   openMarkdownPreview: (id: string) => void;
-  change: (id: string, value: string, saved?: boolean) => void;
+  change: (id: string, value: string) => void;
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);

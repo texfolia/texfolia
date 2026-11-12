@@ -3,6 +3,8 @@ import type { z } from "zod";
 
 import { createProjectNode } from "#/lib/project-node.functions";
 import { createNodeSchema } from "#/lib/project-node.schema";
+import { decodeSource } from "#/lib/project-source";
+import { deleteProjectNode } from "#/lib/project-source.functions";
 import type { ProjectNode } from "#/lib/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
 
@@ -15,14 +17,37 @@ export function createProjectFilesStore({
   initial: ProjectNode[];
   projectId: string;
 }) {
-  const nodes = createRpcCollection({
+  const createdSources = new Map<
+    string,
+    {
+      version: { objectKey: string | null; updatedAt: number };
+      content: string;
+    }
+  >();
+  const nodes = createRpcCollection<ProjectNode>({
     initial,
-    insert: (row) => createProjectNode({ data: createNodeSchema.parse(row) }),
+    insert: async (row) => {
+      const input = createNodeSchema.parse(row);
+      const created = await createProjectNode({ data: input });
+      if (input.kind === "text")
+        createdSources.set(created.id, {
+          version: created.sourceVersion,
+          content:
+            input.content === undefined
+              ? ""
+              : new TextDecoder().decode(decodeSource(input.content)),
+        });
+      return created;
+    },
+    remove: (row) => deleteProjectNode({ data: { projectId, nodeId: row.id } }),
   });
 
   return {
     nodes,
-    async create(input: Pick<NewNode, "parentId" | "name" | "kind">) {
+    createdSources,
+    async create(
+      input: Pick<NewNode, "parentId" | "name" | "kind" | "content">,
+    ) {
       const row = createNodeSchema.parse({
         ...input,
         id: crypto.randomUUID(),

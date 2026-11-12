@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { buildFileUrl } from "#/lib/build";
 import { downloadFile } from "#/lib/download-file";
+import { decodeSource, type SourceFiles } from "#/lib/project-source";
 import { createZip } from "#/lib/zip";
 import { useWorkspace } from "#/providers/workspace-provider";
 
@@ -12,7 +13,7 @@ export function ProjectExport({
   sources,
 }: {
   name: string;
-  sources: () => Record<string, string>;
+  sources: () => Promise<SourceFiles>;
 }) {
   const { build, projectId } = useWorkspace();
   const [includeBuild, setIncludeBuild] = useState(false);
@@ -22,9 +23,11 @@ export function ProjectExport({
     setPending(true);
     setError("");
     try {
-      const files = Object.entries(sources()).map(([path, text]) => ({
+      const files = Object.entries(await sources()).map(([path, content]) => ({
         path,
-        blob: new Blob([text]),
+        blob: new Blob([
+          typeof content === "string" ? content : decodeSource(content.base64),
+        ]),
       }));
       if (includeBuild)
         for (const file of build?.artifacts?.files ?? []) {

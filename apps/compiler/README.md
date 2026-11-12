@@ -144,11 +144,13 @@ the same policy, with long alarms checked in daily intervals.
 `GET /projects/<projectId>/events` streams the same snapshot on attach and after
 every transition. It sends heartbeat comments every 15 seconds. EventSource
 reconnects with the current snapshot, so no replay cursor is needed. The editor
-attaches when the project opens. It submits full source snapshots on save through
-Cmd/Ctrl+S or **Save & compile**. Typing marks the preview stale and leaves the
-saved build running. Source drafts still live in each browser's local storage.
-Builds and edit notifications are shared, but these endpoints do not synchronize
-source contents between editors. Delta sync is separate work.
+attaches when the project opens. **Save & compile** saves sources to the web
+Worker's R2 bucket, then submits a full acknowledged source snapshot. Save and
+Cmd/Ctrl+S persist without compiling. Typing marks the preview stale and leaves
+the saved build running. Browser storage is only an unsaved/offline draft cache;
+opening a project reads saved sources from the server, with explicit recovery
+for conflicting browser drafts. Binary assets use base64 entries in compiler
+snapshots. Live source collaboration and delta sync are separate work.
 
 New revisions terminate superseded jobs with `status: "failed"` and an explicit
 superseded error. Cancellation waits for the Go engine to stop the old TeX
