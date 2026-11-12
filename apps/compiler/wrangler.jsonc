@@ -19,11 +19,13 @@
     "bindings": [
       { "name": "COMPILER", "class_name": "TectonicContainer" },
       { "name": "PROJECTS", "class_name": "ProjectCoordinator" },
+      { "name": "POOL", "class_name": "PoolManager" },
     ],
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TectonicContainer"] },
     { "tag": "v2", "new_sqlite_classes": ["ProjectCoordinator"] },
+    { "tag": "v3", "new_sqlite_classes": ["PoolManager"] },
   ],
   "r2_buckets": [{ "binding": "PDFS", "bucket_name": "texfolia-compilations" }],
   "queues": {

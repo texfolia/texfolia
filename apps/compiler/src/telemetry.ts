@@ -60,6 +60,7 @@ export function emitCompileEvent(
   event: {
     event:
       | "compile_submission"
+      | "compile_pool_claim"
       | "compile_engine_request"
       | "compile_retry"
       | "compile_backend";
