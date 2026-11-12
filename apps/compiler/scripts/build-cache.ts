@@ -54,6 +54,15 @@ for (let pair = -1; pair < Number(process.env.PAIRS ?? 5); pair++) {
       if (!output.files?.[name]) throw new Error(`Missing generated ${name}`);
     if (output.pdf.length < 1000) throw new Error("Invalid PDF output");
     const reruns = (output.log.match(/Rerunning TeX/g) ?? []).length;
+    const bibtexPasses = (output.log.match(/Running BibTeX/g) ?? []).length;
+    if (bibliographyEnabled) {
+      if (mode === "clean" && bibtexPasses === 0)
+        throw new Error("Clean bibliography build skipped BibTeX");
+      if (mode === "cached" && (bibtexPasses !== 0 || reruns !== 0))
+        throw new Error(
+          "Unchanged bibliography cache did not skip BibTeX and reruns",
+        );
+    }
     cache = {};
     for (const [path, blob] of Object.entries(output.files ?? {}))
       cache[path] = {
@@ -70,6 +79,7 @@ for (let pair = -1; pair < Number(process.env.PAIRS ?? 5); pair++) {
             ? null
             : output.timing.compileMs / 1000,
         reruns,
+        bibtexPasses,
         pdfBytes: output.pdf.length,
       });
     await writeFile(`${directory}/${mode}.pdf`, output.pdf);
