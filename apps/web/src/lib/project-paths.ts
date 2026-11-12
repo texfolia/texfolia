@@ -1,6 +1,8 @@
 import type { ProjectNode } from "#/lib/project.functions";
 
-export function projectNodePaths(nodes: ProjectNode[]) {
+type PathNode = Pick<ProjectNode, "id" | "parentId" | "name" | "kind">;
+
+export function projectNodePaths(nodes: PathNode[]) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const roots = nodes.filter((node) => node.parentId === null);
   const root =
@@ -26,7 +28,7 @@ export function projectNodePaths(nodes: ProjectNode[]) {
   return paths;
 }
 
-export function projectPaths(nodes: ProjectNode[]) {
+export function projectPaths(nodes: PathNode[]) {
   const paths = projectNodePaths(nodes);
   for (const node of nodes) if (node.kind === "folder") paths.delete(node.id);
   return paths;

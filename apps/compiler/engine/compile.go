@@ -135,7 +135,12 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 		if err = os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 			return nil, err
 		}
-		if err = os.WriteFile(target, content, 0600); err != nil {
+		if p.sourceDir != "" {
+			err = os.Link(filepath.Join(p.sourceDir, path), target)
+		} else {
+			err = os.WriteFile(target, content, 0600)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}

@@ -8,6 +8,7 @@ import {
   EngineError,
   HttpError,
 } from "./project";
+import type { SourceDelta, SyncedProject } from "./source-sync";
 import {
   parseEngineTiming,
   unknownEngineTiming,
@@ -26,6 +27,7 @@ export function createEngineClient(
   fetchEngine: (request: Request) => Promise<Response>,
   baseUrl = "http://container",
 ): Engine {
+  let working: SyncedProject | null = null;
   return async (project, context) => {
     const started = performance.now();
     let timing = unknownEngineTiming;
@@ -47,26 +49,93 @@ export function createEngineClient(
       context.signal?.addEventListener("abort", cancel, { once: true });
       let response: Response;
       try {
-        response = await fetchEngine(
-          new Request(new URL("/compile", baseUrl).href, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "multipart/form-data",
-              "X-Compilation-Id": context.jobId,
-              "X-Compile-Attempt": String(context.attempt),
-              "X-Compile-Plan": context.plan,
-              ...(context.projectId
-                ? { "X-Project-Id": context.projectId }
-                : {}),
-            },
-            body: JSON.stringify({
-              ...project,
-              ...(context.cache ? { cache: context.cache } : {}),
+        const sync = "kind" in project ? project : null;
+        if (
+          sync &&
+          working &&
+          (sync.revision < working.revision ||
+            (sync.revision === working.revision &&
+              (sync.mainFile !== working.mainFile ||
+                Object.keys(sync.files).length !==
+                  Object.keys(working.files).length ||
+                Object.entries(sync.files).some(
+                  ([path, file]) => working?.files[path]?.hash !== file.hash,
+                ))))
+        )
+          working = null;
+        const delta = async (resync = false): Promise<SourceDelta> => {
+          if (!sync || !context.readSource)
+            throw new Error("Missing source store");
+          const previous = resync ? null : working;
+          const knownHashes = new Set(
+            Object.values(previous?.files ?? {}).map((file) => file.hash),
+          );
+          const files: SourceDelta["files"] = {};
+          for (const [path, file] of Object.entries(sync.files)) {
+            if (previous?.files[path]?.hash !== file.hash) {
+              Object.defineProperty(files, path, {
+                value: {
+                  hash: file.hash,
+                  ...(knownHashes.has(file.hash)
+                    ? {}
+                    : { content: await context.readSource(file) }),
+                },
+                enumerable: true,
+              });
+              knownHashes.add(file.hash);
+            }
+          }
+          return {
+            mainFile: sync.mainFile,
+            baseRevision: previous?.revision ?? 0,
+            revision: sync.revision,
+            files,
+            deleted: Object.keys(previous?.files ?? {}).filter(
+              (path) => !Object.hasOwn(sync.files, path),
+            ),
+            ...(resync ? { resync: true } : {}),
+          };
+        };
+        const send = (sources: object) => {
+          context.signal?.throwIfAborted();
+          return fetchEngine(
+            new Request(new URL("/compile", baseUrl).href, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "multipart/form-data",
+                "X-Compilation-Id": context.jobId,
+                "X-Compile-Attempt": String(context.attempt),
+                "X-Compile-Plan": context.plan,
+                ...(context.projectId
+                  ? { "X-Project-Id": context.projectId }
+                  : {}),
+              },
+              body: JSON.stringify({
+                ...sources,
+                ...(context.cache ? { cache: context.cache } : {}),
+              }),
+              signal: AbortSignal.timeout(90_000),
             }),
-            signal: AbortSignal.timeout(90_000),
-          }),
-        );
+          );
+        };
+        response = await send(sync ? await delta(!working) : project);
+        if (
+          sync &&
+          response.status === 409 &&
+          response.headers.get("X-Source-Resync") === "1"
+        ) {
+          await response.body?.cancel();
+          context.signal?.throwIfAborted();
+          working = null;
+          response = await send(await delta(true));
+        }
+        if (
+          sync &&
+          response.headers.get("X-Source-Revision") === String(sync.revision)
+        )
+          working = sync;
+        else working = null;
       } finally {
         context.signal?.removeEventListener("abort", cancel);
         await cancellation;

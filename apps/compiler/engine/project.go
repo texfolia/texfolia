@@ -13,9 +13,10 @@ const maxProjectBytes = 10 * 1024 * 1024
 const maxArtifactBytes = 32 * 1024 * 1024
 
 type project struct {
-	mainFile string
-	files    map[string][]byte
-	cache    map[string][]byte
+	mainFile  string
+	files     map[string][]byte
+	cache     map[string][]byte
+	sourceDir string
 }
 
 func validPath(path string) bool {

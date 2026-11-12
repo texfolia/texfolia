@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { Db } from "@texfolia/db";
 import { projectJob } from "@texfolia/db/schema";
+import { env } from "cloudflare:workers";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
+import { compileResync } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
-import { sourceContentSchema } from "#/lib/project-source";
+import { compileDeltaSchema } from "#/lib/latex/source-sync";
 
 const compilerTimingSchema = z.looseObject({
   plan: z.enum(["free", "pro", "unknown"]),
@@ -16,19 +18,13 @@ const compilerTimingSchema = z.looseObject({
 });
 type CompilerTiming = z.infer<typeof compilerTimingSchema>;
 
-const payload = z.object({
-  mainFile: z.string(),
-  files: z.record(
-    z.string(),
-    z.union([z.string(), z.object({ base64: sourceContentSchema })]),
-  ),
-});
 const idSchema = z.uuid();
 const pending = z.object({
   id: idSchema,
   status: z.enum(["queued", "running"]),
   supersededId: idSchema.optional(),
   revision: z.number().int().nonnegative().optional(),
+  sourceRevision: z.number().int().nonnegative().optional(),
 });
 const status = z.union([
   pending,
@@ -108,8 +104,7 @@ async function readSources(request: Request) {
   }
   const body = await new Blob(chunks).text();
   try {
-    payload.parse(JSON.parse(body));
-    return body;
+    return compileDeltaSchema.parse(JSON.parse(body));
   } catch {
     return json({ error: "Invalid project sources" }, 400);
   }
@@ -224,7 +219,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         )
           return json({ error: "Expected application/json" }, 415);
         const body = await readSources(request);
-        if (typeof body !== "string") return body;
+        if (body instanceof Response) return body;
 
         const id =
           idSchema.safeParse(request.headers.get("X-Compilation-Id")).data ??
@@ -238,10 +233,10 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         });
 
         let revision: number | undefined;
+        let sourceRevision: number | undefined;
         try {
-          const response = await fetchCompiler(
-            `/projects/${params.projectId}/compile`,
-            {
+          const send = (sources: object) =>
+            fetchCompiler(`/projects/${params.projectId}/compile`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -259,13 +254,52 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                     }
                   : {}),
               },
-              body,
-            },
-          );
+              body: JSON.stringify(sources),
+            });
+          let response = await send(body);
+          if (response.status === 409) {
+            const resync = z
+              .object({
+                resync: z.literal(true),
+                sourceRevision: z.number().int().nonnegative(),
+              })
+              .safeParse(
+                await response
+                  .clone()
+                  .json()
+                  .catch(() => null),
+              );
+            if (resync.success) {
+              let sources: Awaited<ReturnType<typeof compileResync>>;
+              try {
+                sources = await compileResync({
+                  db,
+                  bucket: env.SOURCES,
+                  projectId: params.projectId,
+                  userId: denied.userId,
+                  mainFile: body.mainFile,
+                  sourceRevision: resync.data.sourceRevision,
+                });
+              } catch (error) {
+                const detail = {
+                  error:
+                    error instanceof Error
+                      ? error.message
+                      : "Source resync failed",
+                  status: "failed" as const,
+                  finishedAt: new Date(),
+                };
+                await updateJob(db, id, detail);
+                return json({ error: detail.error }, 502);
+              }
+              response = await send(sources);
+            }
+          }
           if (response.status === 202) {
             const accepted = pending.parse(await response.json());
             if (accepted.id !== id) throw new Error("Invalid compiler job ID");
             revision = accepted.revision;
+            sourceRevision = accepted.sourceRevision;
             if (accepted.supersededId)
               await db
                 .update(projectJob)
@@ -328,6 +362,7 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           {
             id,
             revision,
+            sourceRevision,
             status: "queued",
             statusUrl,
             previewUrl: `${statusUrl}&preview=pdf`,

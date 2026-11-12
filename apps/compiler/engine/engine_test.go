@@ -91,7 +91,9 @@ esac
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TMPDIR", temp)
 	t.Setenv("SERVICE_SECRET", "must not reach TeX")
-	return newHandler(timeout), temp, marker
+	handler := newHandler(timeout)
+	t.Cleanup(func() { _ = handler.Close() })
+	return handler, temp, marker
 }
 
 func post(handler http.Handler, body string) *httptest.ResponseRecorder {

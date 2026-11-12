@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import type { SourceFiles } from "../project-source";
 import { trackCompilePreview } from "./compile-telemetry";
 import type { ProjectBuildEvents } from "./project-build-events";
+import { ProjectSourceSync, type CompileSources } from "./source-sync";
 
 const failure = z.object({ error: z.string(), log: z.string().optional() });
 const submission = z.object({
@@ -10,6 +10,7 @@ const submission = z.object({
   revision: z.number().int().nonnegative().optional(),
   statusUrl: z.string(),
   previewUrl: z.string().optional(),
+  sourceRevision: z.number().int().nonnegative().optional(),
 });
 const status = z.discriminatedUnion("status", [
   z.object({ id: z.uuid(), status: z.literal("queued") }),
@@ -32,6 +33,8 @@ const status = z.discriminatedUnion("status", [
 type CompileResult =
   | { pdf: File; log: string; jobId: string; revision: number | undefined }
   | { error: string; log: string };
+
+const sourceSyncs = new WeakMap<ProjectBuildEvents, ProjectSourceSync>();
 
 async function failureResult(response: Response) {
   const result = failure.safeParse(await response.json().catch(() => null));
@@ -153,7 +156,7 @@ export async function requestCompilation(options: {
   projectId: string;
   events: ProjectBuildEvents;
   mainFile: string;
-  files: SourceFiles;
+  files: CompileSources;
   signal: AbortSignal;
   startedAt?: number;
   lastEditAt?: number | null;
@@ -168,6 +171,13 @@ export async function requestCompilation(options: {
   const { projectId, mainFile, files, signal } = options;
   const startedAt = options.startedAt ?? performance.now();
   const jobId = crypto.randomUUID();
+  let sync = sourceSyncs.get(options.events);
+  if (!sync) {
+    sync = new ProjectSourceSync();
+    sourceSyncs.set(options.events, sync);
+  }
+  const prepared = await sync.prepare(mainFile, files);
+  signal.throwIfAborted();
   const response = await fetch(
     `/api/compile/${encodeURIComponent(projectId)}`,
     {
@@ -183,15 +193,17 @@ export async function requestCompilation(options: {
             }
           : {}),
       },
-      body: JSON.stringify({ mainFile, files }),
+      body: JSON.stringify(prepared.delta),
       signal,
     },
   );
   if (!response.ok) return failureResult(response);
-  const { id, revision, statusUrl, previewUrl } = submission.parse(
-    await response.json(),
-  );
+  const { id, revision, statusUrl, previewUrl, sourceRevision } =
+    submission.parse(await response.json());
   if (id !== jobId) throw new Error("Invalid compiler job ID");
+  signal.throwIfAborted();
+  if (sourceRevision !== undefined)
+    sync.accept(sourceRevision, prepared.hashes, prepared.sequence);
   const submittedAt = performance.now();
   const completion = waitForCompletion({
     events: options.events,

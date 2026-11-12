@@ -98,8 +98,13 @@ export function localProjectEngine(
       throw error;
     });
     const url = await endpoint;
-    return fetch(
-      new Request(new URL(new URL(request.url).pathname, url).href, request),
-    );
+    try {
+      return await fetch(
+        new Request(new URL(new URL(request.url).pathname, url).href, request),
+      );
+    } catch (error) {
+      endpoint = undefined;
+      throw error;
+    }
   });
 }

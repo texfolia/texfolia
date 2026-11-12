@@ -1,7 +1,7 @@
 import { createEngineClient } from "./engine";
 import { createLocalRuntime } from "./local";
 import { localProjectEngine } from "./local-containers";
-import { maxProjectBytes } from "./project";
+import { maxSourceSyncBytes } from "./source-sync";
 
 const runtime = createLocalRuntime({
   path: process.env.COMPILER_DB_PATH ?? ".cache/compiler.sqlite",
@@ -20,7 +20,7 @@ const runtime = createLocalRuntime({
 const server = Bun.serve({
   hostname: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 8080),
-  maxRequestBodySize: maxProjectBytes,
+  maxRequestBodySize: maxSourceSyncBytes,
   idleTimeout: 120,
   fetch: runtime.fetch,
 });

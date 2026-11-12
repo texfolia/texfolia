@@ -262,7 +262,15 @@ test("submission carries the browser job ID and preview reports only once after 
         expect(jobId).toMatch(/^[a-f0-9-]{36}$/);
         expect(await request.json()).toEqual({
           mainFile: "main.tex",
-          files: { "main.tex": "hello" },
+          baseRevision: 0,
+          revision: 1,
+          files: {
+            "main.tex": {
+              hash: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+              content: "hello",
+            },
+          },
+          deleted: [],
         });
         source.message(snapshot(jobId, "succeeded"));
         return Response.json(

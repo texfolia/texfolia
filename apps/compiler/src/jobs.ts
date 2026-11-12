@@ -8,6 +8,7 @@ import {
   parseProject,
   type Project,
 } from "./project";
+import type { SourceContent, SyncedProject } from "./source-sync";
 import {
   emitCompileEvent,
   decodeTelemetry,
@@ -64,7 +65,7 @@ export interface JobQueue {
   send(message: { id: string }): Promise<void>;
 }
 export type Engine = (
-  project: Project,
+  project: Project | SyncedProject,
   context: {
     jobId: string;
     attempt: number;
@@ -73,6 +74,9 @@ export type Engine = (
     signal?: AbortSignal;
     cache?: z.infer<typeof artifactFilesSchema>;
     onPdf?: (body: ReadableStream<Uint8Array>) => void;
+    readSource?: (
+      file: SyncedProject["files"][string],
+    ) => Promise<SourceContent>;
   },
 ) => Promise<{
   pdf: Uint8Array;
