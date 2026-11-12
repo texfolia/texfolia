@@ -51,6 +51,20 @@ function lineNumber(text: string) {
   };
 }
 
+export function maskLatexSource(text: string) {
+  // Mask comments and verbatim material while retaining CodeMirror offsets.
+  return text.replace(
+    /\\verb\*?(?<delimiter>[^\w\s])[^\n]*?\k<delimiter>|\\begin\{(?<literal>verbatim\*?|lstlisting|minted|Verbatim)\}[\s\S]*?(?=\\end\{\k<literal>\}|$)|\\[\\%]|%[^\r\n]*/g,
+    (match, _delimiter: string | undefined, literal: string | undefined) =>
+      literal
+        ? match.slice(0, literal.length + 8) +
+          match.slice(literal.length + 8).replace(/[^\r\n]/g, " ")
+        : match === "\\\\" || match === "\\%"
+          ? match
+          : match.replace(/[^\r\n]/g, " "),
+  );
+}
+
 export function scanFile(path: string, text: string): FileSymbols {
   const symbols: FileSymbols = {
     text,
@@ -63,17 +77,7 @@ export function scanFile(path: string, text: string): FileSymbols {
   };
   if (!texFile.test(path) && !/\.bib$/i.test(path)) return symbols;
 
-  // Mask comments and verbatim material while retaining CodeMirror offsets.
-  const source = text.replace(
-    /\\verb\*?(?<delimiter>[^\w\s])[^\n]*?\k<delimiter>|\\begin\{(?<literal>verbatim\*?|lstlisting|minted|Verbatim)\}[\s\S]*?(?=\\end\{\k<literal>\}|$)|\\[\\%]|%[^\r\n]*/g,
-    (match, _delimiter: string | undefined, literal: string | undefined) =>
-      literal
-        ? match.slice(0, literal.length + 8) +
-          match.slice(literal.length + 8).replace(/[^\r\n]/g, " ")
-        : match === "\\\\" || match === "\\%"
-          ? match
-          : match.replace(/[^\r\n]/g, " "),
-  );
+  const source = maskLatexSource(text);
 
   if (/\.bib$/i.test(path)) {
     for (const match of source.matchAll(

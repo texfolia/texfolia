@@ -20,6 +20,7 @@ import {
   IconEye,
   IconFolderOpen,
   IconSearch,
+  IconMathSymbols,
   IconTextWrap,
   IconWand,
 } from "@tabler/icons-react";
@@ -38,6 +39,10 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import {
+  SymbolPalette,
+  type SymbolPreamble,
+} from "#/components/symbol-palette";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { downloadFile } from "#/lib/download-file";
 import type { LatexProblem } from "#/lib/latex/analysis";
@@ -48,6 +53,7 @@ import {
 } from "#/lib/latex/editor-commands";
 import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
+import { addLatexPackage, insertLatexSymbol } from "#/lib/latex/symbols";
 import { useSettings } from "#/providers/settings-provider";
 import { useTheme } from "#/providers/theme-provider";
 
@@ -65,6 +71,7 @@ type EditorProps = {
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
   jump?: { line: number };
   formatSettings?: FormatSettings;
+  preamble?: SymbolPreamble;
 };
 
 export function Editor({
@@ -81,6 +88,7 @@ export function Editor({
   onSyntaxProblems,
   jump,
   formatSettings = defaultFormatSettings,
+  preamble,
 }: EditorProps) {
   const { theme } = useTheme();
   const editor = useRef<ReactCodeMirrorRef>(null);
@@ -96,6 +104,7 @@ export function Editor({
   const [downloadedValue, setDownloadedValue] = useState(defaultValue);
   const { editor: preferences, updateEditor } = useSettings();
   const [error, setError] = useState("");
+  const [showSymbols, setShowSymbols] = useState(false);
   const [status, setStatus] = useState({
     undo: false,
     redo: false,
@@ -325,6 +334,16 @@ export function Editor({
           >
             <IconSearch />
           </PanelAction>
+          {isLatex && (
+            <PanelAction
+              label="LaTeX symbols"
+              disabled={readOnly}
+              aria-expanded={showSymbols}
+              onClick={() => setShowSymbols((open) => !open)}
+            >
+              <IconMathSymbols />
+            </PanelAction>
+          )}
           {canFormat && (
             <PanelAction
               label="Format document (⌘/Ctrl+Shift+F)"
@@ -354,6 +373,31 @@ export function Editor({
           </PanelAction>
         </PanelActions>
       </PanelHeader>
+      {isLatex && !readOnly && showSymbols && (
+        <SymbolPalette
+          preamble={
+            preamble ?? {
+              source: value,
+              filename: name,
+              addPackage: (packageName) => {
+                const view = editor.current?.view;
+                if (view) addLatexPackage(packageName)(view);
+              },
+            }
+          }
+          onInsert={(symbol) => {
+            const view = editor.current?.view;
+            if (view) {
+              insertLatexSymbol(symbol)(view);
+              view.focus();
+            }
+          }}
+          onClose={() => {
+            setShowSymbols(false);
+            editor.current?.view?.focus();
+          }}
+        />
+      )}
       <input
         ref={fileInput}
         type="file"
