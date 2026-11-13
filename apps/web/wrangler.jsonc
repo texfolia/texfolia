@@ -16,7 +16,7 @@
       "new_sqlite_classes": ["ProjectCollaboration"],
     },
   ],
-  "triggers": { "crons": ["17 * * * *"] },
+  "triggers": { "crons": ["17 * * * *", "* * * * *"] },
   "services": [
     {
       "binding": "COMPILER",
@@ -34,6 +34,7 @@
     },
   ],
   "vars": {
+    "TEMPLATE_REVIEWER_IDS": "",
     "EMAIL_FROM": "noreply@texfolia.com",
     "TURNSTILE_HOSTNAMES": "www.texfolia.com",
   },
@@ -60,6 +61,7 @@
       "services": [{ "binding": "COMPILER", "service": "texfolia-compiler" }],
       "send_email": [{ "name": "EMAIL" }],
       "vars": {
+        "TEMPLATE_REVIEWER_IDS": "",
         "EMAIL_FROM": "noreply@texfolia.com",
         "TURNSTILE_HOSTNAMES": "www.texfolia.com",
       },
@@ -82,6 +84,7 @@
       ],
       "send_email": [{ "name": "EMAIL" }],
       "vars": {
+        "TEMPLATE_REVIEWER_IDS": "",
         "EMAIL_FROM": "noreply@texfolia.com",
         "TURNSTILE_HOSTNAMES": "<staging hostname>",
       },

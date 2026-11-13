@@ -1,7 +1,7 @@
 export async function fetchCompiler(
   path: string,
   init?: RequestInit,
-  compiler?: Fetcher,
+  compiler?: Pick<Fetcher, "fetch">,
 ) {
   const options: RequestInit = {
     ...init,

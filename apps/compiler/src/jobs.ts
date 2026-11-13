@@ -93,6 +93,7 @@ export type Engine = ((
   timing: EngineTiming;
   files?: Record<string, Blob>;
   cacheArchive?: Blob;
+  preview?: Uint8Array;
 }>) & { prewarm?: () => Promise<void> };
 const redeliverAfterMs = 60 * 60_000;
 
@@ -211,12 +212,15 @@ export function createJobs(options: {
       }
       return saved;
     },
-    async artifact(id: string): Promise<ReadableStream<Uint8Array> | null> {
+    async artifact(
+      id: string,
+      extension: "pdf" | "png" = "pdf",
+    ): Promise<ReadableStream<Uint8Array> | null> {
       const result = await terminal(id);
       if (result?.status === "failed" || (!result && (await pending(id))))
         return null;
       // Older compilations have a PDF but no job record in the compiler store.
-      return store.read(`compilations/${id}.pdf`);
+      return store.read(`compilations/${id}.${extension}`);
     },
     async recover() {
       for await (const key of store.keys("sources/")) {
@@ -303,6 +307,13 @@ export function createJobs(options: {
             engineRequestMs = performance.now() - engineStart;
           }
           const publishStart = performance.now();
+          if (project.preview) {
+            if (!output.preview)
+              throw new Error(
+                "TeX host did not generate the requested preview",
+              );
+            await store.create(`compilations/${id}.png`, output.preview);
+          }
           await store.write(transcriptKey, output.log);
           await store.create(pdfKey, output.pdf, JSON.stringify(engineTiming));
           publishMs = performance.now() - publishStart;

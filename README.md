@@ -183,6 +183,14 @@ Run `bun run lint:fix` to apply automatic Oxlint fixes.
 `bun run deploy` also run through Turbo. Deploy builds the web app and deploys
 the compiler before the web Worker.
 
+## Templates
+
+Browse `/templates`, publish a saved project at `/templates/publish`, and open an
+independent personal or organization copy from `/template/{templateId}`. New
+publishers are reviewed, and unlisted templates stay out of the public gallery.
+See [the templates setup and verification guide](apps/web/README.md#public-templates)
+for database rollout, compiler previews, reviewer configuration, and starter seeds.
+
 ## License
 
 Texfolia is licensed under the [GNU General Public License v3.0](LICENSE).

@@ -40,6 +40,21 @@ jobs:
         run: bun run --cwd apps/web test:collaboration
       - name: Exercise project source storage with local R2
         run: bun run apps/web/test/source-storage.ts
+      - name: Exercise templates with Postgres and local R2
+        run: bun run apps/web/test/templates.ts
+      - name: Exercise server-rendered template pages
+        env:
+          CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgres://user:password@127.0.0.1:5432/texfolia_test
+          TEMPLATE_TEST_BASE_URL: http://localhost:3000
+          BETTER_AUTH_URL: http://localhost:3000
+          BETTER_AUTH_SECRET: template-page-integration-test-secret-not-for-production
+          STRIPE_SECRET_KEY: sk_test_template_pages_fixture
+        run: |
+          printf 'BETTER_AUTH_URL=http://localhost:3000\nBETTER_AUTH_SECRET=template-page-integration-test-secret-not-for-production\nSTRIPE_SECRET_KEY=sk_test_template_pages_fixture\n' > apps/web/.dev.vars
+          bun run --cwd apps/web dev > "$RUNNER_TEMP/template-pages-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"; cat "$RUNNER_TEMP/template-pages-server.log"' EXIT
+          bun run apps/web/test/template-pages.ts
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -54,6 +69,8 @@ jobs:
           cache: false
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Install PDF preview renderer
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Typecheck
         run: bun run typecheck
       - name: Test

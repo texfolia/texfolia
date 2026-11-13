@@ -15,7 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { user } from "./auth-schema";
+import { organization, user } from "./auth-schema";
 
 const NIL_UUID = sql`'00000000-0000-0000-0000-000000000000'::uuid`;
 
@@ -41,9 +41,12 @@ export const project = pgTable(
   "project",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    ownerId: text("owner_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -54,7 +57,14 @@ export const project = pgTable(
       .$onUpdate(() => new Date()),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [uniqueIndex("project_owner_id_name_idx").on(t.ownerId, t.name)],
+  (t) => [
+    uniqueIndex("project_owner_id_name_idx").on(t.ownerId, t.name),
+    index("project_organization_id_idx").on(t.organizationId),
+    check(
+      "project_owner_check",
+      sql`(${t.ownerId} IS NOT NULL AND ${t.organizationId} IS NULL) OR (${t.ownerId} IS NULL AND ${t.organizationId} IS NOT NULL)`,
+    ),
+  ],
 );
 
 export const projectCollaborator = pgTable(

@@ -1,5 +1,29 @@
 # Compiler
 
+## Template previews
+
+Legacy snapshot jobs accept an opt-in `preview: true` in `POST /compile` alongside
+`mainFile` and `files`. The request uses the existing compilation ID, account
+admission limits, queue, and status lifecycle. Normal project compilations do not
+render previews. After `GET /jobs/{id}` reports success,
+`GET /compilations/{id}.png` returns the persisted first-page image; the existing
+PDF endpoint remains available. Retrying the same compilation ID reuses the PNG
+and PDF rather than running TeX again.
+
+The compile image installs `poppler-utils`. After an opted-in compile, the engine
+runs `pdftoppm` with a 15-second cancellation-aware timeout, first-page-only,
+1200-pixel maximum dimension, and a 4 MiB output limit. The PNG is passed through
+the multipart engine response and stored before the PDF commit marker. Local
+SQLite and production R2 use the same job path. Rebuild the engine image before
+using this feature in an existing local stack.
+
+Run `ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts`
+from the repository root to compile the original article, journal, and thesis
+starters with a real container and check both persisted artifacts. Go's
+`TestRenderPreview` also runs against real Poppler when it is installed.
+
+## Project builds
+
 Each project has one coordinator and one dedicated Tectonic container. The
 coordinator serializes builds, waits 300 ms after the latest source update, cancels
 superseded work, and publishes revision metadata over server-sent events.

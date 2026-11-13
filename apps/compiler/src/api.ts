@@ -80,14 +80,18 @@ export function createApp() {
   });
   app.get("/compilations/:file", async (c) => {
     const file = c.req.param("file");
+    const extension = file.endsWith(".png") ? "png" : "pdf";
     const id = jobIdSchema.safeParse(
-      file.endsWith(".pdf") ? file.slice(0, -4) : "",
+      file.endsWith(`.${extension}`) ? file.slice(0, -4) : "",
     );
-    const pdf = id.success ? await c.env.jobs.artifact(id.data) : null;
+    const pdf = id.success
+      ? await c.env.jobs.artifact(id.data, extension)
+      : null;
     return pdf
       ? new Response(pdf, {
           headers: {
-            "Content-Type": "application/pdf",
+            "Content-Type":
+              extension === "png" ? "image/png" : "application/pdf",
             "Cache-Control": "no-store",
           },
         })

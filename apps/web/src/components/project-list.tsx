@@ -108,6 +108,13 @@ export function ProjectList() {
           <div className="flex items-center gap-2">
             <SidebarTrigger />
             <h1 className="flex-1">Projects</h1>
+            <Link
+              to="/templates"
+              search={{ page: 0 }}
+              className="text-sm underline"
+            >
+              Templates
+            </Link>
             <DialogTrigger render={<Button />}>Create Project</DialogTrigger>
           </div>
           <InputGroup className="max-w-sm">

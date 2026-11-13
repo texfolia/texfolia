@@ -217,6 +217,9 @@ export async function collectProjectSources({
     );
     for (const projectId of projectIds)
       await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
+        );
         const [found] = await tx
           .select()
           .from(project)
