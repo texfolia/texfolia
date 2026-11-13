@@ -67,6 +67,7 @@ const projectSchema = z
       sourcePathSchema,
       z.union([z.string(), artifactContentSchema]),
     ),
+    preview: z.literal(true).optional(),
   })
   .superRefine(({ mainFile, files }, ctx) => {
     const paths = Object.keys(files);

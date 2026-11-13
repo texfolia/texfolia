@@ -1,6 +1,6 @@
 import type { Db } from "@texfolia/db";
-import { project, projectNode } from "@texfolia/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { member, project, projectNode } from "@texfolia/db/schema";
+import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
 import { fetchCompiler } from "./compiler.server";
@@ -58,6 +58,28 @@ export async function createProject({
 }
 
 export async function getProjects({ db, ownerId }: ProjectOwner) {
+  const memberships = await db
+    .select({ id: member.organizationId })
+    .from(member)
+    .where(eq(member.userId, ownerId));
+  const accessible = await db
+    .select({ id: project.id })
+    .from(project)
+    .where(
+      and(
+        isNull(project.deletedAt),
+        or(
+          and(eq(project.ownerId, ownerId), isNull(project.organizationId)),
+          memberships.length
+            ? inArray(
+                project.organizationId,
+                memberships.map((item) => item.id),
+              )
+            : undefined,
+        ),
+      ),
+    );
+  if (!accessible.length) return [];
   return db.query.project.findMany({
     with: {
       collaborators: {
@@ -67,7 +89,7 @@ export async function getProjects({ db, ownerId }: ProjectOwner) {
       },
     },
     where: {
-      ownerId,
+      id: { in: accessible.map((item) => item.id) },
       deletedAt: { isNull: true },
     },
   });
@@ -78,17 +100,35 @@ export async function deleteProject({
   ownerId,
   projectId,
 }: ProjectOwner & { projectId: string }) {
-  const [deletedProject] = await db
-    .update(project)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
-        eq(project.id, projectId),
-        eq(project.ownerId, ownerId),
-        isNull(project.deletedAt),
-      ),
-    )
-    .returning({ id: project.id });
+  const deletedProject = await db.transaction(async (tx) => {
+    const found = await lockProject({ tx, projectId, userId: ownerId });
+    if (found.organizationId) {
+      const [membership] = await tx
+        .select()
+        .from(member)
+        .where(
+          and(
+            eq(member.organizationId, found.organizationId),
+            eq(member.userId, ownerId),
+          ),
+        )
+        .for("share");
+      if (
+        !membership?.role
+          .split(",")
+          .some((role) => role === "owner" || role === "admin")
+      )
+        throw new Error(
+          "Only organization owners and admins can delete projects",
+        );
+    } else if (found.ownerId !== ownerId) throw new Error("Project not found");
+    const [deleted] = await tx
+      .update(project)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(project.id, projectId), isNull(project.deletedAt)))
+      .returning({ id: project.id });
+    return deleted;
+  });
 
   if (!deletedProject) throw new Error("Project not found");
   try {

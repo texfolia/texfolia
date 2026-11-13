@@ -15,13 +15,19 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
+import { Route as TemplateTemplateIdRouteImport } from './routes/template.$templateId'
+import { Route as TemplatesPublishRouteImport } from './routes/templates_.publish'
+import { Route as TemplatesReviewRouteImport } from './routes/templates_.review'
 import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api.compile.$projectId'
 import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api.collaboration.$projectId.$nodeId'
 import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api.sources.$projectId.$nodeId'
+import { Route as ApiTemplatesTemplateIdPreviewRouteImport } from './routes/api.templates.$templateId.preview'
+import { Route as ApiTemplatesTemplateIdSourceRouteImport } from './routes/api.templates.$templateId.source'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -53,6 +59,11 @@ const ProjectsRoute = ProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -67,6 +78,21 @@ const AcceptInvitationInvitationIdRoute =
 const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
   id: '/project/$projectId',
   path: '/project/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplateTemplateIdRoute = TemplateTemplateIdRouteImport.update({
+  id: '/template/$templateId',
+  path: '/template/$templateId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesPublishRoute = TemplatesPublishRouteImport.update({
+  id: '/templates_/publish',
+  path: '/templates/publish',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesReviewRoute = TemplatesReviewRouteImport.update({
+  id: '/templates_/review',
+  path: '/templates/review',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -91,6 +117,18 @@ const ApiSourcesProjectIdNodeIdRoute =
     path: '/api/sources/$projectId/$nodeId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiTemplatesTemplateIdPreviewRoute =
+  ApiTemplatesTemplateIdPreviewRouteImport.update({
+    id: '/api/templates/$templateId/preview',
+    path: '/api/templates/$templateId/preview',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiTemplatesTemplateIdSourceRoute =
+  ApiTemplatesTemplateIdSourceRouteImport.update({
+    id: '/api/templates/$templateId/source',
+    path: '/api/templates/$templateId/source',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -99,13 +137,19 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/projects': typeof ProjectsRoute
+  '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/project/$projectId': typeof ProjectProjectIdRoute
+  '/template/$templateId': typeof TemplateTemplateIdRoute
+  '/templates/publish': typeof TemplatesPublishRoute
+  '/templates/review': typeof TemplatesReviewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/templates/$templateId/preview': typeof ApiTemplatesTemplateIdPreviewRoute
+  '/api/templates/$templateId/source': typeof ApiTemplatesTemplateIdSourceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -114,13 +158,19 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/projects': typeof ProjectsRoute
+  '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/project/$projectId': typeof ProjectProjectIdRoute
+  '/template/$templateId': typeof TemplateTemplateIdRoute
+  '/templates/publish': typeof TemplatesPublishRoute
+  '/templates/review': typeof TemplatesReviewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/templates/$templateId/preview': typeof ApiTemplatesTemplateIdPreviewRoute
+  '/api/templates/$templateId/source': typeof ApiTemplatesTemplateIdSourceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -130,13 +180,19 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/projects': typeof ProjectsRoute
+  '/templates': typeof TemplatesRoute
   '/terms': typeof TermsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/project/$projectId': typeof ProjectProjectIdRoute
+  '/template/$templateId': typeof TemplateTemplateIdRoute
+  '/templates_/publish': typeof TemplatesPublishRoute
+  '/templates_/review': typeof TemplatesReviewRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/templates/$templateId/preview': typeof ApiTemplatesTemplateIdPreviewRoute
+  '/api/templates/$templateId/source': typeof ApiTemplatesTemplateIdSourceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -147,13 +203,19 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/projects'
+    | '/templates'
     | '/terms'
     | '/accept-invitation/$invitationId'
     | '/project/$projectId'
+    | '/template/$templateId'
+    | '/templates/publish'
+    | '/templates/review'
     | '/api/auth/$'
     | '/api/compile/$projectId'
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/sources/$projectId/$nodeId'
+    | '/api/templates/$templateId/preview'
+    | '/api/templates/$templateId/source'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,13 +224,19 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/projects'
+    | '/templates'
     | '/terms'
     | '/accept-invitation/$invitationId'
     | '/project/$projectId'
+    | '/template/$templateId'
+    | '/templates/publish'
+    | '/templates/review'
     | '/api/auth/$'
     | '/api/compile/$projectId'
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/sources/$projectId/$nodeId'
+    | '/api/templates/$templateId/preview'
+    | '/api/templates/$templateId/source'
   id:
     | '__root__'
     | '/'
@@ -177,13 +245,19 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/projects'
+    | '/templates'
     | '/terms'
     | '/accept-invitation/$invitationId'
     | '/project/$projectId'
+    | '/template/$templateId'
+    | '/templates_/publish'
+    | '/templates_/review'
     | '/api/auth/$'
     | '/api/compile/$projectId'
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/sources/$projectId/$nodeId'
+    | '/api/templates/$templateId/preview'
+    | '/api/templates/$templateId/source'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -193,13 +267,19 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
   ProjectsRoute: typeof ProjectsRoute
+  TemplatesRoute: typeof TemplatesRoute
   TermsRoute: typeof TermsRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
   ProjectProjectIdRoute: typeof ProjectProjectIdRoute
+  TemplateTemplateIdRoute: typeof TemplateTemplateIdRoute
+  TemplatesPublishRoute: typeof TemplatesPublishRoute
+  TemplatesReviewRoute: typeof TemplatesReviewRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
   ApiCollaborationProjectIdNodeIdRoute: typeof ApiCollaborationProjectIdNodeIdRoute
   ApiSourcesProjectIdNodeIdRoute: typeof ApiSourcesProjectIdNodeIdRoute
+  ApiTemplatesTemplateIdPreviewRoute: typeof ApiTemplatesTemplateIdPreviewRoute
+  ApiTemplatesTemplateIdSourceRoute: typeof ApiTemplatesTemplateIdSourceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -246,6 +326,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -265,6 +352,27 @@ declare module '@tanstack/react-router' {
       path: '/project/$projectId'
       fullPath: '/project/$projectId'
       preLoaderRoute: typeof ProjectProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/template/$templateId': {
+      id: '/template/$templateId'
+      path: '/template/$templateId'
+      fullPath: '/template/$templateId'
+      preLoaderRoute: typeof TemplateTemplateIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates_/publish': {
+      id: '/templates_/publish'
+      path: '/templates/publish'
+      fullPath: '/templates/publish'
+      preLoaderRoute: typeof TemplatesPublishRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates_/review': {
+      id: '/templates_/review'
+      path: '/templates/review'
+      fullPath: '/templates/review'
+      preLoaderRoute: typeof TemplatesReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -295,6 +403,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSourcesProjectIdNodeIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/templates/$templateId/preview': {
+      id: '/api/templates/$templateId/preview'
+      path: '/api/templates/$templateId/preview'
+      fullPath: '/api/templates/$templateId/preview'
+      preLoaderRoute: typeof ApiTemplatesTemplateIdPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/templates/$templateId/source': {
+      id: '/api/templates/$templateId/source'
+      path: '/api/templates/$templateId/source'
+      fullPath: '/api/templates/$templateId/source'
+      preLoaderRoute: typeof ApiTemplatesTemplateIdSourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -305,13 +427,19 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
   ProjectsRoute: ProjectsRoute,
+  TemplatesRoute: TemplatesRoute,
   TermsRoute: TermsRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
   ProjectProjectIdRoute: ProjectProjectIdRoute,
+  TemplateTemplateIdRoute: TemplateTemplateIdRoute,
+  TemplatesPublishRoute: TemplatesPublishRoute,
+  TemplatesReviewRoute: TemplatesReviewRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
   ApiCollaborationProjectIdNodeIdRoute: ApiCollaborationProjectIdNodeIdRoute,
   ApiSourcesProjectIdNodeIdRoute: ApiSourcesProjectIdNodeIdRoute,
+  ApiTemplatesTemplateIdPreviewRoute: ApiTemplatesTemplateIdPreviewRoute,
+  ApiTemplatesTemplateIdSourceRoute: ApiTemplatesTemplateIdSourceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

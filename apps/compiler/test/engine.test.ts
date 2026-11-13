@@ -11,6 +11,34 @@ const context = {
 };
 const project = { mainFile: "main.tex", files: { "main.tex": "hello" } };
 
+test("template preview is opt-in and returned independently of build artifacts", async () => {
+  const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const engine = createEngineClient(async (request) => {
+    expect(await request.json()).toMatchObject({ preview: true });
+    const form = new FormData();
+    form.set("pdf", new Blob(["%PDF-1.5"]), "output.pdf");
+    form.set("log", "Preview compiled");
+    form.set(
+      "preview",
+      new Blob([bytes], { type: "image/png" }),
+      "preview.png",
+    );
+    return new Response(form);
+  });
+  expect(
+    (await engine({ ...project, preview: true }, context)).preview,
+  ).toEqual(bytes);
+  const missing = createEngineClient(async () => {
+    const form = new FormData();
+    form.set("pdf", new Blob(["%PDF-1.5"]), "output.pdf");
+    form.set("log", "No preview");
+    return new Response(form);
+  });
+  await expect(missing({ ...project, preview: true }, context)).rejects.toThrow(
+    "invalid preview",
+  );
+});
+
 test("engine client sends sources and reads multipart PDF and diagnostics", async () => {
   const engine = createEngineClient(async (request) => {
     expect(request.url).toBe("http://engine:8080/compile");

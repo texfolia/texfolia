@@ -222,6 +222,7 @@ func newHandler(timeout time.Duration) *engineHandler {
 		}
 		var envelope struct {
 			BaseRevision *int64 `json:"baseRevision"`
+			Preview      bool   `json:"preview"`
 		}
 		_ = json.Unmarshal(body, &envelope)
 		var p project
@@ -265,6 +266,14 @@ func newHandler(timeout time.Duration) *engineHandler {
 			return
 		}
 		defer result.close()
+		var preview []byte
+		if envelope.Preview {
+			preview, err = renderPreview(ctx, result.pdf.Name())
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+		}
 		nextCache, err := resultCache(result)
 		if err != nil {
 			writeError(w, err)
@@ -307,6 +316,15 @@ func newHandler(timeout time.Duration) *engineHandler {
 		}
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
+		}
+		if err == nil && preview != nil {
+			part, err = form.CreatePart(textproto.MIMEHeader{
+				"Content-Disposition": {`form-data; name="preview"; filename="preview.png"`},
+				"Content-Type":        {"image/png"},
+			})
+			if err == nil {
+				_, err = part.Write(preview)
+			}
 		}
 		for _, path := range result.artifacts {
 			if err != nil {

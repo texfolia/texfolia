@@ -31,6 +31,7 @@ export function createProjectsStore({
           id,
           name: projectNameSchema.parse(name),
           ownerId,
+          organizationId: null,
           createdAt: now,
           updatedAt: now,
           deletedAt: null,

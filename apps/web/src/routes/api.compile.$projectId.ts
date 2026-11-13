@@ -10,6 +10,7 @@ import { compileResync } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema } from "#/lib/latex/source-sync";
+import { lockProject } from "#/lib/project-access.server";
 
 const compilerTimingSchema = z.looseObject({
   plan: z.enum(["free", "pro", "team", "unknown"]),
@@ -65,25 +66,22 @@ async function checkProject(
   if (!session) return json({ error: "Unauthorized" }, 401);
   if (!idSchema.safeParse(projectId).success)
     return json({ error: "Project not found" }, 404);
-  const project = await db.query.project.findFirst({
-    columns: { id: true, ownerId: true },
-    where: {
-      id: projectId,
-      deletedAt: { isNull: true },
-    },
-  });
-  if (!project) return json({ error: "Project not found" }, 404);
-  if (project.ownerId !== session.user.id) {
-    const collaborator = await db.query.projectCollaborator.findFirst({
-      where: { projectId, userId: session.user.id },
-    });
-    if (
-      !collaborator ||
-      (request.method !== "GET" &&
-        request.method !== "PATCH" &&
-        collaborator.role !== "editor")
-    )
+  try {
+    await db.transaction((tx) =>
+      lockProject({
+        tx,
+        projectId,
+        userId: session.user.id,
+        access:
+          request.method === "GET" || request.method === "PATCH"
+            ? "read"
+            : "write",
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "Project not found")
       return json({ error: "Project not found" }, 404);
+    throw error;
   }
   return { userId: session.user.id, name: session.user.name };
 }

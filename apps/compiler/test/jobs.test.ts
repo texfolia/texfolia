@@ -22,6 +22,56 @@ const output = {
   },
 };
 
+test("preview jobs persist PNGs once and expose them through the local API", async () => {
+  const root = await mkdtemp(join(tmpdir(), "texfolia-template-preview-"));
+  let runs = 0;
+  const started = Promise.withResolvers<void>();
+  const preview = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const engine = async (
+    sources: Parameters<Parameters<typeof createJobs>[0]["engine"]>[0],
+  ) => {
+    expect("preview" in sources && sources.preview).toBe(true);
+    runs++;
+    started.resolve();
+    return { ...output, preview };
+  };
+  const open = () =>
+    createLocalRuntime({
+      path: join(root, "jobs.sqlite"),
+      engine,
+      projectEngine: () => engine,
+    });
+  let runtime = open();
+  const id = crypto.randomUUID();
+  const request = () =>
+    new Request("http://local/compile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Compilation-Id": id },
+      body: JSON.stringify({ ...project, preview: true }),
+    });
+  try {
+    expect(
+      (await runtime.fetch(new Request(`http://local/compilations/${id}.png`)))
+        .status,
+    ).toBe(404);
+    expect((await runtime.fetch(request())).status).toBe(202);
+    await started.promise;
+    await runtime.close();
+    runtime = open();
+    const image = await runtime.fetch(
+      new Request(`http://local/compilations/${id}.png`),
+    );
+    expect(image.status).toBe(200);
+    expect(image.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(preview);
+    expect((await runtime.fetch(request())).status).toBe(202);
+    expect(runs).toBe(1);
+  } finally {
+    await runtime.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("local API accepts jobs without a token and retains results across restarts", async () => {
   const root = await mkdtemp(join(tmpdir(), "texfolia-compiler-"));
   const path = join(root, "jobs.sqlite");

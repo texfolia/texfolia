@@ -204,6 +204,13 @@ export function createEngineClient(
       const pdf = form.get("pdf");
       const log = form.get("log");
       const cacheArchive = form.get("cache");
+      const preview = form.get("preview");
+      if (
+        "preview" in project &&
+        project.preview &&
+        (!(preview instanceof Blob) || preview.size > 4 * 1024 * 1024)
+      )
+        throw new Error("TeX host returned an invalid preview");
       if (!(pdf instanceof Blob) || typeof log !== "string")
         throw new Error("TeX host returned an invalid result");
       const files: Record<string, Blob> = {};
@@ -226,6 +233,9 @@ export function createEngineClient(
         timing,
         files,
         ...(cacheArchive instanceof Blob ? { cacheArchive } : {}),
+        ...(preview instanceof Blob
+          ? { preview: new Uint8Array(await preview.arrayBuffer()) }
+          : {}),
       };
     } catch (error) {
       if (error instanceof HttpError) throw error;

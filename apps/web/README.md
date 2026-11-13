@@ -1,5 +1,76 @@
 Welcome to your new TanStack Start app!
 
+# Public templates
+
+`/templates` is a paginated, server-rendered public gallery. A snapshot's stable
+page is `/template/$templateId`. There are no public publisher/profile routes.
+`/templates/publish` publishes saved projects and lists your existing snapshots.
+
+Publishing copies saved text and binary R2 objects into
+`templates/{templateId}/sources/{sha256}` while holding the project lock. Browser
+drafts are not included. Source changes, project deletion, and project-source
+garbage collection cannot change an existing snapshot. Opening a template copies
+its tree and objects into a new personal or organization project with new IDs
+and project-scoped object keys. Original license and attribution files are copied
+unchanged. All organization members can read/edit their organization's projects;
+only owners/admins can delete them or publish them as templates. Removing a
+membership also removes access for the member who originally created the copy.
+Organization copies belong to the organization, not to the creator's account.
+New project copies and the source sweeper share a transaction-scoped advisory
+lock, so collection cannot delete uploads whose new project row is uncommitted.
+
+A license and redistribution confirmation are required. Publishing is serialized
+per account and limited to three snapshots per rolling hour and ten per rolling
+day, including failed preview jobs. Templates have immutable metadata and files;
+publish a new snapshot for changes. Current limits are 200 source files, 401 total
+nodes, and an encoded compiler request under 10 MiB.
+
+The compiler generates a first-page PNG once per snapshot. Publication begins in
+`building`, then becomes `pending` for a new publisher or `approved` for a
+previously approved publisher. Every minute, the Worker checks up to ten preview
+jobs, oldest check first. Compiler outages retry without exposing the snapshot;
+compilation errors become `failed`. Jobs expire after 24 hours. Local R2 uses
+Wrangler's simulation, including previews. Local Vite development does not run
+scheduled events automatically: use **Check preview status** on the snapshot page
+or invoke the scheduled handler when testing locally.
+
+Configure `TEMPLATE_REVIEWER_IDS` in `wrangler.jsonc` for each environment as a
+comma-separated list of existing auth user IDs. The default empty list grants
+nobody review access. Reviewers use `/templates/review` to approve/reject new
+publishers and resolve reports. Reviewers cannot approve their own snapshots.
+Pending, failed, and rejected snapshots are visible only to their publisher and
+reviewers. Approved unlisted templates are accessible by URL, excluded from the
+gallery, and marked `noindex, nofollow`. Unlisted is not an access-control feature.
+Source ZIP and image endpoints recheck visibility and moderation on each request.
+
+Reviewers can use **Publish curated starter set** to seed original CC0 article,
+generic two-column journal, and thesis templates. This operation is idempotent
+per publishing account. No third-party university/publisher assets are included;
+their redistribution licenses must be checked separately before importing them.
+Do not treat the generic journal/thesis starters as institution-compliant forms.
+
+Before deploying, apply `packages/db/sql/20261112_templates.sql` once to the
+existing database (or use `bun run db:push` locally), deploy the compiler image
+with Poppler, configure reviewers, and then deploy the web Worker. The hourly
+source sweep also deletes orphan template objects older than one hour, using a
+transaction-scoped advisory lock shared with publishing to protect retries.
+
+Verification from the repository root, with an isolated, schema-applied test DB:
+
+```sh
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/templates.ts
+ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts
+TEMPLATE_TEST_BASE_URL=http://localhost:3000 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/template-pages.ts
+```
+
+The first check uses real Postgres and simulated R2; only the compiler service is
+substituted. The second compiles all three starters in the real compile container
+and verifies persisted PDFs and first-page PNG dimensions. CI runs the storage
+check, server-rendered page check, unit suites, and the real Poppler rendering
+test. The page check requires a local web app using the same isolated database;
+it verifies HTML without JavaScript, sharing metadata, unlisted `noindex`, and
+moderation/asset 404s. It does not drive browser interactions.
+
 # Getting Started
 
 To run this application:

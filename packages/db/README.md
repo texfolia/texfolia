@@ -23,6 +23,12 @@ repository.
 
 ## Change the schema
 
+The public-template feature adds `project.organization_id`, template enums,
+immutable JSONB snapshots, and reports. Existing deployments must apply
+`sql/20261112_templates.sql` once before deploying the templates Worker. The
+script runs in a transaction and preserves existing personal projects. Local
+development and CI can apply the equivalent Drizzle schema with `db:push`.
+
 1. Edit `src/db/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root.
 2. Run `bun run db:push` against your local database.
 3. Run the integration check.

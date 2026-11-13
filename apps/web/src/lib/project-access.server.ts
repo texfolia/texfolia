@@ -1,5 +1,5 @@
 import type { Db } from "@texfolia/db";
-import { project, projectCollaborator } from "@texfolia/db/schema";
+import { member, project, projectCollaborator } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 export type ProjectTransaction = Parameters<
@@ -23,6 +23,20 @@ export async function lockProject({
     .where(and(eq(project.id, projectId), isNull(project.deletedAt)))
     .for(access === "write" ? "update" : "share");
   if (!found) throw new Error("Project not found");
+  if (found.organizationId) {
+    const [membership] = await tx
+      .select()
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, found.organizationId),
+          eq(member.userId, userId),
+        ),
+      )
+      .for("share");
+    if (!membership) throw new Error("Project not found");
+    return { ...found, canWrite: true };
+  }
   if (found.ownerId === userId) return { ...found, canWrite: true };
   const [collaborator] = await tx
     .select()

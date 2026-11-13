@@ -24,7 +24,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates fontconfig libgraphite2-3 libharfbuzz0b libicu72 libssl3 \
+    ca-certificates fontconfig libgraphite2-3 libharfbuzz0b libicu72 libssl3 poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=tectonic-build /usr/local/bin/tectonic /usr/local/bin/tectonic
 RUN useradd --create-home --uid 10001 engine
