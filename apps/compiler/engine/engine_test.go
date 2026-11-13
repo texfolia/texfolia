@@ -302,6 +302,11 @@ func TestProjectOwnershipAndCancellation(t *testing.T) {
 			t.Error(err)
 			return nil
 		}
+		defer res.Body.Close()
+		// Reading through EOF waits for the streamed response and handler cleanup.
+		if _, err := io.Copy(io.Discard, res.Body); err != nil {
+			t.Error(err)
+		}
 		return res
 	}
 	finished := make(chan *http.Response, 1)
@@ -329,15 +334,12 @@ func TestProjectOwnershipAndCancellation(t *testing.T) {
 	if prior == nil {
 		t.Fatal("missing response")
 	}
-	_ = prior.Body.Close()
 	assertClean(t, temp)
 	next := send("project-a", "new", "hello")
-	_ = next.Body.Close()
 	if next.StatusCode != 200 {
 		t.Fatalf("replacement: %d", next.StatusCode)
 	}
 	other := send("project-b", "other", "hello")
-	_ = other.Body.Close()
 	if other.StatusCode != 409 {
 		t.Fatalf("engine reused by other project: %d", other.StatusCode)
 	}
@@ -349,7 +351,6 @@ func TestProjectOwnershipAndCancellation(t *testing.T) {
 	}
 	_ = res.Body.Close()
 	late := send("project-a", "early", "hello")
-	_ = late.Body.Close()
 	if late.StatusCode != 409 {
 		t.Fatalf("early cancellation lost: %d", late.StatusCode)
 	}
