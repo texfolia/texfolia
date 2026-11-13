@@ -3,6 +3,8 @@ import { createDb } from "@texfolia/db";
 
 import { collectProjectSources } from "./lib/project-source.server";
 
+export { ProjectCollaboration } from "./lib/collaboration/project-collaboration";
+
 export default {
   fetch(request) {
     return handler.fetch(request);

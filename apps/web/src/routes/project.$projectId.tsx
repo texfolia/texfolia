@@ -44,9 +44,10 @@ export const Route = createFileRoute("/project/$projectId")({
 
 function WorkspacePage() {
   const { project, files } = Route.useLoaderData();
+  const { user } = Route.useRouteContext();
   return (
     <ProjectFilesProvider store={files}>
-      <ProjectWorkspace project={project} />
+      <ProjectWorkspace project={project} userId={user.id} />
     </ProjectFilesProvider>
   );
 }

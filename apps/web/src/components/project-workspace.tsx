@@ -24,6 +24,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import { Editor } from "#/components/editor";
@@ -37,6 +38,7 @@ import { Button } from "#/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
+import { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
@@ -66,9 +68,10 @@ import {
 type FilePanelParams = {
   node: ProjectNode;
   preview: boolean;
-  recoveredAt?: number;
 };
 const noProblems: LatexProblem[] = [];
+const emptySubscribe = () => () => {};
+const noCollaborationStatus = () => undefined;
 
 const PdfViewer = lazy(() => import("#/components/pdf"));
 
@@ -97,6 +100,11 @@ function FileEditor({
       subscription.dispose();
     };
   }, [panelApi]);
+  const collaboration = workspace.collaboration.get(params.node.id);
+  const status = useSyncExternalStore(
+    collaboration?.subscribe ?? emptySubscribe,
+    collaboration?.getStatus ?? noCollaborationStatus,
+  );
   const draft = workspace.drafts.get(params.node.id);
   const path = workspace.paths.get(params.node.id) ?? params.node.name;
   if (params.node.kind === "binary")
@@ -135,33 +143,48 @@ function FileEditor({
         )}
       </div>
     );
+  if (!collaboration || !status?.ready)
+    return (
+      <p role="status" className="p-4 text-sm">
+        {status?.error || "Connecting to collaboration…"}
+      </p>
+    );
   return (
-    <Editor
-      key={params.recoveredAt}
-      readOnly={!workspace.canWrite}
-      onCreateEditor={(view) => {
-        editor.current = view;
-        registerEditor(params.node.id, view);
-        if (panelApi.isActive) view.focus();
-      }}
-      filename={params.node.name}
-      defaultValue={draft?.value ?? ""}
-      savedValue={draft?.savedValue ?? ""}
-      allowOpenFile={false}
-      completion={workspace.completion}
-      problems={workspace.problems.get(path) ?? noProblems}
-      onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
-      jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
-      formatSettings={workspace.formatSettings}
-      preamble={
-        workspace.symbolPreamble && {
-          ...workspace.symbolPreamble,
-          addPackage: workspace.addSymbolPackage,
+    <div className="flex h-full min-h-0 flex-col">
+      {(!status.connected || status.error) && (
+        <p role="status" className="border-b px-3 py-2 text-xs">
+          {status.error || "Offline. Edits will merge when reconnected."}
+        </p>
+      )}
+      <Editor
+        collaboration={collaboration}
+        key={params.node.id}
+        readOnly={!workspace.canWrite || !status.canWrite}
+        onCreateEditor={(view) => {
+          editor.current = view;
+          registerEditor(params.node.id, view);
+          if (panelApi.isActive) view.focus();
+        }}
+        filename={params.node.name}
+        defaultValue={collaboration.text.toString()}
+        savedValue={draft?.savedValue ?? ""}
+        allowOpenFile={false}
+        completion={workspace.completion}
+        problems={workspace.problems.get(path) ?? noProblems}
+        onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
+        jump={
+          workspace.jump?.id === params.node.id ? workspace.jump : undefined
         }
-      }
-      onChange={(value) => workspace.change(params.node.id, value)}
-      onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
-    />
+        formatSettings={workspace.formatSettings}
+        preamble={
+          workspace.symbolPreamble && {
+            ...workspace.symbolPreamble,
+            addPackage: workspace.addSymbolPackage,
+          }
+        }
+        onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
+      />
+    </div>
   );
 }
 
@@ -213,7 +236,13 @@ const components = {
 };
 const tabComponents = { file: FileTab };
 
-export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
+export function ProjectWorkspace({
+  project,
+  userId,
+}: {
+  project: ProjectDetails;
+  userId: string;
+}) {
   const files = useProjectFiles();
   const { id: projectId, name } = project;
   const { data: nodes } = useLiveQuery(files.nodes);
@@ -229,6 +258,9 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const [activeId, setActiveId] = useState<string>();
   const [ready, setReady] = useState(false);
+  const collaboration = useRef(new Map<string, CollaborativeFile>());
+  const [, setCollaborationRevision] = useState(0);
+  const observeChange = useRef<(id: string, value: string) => void>(() => {});
   const versions = useRef({ ...project.sourceVersions });
   const localDrafts = useRef<Record<string, SourceDraft>>({});
   const [recovery, setRecovery] = useState<Record<string, SourceDraft>>({});
@@ -467,6 +499,15 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   async function sourceFiles(): Promise<SourceFiles>;
   async function sourceFiles(mode: "compile"): Promise<CompileSources>;
   async function sourceFiles(mode?: "compile"): Promise<CompileSources> {
+    for (const node of nodes) {
+      if (
+        node.kind === "text" &&
+        !collaboration.current.get(node.id)?.getStatus().ready
+      )
+        throw new Error(
+          "Wait for project files to synchronize before exporting or compiling.",
+        );
+    }
     const saved = mode === "compile";
     const sources: CompileSources = Object.fromEntries(
       nodes.flatMap((node) => {
@@ -501,6 +542,50 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     return sources;
   }
 
+  useEffect(() => {
+    if (!ready) return;
+    const ids = new Set(
+      nodes.filter((node) => node.kind === "text").map((node) => node.id),
+    );
+    let changed = false;
+    for (const id of ids) {
+      if (collaboration.current.has(id)) continue;
+      let initialized = false;
+      collaboration.current.set(
+        id,
+        new CollaborativeFile({
+          projectId,
+          nodeId: id,
+          userId,
+          canWrite: project.canWrite,
+          onChange: (value) => {
+            observeChange.current(id, value);
+            if (!initialized) {
+              initialized = true;
+              setCollaborationRevision((revision) => revision + 1);
+            }
+          },
+        }),
+      );
+      changed = true;
+    }
+    for (const [id, file] of collaboration.current) {
+      if (ids.has(id)) continue;
+      file.destroy();
+      collaboration.current.delete(id);
+      changed = true;
+    }
+    if (changed) setCollaborationRevision((value) => value + 1);
+  }, [ready, nodes, projectId, project.canWrite, userId]);
+
+  useEffect(
+    () => () => {
+      for (const file of collaboration.current.values()) file.destroy();
+      collaboration.current.clear();
+    },
+    [],
+  );
+
   function cacheDrafts() {
     try {
       localStorage.setItem(
@@ -526,40 +611,24 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     setSaving(true);
     setSourceError("");
     try {
-      const pending = [...drafts.current]
-        .filter(
-          ([id, draft]) =>
-            draft.value !== draft.savedValue ||
-            versions.current[id]?.objectKey == null,
-        )
-        .map(([id, draft]) => ({ id, value: draft.value }));
-      for (const { id, value } of pending) {
-        const version = await saveProjectSource({
-          data: {
-            projectId,
-            nodeId: id,
-            expectedObjectKey: versions.current[id]?.objectKey ?? null,
-            content: encodeSource(new TextEncoder().encode(value)),
-          },
-        });
-        versions.current[id] = version;
-        const current = drafts.current.get(id);
-        if (current) {
-          drafts.current.set(id, { value: current.value, savedValue: value });
-          if (current.value === value) delete localDrafts.current[id];
-          else if (localDrafts.current[id])
-            localDrafts.current[id].baseObjectKey = version.objectKey;
-          const node = nodes.find((node) => node.id === id);
-          if (node)
-            api.current
-              ?.getPanel(id)
-              ?.api.setTitle(
-                `${node.name}${current.value !== value ? " ●" : ""}`,
-              );
-          api.current?.getPanel(id)?.api.updateParameters({});
-        }
-        cacheDrafts();
+      for (const node of nodes) {
+        if (node.kind !== "text") continue;
+        const file = collaboration.current.get(node.id);
+        if (!file)
+          throw new Error("Wait for collaboration to connect before saving.");
+        const saved = await file.save();
+        versions.current[node.id] = {
+          objectKey: saved.objectKey,
+          updatedAt: saved.updatedAt,
+        };
+        const value = file.text.toString();
+        drafts.current.set(node.id, { value, savedValue: saved.value });
+        if (value === saved.value) delete localDrafts.current[node.id];
+        api.current
+          ?.getPanel(node.id)
+          ?.api.setTitle(`${node.name}${value !== saved.value ? " ●" : ""}`);
       }
+      cacheDrafts();
       return true;
     } catch (error) {
       setSourceError(
@@ -711,15 +780,15 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
 
   function change(id: string, value: string) {
     if (!project.canWrite) return;
+    const file = collaboration.current.get(id);
+    if (file) file.replace(value);
+  }
+
+  observeChange.current = (id, value) => {
     const previous = drafts.current.get(id) ?? { value: "", savedValue: "" };
     const savedValue = previous.savedValue;
     drafts.current.set(id, { value, savedValue });
-    localDrafts.current[id] = {
-      value,
-      updatedAt: Date.now(),
-      baseObjectKey: versions.current[id]?.objectKey ?? null,
-    };
-    cacheDrafts();
+
     api.current
       ?.getPanel(`markdown:${id}`)
       ?.api.updateParameters({ source: value });
@@ -727,7 +796,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     if (path && previous.value !== value) {
       lastEditAt.current = performance.now();
       setSourceChanged(true);
-      notifySourceEdit();
+      if (project.canWrite) notifySourceEdit();
       update(path, value);
       setCompileProblems((current) => (current.length ? [] : current));
     }
@@ -736,7 +805,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
     const node = nodes.find((node) => node.id === id);
     if (node)
       panel?.api.setTitle(`${node.name}${value !== savedValue ? " ●" : ""}`);
-  }
+  };
 
   function openMarkdownPreview(id: string) {
     const dock = api.current;
@@ -926,6 +995,7 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
   return (
     <WorkspaceProvider
       value={{
+        collaboration: new Map(collaboration.current),
         projectId,
         canWrite: project.canWrite && Object.keys(recovery).length === 0,
         build: buildMetadata,
@@ -1057,14 +1127,18 @@ export function ProjectWorkspace({ project }: { project: ProjectDetails }) {
                 </span>
                 <Button
                   size="sm"
-                  disabled={!project.canWrite}
+                  disabled={
+                    !project.canWrite ||
+                    Object.keys(recovery).some(
+                      (id) => !collaboration.current.get(id)?.getStatus().ready,
+                    )
+                  }
                   onClick={() => {
                     for (const [id, draft] of Object.entries(recovery)) {
                       change(id, draft.value);
-                      api.current
-                        ?.getPanel(id)
-                        ?.api.updateParameters({ recoveredAt: Date.now() });
+                      delete localDrafts.current[id];
                     }
+                    cacheDrafts();
                     setRecovery({});
                   }}
                 >

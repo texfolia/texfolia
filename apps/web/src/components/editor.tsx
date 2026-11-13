@@ -33,6 +33,12 @@ import CodeMirror, {
   type ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  yCollab,
+  ySyncAnnotation,
+  yUndoManagerKeymap,
+} from "y-codemirror.next";
+import * as Y from "yjs";
 
 import {
   PanelAction,
@@ -44,6 +50,7 @@ import {
   type SymbolPreamble,
 } from "#/components/symbol-palette";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+import type { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import {
@@ -58,6 +65,7 @@ import { useSettings } from "#/providers/settings-provider";
 import { useTheme } from "#/providers/theme-provider";
 
 type EditorProps = {
+  collaboration?: CollaborativeFile;
   readOnly?: boolean;
   defaultValue?: string;
   savedValue?: string;
@@ -75,6 +83,7 @@ type EditorProps = {
 };
 
 export function Editor({
+  collaboration,
   readOnly = false,
   defaultValue = "",
   savedValue,
@@ -109,6 +118,15 @@ export function Editor({
     undo: false,
     redo: false,
   });
+  const undoManager = useMemo(
+    () => (collaboration ? new Y.UndoManager(collaboration.text) : undefined),
+    [collaboration],
+  );
+  useEffect(() => () => undoManager?.destroy(), [undoManager]);
+  const runUndo = (view: EditorView) =>
+    undoManager ? undoManager.undo() : undo(view);
+  const runRedo = (view: EditorView) =>
+    undoManager ? undoManager.redo() : redo(view);
   const modified = value !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
   const isMarkdown = /\.(?:md|markdown)$/i.test(name);
@@ -187,6 +205,14 @@ export function Editor({
 
   const extensions = useMemo(
     () => [
+      ...(collaboration
+        ? [
+            yCollab(collaboration.text, collaboration.awareness, {
+              undoManager: readOnly ? false : (undoManager ?? false),
+            }),
+            ...(readOnly ? [] : [Prec.highest(keymap.of(yUndoManagerKeymap))]),
+          ]
+        : []),
       language,
       ...(isMarkdown ? [markdown()] : []),
       EditorView.theme({
@@ -198,7 +224,11 @@ export function Editor({
       }),
       EditorState.tabSize.of(formatSettings.indent),
       EditorState.transactionFilter.of((transaction) =>
-        readOnly && transaction.docChanged ? [] : transaction,
+        readOnly &&
+        transaction.docChanged &&
+        !transaction.annotation(ySyncAnnotation)
+          ? []
+          : transaction,
       ),
       indentUnit.of(" ".repeat(formatSettings.indent)),
       ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
@@ -220,6 +250,8 @@ export function Editor({
       ]),
     ],
     [
+      collaboration,
+      undoManager,
       preferences,
       readOnly,
       formatSettings.indent,
@@ -305,7 +337,7 @@ export function Editor({
             onClick={() => {
               const view = editor.current?.view;
               if (view) {
-                undo(view);
+                runUndo(view);
                 view.focus();
               }
             }}
@@ -318,7 +350,7 @@ export function Editor({
             onClick={() => {
               const view = editor.current?.view;
               if (view) {
-                redo(view);
+                runRedo(view);
                 view.focus();
               }
             }}
@@ -416,6 +448,7 @@ export function Editor({
         </p>
       )}
       <CodeMirror
+        basicSetup={{ history: !collaboration }}
         readOnly={readOnly}
         editable={!readOnly}
         ref={editor}
@@ -427,8 +460,12 @@ export function Editor({
         }}
         onUpdate={({ state }) => {
           const next = {
-            undo: undoDepth(state) > 0,
-            redo: redoDepth(state) > 0,
+            undo: undoManager
+              ? undoManager.undoStack.length > 0
+              : undoDepth(state) > 0,
+            redo: undoManager
+              ? undoManager.redoStack.length > 0
+              : redoDepth(state) > 0,
           };
           setStatus((previous) =>
             previous.undo === next.undo && previous.redo === next.redo

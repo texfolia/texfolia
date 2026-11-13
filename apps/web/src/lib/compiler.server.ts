@@ -1,4 +1,8 @@
-export async function fetchCompiler(path: string, init?: RequestInit) {
+export async function fetchCompiler(
+  path: string,
+  init?: RequestInit,
+  compiler?: Fetcher,
+) {
   const options: RequestInit = {
     ...init,
     redirect: "manual",
@@ -10,8 +14,8 @@ export async function fetchCompiler(path: string, init?: RequestInit) {
         options,
       )
     : await (
-        await import("cloudflare:workers")
-      ).env.COMPILER.fetch(new URL(path, "http://compiler"), options);
+        compiler ?? (await import("cloudflare:workers")).env.COMPILER
+      ).fetch(new URL(path, "http://compiler"), options);
   if (response.status >= 300 && response.status < 400)
     throw new Error("Compiler returned an unexpected redirect");
   return response;

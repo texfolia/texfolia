@@ -9,6 +9,18 @@ export const saveProjectSource = createServerFn({ method: "POST" })
   .validator(saveSourceSchema)
   .handler(async ({ data, context }) => {
     const session = await ensureSession();
+    const node = await context.db.query.projectNode.findFirst({
+      where: {
+        id: data.nodeId,
+        projectId: data.projectId,
+        deletedAt: { isNull: true },
+      },
+    });
+    if (node?.kind === "text")
+      return env.COLLABORATION.getByName(data.projectId).saveSource({
+        data,
+        userId: session.user.id,
+      });
     const server = await import("./project-source.server");
     return server.saveProjectSource({
       db: context.db,

@@ -1,0 +1,579 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { createDb } from "@texfolia/db";
+import { projectCollaborator, projectNode, user } from "@texfolia/db/schema";
+import { eq } from "drizzle-orm";
+import { build } from "esbuild";
+import {
+  convertV4MiniflareOptions,
+  Miniflare,
+  type MessageEvent as RuntimeMessageEvent,
+} from "miniflare";
+import { chromium, type BrowserContext } from "playwright";
+import * as Y from "yjs";
+
+import {
+  serverMessageSchema,
+  type ServerMessage,
+} from "../src/lib/collaboration/protocol";
+import { hashSource } from "../src/lib/latex/source-sync";
+import { decodeSource, encodeSource } from "../src/lib/project-source";
+import { createProject } from "../src/lib/project.server";
+import type { BrowserApi } from "./collaboration/browser";
+
+declare global {
+  interface Window {
+    collaborationTest: BrowserApi;
+  }
+}
+const connectionString = process.env.INTEGRATION_DATABASE_URL;
+assert(
+  connectionString && new URL(connectionString).pathname.includes("test"),
+  "Set INTEGRATION_DATABASE_URL to an isolated Postgres test database",
+);
+const db = createDb(connectionString);
+const directory = await mkdtemp(join(tmpdir(), "texfolia-collaboration-"));
+const workerBuild = await build({
+  entryPoints: [new URL("./collaboration/worker.ts", import.meta.url).pathname],
+  bundle: true,
+  write: false,
+  format: "esm",
+  platform: "node",
+  conditions: ["workerd"],
+  banner: {
+    js: 'import { createRequire } from "node:module"; const require = createRequire("file:///worker.js");',
+  },
+  external: ["cloudflare:workers", "cloudflare:sockets"],
+  define: { "import.meta.env.DEV": "false" },
+});
+const clientBuild = await build({
+  entryPoints: [
+    new URL("./collaboration/browser.ts", import.meta.url).pathname,
+  ],
+  bundle: true,
+  write: false,
+  format: "esm",
+  platform: "browser",
+});
+const script = workerBuild.outputFiles[0]?.text;
+const client = clientBuild.outputFiles[0]?.text;
+assert(script && client);
+const runtimeOptions = {
+  ...convertV4MiniflareOptions({
+    name: "collaboration-test",
+    modules: true,
+    script,
+    compatibilityDate: "2025-09-02",
+    compatibilityFlags: ["nodejs_compat"],
+    durableObjects: {
+      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+    },
+    r2Buckets: ["SOURCES"],
+    hyperdrives: { HYPERDRIVE: connectionString },
+    unsafeInspectDurableObjects: true,
+    serviceBindings: {
+      COMPILER: { name: "collaboration-test", entrypoint: "CompilerFixture" },
+      CLIENT: () =>
+        new Response(client, {
+          headers: { "Content-Type": "text/javascript" },
+        }),
+    },
+  }),
+  resourcePersistencePath: directory,
+};
+let mf = new Miniflare(runtimeOptions);
+const browser = await chromium.launch({ headless: true });
+const contexts: BrowserContext[] = [];
+const userIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+const [ownerId, editorId, viewerId] = userIds;
+assert(ownerId && editorId && viewerId);
+try {
+  for (const id of userIds)
+    await db.insert(user).values({
+      id,
+      name: id,
+      email: `${id}@example.com`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  const created = await createProject({
+    db,
+    ownerId,
+    data: { id: crypto.randomUUID(), name: "Collaboration test" },
+  });
+  const projectId = created.id;
+  const node = await db.query.projectNode.findFirst({
+    where: { projectId, name: "main.tex" },
+  });
+  assert(node);
+  const nodeId = node.id;
+  let bucket = await mf.getR2Bucket("SOURCES");
+  const initialBytes = new TextEncoder().encode("existing source");
+  const initialKey = `projects/${projectId}/sources/${await hashSource(initialBytes)}`;
+  await bucket.put(initialKey, initialBytes);
+  await db
+    .update(projectNode)
+    .set({ objectKey: initialKey, sizeBytes: BigInt(initialBytes.length) })
+    .where(eq(projectNode.id, nodeId));
+  await db.insert(projectCollaborator).values([
+    { projectId, userId: editorId, role: "editor" },
+    { projectId, userId: viewerId, role: "viewer" },
+  ]);
+  const origin = (await mf.ready).origin;
+  async function open(userId: string, viewer = false) {
+    const context = await browser.newContext();
+    contexts.push(context);
+    await context.addCookies([
+      { name: "test-user", value: userId, url: origin },
+    ]);
+    const page = await context.newPage();
+    page.on("console", (message) => {
+      if (message.type() === "error") console.error(message.text());
+    });
+    page.on("websocket", (socket) => {
+      socket.on("framereceived", (event) => {
+        const text = String(event.payload);
+        if (text.includes('"type":"error"')) console.error(text);
+      });
+    });
+    page.on("pageerror", (error) => {
+      throw error;
+    });
+    await page.goto(
+      `${origin}/?projectId=${projectId}&nodeId=${nodeId}&userId=${userId}&viewer=${viewer ? 1 : 0}`,
+    );
+    try {
+      await page.waitForFunction(
+        () => window.collaborationTest?.status().connected,
+      );
+    } catch (error) {
+      console.error(
+        await page.evaluate(() => window.collaborationTest?.status()),
+      );
+      throw error;
+    }
+    return { page, context };
+  }
+  console.log("Checking connect");
+  const a = await open(ownerId);
+  const b = await open(editorId);
+  const viewer = await open(viewerId, true);
+  assert.equal(
+    await a.page.evaluate(() => window.collaborationTest.value()),
+    "existing source",
+  );
+  assert.equal(
+    await b.page.evaluate(() => window.collaborationTest.value()),
+    "existing source",
+  );
+  await a.page.evaluate(() => window.collaborationTest.replace("hello"));
+  await b.page.waitForFunction(
+    () => window.collaborationTest.value() === "hello",
+  );
+  await viewer.page.waitForFunction(
+    () => window.collaborationTest.editorValue() === "hello",
+  );
+  assert.equal(
+    await viewer.page.locator(".cm-content").getAttribute("contenteditable"),
+    "false",
+  );
+  assert.match(
+    await viewer.page.evaluate(() =>
+      window.collaborationTest.maliciousUpdate(),
+    ),
+    /Viewers cannot edit/,
+  );
+  assert.equal(
+    await a.page.evaluate(() => window.collaborationTest.value()),
+    "hello",
+  );
+
+  if (process.env.CHECK_COLLABORATION_LATENCY === "1") {
+    // Date.now() uses the same host clock in these isolated Chromium contexts.
+    // Time the edit dispatch through the receiver's CodeMirror update, excluding
+    // runner polling. This local acceptance gate does not predict deployed latency.
+    const samples: number[] = [];
+    for (let round = 0; round < 5; round++) {
+      for (const [sender, receiver] of [
+        [a, b],
+        [b, a],
+      ]) {
+        assert(sender && receiver);
+        const before = await sender.page.evaluate(() =>
+          window.collaborationTest.value(),
+        );
+        const prefix = `warm-${round}|`;
+        const startedAt = await sender.page.evaluate(
+          (prefix) => window.collaborationTest.insert(0, prefix),
+          prefix,
+        );
+        await receiver.page.waitForFunction(
+          (expected) => window.collaborationTest.editorValue() === expected,
+          prefix + before,
+        );
+        const receivedAt = await receiver.page.evaluate(() =>
+          window.collaborationTest.updatedAt(),
+        );
+        samples.push(receivedAt - startedAt);
+      }
+    }
+    assert(
+      samples.every((sample) => sample >= 0 && sample <= 200),
+      JSON.stringify(samples),
+    );
+    console.log(
+      "Warm local propagation met 200 ms gate",
+      JSON.stringify(samples),
+    );
+    await a.page.evaluate(() => window.collaborationTest.replace("hello"));
+    await b.page.waitForFunction(
+      () => window.collaborationTest.value() === "hello",
+    );
+  }
+
+  console.log("Checking offline convergence");
+  // Both peers edit the same base while disconnected, then merge their updates.
+  await Promise.all([a.context.setOffline(true), b.context.setOffline(true)]);
+  await Promise.all([
+    a.page.waitForFunction(() => !window.collaborationTest.status().connected),
+    b.page.waitForFunction(() => !window.collaborationTest.status().connected),
+  ]);
+  await a.page.evaluate(() => window.collaborationTest.insert(5, " Alice"));
+  await b.page.evaluate(() => window.collaborationTest.insert(5, " Bob"));
+  await Promise.all([a.context.setOffline(false), b.context.setOffline(false)]);
+  await Promise.all([
+    a.page.waitForFunction(
+      () =>
+        window.collaborationTest.status().connected &&
+        window.collaborationTest.value().includes("Bob"),
+    ),
+    b.page.waitForFunction(
+      () =>
+        window.collaborationTest.status().connected &&
+        window.collaborationTest.value().includes("Alice"),
+    ),
+  ]);
+  const merged = await a.page.evaluate(() => window.collaborationTest.value());
+  assert.equal(
+    await b.page.evaluate(() => window.collaborationTest.value()),
+    merged,
+  );
+  assert.match(merged, /Alice/);
+  assert.match(merged, /Bob/);
+  await a.page.evaluate(() => window.collaborationTest.undo());
+  await b.page.waitForFunction(
+    () => !window.collaborationTest.value().includes("Alice"),
+  );
+  assert.match(
+    await b.page.evaluate(() => window.collaborationTest.value()),
+    /Bob/,
+  );
+
+  console.log("Checking cursors and formatting");
+  // Cursor positions follow minimal formatting edits, and names come from the server.
+  await a.page.evaluate(() => window.collaborationTest.replace("alpha beta"));
+  await b.page.waitForFunction(
+    () => window.collaborationTest.value() === "alpha beta",
+  );
+  await b.page.bringToFront();
+  const bClient = await b.page.evaluate(() => {
+    window.collaborationTest.select(6, 10);
+    return window.collaborationTest.clientId();
+  });
+  await a.page.waitForFunction(
+    (id) => window.collaborationTest.cursorIndex(id) === 6,
+    bClient,
+  );
+  console.log("Cursor received; applying minimal diff");
+  await a.page.evaluate(() => window.collaborationTest.format("alpha\n  beta"));
+  await b.page.waitForFunction(
+    () => window.collaborationTest.editorValue() === "alpha\n  beta",
+  );
+  await a.page.waitForFunction(
+    (id) => window.collaborationTest.cursorIndex(id) === 8,
+    bClient,
+  );
+  const presence = await a.page.evaluate(() =>
+    window.collaborationTest.presence(),
+  );
+  assert(presence.some((state) => state.userName === editorId));
+  assert((await a.page.locator(".cm-ySelectionCaret").count()) > 0);
+
+  console.log("Checking hibernation");
+  // Eviction must restore SQLite state and attached awareness without closing sockets.
+  await a.page.evaluate(() => window.collaborationTest.save());
+  await mf.unsafeEvictDurableObject(
+    "collaboration-test",
+    "ProjectCollaboration",
+    { name: projectId, webSockets: "hibernate" },
+  );
+  await a.page.evaluate(() => window.collaborationTest.insert(12, "!"));
+  await b.page.waitForFunction(
+    () => window.collaborationTest.value() === "alpha\n  beta!",
+  );
+  await a.page.evaluate(() => window.collaborationTest.save());
+
+  console.log("Checking interrupted source flush after runtime restart");
+  let storage = await mf.unsafeGetDurableObjectStorage(
+    "collaboration-test",
+    "ProjectCollaboration",
+    { name: projectId },
+  );
+  await storage.exec(
+    "UPDATE documents SET object_key = NULL, dirty = 1 WHERE node_id = ?",
+    nodeId,
+  );
+  await mf.dispose();
+  await a.page.waitForFunction(
+    () => !window.collaborationTest.status().connected,
+  );
+  mf = new Miniflare({ ...runtimeOptions, port: Number(new URL(origin).port) });
+  await mf.ready;
+  bucket = await mf.getR2Bucket("SOURCES");
+  await a.page.waitForFunction(
+    () => window.collaborationTest.status().connected,
+  );
+  await b.page.waitForFunction(
+    () => window.collaborationTest.status().connected,
+  );
+  storage = await mf.unsafeGetDurableObjectStorage(
+    "collaboration-test",
+    "ProjectCollaboration",
+    { name: projectId },
+  );
+  await a.page.evaluate(() => window.collaborationTest.save());
+
+  console.log("Checking offline reload");
+  // Offline Yjs identities survive a browser reload and merge, rather than duplicating source text.
+  await a.context.setOffline(true);
+  await a.page.waitForFunction(
+    () => !window.collaborationTest.status().connected,
+  );
+  await a.page.evaluate(() => window.collaborationTest.insert(13, " offline"));
+  await a.context.setOffline(false);
+  await a.page.reload();
+  await a.page.waitForFunction(
+    () =>
+      window.collaborationTest?.status().connected &&
+      window.collaborationTest.value().endsWith(" offline"),
+  );
+  await b.page.waitForFunction(() =>
+    window.collaborationTest.value().endsWith(" offline"),
+  );
+
+  console.log("Checking compaction and persistence");
+  // Compact a long update journal; the live CRDT identifiers must still merge after compaction.
+  for (let i = 0; i < 70; i++)
+    await a.page.evaluate(() => window.collaborationTest.insert(0, "x"));
+  const expectedText = await a.page.evaluate(() =>
+    window.collaborationTest.value(),
+  );
+  const expectedKey = `projects/${projectId}/sources/${await hashSource(new TextEncoder().encode(expectedText))}`;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const row = await db.query.projectNode.findFirst({ where: { id: nodeId } });
+    if (row?.objectKey === expectedKey) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(
+    (await db.query.projectNode.findFirst({ where: { id: nodeId } }))
+      ?.objectKey,
+    expectedKey,
+    "Alarm must persist merged text without Save",
+  );
+  const saved = await a.page.evaluate(() => window.collaborationTest.save());
+
+  const count = await storage.exec<{ count: number }>(
+    "SELECT count(*) AS count FROM updates",
+  );
+  assert((count[0]?.count ?? 1000) < 64);
+  assert.equal(await (await bucket.get(saved.objectKey))?.text(), saved.value);
+  const row = await db.query.projectNode.findFirst({ where: { id: nodeId } });
+  assert.equal(row?.objectKey, saved.objectKey);
+  assert.equal(
+    row?.sizeBytes,
+    BigInt(new TextEncoder().encode(saved.value).length),
+  );
+  const fresh = await open(ownerId);
+  assert.equal(
+    await fresh.page.evaluate(() => window.collaborationTest.value()),
+    saved.value,
+  );
+
+  console.log("Checking multi-chunk document persistence");
+  const largeId = crypto.randomUUID();
+  const largeText = "L".repeat(9 * 1024 * 1024);
+  const largeBytes = new TextEncoder().encode(largeText);
+  const largeKey = `projects/${projectId}/sources/${await hashSource(largeBytes)}`;
+  await bucket.put(largeKey, largeBytes);
+  await db.insert(projectNode).values({
+    id: largeId,
+    projectId,
+    parentId: node.parentId,
+    kind: "text",
+    name: "large.txt",
+    objectKey: largeKey,
+    sizeBytes: BigInt(largeBytes.length),
+  });
+  const largeResponse = await mf.dispatchFetch(
+    `${origin}/api/collaboration/${projectId}/${largeId}?clientId=12345`,
+    { headers: { Upgrade: "websocket", Cookie: `test-user=${ownerId}` } },
+  );
+  let largeSocket = largeResponse.webSocket;
+  assert(largeSocket);
+  largeSocket.accept();
+  function largeMessage(type: ServerMessage["type"]) {
+    return new Promise<ServerMessage>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("Large document timed out")),
+        20_000,
+      );
+      const listener = (event: RuntimeMessageEvent) => {
+        try {
+          const message = serverMessageSchema.parse(
+            JSON.parse(String(event.data)),
+          );
+          if (message.type === "error") throw new Error(message.message);
+          if (message.type === type) {
+            clearTimeout(timer);
+            largeSocket?.removeEventListener("message", listener);
+            resolve(message);
+          }
+        } catch (error) {
+          clearTimeout(timer);
+          largeSocket?.removeEventListener("message", listener);
+          reject(error);
+        }
+      };
+      largeSocket?.addEventListener("message", listener);
+    });
+  }
+  const largeDoc = new Y.Doc();
+  const synced = largeMessage("sync");
+  largeSocket.send(
+    JSON.stringify({
+      type: "sync",
+      vector: encodeSource(Y.encodeStateVector(largeDoc)),
+    }),
+  );
+  const initialLarge = await synced;
+  assert(initialLarge.type === "sync");
+  Y.applyUpdate(largeDoc, decodeSource(initialLarge.update));
+  assert.equal(largeDoc.getText("source").toString(), largeText);
+  largeDoc.getText("source").insert(0, "large ");
+  const largeSaved = largeMessage("saved");
+  largeSocket.send(
+    JSON.stringify({
+      type: "save",
+      id: crypto.randomUUID(),
+      update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
+    }),
+  );
+  const storedLarge = await largeSaved;
+  assert(storedLarge.type === "saved");
+  assert.equal(storedLarge.value, "large " + largeText);
+  assert.equal(
+    await (await bucket.get(storedLarge.objectKey))?.text(),
+    storedLarge.value,
+  );
+  const chunks = await storage.exec<{ count: number; size: number }>(
+    "SELECT count(*) AS count, max(length(data)) AS size FROM snapshot_chunks WHERE node_id = ?",
+    largeId,
+  );
+  assert(
+    (chunks[0]?.count ?? 0) >= 8 &&
+      (chunks[0]?.size ?? Infinity) <= 1024 * 1024,
+  );
+  console.log("Checking recovery after a project quota rejection");
+  const assetBytes = new TextEncoder().encode("B".repeat(10 * 1024 * 1024));
+  const assetKey = `projects/${projectId}/sources/${await hashSource(assetBytes)}`;
+  await bucket.put(assetKey, assetBytes);
+  for (let index = 0; index < 4; index++)
+    await db.insert(projectNode).values({
+      id: crypto.randomUUID(),
+      projectId,
+      parentId: node.parentId,
+      kind: "binary",
+      name: `asset-${index}.bin`,
+      objectKey: assetKey,
+      sizeBytes: BigInt(assetBytes.length),
+    });
+  const largeSource = largeDoc.getText("source");
+  largeSource.insert(
+    largeSource.length,
+    "q".repeat(10 * 1024 * 1024 - largeSource.length),
+  );
+  const rejectedSave = largeMessage("saved");
+  largeSocket.send(
+    JSON.stringify({
+      type: "save",
+      id: crypto.randomUUID(),
+      update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
+    }),
+  );
+  await assert.rejects(rejectedSave, /Project exceeds 50 MiB/);
+  largeSocket.close();
+  // The failed flush discards the memory cache. Restore the pending SQLite
+  // document and shorten it without first having to persist the oversized text.
+  const resumed = await mf.dispatchFetch(
+    `${origin}/api/collaboration/${projectId}/${largeId}?clientId=12345`,
+    { headers: { Upgrade: "websocket", Cookie: `test-user=${ownerId}` } },
+  );
+  assert.equal(resumed.status, 101);
+  largeSocket = resumed.webSocket;
+  assert(largeSocket);
+  largeSocket.accept();
+  const restored = largeMessage("sync");
+  largeSocket.send(
+    JSON.stringify({
+      type: "sync",
+      vector: encodeSource(Y.encodeStateVector(largeDoc)),
+    }),
+  );
+  assert.equal((await restored).type, "sync");
+  largeSource.delete(9 * 1024 * 1024, 1024 * 1024);
+  const repaired = largeMessage("saved");
+  largeSocket.send(
+    JSON.stringify({
+      type: "save",
+      id: crypto.randomUUID(),
+      update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
+    }),
+  );
+  const repairedSource = await repaired;
+  assert(
+    repairedSource.type === "saved" &&
+      repairedSource.value.length === 9 * 1024 * 1024,
+  );
+  largeSocket.close();
+  largeDoc.destroy();
+
+  console.log("Checking permission change");
+  // A connected editor downgraded to viewer cannot keep writing through its socket.
+  await db
+    .update(projectCollaborator)
+    .set({ role: "viewer" })
+    .where(eq(projectCollaborator.userId, editorId));
+  await b.page.evaluate(() => window.collaborationTest.insert(0, "DENIED"));
+  await b.page.waitForFunction(() =>
+    window.collaborationTest.status().error.includes("Viewers cannot edit"),
+  );
+  await fresh.page.evaluate(() => window.collaborationTest.save());
+  assert(
+    !(await fresh.page.evaluate(() =>
+      window.collaborationTest.value().includes("DENIED"),
+    )),
+  );
+  console.log(
+    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, and permission changes",
+  );
+} finally {
+  await Promise.all(contexts.map((context) => context.close()));
+  await browser.close();
+  await mf.dispose();
+  for (const id of userIds) await db.delete(user).where(eq(user.id, id));
+  await db.$client.end();
+  await rm(directory, { recursive: true, force: true });
+}

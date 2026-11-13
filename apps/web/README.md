@@ -21,13 +21,15 @@ bun --bun run build
 
 Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed
 by `project_node.object_key` and `size_bytes`. Keys are
-`projects/{projectId}/sources/{sha256}`. Save and Cmd/Ctrl+S persist to the server;
-**Save & compile** persists first and submits the acknowledged source snapshot.
+`projects/{projectId}/sources/{sha256}`. Collaborative text edits persist automatically.
+Save and Cmd/Ctrl+S wait for merged text to reach R2. **Save & compile** persists
+first and submits the acknowledged source snapshot.
 Uploads use the same storage and quota checks. Text uploads (including `.bib`)
 remain editable; binary sources can be downloaded, exported, and compiled.
 
 Owners and editor collaborators can write. Viewer collaborators can read and
-export. Writes compare the previous object key to reject stale overwrites.
+export. Binary writes compare the previous object key to reject stale overwrites.
+Text edits merge through the project's collaboration object.
 Limits are 10 MiB per file and 50 MiB per active project, using actual UTF-8 or
 binary byte counts. Compilation has its separate 10 MiB JSON payload limit,
 including base64 overhead for binary assets.
@@ -48,13 +50,53 @@ mode so GC cannot remove a version while it is being read.
 
 On open, sources come from the server. Legacy local-storage drafts are uploaded
 automatically only for text nodes without a server object. Other differing drafts
-are offered for recovery, download, or discard; they never silently replace the
-server copy. The timestamped version-1 cache retains unsaved drafts and the
-object key they were based on. Conflicting drafts remain recoverable even if
-device clocks disagree. Local storage is optional for a successful server save.
+are offered for recovery, download, or discard. Recovery applies a diff to the
+shared document. New collaborative edits use the Yjs IndexedDB cache described
+below; the legacy text-draft cache is only used for migration.
 Before clearing storage in an old browser, open each legacy project there once
-and let migration finish. Drafts in browsers that have not reopened a project
-still exist only in those browsers.
+and let migration finish.
+
+### Real-time collaboration
+
+The web Worker exports `ProjectCollaboration`, with one SQLite-backed Durable
+Object named by `projectId`. Each text file has a Yjs document and a WebSocket.
+The workspace keeps those documents connected while file tabs open and close,
+so analysis, export, and compile inputs include changes to closed files.
+Binary files retain their existing source-storage path.
+
+`y-codemirror.next` binds the editor, remote selections, and user cursors to Yjs.
+Undo affects the local user's edits. Formatting keeps the existing minimal-diff
+path. The WebSocket route authenticates the session and checks the request
+origin. The object checks current project permissions on every message. Viewer
+clients receive changes and publish presence; the server rejects their document
+updates. Presence names and colors come from the authenticated session.
+
+The object journals accepted Yjs updates in SQLite before broadcasting. At 64
+updates or 256 KiB of journal data per file, it replaces the snapshot and deletes
+the journal. Snapshots retain the CRDT identities needed by offline clients.
+Encoded Yjs state is capped at 20 MiB, including CRDT metadata; text retains its
+10 MiB source limit. Snapshots and updates use 1 MiB SQLite chunks to stay below
+the per-row storage limit.
+Compaction does not reset the document or discard offline merge history.
+
+An alarm writes merged text to R2 after two seconds, through the same project
+lock, quotas, and content-addressed keys as other sources. Failed writes remain
+dirty in SQLite and retry. Save waits for this write, and compile uses the
+acknowledged merged text. The existing ProjectCoordinator stays in the compiler
+Worker and receives source-change notifications through its existing endpoint.
+
+WebSockets use the hibernation API. Attachments retain file identity and presence
+across eviction. Automatic ping/pong responses do not wake the object. On wake,
+the object restores each document from its snapshot and journal. It reconciles
+any interrupted source commit before accepting further edits. Pending writes
+remain editable if saving failed, including when the project exceeded its quota.
+
+Editors cache Yjs updates in IndexedDB, scoped by user, project, and file. After
+the first synchronization, editing can continue offline. Reconnect exchanges
+state vectors and merges missing updates in both directions. Reloading the page
+also restores cached updates. The first open of an uncached file needs a server
+connection. Keep the page open until connected if the browser cannot use
+IndexedDB. Viewer clients do not load writable caches.
 
 ### Local development and rollout
 
@@ -81,6 +123,25 @@ stale versions, rollback, deduplication, garbage collection, recursive deletion,
 and concurrent aggregate quotas. The existing compiler invalidation calls are
 best-effort and log failures when the compiler Worker is unavailable in this
 standalone check. CI runs this check after applying the database schema.
+
+Run the collaboration integration suite against the same isolated test database:
+
+```sh
+bun run --cwd apps/web playwright install chromium
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:collaboration
+```
+
+The suite runs the production collaboration object in workerd, with local R2,
+SQLite, and real Postgres. Isolated Chromium contexts exercise the production
+client and CodeMirror binding. It covers concurrent and offline edits, reconnect
+and reload recovery, read-only viewers, permission changes, named cursors,
+formatting, local undo, hibernation, snapshot compaction, and persisted sources.
+Its test-only entry point supplies identities from test cookies and stubs compiler
+notifications. The production route continues to use authenticated sessions.
+CI installs Chromium and runs this suite with the database checks. Set
+`CHECK_COLLABORATION_LATENCY=1` to include a warm local propagation check against
+the 200 ms target. This check times edit dispatch through the receiving
+CodeMirror update; it does not measure deployed latency.
 
 ## Editor libraries
 

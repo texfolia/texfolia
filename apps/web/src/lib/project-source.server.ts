@@ -56,13 +56,20 @@ export async function putSource({
   return { objectKey, sizeBytes };
 }
 
-export async function invalidateSourceBuild(projectId: string) {
+export async function invalidateSourceBuild(
+  projectId: string,
+  compiler?: Fetcher,
+) {
   try {
-    const response = await fetchCompiler(`/projects/${projectId}/changed`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ editorId: crypto.randomUUID(), sequence: 0 }),
-    });
+    const response = await fetchCompiler(
+      `/projects/${projectId}/changed`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ editorId: crypto.randomUUID(), sequence: 0 }),
+      },
+      compiler,
+    );
     if (!response.ok)
       throw new Error(`Build invalidation returned ${response.status}`);
   } catch (error) {
