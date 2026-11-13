@@ -2,12 +2,14 @@ import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
 import type { BuildSnapshot } from "#/lib/build";
+import type { CollaborativeFile } from "#/lib/collaboration/file";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import type { latexCompletion } from "#/lib/latex/completion";
 import type { FormatSettings } from "#/lib/latex/format";
 
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {
+  collaboration: ReadonlyMap<string, CollaborativeFile>;
   projectId: string;
   canWrite: boolean;
   build: BuildSnapshot | null;

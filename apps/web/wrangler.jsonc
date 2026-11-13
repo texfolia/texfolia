@@ -5,6 +5,17 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/worker.ts",
   "r2_buckets": [{ "binding": "SOURCES", "bucket_name": "texfolia-sources" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1-collaboration",
+      "new_sqlite_classes": ["ProjectCollaboration"],
+    },
+  ],
   "triggers": { "crons": ["17 * * * *"] },
   "services": [
     {
@@ -38,6 +49,11 @@
       "r2_buckets": [
         { "binding": "SOURCES", "bucket_name": "texfolia-sources" },
       ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
+        ],
+      },
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "<production hyperdrive id>" },
       ],
@@ -53,6 +69,11 @@
       "r2_buckets": [
         { "binding": "SOURCES", "bucket_name": "texfolia-sources-staging" },
       ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
+        ],
+      },
       "hyperdrive": [
         { "binding": "HYPERDRIVE", "id": "<staging hyperdrive id>" },
       ],
