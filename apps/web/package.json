@@ -21,6 +21,7 @@
     "test": "bun test",
     "test:collaboration": "bun run test/collaboration.ts",
     "test:production-assets": "bun run test/production-assets.ts",
+    "test:workspace-upload": "bun run test/workspace-upload.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -34,6 +34,7 @@ export const Route = createFileRoute("/project/$projectId")({
     const files = createProjectFilesStore({
       initial: project.nodes,
       projectId: project.id,
+      initialSourceVersions: project.sourceVersions,
     });
     await files.nodes.preload();
     return { project, files };

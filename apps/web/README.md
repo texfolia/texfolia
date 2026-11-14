@@ -226,6 +226,21 @@ and concurrent aggregate quotas. The existing compiler invalidation calls are
 best-effort and log failures when the compiler Worker is unavailable in this
 standalone check. CI runs this check after applying the database schema.
 
+To check uploads in the rendered workspace, start a local Tectonic engine and run:
+
+```sh
+bun run --cwd apps/web playwright install chromium
+ENGINE_URL=http://127.0.0.1:8081 bun run --cwd apps/web test:workspace-upload
+```
+
+This separate browser check mounts the production workspace, uploads a PNG,
+compiles it with Tectonic, and renders the PDF with PDF.js without navigation or
+reload. It also checks uploads that have never been opened, rejected upload and
+deletion rollback, compile retries, text initialization, and hash-only binary
+transport. Authenticated RPCs, source storage, collaboration responses, and build
+events use an in-memory network fixture. This check needs no database or R2 and
+runs separately from `bun test` and CI.
+
 Run the collaboration integration suite against the same isolated test database:
 
 ```sh

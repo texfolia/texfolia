@@ -261,7 +261,7 @@ export function ProjectWorkspace({
   const collaboration = useRef(new Map<string, CollaborativeFile>());
   const [, setCollaborationRevision] = useState(0);
   const observeChange = useRef<(id: string, value: string) => void>(() => {});
-  const versions = useRef({ ...project.sourceVersions });
+  const versions = files.sourceVersions;
   const localDrafts = useRef<Record<string, SourceDraft>>({});
   const [recovery, setRecovery] = useState<Record<string, SourceDraft>>({});
   const [sourceError, setSourceError] = useState("");
@@ -528,7 +528,7 @@ export function ProjectWorkspace({
       const path = paths.get(node.id);
       if (node.kind !== "binary" || !path) continue;
       if (mode === "compile") {
-        const hash = versions.current[node.id]?.objectKey?.split("/").at(-1);
+        const hash = versions[node.id]?.objectKey?.split("/").at(-1);
         if (!hash) throw new Error(`Save ${path} before compiling`);
         sources[path] = { hash };
       } else {
@@ -617,7 +617,7 @@ export function ProjectWorkspace({
         if (!file)
           throw new Error("Wait for collaboration to connect before saving.");
         const saved = await file.save();
-        versions.current[node.id] = {
+        versions[node.id] = {
           objectKey: saved.objectKey,
           updatedAt: saved.updatedAt,
         };
@@ -832,21 +832,20 @@ export function ProjectWorkspace({
   }
 
   function openFile(node: ProjectNode, permanent: boolean) {
-    const created = files.createdSources.get(node.id);
-    if (created) {
-      versions.current[node.id] = created.version;
+    const created = files.createdTextSources.get(node.id);
+    if (created !== undefined) {
       drafts.current.set(node.id, {
-        value: created.content,
-        savedValue: created.content,
+        value: created,
+        savedValue: created,
       });
-      files.createdSources.delete(node.id);
+      files.createdTextSources.delete(node.id);
       const path =
         paths.get(node.id) ??
         projectPaths([
           ...nodes.filter((existing) => existing.id !== node.id),
           node,
         ]).get(node.id);
-      if (path) update(path, created.content);
+      if (path) update(path, created);
     }
     const dock = api.current;
     if (!dock) return;
@@ -939,7 +938,7 @@ export function ProjectWorkspace({
               content: encodeSource(new TextEncoder().encode(draft.value)),
             },
           });
-          versions.current[id] = version;
+          versions[id] = version;
           drafts.current.set(id, {
             value: draft.value,
             savedValue: draft.value,
