@@ -5,7 +5,7 @@ import { createProjectNode } from "#/lib/project-node.functions";
 import { createNodeSchema } from "#/lib/project-node.schema";
 import { decodeSource } from "#/lib/project-source";
 import { deleteProjectNode } from "#/lib/project-source.functions";
-import type { ProjectNode } from "#/lib/project.functions";
+import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
 
 type NewNode = z.input<typeof createNodeSchema>;
@@ -13,30 +13,28 @@ type NewNode = z.input<typeof createNodeSchema>;
 export function createProjectFilesStore({
   initial,
   projectId,
+  initialSourceVersions,
 }: {
   initial: ProjectNode[];
   projectId: string;
+  initialSourceVersions: ProjectDetails["sourceVersions"];
 }) {
-  const createdSources = new Map<
-    string,
-    {
-      version: { objectKey: string | null; updatedAt: number };
-      content: string;
-    }
-  >();
+  const sourceVersions = { ...initialSourceVersions };
+  const createdTextSources = new Map<string, string>();
   const nodes = createRpcCollection<ProjectNode>({
     initial,
     insert: async (row) => {
       const input = createNodeSchema.parse(row);
       const created = await createProjectNode({ data: input });
+      if (created.kind !== "folder")
+        sourceVersions[created.id] = created.sourceVersion;
       if (input.kind === "text")
-        createdSources.set(created.id, {
-          version: created.sourceVersion,
-          content:
-            input.content === undefined
-              ? ""
-              : new TextDecoder().decode(decodeSource(input.content)),
-        });
+        createdTextSources.set(
+          created.id,
+          input.content === undefined
+            ? ""
+            : new TextDecoder().decode(decodeSource(input.content)),
+        );
       return created;
     },
     remove: (row) => deleteProjectNode({ data: { projectId, nodeId: row.id } }),
@@ -44,7 +42,8 @@ export function createProjectFilesStore({
 
   return {
     nodes,
-    createdSources,
+    sourceVersions,
+    createdTextSources,
     async create(
       input: Pick<NewNode, "parentId" | "name" | "kind" | "content">,
     ) {
