@@ -6,12 +6,8 @@ export async function sendEmail(options: {
   html: string;
   text: string;
 }) {
-  try {
-    await env.EMAIL.send({
-      from: "noreply@texfolia.com",
-      ...options,
-    });
-  } catch (e: any) {
-    console.error("Failed to send email:", e.code, e.message);
-  }
+  await env.EMAIL.send({
+    from: "noreply@texfolia.com",
+    ...options,
+  });
 }
