@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { formatChanges } from "../latex/format";
 import { hashSource } from "../latex/source-sync";
+import { liveProjectAccessIntervalMs } from "../live-project.server";
 import {
   decodeSource,
   encodeSource,
@@ -74,9 +75,10 @@ export class ProjectCollaboration extends DurableObject<Env> {
     );
     ctx.blockConcurrencyWhile(async () => {
       if (
-        this.ctx.storage.sql
-          .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
-          .toArray().length &&
+        (this.ctx.getWebSockets().length ||
+          this.ctx.storage.sql
+            .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
+            .toArray().length) &&
         (await this.ctx.storage.getAlarm()) === null
       )
         await this.ctx.storage.setAlarm(Date.now() + 2000);
@@ -201,17 +203,38 @@ export class ProjectCollaboration extends DurableObject<Env> {
     };
   }
 
-  private send(ws: WebSocket, message: ServerMessage) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+  private async checkRecipient(ws: WebSocket, deliver?: () => void) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    try {
+      const info = attachmentSchema.parse(ws.deserializeAttachment());
+      await this.withDb((db) =>
+        collaborationAccess(
+          db,
+          info.projectId,
+          info.nodeId,
+          info.userId,
+          () => {
+            if (ws.readyState === WebSocket.OPEN) deliver?.();
+          },
+        ),
+      );
+    } catch {
+      // Failure to verify access must never leave a recipient subscribed.
+      ws.close(1008, "Project access could not be verified");
+    }
   }
 
-  private broadcast(
+  private async send(ws: WebSocket, message: ServerMessage) {
+    await this.checkRecipient(ws, () => ws.send(JSON.stringify(message)));
+  }
+
+  private async broadcast(
     nodeId: string,
     message: ServerMessage,
     except?: WebSocket,
   ) {
     for (const peer of this.ctx.getWebSockets(nodeId))
-      if (peer !== except) this.send(peer, message);
+      if (peer !== except) await this.send(peer, message);
   }
 
   override async fetch(request: Request) {
@@ -228,6 +251,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
       const pair = new WebSocketPair();
       pair[1].serializeAttachment(info);
       this.ctx.acceptWebSocket(pair[1], [info.nodeId]);
+      const alarm = await this.ctx.storage.getAlarm();
+      if (alarm === null || alarm > Date.now() + liveProjectAccessIntervalMs)
+        await this.ctx.storage.setAlarm(
+          Date.now() + liveProjectAccessIntervalMs,
+        );
       return new Response(null, { status: 101, webSocket: pair[0] });
     });
   }
@@ -282,7 +310,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
     }
     if ((await this.ctx.storage.getAlarm()) === null)
       await this.ctx.storage.setAlarm(Date.now() + 2000);
-    this.broadcast(info.nodeId, {
+    await this.broadcast(info.nodeId, {
       type: "update",
       update: encodeSource(bytes),
     });
@@ -293,6 +321,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
     message: string | ArrayBuffer,
   ) {
     return this.serial(async () => {
+      if (ws.readyState !== WebSocket.OPEN) return;
       let requestId: string | undefined;
       try {
         if (
@@ -309,7 +338,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         const doc = await this.document(info);
         switch (data.type) {
           case "sync":
-            this.send(ws, {
+            await this.send(ws, {
               type: "sync",
               update: encodeSource(
                 Y.encodeStateAsUpdate(doc, decodeSource(data.vector)),
@@ -323,7 +352,10 @@ export class ProjectCollaboration extends DurableObject<Env> {
                 peer.deserializeAttachment(),
               ).awareness;
               if (peer !== ws && state && Date.now() - state.at < 30_000)
-                this.send(ws, { type: "awareness", update: state.update });
+                await this.send(ws, {
+                  type: "awareness",
+                  update: state.update,
+                });
             }
             break;
           case "update":
@@ -334,7 +366,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
             if (data.type === "save") {
               const version = await this.flush(info.nodeId);
               if (!version) throw new Error("File not found");
-              this.send(ws, {
+              await this.send(ws, {
                 type: "saved",
                 id: data.id,
                 value: doc.getText("source").toString(),
@@ -356,7 +388,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
               at: Date.now(),
             };
             ws.serializeAttachment(info);
-            this.broadcast(
+            await this.broadcast(
               info.nodeId,
               { type: "awareness", update: info.awareness.update },
               ws,
@@ -365,7 +397,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
           }
         }
       } catch (error) {
-        this.send(ws, {
+        await this.send(ws, {
           type: "error",
           message:
             error instanceof Error ? error.message : "Collaboration failed",
@@ -429,6 +461,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
 
   override async alarm() {
     return this.serial(async () => {
+      for (const ws of this.ctx.getWebSockets()) await this.checkRecipient(ws);
       for (const row of this.ctx.storage.sql
         .exec<DocumentRow>("SELECT * FROM documents WHERE dirty = 1")
         .toArray()) {
@@ -440,7 +473,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
             nodeId: row.node_id,
             error,
           });
-          this.broadcast(row.node_id, {
+          await this.broadcast(row.node_id, {
             type: "error",
             message:
               "Edits are retained in collaboration, but source saving failed. " +
@@ -449,11 +482,16 @@ export class ProjectCollaboration extends DurableObject<Env> {
         }
       }
       if (
+        this.ctx
+          .getWebSockets()
+          .some((ws) => ws.readyState === WebSocket.OPEN) ||
         this.ctx.storage.sql
           .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
           .toArray().length
       )
-        await this.ctx.storage.setAlarm(Date.now() + 5000);
+        await this.ctx.storage.setAlarm(
+          Date.now() + liveProjectAccessIntervalMs,
+        );
     });
   }
 
@@ -504,18 +542,20 @@ export class ProjectCollaboration extends DurableObject<Env> {
   }
 
   override async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    const info = attachmentSchema.parse(ws.deserializeAttachment());
-    const update = awarenessFrame(
-      info.clientId,
-      (info.awareness?.clock ?? 0) + 1,
-      null,
-    );
-    this.broadcast(
-      info.nodeId,
-      { type: "awareness", update: encodeSource(update) },
-      ws,
-    );
-    ws.close(code, reason);
+    return this.serial(async () => {
+      const info = attachmentSchema.parse(ws.deserializeAttachment());
+      const update = awarenessFrame(
+        info.clientId,
+        (info.awareness?.clock ?? 0) + 1,
+        null,
+      );
+      await this.broadcast(
+        info.nodeId,
+        { type: "awareness", update: encodeSource(update) },
+        ws,
+      );
+      ws.close(code, reason);
+    });
   }
 
   override async webSocketError(ws: WebSocket) {
