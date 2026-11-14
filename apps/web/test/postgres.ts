@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 
 import { createDb } from "@texfolia/db";
 import {
+  member,
+  organization,
+  project,
   projectCollaborator,
   projectNodeText,
   user,
 } from "@texfolia/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { createProjectNode } from "../src/lib/project-node.server";
 import {
@@ -27,6 +30,26 @@ assert(
 const db = createDb(connectionString);
 const ownerId = crypto.randomUUID();
 const teammateId = crypto.randomUUID();
+const organizationId = crypto.randomUUID();
+
+async function assertInaccessible({
+  userId,
+  projectId,
+}: {
+  userId: string;
+  projectId: string;
+}) {
+  assert(
+    !(await getProjects({ db, ownerId: userId })).some(
+      (item) => item.id === projectId,
+    ),
+  );
+  await assert.rejects(
+    getProject({ db, ownerId: userId, projectId }),
+    /Project not found/,
+  );
+}
+
 try {
   await db.insert(user).values({
     id: ownerId,
@@ -66,10 +89,26 @@ try {
     projects.find((item) => item.id === created.id)?.collaborators[0]?.user?.id,
     teammateId,
   );
-  assert.equal(
-    (await getProject({ db, ownerId: teammateId, projectId: created.id })).id,
-    created.id,
-  );
+  for (const role of ["viewer", "editor"] as const) {
+    await db
+      .update(projectCollaborator)
+      .set({ role })
+      .where(eq(projectCollaborator.projectId, created.id));
+    const shared = await getProject({
+      db,
+      ownerId: teammateId,
+      projectId: created.id,
+    });
+    assert.equal(shared.id, created.id);
+    assert.equal(shared.canWrite, role === "editor");
+    const listed = (await getProjects({ db, ownerId: teammateId })).filter(
+      (item) => item.id === created.id,
+    );
+    assert.equal(listed.length, 1, `${role} can discover the shared project`);
+    assert.equal(listed[0]?.ownerId, ownerId);
+    assert.equal(listed[0]?.organizationId, null);
+    assert.equal(listed[0]?.collaborators[0]?.user?.id, teammateId);
+  }
   await assert.rejects(
     getProject({ db, ownerId: crypto.randomUUID(), projectId: created.id }),
     /Project not found/,
@@ -126,10 +165,109 @@ try {
     1,
   );
 
+  await db.insert(projectCollaborator).values({
+    projectId: created.id,
+    userId: ownerId,
+    role: "viewer",
+  });
+  assert.equal(
+    (await getProjects({ db, ownerId })).filter(
+      (item) => item.id === created.id,
+    ).length,
+    1,
+    "Ownership and collaboration return the project only once",
+  );
+  assert.equal(
+    (await getProject({ db, ownerId, projectId: created.id })).canWrite,
+    true,
+  );
+
+  const unshared = await createProject({
+    db,
+    ownerId: teammateId,
+    data: { id: crypto.randomUUID(), name: "Unshared personal project" },
+  });
+  await assertInaccessible({ userId: ownerId, projectId: unshared.id });
+
+  await db
+    .delete(projectCollaborator)
+    .where(
+      and(
+        eq(projectCollaborator.projectId, created.id),
+        eq(projectCollaborator.userId, teammateId),
+      ),
+    );
+  await assertInaccessible({ userId: teammateId, projectId: created.id });
+
+  await db.insert(organization).values({
+    id: organizationId,
+    name: "Project listing test",
+    slug: organizationId,
+    createdAt: new Date(),
+  });
+  const organizationProjectId = crypto.randomUUID();
+  await db.insert(project).values({
+    id: organizationProjectId,
+    organizationId,
+    name: "Organization project",
+  });
+  await db.insert(projectCollaborator).values({
+    projectId: organizationProjectId,
+    userId: teammateId,
+    role: "editor",
+  });
+  await assertInaccessible({
+    userId: teammateId,
+    projectId: organizationProjectId,
+  });
+
+  const membershipId = crypto.randomUUID();
+  await db.insert(member).values({
+    id: membershipId,
+    organizationId,
+    userId: teammateId,
+    role: "member",
+    createdAt: new Date(),
+  });
+  const organizationProjects = (
+    await getProjects({ db, ownerId: teammateId })
+  ).filter((item) => item.id === organizationProjectId);
+  assert.equal(organizationProjects.length, 1);
+  assert.equal(organizationProjects[0]?.ownerId, null);
+  assert.equal(organizationProjects[0]?.organizationId, organizationId);
+  assert.equal(
+    (
+      await getProject({
+        db,
+        ownerId: teammateId,
+        projectId: organizationProjectId,
+      })
+    ).canWrite,
+    true,
+  );
+  await db.delete(member).where(eq(member.id, membershipId));
+  await assertInaccessible({
+    userId: teammateId,
+    projectId: organizationProjectId,
+  });
+
+  await db.insert(projectCollaborator).values({
+    projectId: created.id,
+    userId: teammateId,
+    role: "editor",
+  });
+  await db
+    .update(project)
+    .set({ deletedAt: new Date() })
+    .where(eq(project.id, created.id));
+  for (const userId of [ownerId, teammateId])
+    await assertInaccessible({ userId, projectId: created.id });
+
   console.log(
-    "Postgres integration passed: projects, collaborator relations, binary text state, transaction rollback, and ownership checks",
+    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, binary text state, and transaction rollback",
   );
 } finally {
+  await db.delete(organization).where(eq(organization.id, organizationId));
   await db.delete(user).where(eq(user.id, ownerId));
   await db.delete(user).where(eq(user.id, teammateId));
   await db.$client.end();

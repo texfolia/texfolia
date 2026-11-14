@@ -1,5 +1,10 @@
 import type { Db } from "@texfolia/db";
-import { member, project, projectNode } from "@texfolia/db/schema";
+import {
+  member,
+  project,
+  projectCollaborator,
+  projectNode,
+} from "@texfolia/db/schema";
 import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
@@ -73,7 +78,19 @@ export async function getProjects({ db, ownerId }: ProjectOwner) {
       and(
         isNull(project.deletedAt),
         or(
-          and(eq(project.ownerId, ownerId), isNull(project.organizationId)),
+          and(
+            isNull(project.organizationId),
+            or(
+              eq(project.ownerId, ownerId),
+              inArray(
+                project.id,
+                db
+                  .select({ id: projectCollaborator.projectId })
+                  .from(projectCollaborator)
+                  .where(eq(projectCollaborator.userId, ownerId)),
+              ),
+            ),
+          ),
           memberships.length
             ? inArray(
                 project.organizationId,
