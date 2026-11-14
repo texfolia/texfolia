@@ -169,6 +169,25 @@ also restores cached updates. The first open of an uncached file needs a server
 connection. Keep the page open until connected if the browser cannot use
 IndexedDB. Viewer clients do not load writable caches.
 
+### Live access revocation
+
+Collaboration WebSockets, compile SSE subscriptions, and progressive PDF streams
+check project access before each outgoing payload. The check holds shared locks
+on the project and the recipient's collaborator or membership row through delivery.
+A committed removal therefore prevents subsequent source, awareness, and build
+payloads from being sent. Failure to verify access also closes the subscription.
+
+Idle subscriptions recheck access every five seconds. Database query time and
+runtime scheduling add to that interval. Collaboration uses a durable alarm so
+checks continue after hibernation. Revoked WebSockets close with code `1008`.
+Compile streams close and cancel their upstream reader. Reconnects use the
+normal authenticated routes and reject removed users.
+
+Personal collaborators downgraded to viewers keep read access, but cannot submit
+edits. Organization members keep project access when their organization role
+changes. Removing membership revokes that access. Edits accepted before removal
+remain in the collaboration journal and still flush to source storage.
+
 ### Local development and rollout
 
 The R2 binding in `wrangler.jsonc` uses Wrangler's local simulation during
@@ -207,8 +226,11 @@ SQLite, and real Postgres. Isolated Chromium contexts exercise the production
 client and CodeMirror binding. It covers concurrent and offline edits, reconnect
 and reload recovery, read-only viewers, permission changes, named cursors,
 formatting, local undo, hibernation, snapshot compaction, and persisted sources.
-Its test-only entry point supplies identities from test cookies and stubs compiler
-notifications. The production route continues to use authenticated sessions.
+The test entry point invokes the production collaboration and compile GET routes
+with signed Better Auth sessions stored in Postgres. A compiler fixture supplies
+controlled SSE and progressive PDF chunks. Revocation cases cover personal
+collaborators and organization members, including idle sockets after hibernation,
+role changes, denied reconnects, viewer access, and persistence of accepted edits.
 CI installs Chromium and runs this suite with the database checks. Set
 `CHECK_COLLABORATION_LATENCY=1` to include a warm local propagation check against
 the 200 ms target. This check times edit dispatch through the receiving

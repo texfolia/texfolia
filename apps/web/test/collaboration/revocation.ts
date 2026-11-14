@@ -1,0 +1,423 @@
+import assert from "node:assert/strict";
+
+import type { Db } from "@texfolia/db";
+import {
+  member,
+  organization,
+  project,
+  projectCollaborator,
+  projectJob,
+  projectNode,
+} from "@texfolia/db/schema";
+import { and, eq } from "drizzle-orm";
+import type { Miniflare } from "miniflare";
+import * as Y from "yjs";
+
+import {
+  awarenessFrame,
+  serverMessageSchema,
+  type ClientMessage,
+  type ServerMessage,
+} from "../../src/lib/collaboration/protocol";
+import { decodeSource, encodeSource } from "../../src/lib/project-source";
+
+async function eventually(
+  check: () => Promise<boolean> | boolean,
+  label: string,
+) {
+  const deadline = Date.now() + 12_000;
+  while (!(await check())) {
+    assert(Date.now() < deadline, label);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+async function bounded<T>(promise: Promise<T>, label: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), 12_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function checkRevocation({
+  mf,
+  db,
+  origin,
+  ownerId,
+  editorId,
+  viewerId,
+  cookies,
+}: {
+  mf: Miniflare;
+  db: Db;
+  origin: string;
+  ownerId: string;
+  editorId: string;
+  viewerId: string;
+  cookies: Map<string, string>;
+}) {
+  for (const ownership of ["personal", "organization"] as const) {
+    for (const trigger of ["source", "awareness", "idle"] as const) {
+      console.log(`Checking ${ownership} revocation on ${trigger}`);
+      const projectId = crypto.randomUUID();
+      const nodeId = crypto.randomUUID();
+      const organizationId = crypto.randomUUID();
+      const removedMembershipId = crypto.randomUUID();
+      const jobId = crypto.randomUUID();
+      const sockets: NonNullable<
+        Awaited<ReturnType<Miniflare["dispatchFetch"]>>["webSocket"]
+      >[] = [];
+      const streams: ReadableStreamDefaultReader<Uint8Array>[] = [];
+      const headers = (userId: string) => ({
+        Cookie: cookies.get(userId) ?? "",
+        Origin: origin,
+      });
+      const socketUrl = `${origin}/api/collaboration/${projectId}/${nodeId}?clientId=123`;
+      const eventsUrl = `${origin}/api/compile/${projectId}?events=1`;
+      try {
+        if (ownership === "organization") {
+          await db.insert(organization).values({
+            id: organizationId,
+            name: "Revocation",
+            slug: organizationId,
+            createdAt: new Date(),
+          });
+          await db.insert(member).values(
+            [ownerId, editorId, viewerId].map((userId) => ({
+              id:
+                userId === editorId ? removedMembershipId : crypto.randomUUID(),
+              organizationId,
+              userId,
+              role: userId === editorId ? "admin" : "member",
+              createdAt: new Date(),
+            })),
+          );
+        }
+        await db.insert(project).values({
+          id: projectId,
+          name: projectId,
+          ...(ownership === "personal" ? { ownerId } : { organizationId }),
+        });
+        await db.insert(projectNode).values({
+          id: nodeId,
+          projectId,
+          name: "main.tex",
+          kind: "text",
+          sizeBytes: 0n,
+        });
+        await db
+          .insert(projectJob)
+          .values({ id: jobId, projectId, sizeBytes: 0n });
+        if (ownership === "personal")
+          await db.insert(projectCollaborator).values([
+            { projectId, userId: editorId, role: "editor" },
+            { projectId, userId: viewerId, role: "viewer" },
+          ]);
+
+        async function connect(userId: string) {
+          const response = await mf.dispatchFetch(socketUrl, {
+            headers: { ...headers(userId), Upgrade: "websocket" },
+          });
+          assert.equal(response.status, 101);
+          const socket = response.webSocket;
+          assert(socket);
+          sockets.push(socket);
+          socket.accept();
+          const messages: ServerMessage[] = [];
+          const doc = new Y.Doc();
+          let closeCode = 0;
+          socket.addEventListener("close", (event) => {
+            closeCode = event.code;
+          });
+          socket.addEventListener("message", (event) => {
+            const message = serverMessageSchema.parse(
+              JSON.parse(String(event.data)),
+            );
+            messages.push(message);
+            if (message.type === "sync" || message.type === "update")
+              Y.applyUpdate(doc, decodeSource(message.update));
+          });
+          const send = (message: ClientMessage) =>
+            socket.send(JSON.stringify(message));
+          send({
+            type: "sync",
+            vector: encodeSource(Y.encodeStateVector(doc)),
+          });
+          await eventually(
+            () => messages.some((m) => m.type === "sync"),
+            "Socket did not synchronize",
+          );
+          return { socket, messages, doc, send, closeCode: () => closeCode };
+        }
+        async function openStream(userId: string, query = "events=1") {
+          const response = await fetch(
+            `${origin}/api/compile/${projectId}?${query}`,
+            { headers: headers(userId) },
+          );
+          assert.equal(response.status, 200);
+          assert(response.body);
+          const reader = response.body.getReader();
+          streams.push(reader);
+          assert.match(
+            new TextDecoder().decode(
+              (await bounded(reader.read(), "Initial stream timed out")).value,
+            ),
+            /attached/,
+          );
+          return reader;
+        }
+        const owner = await connect(ownerId);
+        const recipient = await connect(editorId);
+        const viewer = await connect(viewerId);
+        // An edit acknowledged by the room before revocation must still reach R2.
+        const accepted = `accepted-${crypto.randomUUID()}`;
+        recipient.doc.getText("source").insert(0, accepted);
+        recipient.send({
+          type: "update",
+          update: encodeSource(Y.encodeStateAsUpdate(recipient.doc)),
+        });
+        await eventually(
+          () => owner.doc.getText("source").toString() === accepted,
+          "Accepted edit missing",
+        );
+        const revokedEvents = await openStream(editorId);
+        const allowedEvents = await openStream(viewerId);
+        const revokedPdf = await openStream(
+          editorId,
+          `job=${jobId}&preview=pdf`,
+        );
+
+        if (ownership === "personal") {
+          await db
+            .update(projectCollaborator)
+            .set({ role: "viewer" })
+            .where(
+              and(
+                eq(projectCollaborator.projectId, projectId),
+                eq(projectCollaborator.userId, editorId),
+              ),
+            );
+          recipient.send({
+            type: "sync",
+            vector: encodeSource(Y.encodeStateVector(recipient.doc)),
+          });
+          await eventually(
+            () =>
+              recipient.messages.some((m) => m.type === "sync" && !m.canWrite),
+            "Viewer reconnect/sync lost read access",
+          );
+          const denied = new Y.Doc();
+          denied.getText("source").insert(0, "DENIED");
+          recipient.send({
+            type: "update",
+            update: encodeSource(Y.encodeStateAsUpdate(denied)),
+          });
+          denied.destroy();
+          await eventually(
+            () =>
+              recipient.messages.some(
+                (m) =>
+                  m.type === "error" && /Viewers cannot edit/.test(m.message),
+              ),
+            "Downgraded editor could write",
+          );
+        } else {
+          await db
+            .update(member)
+            .set({ role: "member" })
+            .where(eq(member.id, removedMembershipId));
+        }
+        // Role changes preserve live reads for both personal viewers and organization members.
+        const roleRead = revokedEvents.read();
+        await fetch(`${origin}/fixture/emit/${projectId}`, {
+          method: "POST",
+          body: "data: role-change\n\n",
+        });
+        assert.match(
+          new TextDecoder().decode(
+            (await bounded(roleRead, "Role change lost events")).value,
+          ),
+          /role-change/,
+        );
+        await bounded(allowedEvents.read(), "Authorized viewer lost events");
+        assert.match(
+          new TextDecoder().decode(
+            (await bounded(revokedPdf.read(), "PDF role chunk missing")).value,
+          ),
+          /role-change/,
+        );
+        assert.equal(recipient.closeCode(), 0);
+        const receivedBefore = recipient.messages.length;
+
+        if (ownership === "personal")
+          await db
+            .delete(projectCollaborator)
+            .where(
+              and(
+                eq(projectCollaborator.projectId, projectId),
+                eq(projectCollaborator.userId, editorId),
+              ),
+            );
+        else await db.delete(member).where(eq(member.id, removedMembershipId));
+        // The recipient sends nothing after deletion, including no application pings.
+        const secret = `secret-${crypto.randomUUID()}`;
+        if (trigger === "source") {
+          owner.doc.getText("source").insert(0, secret);
+          owner.send({
+            type: "update",
+            update: encodeSource(Y.encodeStateAsUpdate(owner.doc)),
+          });
+          await eventually(
+            () => viewer.doc.getText("source").toString().includes(secret),
+            "Authorized viewer lost source updates",
+          );
+        } else if (trigger === "awareness") {
+          const before = viewer.messages.filter(
+            (m) => m.type === "awareness",
+          ).length;
+          owner.send({
+            type: "awareness",
+            update: encodeSource(awarenessFrame(123, 1, { cursor: null })),
+          });
+          await eventually(
+            () =>
+              viewer.messages.filter((m) => m.type === "awareness").length >
+              before,
+            "Authorized viewer lost awareness",
+          );
+        } else {
+          // Wake the alarm from hibernation rather than relying on an in-memory timer.
+          await mf.unsafeEvictDurableObject(
+            "collaboration-test",
+            "ProjectCollaboration",
+            { name: projectId, webSockets: "hibernate" },
+          );
+        }
+        await eventually(
+          () =>
+            recipient.closeCode() !== 0 ||
+            recipient.messages.length > receivedBefore,
+          "Silent revoked socket stayed open",
+        );
+        assert.equal(
+          recipient.messages.length,
+          receivedBefore,
+          "Revoked socket received source or awareness data",
+        );
+        assert.equal(recipient.closeCode(), 1008);
+        const eventsEnd = revokedEvents.read();
+        const pdfEnd = revokedPdf.read();
+        if (trigger !== "idle")
+          await fetch(`${origin}/fixture/emit/${projectId}`, {
+            method: "POST",
+            body: `data: ${secret}\n\n`,
+          });
+        assert.equal(
+          (await bounded(eventsEnd, "Revoked SSE stayed open")).done,
+          true,
+          "SSE leaked a post-removal payload",
+        );
+        assert.equal(
+          (await bounded(pdfEnd, "Revoked PDF stayed open")).done,
+          true,
+          "PDF leaked a post-removal payload",
+        );
+        if (trigger !== "idle")
+          assert.match(
+            new TextDecoder().decode(
+              (
+                await bounded(
+                  allowedEvents.read(),
+                  "Authorized viewer lost build updates",
+                )
+              ).value,
+            ),
+            new RegExp(secret),
+          );
+        await eventually(async () => {
+          const row = await db.query.projectNode.findFirst({
+            where: { id: nodeId },
+          });
+          if (!row?.objectKey) return false;
+          return (
+            (
+              await (
+                await (await mf.getR2Bucket("SOURCES")).get(row.objectKey)
+              )?.text()
+            )?.includes(accepted) ?? false
+          );
+        }, "Accepted edit did not survive revocation");
+        assert.equal(
+          (
+            await mf.dispatchFetch(socketUrl, {
+              headers: { ...headers(editorId), Upgrade: "websocket" },
+            })
+          ).status,
+          404,
+          "Revoked socket reconnected",
+        );
+        assert.equal(
+          (await fetch(eventsUrl, { headers: headers(editorId) })).status,
+          404,
+          "Revoked SSE reconnected",
+        );
+        assert.equal(
+          (
+            await fetch(
+              `${origin}/api/compile/${projectId}?job=${jobId}&preview=pdf`,
+              { headers: headers(editorId) },
+            )
+          ).status,
+          404,
+        );
+        // Existing viewer access is still valid through authenticated reconnects.
+        const reconnected = await connect(viewerId);
+        assert.equal(
+          reconnected.doc.getText("source").toString(),
+          owner.doc.getText("source").toString(),
+        );
+        assert.equal(
+          (
+            await mf.dispatchFetch(socketUrl, {
+              headers: { Origin: origin, Upgrade: "websocket" },
+            })
+          ).status,
+          401,
+        );
+        assert.equal((await fetch(eventsUrl)).status, 401);
+        for (const client of [owner, recipient, viewer, reconnected])
+          client.doc.destroy();
+      } finally {
+        await Promise.all(
+          streams.map((reader) => reader.cancel().catch(() => {})),
+        );
+        await eventually(async () => {
+          const response = await fetch(
+            `${origin}/fixture/subscribers/${projectId}`,
+          );
+          const state: unknown = await response.json();
+          return (
+            typeof state === "object" &&
+            state !== null &&
+            "recipients" in state &&
+            state.recipients === 0
+          );
+        }, "Upstream compiler subscriptions were not cancelled");
+        for (const socket of sockets)
+          if (socket?.readyState === 1) socket.close();
+        await db.delete(project).where(eq(project.id, projectId));
+        if (ownership === "organization")
+          await db
+            .delete(organization)
+            .where(eq(organization.id, organizationId));
+      }
+    }
+  }
+}

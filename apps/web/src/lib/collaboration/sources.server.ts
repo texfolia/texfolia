@@ -11,6 +11,7 @@ export async function collaborationAccess(
   projectId: string,
   nodeId: string,
   userId: string,
+  deliver?: () => void,
 ) {
   return db.transaction(async (tx) => {
     const access = await lockProject({ tx, projectId, userId, access: "read" });
@@ -23,6 +24,8 @@ export async function collaborationAccess(
       },
     });
     if (!node) throw new Error("File not found");
+    // Keep access rows locked through delivery, ordering it against revocation.
+    deliver?.();
     return { node, canWrite: access.canWrite };
   });
 }

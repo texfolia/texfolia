@@ -10,6 +10,7 @@ import { compileResync } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema } from "#/lib/latex/source-sync";
+import { streamProjectResponse } from "#/lib/live-project.server";
 import { lockProject } from "#/lib/project-access.server";
 
 const compilerTimingSchema = z.looseObject({
@@ -429,6 +430,14 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         const denied = await checkProject(request, params.projectId, context);
         if (denied instanceof Response) return denied;
         const url = new URL(request.url);
+        const liveResponse = (response: Response) =>
+          streamProjectResponse({
+            response,
+            connectionString: env.HYPERDRIVE.connectionString,
+            projectId: params.projectId,
+            userId: denied.userId,
+            signal: request.signal,
+          });
         if (!url.searchParams.has("job")) {
           try {
             const file = url.searchParams.get("file");
@@ -437,10 +446,11 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                 `/projects/${params.projectId}/build/files?path=${encodeURIComponent(file)}&version=${encodeURIComponent(url.searchParams.get("version") ?? "")}`,
               );
             const events = url.searchParams.get("events") === "1";
-            return await fetchCompiler(
+            const response = await fetchCompiler(
               `/projects/${params.projectId}${events ? "/events" : ""}`,
               events ? { signal: request.signal } : undefined,
             );
+            return events ? liveResponse(response) : response;
           } catch {
             return json({ error: "Project coordinator unavailable" }, 502);
           }
@@ -468,13 +478,15 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             if (!response.ok) return response;
             if (response.headers.get("Content-Type") !== "application/pdf")
               throw new Error("Invalid compiler PDF stream");
-            return new Response(response.body, {
-              headers: {
-                ...noStore,
-                "Content-Type": "application/pdf",
-                "X-Accel-Buffering": "no",
-              },
-            });
+            return liveResponse(
+              new Response(response.body, {
+                headers: {
+                  ...noStore,
+                  "Content-Type": "application/pdf",
+                  "X-Accel-Buffering": "no",
+                },
+              }),
+            );
           }
           if (url.searchParams.get("artifact") === "pdf") {
             if (job.status !== "succeeded")

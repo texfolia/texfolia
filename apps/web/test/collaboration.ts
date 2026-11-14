@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createDb } from "@texfolia/db";
-import { projectCollaborator, projectNode, user } from "@texfolia/db/schema";
+import {
+  projectCollaborator,
+  projectNode,
+  session,
+  user,
+} from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";
 import { build } from "esbuild";
 import {
@@ -23,6 +30,7 @@ import { hashSource } from "../src/lib/latex/source-sync";
 import { decodeSource, encodeSource } from "../src/lib/project-source";
 import { createProject } from "../src/lib/project.server";
 import type { BrowserApi } from "./collaboration/browser";
+import { checkRevocation } from "./collaboration/revocation";
 
 declare global {
   interface Window {
@@ -35,18 +43,29 @@ assert(
   "Set INTEGRATION_DATABASE_URL to an isolated Postgres test database",
 );
 const db = createDb(connectionString);
+const authSecret = "collaboration-integration-secret-not-for-production";
+const cookies = new Map<string, string>();
 const directory = await mkdtemp(join(tmpdir(), "texfolia-collaboration-"));
 const workerBuild = await build({
   entryPoints: [new URL("./collaboration/worker.ts", import.meta.url).pathname],
   bundle: true,
   write: false,
   format: "esm",
-  platform: "node",
+  platform: "neutral",
+  mainFields: ["module", "main"],
   conditions: ["workerd"],
   banner: {
     js: 'import { createRequire } from "node:module"; const require = createRequire("file:///worker.js");',
   },
-  external: ["cloudflare:workers", "cloudflare:sockets"],
+  external: [
+    ...builtinModules,
+    "node:*",
+    "cloudflare:workers",
+    "cloudflare:sockets",
+    "#tanstack-router-entry",
+    "#tanstack-start-entry",
+    "tanstack-start-manifest:v",
+  ],
   define: { "import.meta.env.DEV": "false" },
 });
 const clientBuild = await build({
@@ -67,15 +86,32 @@ const runtimeOptions = {
     modules: true,
     script,
     compatibilityDate: "2025-09-02",
-    compatibilityFlags: ["nodejs_compat"],
+    compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
     durableObjects: {
       COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+      COMPILER_STREAMS: { className: "CompilerFixture", useSQLite: true },
     },
     r2Buckets: ["SOURCES"],
     hyperdrives: { HYPERDRIVE: connectionString },
     unsafeInspectDurableObjects: true,
+    bindings: {
+      BETTER_AUTH_SECRET: authSecret,
+      BETTER_AUTH_URL: "http://localhost",
+      STRIPE_SECRET_KEY: "sk_test_collaboration_fixture",
+      GITHUB_CLIENT_ID: "fixture",
+      GITHUB_CLIENT_SECRET: "fixture",
+      GOOGLE_CLIENT_ID: "fixture",
+      GOOGLE_CLIENT_SECRET: "fixture",
+      GITLAB_CLIENT_ID: "fixture",
+      GITLAB_CLIENT_SECRET: "fixture",
+      MICROSOFT_CLIENT_ID: "fixture",
+      MICROSOFT_CLIENT_SECRET: "fixture",
+    },
     serviceBindings: {
-      COMPILER: { name: "collaboration-test", entrypoint: "CompilerFixture" },
+      COMPILER: {
+        name: "collaboration-test",
+        entrypoint: "CompilerServiceFixture",
+      },
       CLIENT: () =>
         new Response(client, {
           headers: { "Content-Type": "text/javascript" },
@@ -91,7 +127,7 @@ const userIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
 const [ownerId, editorId, viewerId] = userIds;
 assert(ownerId && editorId && viewerId);
 try {
-  for (const id of userIds)
+  for (const id of userIds) {
     await db.insert(user).values({
       id,
       name: id,
@@ -99,6 +135,23 @@ try {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+    const token = crypto.randomUUID();
+    await db.insert(session).values({
+      id: crypto.randomUUID(),
+      token,
+      userId: id,
+      expiresAt: new Date(Date.now() + 60 * 60_000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const signature = createHmac("sha256", authSecret)
+      .update(token)
+      .digest("base64");
+    cookies.set(
+      id,
+      `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`,
+    );
+  }
   const created = await createProject({
     db,
     ownerId,
@@ -127,7 +180,11 @@ try {
     const context = await browser.newContext();
     contexts.push(context);
     await context.addCookies([
-      { name: "test-user", value: userId, url: origin },
+      {
+        name: "better-auth.session_token",
+        value: cookies.get(userId)?.split("=").slice(1).join("=") ?? "",
+        url: origin,
+      },
     ]);
     const page = await context.newPage();
     page.on("console", (message) => {
@@ -419,7 +476,13 @@ try {
   });
   const largeResponse = await mf.dispatchFetch(
     `${origin}/api/collaboration/${projectId}/${largeId}?clientId=12345`,
-    { headers: { Upgrade: "websocket", Cookie: `test-user=${ownerId}` } },
+    {
+      headers: {
+        Upgrade: "websocket",
+        Cookie: cookies.get(ownerId) ?? "",
+        Origin: origin,
+      },
+    },
   );
   let largeSocket = largeResponse.webSocket;
   assert(largeSocket);
@@ -531,7 +594,13 @@ try {
   // document and shorten it without first having to persist the oversized text.
   const resumed = await mf.dispatchFetch(
     `${origin}/api/collaboration/${projectId}/${largeId}?clientId=12345`,
-    { headers: { Upgrade: "websocket", Cookie: `test-user=${ownerId}` } },
+    {
+      headers: {
+        Upgrade: "websocket",
+        Cookie: cookies.get(ownerId) ?? "",
+        Origin: origin,
+      },
+    },
   );
   assert.equal(resumed.status, 101);
   const resumedSocket = resumed.webSocket;
@@ -589,8 +658,17 @@ try {
       window.collaborationTest.value().includes("DENIED"),
     )),
   );
+  await checkRevocation({
+    mf,
+    db,
+    origin,
+    ownerId,
+    editorId,
+    viewerId,
+    cookies,
+  });
   console.log(
-    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, and permission changes",
+    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, and live WebSocket/SSE/PDF revocation",
   );
 } finally {
   await Promise.all(contexts.map((context) => context.close()));
