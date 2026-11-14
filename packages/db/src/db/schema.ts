@@ -104,6 +104,7 @@ export const projectJob = pgTable(
       .notNull()
       .references(() => project.id, { onDelete: "cascade" }),
     status: projectJobStatus("status").notNull().default("queued"),
+    requestDigest: text("request_digest"),
     objectKey: text("object_key"),
     sizeBytes: bigint("size_bytes", { mode: "bigint" }).notNull(),
     log: text("log"),

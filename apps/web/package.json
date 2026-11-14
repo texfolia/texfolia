@@ -20,6 +20,7 @@
     "preview": "vite preview",
     "test": "bun test",
     "test:collaboration": "bun run test/collaboration.ts",
+    "test:compile-route": "bun run test/compile-route.ts",
     "test:login": "bun run test/login.ts",
     "test:production-assets": "bun run test/production-assets.ts",
     "test:workspace-metadata": "bun run build && bun run test/workspace-metadata.ts",
