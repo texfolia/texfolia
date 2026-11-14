@@ -15,6 +15,26 @@ async function sendEmail(
   return sendEmail(options);
 }
 
+export function createEmailOTPPlugin(sendOTPEmail: typeof sendEmail) {
+  return emailOTP({
+    expiresIn: 300,
+    async sendVerificationOTP({ email, otp, type }) {
+      const purpose = {
+        "sign-in": "sign-in",
+        "email-verification": "email verification",
+        "forget-password": "password reset",
+        "change-email": "email change",
+      }[type];
+      await sendOTPEmail({
+        to: email,
+        subject: `Your Texfolia ${purpose} code`,
+        text: `Your Texfolia ${purpose} code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
+        html: `<p>Your Texfolia ${purpose} code is:</p><p><strong>${otp}</strong></p><p>It expires in 5 minutes. If you did not request this code, you can ignore this email.</p>`,
+      });
+    },
+  });
+}
+
 export function createOrganizationPlugin({
   baseURL,
   sendInvitationEmail,
@@ -102,22 +122,7 @@ export function createAuth(db: Db) {
         secretKey: process.env.TURNSTILE_SECRET!,
         endpoints: ["/email-otp/send-verification-otp"],
       }),
-      emailOTP({
-        async sendVerificationOTP({ email, otp, type }) {
-          if (type === "sign-in") {
-            await sendEmail({
-              to: email,
-              subject: "Your Texfolia verification code",
-              text: `Your Texfolia verification code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
-              html: `<p>Your Texfolia verification code is:</p><p><strong>${otp}</strong></p><p>It expires in 5 minutes. If you did not request this code, you can ignore this email.</p>`,
-            });
-          } else if (type === "email-verification") {
-            // Send the OTP for email verification
-          } else {
-            // Send the OTP for password reset
-          }
-        },
-      }),
+      createEmailOTPPlugin(sendEmail),
       stripe({
         stripeClient,
         stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
