@@ -14,6 +14,7 @@ import { and, eq } from "drizzle-orm";
 import { createProjectNode } from "../src/lib/project-node.server";
 import {
   createProject,
+  deleteProject,
   getProject,
   getProjects,
 } from "../src/lib/project.server";
@@ -256,15 +257,66 @@ try {
     userId: teammateId,
     role: "editor",
   });
-  await db
-    .update(project)
-    .set({ deletedAt: new Date() })
-    .where(eq(project.id, created.id));
+  await deleteProject({ db, ownerId, projectId: created.id });
   for (const userId of [ownerId, teammateId])
     await assertInaccessible({ userId, projectId: created.id });
 
+  const recreated = await createProject({
+    db,
+    ownerId,
+    data: { id: crypto.randomUUID(), name: created.name },
+  });
+  assert.notEqual(recreated.id, created.id);
+  const deleted = await db.query.project.findFirst({
+    where: { id: created.id },
+    with: { nodes: true },
+  });
+  assert(deleted?.deletedAt);
+  assert.equal(deleted.name, created.name);
+  assert.equal(deleted.nodes.length, loaded.nodes.length + 1);
+  assert.equal(
+    (await getProjects({ db, ownerId })).filter(
+      (item) => item.name === created.name,
+    ).length,
+    1,
+  );
+
+  await deleteProject({ db, ownerId, projectId: recreated.id });
+  const competing = await Promise.allSettled(
+    [crypto.randomUUID(), crypto.randomUUID()].map((id) =>
+      createProject({ db, ownerId, data: { id, name: created.name } }),
+    ),
+  );
+  assert.equal(
+    competing.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  const rejected = competing.find((result) => result.status === "rejected");
+  assert(rejected?.status === "rejected");
+  assert(rejected.reason instanceof Error);
+  const cause = rejected.reason.cause;
+  assert(cause instanceof Error && "code" in cause && "constraint" in cause);
+  assert.equal(cause.code, "23505");
+  assert.equal(cause.constraint, "project_owner_id_name_idx");
+  const history = await db.query.project.findMany({
+    where: { ownerId, name: created.name },
+    with: { nodes: true },
+  });
+  assert.equal(history.length, 3);
+  assert.equal(history.filter((item) => item.deletedAt).length, 2);
+  const active = history.filter((item) => !item.deletedAt);
+  assert.equal(active.length, 1);
+  assert.equal(active[0]?.nodes.length, 2);
+
+  const otherOwnerProject = await createProject({
+    db,
+    ownerId: teammateId,
+    data: { id: crypto.randomUUID(), name: created.name },
+  });
+  assert.equal(otherOwnerProject.name, created.name);
+
   console.log(
-    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, binary text state, and transaction rollback",
+    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, deleted project name reuse, concurrent active name uniqueness, binary text state, and transaction rollback",
   );
 } finally {
   await db.delete(organization).where(eq(organization.id, organizationId));

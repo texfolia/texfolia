@@ -42,6 +42,20 @@ Before deploying compilation-ID retry handling, apply
 `project_job` and is safe to run again. Jobs created before this change keep a
 null digest and remain readable, but their IDs cannot be reused for submissions.
 
+Personal project names are case-sensitive and unique per owner among rows with
+`deleted_at IS NULL`. Deleting a project releases its name and retains the row
+and its nodes. Organization project names keep their existing policy, which
+allows duplicates.
+
+For NAT-198's first deployment, generate the reviewed Drizzle baseline from the
+final schema, including the partial `project_owner_id_name_idx` index. For an
+existing database with the unconditional index, apply
+`sql/20261114_active_project_names.sql` before deploying name reuse. The script
+replaces the index in one transaction, preserves all project data, and is safe to
+run again. It takes an exclusive table lock while rebuilding the index, so apply
+it during a maintenance window. After names have been reused, restoring the old
+index can fail because deleted rows can share names with active rows.
+
 1. Edit `src/db/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root.
 2. Run `bun run db:push` against your local database.
 3. Run the integration check.
@@ -69,4 +83,14 @@ Create an isolated database with `test` in its name, apply the schema to it with
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/postgres.ts
 ```
 
-This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, binary text state, constraint rollback, and ownership checks. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
+This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, binary text state, constraint rollback, ownership checks, create/delete/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
+
+Verify the name-index upgrade separately after applying the schema:
+
+```sh
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run packages/db/test/project-names-migration.ts
+```
+
+This check creates an isolated schema with the legacy index, applies the rollout
+SQL, and verifies retained rows, name reuse, active uniqueness, and reapplication.
+CI runs it before the application integration check.
