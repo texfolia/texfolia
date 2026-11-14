@@ -1,5 +1,6 @@
-import { sourcePathSchema } from "@texfolia/project-paths";
 import { z } from "zod";
+
+import { sourcePathSchema } from "./source-path.schema";
 
 export const templateLicenses = [
   "CC0-1.0",

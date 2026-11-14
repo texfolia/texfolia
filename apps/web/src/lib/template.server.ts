@@ -8,7 +8,6 @@ import {
   templateReport,
   user,
 } from "@texfolia/db/schema";
-import { InvalidSourcePathError } from "@texfolia/project-paths";
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -18,6 +17,7 @@ import { lockProject } from "./project-access.server";
 import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import { encodeSource } from "./project-source";
 import type { SourceBucket } from "./project-source.server";
+import { InvalidSourcePathError } from "./source-path.schema";
 import {
   openTemplateSchema,
   publishTemplateSchema,

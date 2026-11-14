@@ -1,3 +1,5 @@
+import type { ProjectNode } from "#/lib/project.functions";
+
 import {
   InvalidSourcePathError,
   assertSourcePath,
@@ -5,9 +7,7 @@ import {
   nodeNameSchema,
   pathBytes,
   sourcePathError,
-} from "@texfolia/project-paths";
-
-import type { ProjectNode } from "#/lib/project.functions";
+} from "./source-path.schema";
 
 type PathNode = Pick<ProjectNode, "id" | "parentId" | "name" | "kind">;
 

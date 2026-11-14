@@ -11,7 +11,7 @@ import (
 )
 
 func TestSharedPathPolicy(t *testing.T) {
-	raw, err := os.ReadFile("../../../packages/project-paths/fixtures.json")
+	raw, err := os.ReadFile("../test/fixtures/path-policy.json")
 	if err != nil {
 		t.Fatal(err)
 	}

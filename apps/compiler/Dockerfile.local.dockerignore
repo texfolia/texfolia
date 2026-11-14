@@ -4,4 +4,3 @@
 !apps/*/package.json
 !packages/*/package.json
 !apps/compiler/src/**
-!packages/project-paths/src/**

@@ -111,7 +111,7 @@ export function CreateNodeForm({
         } catch (error) {
           setError(
             error instanceof Error
-              ? error.message
+              ? `Could not create this item. ${error.message}`
               : "Could not create this item. Check your connection and try again.",
           );
         } finally {

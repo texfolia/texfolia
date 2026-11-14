@@ -8,7 +8,6 @@ import "dockview-react/dist/styles/dockview.css";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
-import { InvalidSourcePathError } from "@texfolia/project-paths";
 import type { EditorView } from "@uiw/react-codemirror";
 import {
   type DockviewApi,
@@ -59,6 +58,7 @@ import { assertProjectSourcePaths, projectPaths } from "#/lib/project-paths";
 import { encodeSource, type SourceFiles } from "#/lib/project-source";
 import { saveProjectSource } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
+import { InvalidSourcePathError } from "#/lib/source-path.schema";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
 import {

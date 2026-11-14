@@ -1,4 +1,3 @@
-import { artifactPathSchema, sourcePathSchema } from "@texfolia/project-paths";
 import { z } from "zod";
 
 import { type EngineTiming, unknownEngineTiming } from "./telemetry";
@@ -32,7 +31,21 @@ export class EngineError extends Error {
   }
 }
 
-export { artifactPathSchema, sourcePathSchema };
+export const artifactPathSchema = z
+  .string()
+  .min(1)
+  .refine((path) => new TextEncoder().encode(path).length <= 255)
+  .refine(
+    (path) =>
+      // oxlint-disable-next-line no-control-regex -- Project paths must reject control characters.
+      !/[\\:\u0000-\u001f]/.test(path) &&
+      path
+        .split("/")
+        .every((part) => part !== "" && part !== "." && part !== ".."),
+  );
+export const sourcePathSchema = artifactPathSchema
+  .refine((path) => new TextEncoder().encode(path).length <= 240)
+  .refine((path) => path.split("/")[0]?.toLowerCase() !== "out");
 export const artifactContentSchema = z.object({
   base64: z
     .string()

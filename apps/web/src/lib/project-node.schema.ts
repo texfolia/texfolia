@@ -1,7 +1,7 @@
-import { nodeNameSchema } from "@texfolia/project-paths";
 import { z } from "zod";
 
 import { sourceContentSchema } from "./project-source";
+import { nodeNameSchema } from "./source-path.schema";
 
 export { nodeNameSchema };
 

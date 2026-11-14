@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const maxSourcePathBytes = 240;
-export const maxArtifactPathBytes = 255;
 export const pathBytes = (path: string) =>
   new TextEncoder().encode(path).length;
 const pathLengthMessage =
@@ -19,11 +18,6 @@ const relativePathSchema = z
         .every((part) => part !== "" && part !== "." && part !== ".."),
     "Use a relative path without colons, backslashes, control characters, or empty, . or .. components.",
   );
-
-export const artifactPathSchema = relativePathSchema.refine(
-  (path) => pathBytes(path) <= maxArtifactPathBytes,
-  "Use an artifact path of at most 255 UTF-8 bytes.",
-);
 
 export const sourcePathSchema = relativePathSchema
   .refine((path) => pathBytes(path) <= maxSourcePathBytes, pathLengthMessage)

@@ -17,7 +17,6 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/compiler/src:/app/apps/compiler/src:ro
-      - ./packages/project-paths/src:/app/packages/project-paths/src:ro
       - compiler-data:/app/apps/compiler/.cache
       - /var/run/docker.sock:/var/run/docker.sock
     user: root

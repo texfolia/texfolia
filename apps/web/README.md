@@ -103,7 +103,7 @@ first and submits the acknowledged source snapshot.
 Uploads use the same storage and quota checks. Text uploads (including `.bib`)
 remain editable; binary sources can be downloaded, exported, and compiled.
 
-Source names and full paths follow the [shared project path policy](../../packages/project-paths/README.md).
+Source names and full paths follow the [project path policy](../../docs/source-paths.md).
 Creation and uploads check the assembled path before storage. Existing invalid
 paths appear in the Files sidebar under **Repair source paths**. Renaming keeps
 file contents and collaboration documents.

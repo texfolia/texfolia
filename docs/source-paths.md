@@ -1,8 +1,11 @@
 # Project path policy
 
-`@texfolia/project-paths` defines the schemas used by source creation, uploads,
-template publishing and copying, and the compiler API. The Go engine implements
-the same policy and runs against the shared `fixtures.json` cases.
+The web app defines source validation in
+[`source-path.schema.ts`](../apps/web/src/lib/source-path.schema.ts). The compiler
+API defines its source and artifact schemas in
+[`project.ts`](../apps/compiler/src/project.ts), and the Go engine implements the
+same policy. All three implementations run against the cases in
+[`path-policy.json`](../apps/compiler/test/fixtures/path-policy.json).
 
 A source path is relative to the project root. The root node's display name is
 not part of the path. Names and paths preserve spaces, Unicode, and Unicode
@@ -55,7 +58,7 @@ repair the original project and publish a new snapshot.
 From the repository root, run:
 
 ```sh
-bun test packages/project-paths apps/compiler/test/project.test.ts apps/web/src/lib/project-node.schema.test.ts apps/web/src/lib/project-paths.test.ts
+bun test apps/web/src/lib/source-path.schema.test.ts apps/compiler/test/project.test.ts apps/web/src/lib/project-node.schema.test.ts apps/web/src/lib/project-paths.test.ts
 (cd apps/compiler/engine && go test -race ./...)
 ```
 

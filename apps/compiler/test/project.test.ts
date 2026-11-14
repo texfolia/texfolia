@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
-import pathFixtures from "../../../packages/project-paths/fixtures.json";
-import { HttpError, parseProject } from "../src/project";
+import { artifactPathSchema, HttpError, parseProject } from "../src/project";
+import pathFixtures from "./fixtures/path-policy.json";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "hello" } };
 test("accepts nested projects and binary assets", () => {
@@ -34,6 +34,9 @@ test("rejects traversal, absolute paths, missing inputs and file collisions", ()
 
 for (const fixture of pathFixtures)
   test(`compiler source path: ${JSON.stringify(fixture.path)}`, () => {
+    expect(artifactPathSchema.safeParse(fixture.path).success).toBe(
+      fixture.artifact,
+    );
     const input = {
       ...project,
       files: { ...project.files, [fixture.path]: "source" },

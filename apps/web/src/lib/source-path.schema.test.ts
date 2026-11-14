@@ -1,20 +1,16 @@
 import { expect, test } from "bun:test";
 
-import fixtures from "../fixtures.json";
+import fixtures from "../../../compiler/test/fixtures/path-policy.json";
 import {
-  artifactPathSchema,
   nodeNameSchema,
   pathBytes,
   sourcePathSchema,
-} from "./index";
+} from "./source-path.schema";
 
 for (const fixture of fixtures)
   test(`path policy: ${JSON.stringify(fixture.path)}`, () => {
     expect(sourcePathSchema.safeParse(fixture.path).success).toBe(
       fixture.source,
-    );
-    expect(artifactPathSchema.safeParse(fixture.path).success).toBe(
-      fixture.artifact,
     );
     expect(nodeNameSchema.safeParse(fixture.path).success).toBe(
       fixture.artifact &&
