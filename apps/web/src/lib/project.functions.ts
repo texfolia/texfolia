@@ -34,6 +34,7 @@ export const deleteProject = createServerFn({ method: "POST" })
       db: context.db,
       ownerId: session.user.id,
       projectId: data.projectId,
+      collaboration: env.COLLABORATION,
     });
   });
 

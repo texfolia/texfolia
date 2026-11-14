@@ -156,6 +156,18 @@ dirty in SQLite and retry. Save waits for this write, and compile uses the
 acknowledged merged text. The existing ProjectCoordinator stays in the compiler
 Worker and receives source-change notifications through its existing endpoint.
 
+Project and recursive file deletion notify the collaboration object after the SQL
+transaction commits. Cleanup removes snapshots, journals, and their chunks,
+destroys cached documents, and closes affected sockets. Accepted dirty edits are
+discarded when their source is deleted; they cannot recreate the source.
+Clean disconnected rooms retain an hourly alarm that checks deletion too.
+
+The hourly source sweep also reconciles rooms in `project_collaboration`, even
+when a room has never saved an R2 source. Registrations survive account and
+organization cascades. Failed cleanup or SQL acknowledgement leaves the
+registration for the next sweep. Apply
+`packages/db/sql/20261113_collaboration_cleanup.sql` before deploying this Worker.
+
 WebSockets use the hibernation API. Attachments retain file identity and presence
 across eviction. Automatic ping/pong responses do not wake the object. On wake,
 the object restores each document from its snapshot and journal. It reconciles
@@ -231,6 +243,10 @@ with signed Better Auth sessions stored in Postgres. A compiler fixture supplies
 controlled SSE and progressive PDF chunks. Revocation cases cover personal
 collaborators and organization members, including idle sockets after hibernation,
 role changes, denied reconnects, viewer access, and persistence of accepted edits.
+Deletion cases inspect actual SQLite tables, R2 objects, and SQL metadata after
+project and recursive file deletion, owner cascades, and retries following SQLite
+and Postgres failures. They also check dirty edits, idle clean rooms, chunk
+rollback, memory cache removal, socket closure, and deletion during GC.
 CI installs Chromium and runs this suite with the database checks. Set
 `CHECK_COLLABORATION_LATENCY=1` to include a warm local propagation check against
 the 200 ms target. This check times edit dispatch through the receiving

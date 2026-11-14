@@ -1,5 +1,9 @@
 import type { Db } from "@texfolia/db";
-import { project, projectNode } from "@texfolia/db/schema";
+import {
+  project,
+  projectCollaboration,
+  projectNode,
+} from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { lockProject } from "../project-access.server";
@@ -11,7 +15,7 @@ export async function collaborationAccess(
   projectId: string,
   nodeId: string,
   userId: string,
-  deliver?: () => void,
+  options?: { deliver?: () => void; register?: boolean },
 ) {
   return db.transaction(async (tx) => {
     const access = await lockProject({ tx, projectId, userId, access: "read" });
@@ -24,8 +28,13 @@ export async function collaborationAccess(
       },
     });
     if (!node) throw new Error("File not found");
+    if (options?.register)
+      await tx
+        .insert(projectCollaboration)
+        .values({ projectId })
+        .onConflictDoNothing();
     // Keep access rows locked through delivery, ordering it against revocation.
-    deliver?.();
+    options?.deliver?.();
     return { node, canWrite: access.canWrite };
   });
 }

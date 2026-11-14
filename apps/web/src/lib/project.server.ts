@@ -3,6 +3,10 @@ import { member, project, projectNode } from "@texfolia/db/schema";
 import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
+import {
+  cleanupDeletedCollaboration,
+  type CollaborationCleanup,
+} from "./collaboration/cleanup.server";
 import { fetchCompiler } from "./compiler.server";
 import { lockProject } from "./project-access.server";
 import type { SourceBucket } from "./project-source.server";
@@ -99,7 +103,8 @@ export async function deleteProject({
   db,
   ownerId,
   projectId,
-}: ProjectOwner & { projectId: string }) {
+  collaboration,
+}: ProjectOwner & { projectId: string; collaboration?: CollaborationCleanup }) {
   const deletedProject = await db.transaction(async (tx) => {
     const found = await lockProject({ tx, projectId, userId: ownerId });
     if (found.organizationId) {
@@ -131,6 +136,7 @@ export async function deleteProject({
   });
 
   if (!deletedProject) throw new Error("Project not found");
+  await cleanupDeletedCollaboration(collaboration, projectId);
   try {
     const response = await fetchCompiler(`/projects/${projectId}/build`, {
       method: "DELETE",

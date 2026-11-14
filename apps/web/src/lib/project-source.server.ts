@@ -3,6 +3,11 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import {
+  cleanupDeletedCollaboration,
+  collectCollaborationSources,
+  type CollaborationCleanup,
+} from "./collaboration/cleanup.server";
 import { fetchCompiler } from "./compiler.server";
 import { lockProject, type ProjectTransaction } from "./project-access.server";
 import {
@@ -133,11 +138,13 @@ export async function deleteProjectNode({
   userId,
   projectId,
   nodeId,
+  collaboration,
 }: {
   db: Db;
   userId: string;
   projectId: string;
   nodeId: string;
+  collaboration?: CollaborationCleanup;
 }) {
   await db.transaction(async (tx) => {
     await lockProject({ tx, projectId, userId });
@@ -167,6 +174,7 @@ export async function deleteProjectNode({
       .set({ updatedAt: new Date() })
       .where(eq(project.id, projectId));
   });
+  await cleanupDeletedCollaboration(collaboration, projectId);
   await invalidateSourceBuild(projectId);
 }
 
@@ -199,9 +207,11 @@ export async function readProjectSource({
 export async function collectProjectSources({
   db,
   bucket,
+  collaboration,
 }: {
   db: Db;
   bucket: SourceBucket;
+  collaboration?: CollaborationCleanup;
 }) {
   let cursor: string | undefined;
   do {
@@ -248,4 +258,5 @@ export async function collectProjectSources({
       });
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
+  await collectCollaborationSources({ db, collaboration });
 }

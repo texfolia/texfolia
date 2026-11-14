@@ -17,7 +17,11 @@ export default {
     const db = createDb(env.HYPERDRIVE.connectionString);
     try {
       if (controller.cron === "17 * * * *") {
-        await collectProjectSources({ db, bucket: env.SOURCES });
+        await collectProjectSources({
+          db,
+          bucket: env.SOURCES,
+          collaboration: env.COLLABORATION,
+        });
         await collectTemplateObjects({ db, bucket: env.SOURCES });
       } else await refreshTemplatePreviews({ db, bucket: env.SOURCES });
     } finally {
