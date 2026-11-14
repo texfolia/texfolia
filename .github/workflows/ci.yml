@@ -69,6 +69,12 @@ jobs:
           cache: false
       - name: Install dependencies
         run: bun install --frozen-lockfile
+      - name: Build web for production
+        run: bun run --cwd apps/web build
+      - name: Install Chromium
+        run: bun run --cwd apps/web playwright install --with-deps chromium
+      - name: Check production CSS and worker assets
+        run: bun run --cwd apps/web test:production-assets
       - name: Install PDF preview renderer
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Typecheck
