@@ -9,6 +9,7 @@ import {
   member,
   organization,
   project,
+  projectCollaboration,
   projectCollaborator,
   projectNode,
   session,
@@ -666,7 +667,14 @@ try {
 } finally {
   await browser.close();
   await mf.dispose();
-  if (projectId) await db.delete(project).where(eq(project.id, projectId));
+  if (projectId) {
+    await db.delete(project).where(eq(project.id, projectId));
+    // Room registrations survive project cascades. This fixture discards its
+    // Durable Object storage, so its registration must be removed explicitly.
+    await db
+      .delete(projectCollaboration)
+      .where(eq(projectCollaboration.projectId, projectId));
+  }
   await db.delete(organization).where(eq(organization.id, organizationId));
   for (const id of [ownerId, editorId])
     await db.delete(user).where(eq(user.id, id));
