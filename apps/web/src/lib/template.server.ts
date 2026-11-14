@@ -14,9 +14,10 @@ import { z } from "zod";
 import { fetchCompiler } from "./compiler.server";
 import { hashSource } from "./latex/source-sync";
 import { lockProject } from "./project-access.server";
-import { projectPaths } from "./project-paths";
+import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import { encodeSource } from "./project-source";
 import type { SourceBucket } from "./project-source.server";
+import { InvalidSourcePathError } from "./source-path.schema";
 import {
   openTemplateSchema,
   publishTemplateSchema,
@@ -249,6 +250,7 @@ export async function publishTemplate({
     const nodes = await tx.query.projectNode.findMany({
       where: { projectId: data.projectId, deletedAt: { isNull: true } },
     });
+    assertProjectSourcePaths(nodes);
     const paths = projectPaths(nodes);
     if (
       nodes.length > 401 ||
@@ -338,6 +340,7 @@ export async function openTemplate({
       sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
     );
     const snapshot = templateSnapshotSchema.parse(source.snapshot);
+    assertProjectSourcePaths(snapshot);
     const ids = new Map(snapshot.map((node) => [node.id, crypto.randomUUID()]));
     await tx.insert(project).values({
       id: projectId,
@@ -498,6 +501,7 @@ const compilerStatusSchema = z.object({
 });
 async function compileSnapshot(found: StoredTemplate, bucket: SourceBucket) {
   const snapshot = templateSnapshotSchema.parse(found.snapshot);
+  assertProjectSourcePaths(snapshot);
   const paths = projectPaths(snapshot);
   const files: Record<string, string | { base64: string }> = {};
   for (const node of snapshot) {
@@ -629,7 +633,13 @@ export async function refreshTemplatePreviews({
         .where(and(eq(template.id, found.id), eq(template.status, "building")));
     } catch (error) {
       console.error("Template preview failed", { templateId: found.id, error });
-      if (!(error instanceof TemplatePreviewError)) continue;
+      if (
+        !(
+          error instanceof TemplatePreviewError ||
+          error instanceof InvalidSourcePathError
+        )
+      )
+        continue;
       await db
         .update(template)
         .set({

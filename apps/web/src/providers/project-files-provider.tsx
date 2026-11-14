@@ -5,8 +5,12 @@ import {
   projectMetadataSchema,
   type ProjectMetadata,
 } from "#/lib/project-metadata";
-import { createProjectNode } from "#/lib/project-node.functions";
+import {
+  createProjectNode,
+  renameProjectNode,
+} from "#/lib/project-node.functions";
 import { createNodeSchema } from "#/lib/project-node.schema";
+import { newProjectNodePath } from "#/lib/project-paths";
 import { decodeSource } from "#/lib/project-source";
 import { deleteProjectNode } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
@@ -146,6 +150,12 @@ export function createProjectFilesStore({
       );
       return next;
     },
+    async rename(nodeId: string, name: string, parentId: string) {
+      await write(() =>
+        renameProjectNode({ data: { projectId, nodeId, name, parentId } }),
+      );
+      await this.refresh();
+    },
     async create(
       input: Pick<NewNode, "parentId" | "name" | "kind" | "content">,
     ) {
@@ -154,6 +164,7 @@ export function createProjectFilesStore({
         id: crypto.randomUUID(),
         projectId,
       });
+      newProjectNodePath(nodes.toArray, row.parentId, row.name);
       await nodes.insert(row).when("settled");
       return row;
     },

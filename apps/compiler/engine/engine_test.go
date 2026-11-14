@@ -79,6 +79,7 @@ case "$text" in
 cache) [ "$(cat out/main.aux)" = "cached aux" ]; mkdir -p "$out/custom"; printf '\000\001\002\377' > "$out/custom/data.bin"; printf '%%PDF-1.5' > "$out/$name.pdf"; echo transcript > "$out/$name.log" ;;
 slow) touch '` + marker + `'; exec sleep 5 ;;
 bad) echo 'undefined control sequence' >&2; echo 'invalidcommand' > "$out/$name.log"; exit 1 ;;
+long-name) printf '%%PDF-1.5' > "$out/$name.pdf"; echo transcript > "$out/$name.log"; echo sync > "$out/$name.synctex.gz" ;;
 missing) exit 0 ;;
 large) truncate -s 20971521 "$out/$name.pdf" ;;
 logs) head -c 100000 /dev/zero | tr '\000' x; head -c 100000 /dev/zero | tr '\000' y >&2; printf START > "$out/$name.log"; head -c 100000 /dev/zero | tr '\000' z >> "$out/$name.log"; printf END >> "$out/$name.log"; printf '%%PDF-1.5' > "$out/$name.pdf" ;;

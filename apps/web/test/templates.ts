@@ -8,6 +8,7 @@ import {
   member,
   organization,
   projectCollaborator,
+  projectNode,
   template,
   user,
 } from "@texfolia/db/schema";
@@ -214,6 +215,37 @@ try {
       publishTemplate({ db, bucket, userId, data }),
       /Only the project owner/,
     );
+  const invalidTemplateId = crypto.randomUUID();
+  await db
+    .update(projectNode)
+    .set({ name: "data:1.bin" })
+    .where(eq(projectNode.id, binary.id));
+  await assert.rejects(
+    publishTemplate({
+      db,
+      bucket,
+      userId: publisherId,
+      data,
+      templateId: invalidTemplateId,
+    }),
+    /Repair source paths/,
+  );
+  assert.equal(
+    (await bucket.list({ prefix: `templates/${invalidTemplateId}/sources/` }))
+      .objects.length,
+    0,
+  );
+  assert.deepEqual(
+    await db
+      .select({ id: template.id })
+      .from(template)
+      .where(eq(template.id, invalidTemplateId)),
+    [],
+  );
+  await db
+    .update(projectNode)
+    .set({ name: "data.bin" })
+    .where(eq(projectNode.id, binary.id));
   const published = await publishTemplate({
     db,
     bucket,
@@ -303,6 +335,32 @@ try {
     png,
   );
   const snapshot = templateSnapshotSchema.parse(found.snapshot);
+  const invalidSnapshot = snapshot.map((node) =>
+    node.name === "data.bin" ? { ...node, name: "data:1.bin" } : node,
+  );
+  await db
+    .update(template)
+    .set({ snapshot: invalidSnapshot })
+    .where(eq(template.id, published.id));
+  const projectsBeforeInvalid = (await getProjects({ db, ownerId: editorId }))
+    .length;
+  await assert.rejects(
+    openTemplate({
+      db,
+      bucket,
+      userId: editorId,
+      data: { templateId: published.id, organizationId: null },
+    }),
+    /Repair source paths/,
+  );
+  assert.equal(
+    (await getProjects({ db, ownerId: editorId })).length,
+    projectsBeforeInvalid,
+  );
+  await db
+    .update(template)
+    .set({ snapshot })
+    .where(eq(template.id, published.id));
   const binarySnapshot = snapshot.find((node) => node.name === "data.bin");
   assert(binarySnapshot?.objectKey);
   const beforeFailure = (await getProjects({ db, ownerId: editorId })).length;

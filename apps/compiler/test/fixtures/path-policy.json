@@ -1,0 +1,172 @@
+[
+  {
+    "path": "",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "main.tex",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "chapter:1.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉🦉",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "chapters/日本語.tex",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "chapters/out/file.tex",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "out",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "out/file.tex",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "OUT/file.tex",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "Out",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "outside/file.tex",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "folder/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "folder/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": " folder / file.tex ",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "../file.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "./file.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "/file.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "folder//file.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "folder/../file.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "folder/./file.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "folder/",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "a\\b.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "a\u0000b.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "a\nb.tex",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "é.tex",
+    "source": true,
+    "artifact": true
+  },
+  {
+    "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source": false,
+    "artifact": false
+  },
+  {
+    "path": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+    "source": false,
+    "artifact": true
+  },
+  {
+    "path": "界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+    "source": false,
+    "artifact": false
+  }
+]

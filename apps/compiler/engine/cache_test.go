@@ -4,12 +4,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net/http/httptest"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -75,7 +75,7 @@ func TestCacheArchiveSupportsLongNamesAtFileLimit(t *testing.T) {
 	files := make(map[string][]byte, maxCacheFiles)
 	content := bytes.Repeat([]byte{1}, maxArtifactBytes/maxCacheFiles)
 	for index := range maxCacheFiles {
-		files[strings.Repeat("界", 79)+strconv.Itoa(index)] = content
+		files[strings.Repeat("界", 83)+fmt.Sprintf("%06d", index)] = content
 	}
 	archive, err := packCache(files)
 	if err != nil {

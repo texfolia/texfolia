@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import { newProjectNodePath } from "#/lib/project-paths";
 import { encodeSource, maxSourceFileBytes } from "#/lib/project-source";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
@@ -29,6 +30,7 @@ export function UploadSource({
     setError("");
     setPending(true);
     try {
+      newProjectNodePath(nodes, parentId, file.name);
       if (file.size > maxSourceFileBytes)
         throw new Error("File exceeds 10 MiB. Choose a smaller file.");
       const bytes = new Uint8Array(await file.arrayBuffer());
