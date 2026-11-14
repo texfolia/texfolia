@@ -217,7 +217,7 @@ export function Editor({
       ...(isMarkdown ? [markdown()] : []),
       EditorView.theme({
         ".cm-content, .cm-gutters": {
-          fontFamily: "var(--font-geist-mono)",
+          fontFamily: "var(--font-mono)",
           fontSize: `${preferences.fontSize}px`,
         },
         ".cm-scroller": { overflow: "auto" },

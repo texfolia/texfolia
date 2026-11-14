@@ -20,6 +20,7 @@
     "preview": "vite preview",
     "test": "bun test",
     "test:collaboration": "bun run test/collaboration.ts",
+    "test:production-assets": "bun run test/production-assets.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
