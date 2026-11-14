@@ -91,6 +91,11 @@ export const projectCollaborator = pgTable(
   ],
 );
 
+// Deliberately independent of project: cleanup must survive owner cascades.
+export const projectCollaboration = pgTable("project_collaboration", {
+  projectId: uuid("project_id").primaryKey(),
+});
+
 export const projectJob = pgTable(
   "project_job",
   {

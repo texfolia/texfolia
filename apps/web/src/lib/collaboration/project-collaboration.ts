@@ -1,5 +1,7 @@
 import { createDb, type Db } from "@texfolia/db";
+import { project, projectNode } from "@texfolia/db/schema";
 import { DurableObject } from "cloudflare:workers";
+import { and, eq, isNull } from "drizzle-orm";
 import * as Y from "yjs";
 import { z } from "zod";
 
@@ -57,6 +59,7 @@ const colors = [
   "#d97706",
   "#0891b2",
 ];
+const retentionIntervalMs = 60 * 60_000;
 
 export class ProjectCollaboration extends DurableObject<Env> {
   private documents = new Map<string, Y.Doc>();
@@ -77,7 +80,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       if (
         (this.ctx.getWebSockets().length ||
           this.ctx.storage.sql
-            .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
+            .exec("SELECT node_id FROM documents LIMIT 1")
             .toArray().length) &&
         (await this.ctx.storage.getAlarm()) === null
       )
@@ -110,6 +113,62 @@ export class ProjectCollaboration extends DurableObject<Env> {
     return this.ctx.storage.sql
       .exec<DocumentRow>("SELECT * FROM documents WHERE node_id = ?", nodeId)
       .toArray()[0];
+  }
+
+  private removeDocument(nodeId: string) {
+    this.ctx.storage.transactionSync(() => {
+      deleteUpdates(this.ctx.storage.sql, nodeId);
+      this.ctx.storage.sql.exec(
+        "DELETE FROM snapshot_chunks WHERE node_id = ?",
+        nodeId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM documents WHERE node_id = ?",
+        nodeId,
+      );
+    });
+    this.documents.get(nodeId)?.destroy();
+    this.documents.delete(nodeId);
+    for (const ws of this.ctx.getWebSockets(nodeId))
+      if (ws.readyState === WebSocket.OPEN) ws.close(1008, "File removed");
+  }
+
+  private async purgeDeleted(projectId: string) {
+    const nodeIds = new Set(
+      this.ctx.storage.sql
+        .exec<Pick<DocumentRow, "node_id">>(
+          "SELECT node_id FROM documents WHERE project_id = ?",
+          projectId,
+        )
+        .toArray()
+        .map((row) => row.node_id),
+    );
+    for (const ws of this.ctx.getWebSockets()) {
+      const info = attachmentSchema.parse(ws.deserializeAttachment());
+      if (info.projectId === projectId) nodeIds.add(info.nodeId);
+    }
+    const live = await this.withDb((db) =>
+      db
+        .select({ id: projectNode.id })
+        .from(project)
+        .leftJoin(
+          projectNode,
+          and(
+            eq(project.id, projectNode.projectId),
+            isNull(projectNode.deletedAt),
+            eq(projectNode.kind, "text"),
+          ),
+        )
+        .where(and(eq(project.id, projectId), isNull(project.deletedAt))),
+    );
+    const liveIds = new Set(live.map((node) => node.id));
+    for (const nodeId of nodeIds)
+      if (!liveIds.has(nodeId)) this.removeDocument(nodeId);
+    return { projectDeleted: live.length === 0 };
+  }
+
+  async purgeDeletedSources(projectId: string) {
+    return this.serial(() => this.purgeDeleted(projectId));
   }
 
   private async document(
@@ -208,15 +267,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
     try {
       const info = attachmentSchema.parse(ws.deserializeAttachment());
       await this.withDb((db) =>
-        collaborationAccess(
-          db,
-          info.projectId,
-          info.nodeId,
-          info.userId,
-          () => {
+        collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
+          deliver: () => {
             if (ws.readyState === WebSocket.OPEN) deliver?.();
           },
-        ),
+        }),
       );
     } catch {
       // Failure to verify access must never leave a recipient subscribed.
@@ -245,7 +300,9 @@ export class ProjectCollaboration extends DurableObject<Env> {
         JSON.parse(request.headers.get("X-Collaboration-Session") ?? "null"),
       );
       await this.withDb((db) =>
-        collaborationAccess(db, info.projectId, info.nodeId, info.userId),
+        collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
+          register: true,
+        }),
       );
       await this.document(info);
       const pair = new WebSocketPair();
@@ -308,8 +365,10 @@ export class ProjectCollaboration extends DurableObject<Env> {
     } finally {
       candidate.destroy();
     }
-    if ((await this.ctx.storage.getAlarm()) === null)
-      await this.ctx.storage.setAlarm(Date.now() + 2000);
+    const flushAt = Date.now() + 2000;
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > flushAt)
+      await this.ctx.storage.setAlarm(flushAt);
     await this.broadcast(info.nodeId, {
       type: "update",
       update: encodeSource(bytes),
@@ -434,19 +493,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       throw error;
     }
     if (!version) {
-      deleteUpdates(this.ctx.storage.sql, nodeId);
-      this.ctx.storage.sql.exec(
-        "DELETE FROM snapshot_chunks WHERE node_id = ?",
-        nodeId,
-      );
-      this.ctx.storage.sql.exec(
-        "DELETE FROM documents WHERE node_id = ?",
-        nodeId,
-      );
-      this.documents.delete(nodeId);
-      doc.destroy();
-      for (const ws of this.ctx.getWebSockets(nodeId))
-        ws.close(1008, "File removed");
+      this.removeDocument(nodeId);
       return null;
     }
     this.ctx.storage.sql.exec(
@@ -461,37 +508,56 @@ export class ProjectCollaboration extends DurableObject<Env> {
 
   override async alarm() {
     return this.serial(async () => {
-      for (const ws of this.ctx.getWebSockets()) await this.checkRecipient(ws);
-      for (const row of this.ctx.storage.sql
-        .exec<DocumentRow>("SELECT * FROM documents WHERE dirty = 1")
-        .toArray()) {
-        try {
-          await this.flush(row.node_id);
-        } catch (error) {
-          console.error("Collaborative source flush failed", {
-            projectId: row.project_id,
-            nodeId: row.node_id,
-            error,
-          });
-          await this.broadcast(row.node_id, {
-            type: "error",
-            message:
-              "Edits are retained in collaboration, but source saving failed. " +
-              (error instanceof Error ? error.message : "Retrying."),
-          });
-        }
-      }
-      if (
-        this.ctx
-          .getWebSockets()
-          .some((ws) => ws.readyState === WebSocket.OPEN) ||
-        this.ctx.storage.sql
-          .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
-          .toArray().length
-      )
-        await this.ctx.storage.setAlarm(
-          Date.now() + liveProjectAccessIntervalMs,
+      try {
+        for (const ws of this.ctx.getWebSockets())
+          await this.checkRecipient(ws);
+        const projectIds = new Set(
+          this.ctx.storage.sql
+            .exec<Pick<DocumentRow, "project_id">>(
+              "SELECT DISTINCT project_id FROM documents",
+            )
+            .toArray()
+            .map((row) => row.project_id),
         );
+        for (const projectId of projectIds) await this.purgeDeleted(projectId);
+        for (const row of this.ctx.storage.sql
+          .exec<DocumentRow>("SELECT * FROM documents WHERE dirty = 1")
+          .toArray()) {
+          try {
+            await this.flush(row.node_id);
+          } catch (error) {
+            console.error("Collaborative source flush failed", {
+              projectId: row.project_id,
+              nodeId: row.node_id,
+              error,
+            });
+            await this.broadcast(row.node_id, {
+              type: "error",
+              message:
+                "Edits are retained in collaboration, but source saving failed. " +
+                (error instanceof Error ? error.message : "Retrying."),
+            });
+          }
+        }
+      } finally {
+        const active =
+          this.ctx
+            .getWebSockets()
+            .some((ws) => ws.readyState === WebSocket.OPEN) ||
+          this.ctx.storage.sql
+            .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
+            .toArray().length;
+        if (
+          active ||
+          this.ctx.storage.sql
+            .exec("SELECT node_id FROM documents LIMIT 1")
+            .toArray().length
+        )
+          await this.ctx.storage.setAlarm(
+            Date.now() +
+              (active ? liveProjectAccessIntervalMs : retentionIntervalMs),
+          );
+      }
     });
   }
 
@@ -510,7 +576,9 @@ export class ProjectCollaboration extends DurableObject<Env> {
         awareness: null,
       };
       const access = await this.withDb((db) =>
-        collaborationAccess(db, info.projectId, info.nodeId, userId),
+        collaborationAccess(db, info.projectId, info.nodeId, userId, {
+          register: true,
+        }),
       );
       if (!access.canWrite) throw new Error("Viewers cannot edit documents");
       const doc = await this.document(info);

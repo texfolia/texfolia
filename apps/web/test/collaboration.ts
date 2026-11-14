@@ -30,6 +30,7 @@ import { hashSource } from "../src/lib/latex/source-sync";
 import { decodeSource, encodeSource } from "../src/lib/project-source";
 import { createProject } from "../src/lib/project.server";
 import type { BrowserApi } from "./collaboration/browser";
+import { checkDeletion } from "./collaboration/deletion";
 import { checkRevocation } from "./collaboration/revocation";
 
 declare global {
@@ -152,6 +153,13 @@ try {
       `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`,
     );
   }
+  await checkDeletion({
+    mf,
+    db,
+    origin: (await mf.ready).origin,
+    ownerId,
+    cookie: cookies.get(ownerId) ?? "",
+  });
   const created = await createProject({
     db,
     ownerId,
@@ -673,8 +681,11 @@ try {
 } finally {
   await Promise.all(contexts.map((context) => context.close()));
   await browser.close();
-  await mf.dispose();
   for (const id of userIds) await db.delete(user).where(eq(user.id, id));
+  await mf.dispatchFetch(`${(await mf.ready).origin}/cleanup/collect`, {
+    method: "POST",
+  });
+  await mf.dispose();
   await db.$client.end();
   await rm(directory, { recursive: true, force: true });
 }
