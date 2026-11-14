@@ -8,7 +8,11 @@ import * as Y from "yjs";
 
 import { clientMessageSchema } from "../src/lib/collaboration/protocol";
 import { compileDeltaSchema, hashSource } from "../src/lib/latex/source-sync";
-import { createNodeSchema } from "../src/lib/project-node.schema";
+import {
+  createNodeSchema,
+  renameNodeSchema,
+} from "../src/lib/project-node.schema";
+import { renamedProjectNodes } from "../src/lib/project-paths";
 import {
   decodeSource,
   encodeSource,
@@ -148,6 +152,15 @@ const backend = Bun.serve({
     if (url.pathname === "/fixture/project") return Response.json(project);
     if (url.pathname === `/api/projects/${projectId}/metadata`)
       return Response.json(project);
+    if (url.pathname === "/fixture/rename") {
+      const data = renameNodeSchema.parse(await request.json());
+      renamedProjectNodes(project.nodes, data.nodeId, data.name, data.parentId);
+      const node = project.nodes.find((node) => node.id === data.nodeId);
+      assert(node);
+      node.name = data.name;
+      node.parentId = data.parentId;
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname === "/fixture/nodes") {
       const input = createNodeSchema.parse(await request.json());
       if (failUpload) {
@@ -175,6 +188,15 @@ const backend = Bun.serve({
       return Response.json({ ...input, sourceVersion });
     }
 
+    if (url.pathname.startsWith(`/api/sources/${projectId}/`)) {
+      const version =
+        project.sourceVersions[url.pathname.split("/").at(-1) ?? ""];
+      const hash = version?.objectKey?.split("/").at(-1);
+      const bytes = hash ? sourceObjects.get(hash) : undefined;
+      return bytes
+        ? new Response(new Uint8Array(bytes))
+        : new Response(null, { status: 404 });
+    }
     if (url.searchParams.has("events")) {
       let subscriber: ReadableStreamDefaultController<Uint8Array>;
       return new Response(
@@ -329,6 +351,25 @@ try {
       console.error(await page.locator("body").innerText());
       throw error;
     });
+  console.info("Checking source name validation before any upload is stored");
+  await page.getByRole("button", { name: "New file", exact: true }).click();
+  await page.getByLabel("File name", { exact: true }).fill("chapter:1.tex");
+  await page.getByRole("button", { name: "Create file", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "colons" }).waitFor();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  for (const name of ["chapter:1.tex", "a".repeat(241), "é".repeat(121)]) {
+    await page.getByLabel("Upload project source").setInputFiles({
+      name,
+      mimeType: "text/plain",
+      buffer: Buffer.from("not stored"),
+    });
+    await page
+      .getByRole("alert")
+      .filter({ hasText: name.includes(":") ? "colons" : "240 UTF-8 bytes" })
+      .waitFor();
+    assert.equal(project.nodes.length, 2);
+    assert.equal(sourceObjects.size, 0);
+  }
   const png = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 32;
@@ -512,6 +553,88 @@ try {
     1,
     "Upload through PDF must not navigate or reload",
   );
+  console.info("Checking legacy path recovery through the workspace form");
+  const legacyId = crypto.randomUUID();
+  const legacyDoc = new Y.Doc();
+  legacyDoc.getText("source").insert(0, "legacy source preserved");
+  documents.set(legacyId, legacyDoc);
+  project.nodes.push({
+    id: legacyId,
+    projectId,
+    parentId: rootId,
+    name: "chapter:1.tex",
+    kind: "text",
+  });
+  project.sourceVersions[legacyId] = { objectKey: null, updatedAt: 0 };
+  await page.evaluate(() => window.uploadTest.refresh());
+  const repair = page
+    .locator("details")
+    .filter({ has: page.getByText("Repair source paths", { exact: true }) });
+  await repair.getByText("These paths prevent compilation:").waitFor();
+  await page
+    .getByRole("button", { name: "chapter:1.tex", exact: true })
+    .click();
+  await page.getByRole("tab", { name: /^chapter:1\.tex/ }).waitFor();
+  await page
+    .getByRole("button", { name: "Save & compile", exact: true })
+    .click();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: /chapter:1.tex.*Repair source paths/ })
+    .waitFor();
+  assert.equal(
+    submissions.length,
+    2,
+    "Invalid legacy path must not reach the compiler",
+  );
+  const download = page.waitForEvent("download");
+  await page.getByText("Export project", { exact: true }).click();
+  await page.getByRole("button", { name: "Download zip", exact: true }).click();
+  assert.match((await download).suggestedFilename(), /\.zip$/);
+  await repair
+    .getByLabel("File or folder", { exact: true })
+    .selectOption(legacyId);
+  await repair.getByLabel("New name", { exact: true }).fill("recovered.tex");
+  await repair
+    .getByLabel("In folder", { exact: true })
+    .selectOption(created.folder.id);
+  if (process.env.WORKSPACE_TEST_SCREENSHOT)
+    await page.screenshot({
+      path: process.env.WORKSPACE_TEST_SCREENSHOT,
+      fullPage: true,
+    });
+  await repair.getByRole("button", { name: "Rename", exact: true }).click();
+  await page
+    .getByText("Repair source paths", { exact: true })
+    .waitFor({ state: "detached" });
+  assert.equal(
+    project.nodes.find((node) => node.id === legacyId)?.name,
+    "recovered.tex",
+  );
+  assert.equal(
+    legacyDoc.getText("source").toString(),
+    "legacy source preserved",
+  );
+  await page.getByRole("tab", { name: "recovered.tex", exact: true }).waitFor();
+  const repairedCompile = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/compile/${projectId}`,
+  );
+  await page
+    .getByRole("button", { name: "Save & compile", exact: true })
+    .click();
+  assert.equal((await repairedCompile).status(), 200);
+  await page
+    .getByRole("button", { name: "Save & compile", exact: true })
+    .waitFor();
+  assert.equal(submissions.length, 3);
+  assert(Object.hasOwn(submissions[2]?.files ?? {}, "figures/recovered.tex"));
+  assert.equal(
+    project.nodes.find((node) => node.id === legacyId)?.parentId,
+    created.folder.id,
+  );
+  assert(!Object.hasOwn(submissions[2]?.files ?? {}, "chapter:1.tex"));
   assert.deepEqual(errors, []);
   console.info(
     "Binary upload failure → retry → compile failure → retry → real Tectonic PDF rendered without navigation; binary transport is hash-only.",

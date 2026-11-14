@@ -1,5 +1,10 @@
 Welcome to your new TanStack Start app!
 
+# Authentication
+
+See [Public auth abuse protection](../../docs/auth-abuse-protection.md) for the
+enabled routes, CAPTCHA policy, rate limits, and verification commands.
+
 # Public templates
 
 `/templates` is a paginated, server-rendered public gallery. A snapshot's stable
@@ -97,6 +102,11 @@ Save and Cmd/Ctrl+S wait for merged text to reach R2. **Save & compile** persist
 first and submits the acknowledged source snapshot.
 Uploads use the same storage and quota checks. Text uploads (including `.bib`)
 remain editable; binary sources can be downloaded, exported, and compiled.
+
+Source names and full paths follow the [project path policy](../../docs/source-paths.md).
+Creation and uploads check the assembled path before storage. Existing invalid
+paths appear in the Files sidebar under **Repair source paths**. Renaming keeps
+file contents and collaboration documents.
 
 Owners and editor collaborators can write. Viewer collaborators can read and
 export. Binary writes compare the previous object key to reject stale overwrites.

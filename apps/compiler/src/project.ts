@@ -34,19 +34,18 @@ export class EngineError extends Error {
 export const artifactPathSchema = z
   .string()
   .min(1)
-  .max(240)
+  .refine((path) => new TextEncoder().encode(path).length <= 255)
   .refine(
-    (value) =>
+    (path) =>
       // oxlint-disable-next-line no-control-regex -- Project paths must reject control characters.
-      !/[\\:\x00-\x1f]/.test(value) &&
-      !value.startsWith("/") &&
-      value
+      !/[\\:\u0000-\u001f]/.test(path) &&
+      path
         .split("/")
         .every((part) => part !== "" && part !== "." && part !== ".."),
   );
-export const sourcePathSchema = artifactPathSchema.refine(
-  (value) => value !== "out" && !value.startsWith("out/"),
-);
+export const sourcePathSchema = artifactPathSchema
+  .refine((path) => new TextEncoder().encode(path).length <= 240)
+  .refine((path) => path.split("/")[0]?.toLowerCase() !== "out");
 export const artifactContentSchema = z.object({
   base64: z
     .string()

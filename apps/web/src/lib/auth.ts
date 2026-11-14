@@ -7,6 +7,9 @@ import { captcha, emailOTP, organization } from "better-auth/plugins";
 import type { Member } from "better-auth/plugins/organization";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import Stripe from "stripe";
+import { z } from "zod";
+
+import { AUTH_EMAIL_CAPTCHA_ACTION } from "./auth-captcha";
 
 async function sendEmail(
   options: Parameters<typeof import("./email").sendEmail>[0],
@@ -82,18 +85,32 @@ export const authorizeOrganizationBilling: NonNullable<
 };
 
 export function createAuth(db: Db) {
+  const baseURL = process.env.BETTER_AUTH_URL!;
+  const allowedHostnames = z
+    .array(z.hostname())
+    .nonempty()
+    .parse(
+      (process.env.TURNSTILE_HOSTNAMES ?? new URL(baseURL).hostname)
+        .split(",")
+        .map((hostname) => hostname.trim().toLowerCase())
+        .filter(Boolean),
+    );
   const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2026-10-28.endive",
   });
 
   return betterAuth({
+    baseURL,
     database: drizzleAdapter(db, {
       provider: "pg",
       schema,
     }),
     emailAndPassword: {
       enabled: true,
+      disableSignUp: true,
     },
+    disabledPaths: ["/request-password-reset", "/send-verification-email"],
+    rateLimit: { enabled: true },
     socialProviders: {
       github: {
         clientId: process.env.GITHUB_CLIENT_ID!,
@@ -114,13 +131,19 @@ export function createAuth(db: Db) {
     },
     plugins: [
       createOrganizationPlugin({
-        baseURL: process.env.BETTER_AUTH_URL!,
+        baseURL,
         sendInvitationEmail: sendEmail,
       }),
       captcha({
         provider: "cloudflare-turnstile",
         secretKey: process.env.TURNSTILE_SECRET!,
-        endpoints: ["/email-otp/send-verification-otp"],
+        allowedHostnames,
+        expectedAction: AUTH_EMAIL_CAPTCHA_ACTION,
+        endpoints: [
+          "/email-otp/send-verification-otp",
+          "/email-otp/request-password-reset",
+          "/forget-password/email-otp",
+        ],
       }),
       createEmailOTPPlugin(sendEmail),
       stripe({
@@ -144,6 +167,7 @@ export function createAuth(db: Db) {
       tanstackStartCookies(),
     ],
     advanced: {
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
       database: {
         joins: true,
       },

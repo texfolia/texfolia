@@ -5,7 +5,7 @@ import { compileDeltaSchema, hashSource } from "./latex/source-sync";
 import { lockProject } from "./project-access.server";
 import { projectMetadataVersion } from "./project-metadata";
 import { readProjectMetadata } from "./project-metadata.server";
-import { projectPaths } from "./project-paths";
+import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import { encodeSource } from "./project-source";
 import type { SourceBucket } from "./project-source.server";
 
@@ -34,12 +34,14 @@ export async function withCompileSources<T>(
     await lockProject({ tx, projectId, userId });
     if (options.client) {
       const metadata = await readProjectMetadata({ tx, projectId, userId });
+      assertProjectSourcePaths(metadata.nodes);
       if ((await projectMetadataVersion(metadata)) === options.client.version)
         return options.submit({ ...options.client.delta, resync: false });
     }
     const nodes = await tx.query.projectNode.findMany({
       where: { projectId, deletedAt: { isNull: true } },
     });
+    assertProjectSourcePaths(nodes);
     const paths = projectPaths(nodes);
     if (
       !paths.size ||

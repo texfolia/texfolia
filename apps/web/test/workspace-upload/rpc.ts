@@ -1,6 +1,9 @@
 import type { z } from "zod";
 
-import type { createNodeSchema } from "../../src/lib/project-node.schema";
+import type {
+  createNodeSchema,
+  renameNodeSchema,
+} from "../../src/lib/project-node.schema";
 import type { createProjectNode as createNode } from "../../src/lib/project-node.server";
 
 // Stand in for TanStack's generated RPC transport, retaining the production store.
@@ -24,4 +27,16 @@ export async function deleteProjectNode() {
 
 export async function saveProjectSource() {
   throw new Error("Unexpected legacy draft migration");
+}
+
+export async function renameProjectNode({
+  data,
+}: {
+  data: z.input<typeof renameNodeSchema>;
+}) {
+  const response = await fetch("/fixture/rename", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await response.text());
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode/utf16"
 )
 
 const maxProjectBytes = 10 * 1024 * 1024
@@ -20,7 +19,7 @@ type project struct {
 }
 
 func validPath(path string) bool {
-	if path == "" || len(utf16.Encode([]rune(path))) > 240 || strings.ContainsAny(path, "\\:") {
+	if path == "" || len(path) > 255 || strings.ContainsAny(path, "\\:") {
 		return false
 	}
 	for _, char := range path {
@@ -66,7 +65,7 @@ func parseProject(body []byte) (project, error) {
 		return invalid()
 	}
 	for path, raw := range wire.Files {
-		if !validPath(path) || path == "out" || strings.HasPrefix(path, "out/") {
+		if !sourcePath(path) {
 			return invalid()
 		}
 		for parent := path; strings.Contains(parent, "/"); {

@@ -1,10 +1,11 @@
 import type { Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 
 import { lockProject } from "./project-access.server";
-import type { createNodeSchema } from "./project-node.schema";
+import { createNodeSchema, renameNodeSchema } from "./project-node.schema";
+import { newProjectNodePath, renamedProjectNodes } from "./project-paths";
 import {
   invalidateSourceBuild,
   putSource,
@@ -22,19 +23,13 @@ export async function createProjectNode({
   data: z.infer<typeof createNodeSchema>;
   bucket?: SourceBucket;
 }) {
+  data = createNodeSchema.parse(data);
   const created = await db.transaction(async (tx) => {
     await lockProject({ tx, projectId: data.projectId, userId: ownerId });
-    const parent = await tx.query.projectNode.findFirst({
-      where: {
-        id: data.parentId,
-        projectId: data.projectId,
-        kind: "folder",
-        deletedAt: { isNull: true },
-      },
+    const nodes = await tx.query.projectNode.findMany({
+      where: { projectId: data.projectId, deletedAt: { isNull: true } },
     });
-    if (!parent) throw new Error("Folder not found");
-    if (parent.parentId === null && data.name.toLowerCase() === "out")
-      throw new Error("out/ is reserved for generated build files");
+    newProjectNodePath(nodes, data.parentId, data.name);
     const { content, ...metadata } = data;
     let stored: { objectKey: string | null; sizeBytes: bigint } = {
       objectKey: null,
@@ -77,4 +72,37 @@ export async function createProjectNode({
   });
   await invalidateSourceBuild(data.projectId);
   return created;
+}
+
+export async function renameProjectNode({
+  db,
+  userId,
+  data,
+}: {
+  db: Db;
+  userId: string;
+  data: z.infer<typeof renameNodeSchema>;
+}) {
+  data = renameNodeSchema.parse(data);
+  await db.transaction(async (tx) => {
+    await lockProject({ tx, projectId: data.projectId, userId });
+    const nodes = await tx.query.projectNode.findMany({
+      where: { projectId: data.projectId, deletedAt: { isNull: true } },
+    });
+    renamedProjectNodes(nodes, data.nodeId, data.name, data.parentId);
+    await tx
+      .update(projectNode)
+      .set({ name: data.name, parentId: data.parentId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(projectNode.id, data.nodeId),
+          eq(projectNode.projectId, data.projectId),
+        ),
+      );
+    await tx
+      .update(project)
+      .set({ updatedAt: new Date() })
+      .where(eq(project.id, data.projectId));
+  });
+  await invalidateSourceBuild(data.projectId);
 }
