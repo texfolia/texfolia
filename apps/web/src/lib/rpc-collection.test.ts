@@ -108,3 +108,29 @@ test("bulk writes are rejected before any partial server changes", async () => {
   expect(persisted).toEqual([]);
   expect(rows.toArray).toEqual([]);
 });
+
+test("remote snapshots reconcile a live query without losing optimistic writes", async () => {
+  const response = Promise.withResolvers<Row>();
+  const rows = createRpcCollection<Row>({
+    initial: [{ id: "old", name: "old.tex" }],
+    insert: () => response.promise,
+  });
+  const view = createLiveQueryCollection({
+    query: (q) => q.from({ row: rows }),
+  });
+  cleanups.push(
+    () => view.cleanup(),
+    () => rows.cleanup(),
+  );
+  await view.preload();
+  const transaction = rows.insert({ id: "local", name: "draft.tex" });
+  rows.utils.replace([{ id: "remote", name: "chapter.tex" }]);
+  expect(rows.has("local")).toBe(true);
+  response.resolve({ id: "local", name: "draft.tex" });
+  await transaction.when("settled");
+  expect(view.toArray.map((row) => row.name).sort()).toEqual([
+    "chapter.tex",
+    "draft.tex",
+  ]);
+  expect(rows.has("old")).toBe(false);
+});

@@ -54,6 +54,7 @@ export class CollaborativeFile {
       userId: string;
       canWrite: boolean;
       onChange: (value: string) => void;
+      onSaved?: (saved: Saved) => void;
     },
   ) {
     this.status = {
@@ -263,6 +264,7 @@ export class CollaborativeFile {
             );
             break;
           case "saved": {
+            this.options.onSaved?.(data);
             this.setStatus({ error: "" });
             const pending = this.saves.get(data.id);
             if (pending) {
@@ -340,6 +342,37 @@ export class CollaborativeFile {
         id,
         update: encodeSource(Y.encodeStateAsUpdate(this.doc)),
       });
+    });
+  }
+
+  whenConnected(): Promise<void> {
+    if (this.status.connected && this.status.ready) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsubscribe();
+        reject(
+          new Error(
+            "Wait for project files to synchronize before exporting or compiling.",
+          ),
+        );
+      }, 10_000);
+      const unsubscribe = this.subscribe(() => {
+        if (!this.status.connected || !this.status.ready) return;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve();
+      });
+    });
+  }
+
+  retire() {
+    if (this.stopped) return;
+    this.stopped = true;
+    this.disconnect();
+    this.setStatus({
+      canWrite: false,
+      error:
+        "This file was deleted. Your local text is still available to copy.",
     });
   }
 

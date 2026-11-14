@@ -1,6 +1,6 @@
 import { createCollection, type SyncConfig } from "@tanstack/react-db";
 
-// Route snapshots and acknowledged writes are the only sources of server data.
+// Keep server snapshots beneath TanStack DB's optimistic transaction overlay.
 export function createRpcCollection<T extends { id: string }>({
   initial,
   insert,
@@ -11,7 +11,15 @@ export function createRpcCollection<T extends { id: string }>({
   remove?: (row: T) => Promise<unknown>;
 }) {
   let sync: Parameters<SyncConfig<T, string>["sync"]>[0];
-  const collection = createCollection<T, string>({
+  const utils = {
+    replace(rows: T[]) {
+      sync.begin({ snapshot: true });
+      for (const row of rows) sync.write({ type: "insert", value: row });
+      sync.commit();
+    },
+  };
+  const collection = createCollection<T, string, typeof utils>({
+    utils,
     getKey: (row) => row.id,
     startSync: true,
     gcTime: Infinity,

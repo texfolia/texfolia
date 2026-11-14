@@ -38,6 +38,8 @@ jobs:
         run: bun run --cwd apps/web playwright install --with-deps chromium
       - name: Exercise real-time collaboration locally
         run: bun run --cwd apps/web test:collaboration
+      - name: Exercise metadata synchronization in two authenticated workspaces
+        run: bun run --cwd apps/web test:workspace-metadata
       - name: Exercise project source storage with local R2
         run: bun run apps/web/test/source-storage.ts
       - name: Exercise templates with Postgres and local R2

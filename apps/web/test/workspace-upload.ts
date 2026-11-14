@@ -115,7 +115,13 @@ const backend = Bun.serve({
         Y.applyUpdate(doc, decodeSource(message.update));
       if (message.type === "save") {
         const value = doc.getText("source").toString();
-        const hash = await hashSource(new TextEncoder().encode(value));
+        const bytes = new TextEncoder().encode(value);
+        const hash = await hashSource(bytes);
+        sourceObjects.set(hash, bytes);
+        project.sourceVersions[socket.data.nodeId] = {
+          objectKey: `projects/${projectId}/sources/${hash}`,
+          updatedAt: Date.now(),
+        };
         socket.send(
           JSON.stringify({
             type: "saved",
@@ -140,6 +146,8 @@ const backend = Bun.serve({
       return new Response(null, { status: 400 });
     }
     if (url.pathname === "/fixture/project") return Response.json(project);
+    if (url.pathname === `/api/projects/${projectId}/metadata`)
+      return Response.json(project);
     if (url.pathname === "/fixture/nodes") {
       const input = createNodeSchema.parse(await request.json());
       if (failUpload) {
@@ -154,17 +162,19 @@ const backend = Bun.serve({
         doc.getText("source").insert(0, new TextDecoder().decode(bytes));
         documents.set(input.id, doc);
       }
-      return Response.json({
-        ...input,
-        sourceVersion: {
-          objectKey:
-            input.content === undefined
-              ? null
-              : `projects/${projectId}/sources/${hash}`,
-          updatedAt: Date.now(),
-        },
-      });
+      const sourceVersion = {
+        objectKey:
+          input.content === undefined
+            ? null
+            : `projects/${projectId}/sources/${hash}`,
+        updatedAt: Date.now(),
+      };
+      project.nodes.push(input);
+      if (input.kind !== "folder")
+        project.sourceVersions[input.id] = sourceVersion;
+      return Response.json({ ...input, sourceVersion });
     }
+
     if (url.searchParams.has("events")) {
       let subscriber: ReadableStreamDefaultController<Uint8Array>;
       return new Response(
@@ -210,8 +220,9 @@ const backend = Bun.serve({
           assert(bytes, "Compile referenced an unacknowledged object");
           files[path] = { base64: encodeSource(bytes) };
         } else {
-          assert(source.content !== undefined);
-          files[path] = source.content;
+          const bytes = sourceObjects.get(source.hash);
+          assert(source.content !== undefined || bytes);
+          files[path] = source.content ?? new TextDecoder().decode(bytes);
         }
       }
       jobId = request.headers.get("X-Compilation-Id") ?? "";
@@ -400,6 +411,26 @@ try {
     ),
     true,
     "Failed deletion must roll back",
+  );
+  assert.match(
+    await page.evaluate(async (id) => {
+      try {
+        await window.uploadTest.remove(id);
+        return "Unexpected success";
+      } catch (error) {
+        return String(error);
+      }
+    }, mainId),
+    /Delete unavailable/,
+  );
+  assert.equal(
+    await page
+      .getByText(
+        "This file was deleted. Your local text is still available to copy.",
+      )
+      .count(),
+    0,
+    "Rejected optimistic deletion must leave the collaborative editor connected",
   );
   await page
     .getByRole("button", { name: "Save & compile", exact: true })

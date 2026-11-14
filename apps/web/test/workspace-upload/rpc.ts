@@ -18,6 +18,7 @@ export async function createProjectNode({
 }
 
 export async function deleteProjectNode() {
+  await new Promise((resolve) => setTimeout(resolve, 100));
   throw new Error("Delete unavailable");
 }
 

@@ -157,6 +157,7 @@ export async function requestCompilation(options: {
   events: ProjectBuildEvents;
   mainFile: string;
   files: CompileSources;
+  metadataVersion?: string;
   signal: AbortSignal;
   startedAt?: number;
   lastEditAt?: number | null;
@@ -186,6 +187,9 @@ export async function requestCompilation(options: {
         "Content-Type": "application/json",
         "X-Compilation-Id": jobId,
         "X-Clean-Build": options.clean ? "1" : "0",
+        ...(options.metadataVersion
+          ? { "X-Source-Metadata": options.metadataVersion }
+          : {}),
         ...(options.editorVersion
           ? {
               "X-Editor-Id": options.editorVersion.editorId,

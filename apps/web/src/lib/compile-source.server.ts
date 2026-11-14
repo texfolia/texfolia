@@ -3,21 +3,40 @@ import type { z } from "zod";
 
 import { compileDeltaSchema, hashSource } from "./latex/source-sync";
 import { lockProject } from "./project-access.server";
+import { projectMetadataVersion } from "./project-metadata";
+import { readProjectMetadata } from "./project-metadata.server";
 import { projectPaths } from "./project-paths";
 import { encodeSource } from "./project-source";
 import type { SourceBucket } from "./project-source.server";
 
-export async function compileResync(options: {
+type CompileOptions = {
   db: Db;
   bucket: SourceBucket;
   projectId: string;
   userId: string;
   mainFile: string;
   sourceRevision: number;
-}) {
+  client?: { version: string; delta: z.infer<typeof compileDeltaSchema> };
+};
+type CompileSnapshot = z.infer<typeof compileDeltaSchema> & { resync: boolean };
+
+export function compileResync(options: CompileOptions) {
+  return withCompileSources({ ...options, submit: async (sources) => sources });
+}
+
+export async function withCompileSources<T>(
+  options: CompileOptions & {
+    submit: (sources: CompileSnapshot) => Promise<T>;
+  },
+) {
   const { db, bucket, projectId, userId, mainFile, sourceRevision } = options;
   return db.transaction(async (tx) => {
     await lockProject({ tx, projectId, userId });
+    if (options.client) {
+      const metadata = await readProjectMetadata({ tx, projectId, userId });
+      if ((await projectMetadataVersion(metadata)) === options.client.version)
+        return options.submit({ ...options.client.delta, resync: false });
+    }
     const nodes = await tx.query.projectNode.findMany({
       where: { projectId, deletedAt: { isNull: true } },
     });
@@ -60,13 +79,13 @@ export async function compileResync(options: {
         },
       });
     }
-    return {
+    return options.submit({
       mainFile,
       baseRevision: sourceRevision,
       revision: sourceRevision + 1,
       files,
       deleted: [],
       resync: true,
-    };
+    });
   });
 }
