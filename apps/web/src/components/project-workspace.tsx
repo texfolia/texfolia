@@ -28,6 +28,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { DocumentHistoryPanel } from "#/components/document-history";
 import { Editor } from "#/components/editor";
 import { GeneratedFile } from "#/components/generated-file";
 import {
@@ -232,6 +233,7 @@ function CompiledPdf() {
 }
 
 const components = {
+  history: DocumentHistoryPanel,
   editor: FileEditor,
   generated: GeneratedFile,
   pdf: CompiledPdf,
@@ -1176,6 +1178,19 @@ export function ProjectWorkspace({
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <ProjectSidebar
             name={name}
+            onOpenHistory={() => {
+              const existing = api.current?.getPanel("document-history");
+              if (existing) {
+                existing.api.setActive();
+                return;
+              }
+              api.current?.addPanel({
+                id: "document-history",
+                component: "history",
+                title: "Document history",
+                params: { nodeId: activeId },
+              });
+            }}
             nodes={nodes}
             activeId={activeId}
             ready={ready}

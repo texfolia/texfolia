@@ -5,6 +5,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import * as Y from "yjs";
 import { z } from "zod";
 
+import {
+  historyCadenceMs,
+  type DocumentVersion,
+  type HistoryAuthor,
+} from "../document-history";
 import { formatChanges } from "../latex/format";
 import { hashSource } from "../latex/source-sync";
 import { liveProjectAccessIntervalMs } from "../live-project.server";
@@ -15,6 +20,7 @@ import {
   type saveSourceSchema,
 } from "../project-source";
 import { invalidateSourceBuild } from "../project-source.server";
+import { DocumentHistory, type HistoryDocument } from "./history";
 import {
   awarenessFrame,
   clientMessageSchema,
@@ -62,11 +68,13 @@ const colors = [
 const retentionIntervalMs = 60 * 60_000;
 
 export class ProjectCollaboration extends DurableObject<Env> {
+  private history: DocumentHistory;
   private documents = new Map<string, Y.Doc>();
   private queue: Promise<void> = Promise.resolve();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.history = new DocumentHistory(ctx.storage.sql, env.SOURCES);
     ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS documents (
       node_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, snapshot BLOB NOT NULL,
       object_key TEXT, dirty INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)`);
@@ -127,6 +135,10 @@ export class ProjectCollaboration extends DurableObject<Env> {
         nodeId,
       );
     });
+    this.ctx.storage.sql.exec(
+      "DELETE FROM history_activity WHERE node_id = ?",
+      nodeId,
+    );
     this.documents.get(nodeId)?.destroy();
     this.documents.delete(nodeId);
     for (const ws of this.ctx.getWebSockets(nodeId))
@@ -168,7 +180,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
   }
 
   async purgeDeletedSources(projectId: string) {
-    return this.serial(() => this.purgeDeleted(projectId));
+    return this.serial(async () => {
+      const result = await this.purgeDeleted(projectId);
+      await this.history.collect(projectId, result.projectDeleted, true);
+      return result;
+    });
   }
 
   private async document(
@@ -317,7 +333,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
     });
   }
 
-  private async apply(info: Attachment, bytes: Uint8Array) {
+  private async apply(
+    info: Attachment,
+    bytes: Uint8Array,
+    version?: DocumentVersion,
+  ) {
     const doc = await this.document(info);
     // Validate on a disposable document so a rejected update cannot poison the room.
     const candidate = new Y.Doc();
@@ -340,6 +360,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
         throw new Error(
           "Collaborative document exceeds its text or history limit",
         );
+      if (!this.history.hasVersions(info))
+        await this.history.capture({ info, doc, kind: "automatic" });
+      const changed =
+        candidate.getText("source").toString() !==
+        doc.getText("source").toString();
       this.ctx.storage.transactionSync(() => {
         appendUpdate(this.ctx.storage.sql, info.nodeId, bytes);
         this.ctx.storage.sql.exec(
@@ -360,6 +385,12 @@ export class ProjectCollaboration extends DurableObject<Env> {
           );
           deleteUpdates(this.ctx.storage.sql, info.nodeId);
         }
+        if (changed)
+          this.history.changed(info, {
+            userId: info.userId,
+            name: info.name || "Collaborator",
+          });
+        if (version) this.history.commit(info, version);
       });
       Y.applyUpdate(doc, bytes);
     } finally {
@@ -520,6 +551,15 @@ export class ProjectCollaboration extends DurableObject<Env> {
             .map((row) => row.project_id),
         );
         for (const projectId of projectIds) await this.purgeDeleted(projectId);
+        for (const pending of this.history.pending()) {
+          if (pending.since + historyCadenceMs > Date.now()) continue;
+          const info = {
+            projectId: pending.project_id,
+            nodeId: pending.node_id,
+          };
+          const doc = await this.document({ ...info, userId: "" }, false);
+          await this.history.capture({ info, doc, kind: "automatic" });
+        }
         for (const row of this.ctx.storage.sql
           .exec<DocumentRow>("SELECT * FROM documents WHERE dirty = 1")
           .toArray()) {
@@ -547,15 +587,25 @@ export class ProjectCollaboration extends DurableObject<Env> {
           this.ctx.storage.sql
             .exec("SELECT node_id FROM documents WHERE dirty = 1 LIMIT 1")
             .toArray().length;
+        const pending = this.history.pending();
         if (
+          pending.length ||
           active ||
           this.ctx.storage.sql
             .exec("SELECT node_id FROM documents LIMIT 1")
             .toArray().length
         )
           await this.ctx.storage.setAlarm(
-            Date.now() +
-              (active ? liveProjectAccessIntervalMs : retentionIntervalMs),
+            Math.min(
+              Date.now() +
+                (active ? liveProjectAccessIntervalMs : retentionIntervalMs),
+              ...pending.map((entry) =>
+                Math.max(
+                  Date.now() + liveProjectAccessIntervalMs,
+                  entry.since + historyCadenceMs,
+                ),
+              ),
+            ),
           );
       }
     });
@@ -564,6 +614,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
   async saveSource(options: {
     data: z.infer<typeof saveSourceSchema>;
     userId: string;
+    name?: string;
   }) {
     return this.serial(async () => {
       const { data, userId } = options;
@@ -571,7 +622,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         projectId: data.projectId,
         nodeId: data.nodeId,
         userId,
-        name: "",
+        name: options.name ?? "Collaborator",
         clientId: 0,
         awareness: null,
       };
@@ -606,6 +657,124 @@ export class ProjectCollaboration extends DurableObject<Env> {
       const version = await this.flush(data.nodeId);
       if (!version) throw new Error("File not found");
       return version;
+    });
+  }
+
+  private async historyAccess(
+    info: HistoryDocument & { userId: string },
+    write = false,
+  ) {
+    const access = await this.withDb((db) =>
+      collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
+        register: true,
+      }),
+    );
+    if (write && !access.canWrite)
+      throw new Error("Viewers cannot change document history");
+  }
+
+  async listHistory(
+    info: HistoryDocument & {
+      userId: string;
+      before?: { createdAt: number; id: string };
+    },
+  ) {
+    return this.serial(async () => {
+      await this.historyAccess(info);
+      await this.history.collect(info.projectId);
+      return this.history.list(info, info.before);
+    });
+  }
+
+  async compareHistory(
+    info: HistoryDocument & { userId: string; versionId: string },
+  ) {
+    return this.serial(async () => {
+      await this.historyAccess(info);
+      await this.history.collect(info.projectId);
+      const snapshot = await this.history.read(info, info.versionId);
+      const doc = await this.document(info);
+      return { ...snapshot, current: doc.getText("source").toString() };
+    });
+  }
+
+  async nameHistory(
+    info: HistoryDocument & {
+      userId: string;
+      versionId: string;
+      label: string;
+    },
+  ) {
+    return this.serial(async () => {
+      await this.historyAccess(info, true);
+      await this.history.collect(info.projectId);
+      return this.history.label(info, info.versionId, info.label);
+    });
+  }
+
+  async createHistory(
+    info: HistoryDocument & HistoryAuthor & { label: string },
+  ) {
+    return this.serial(async () => {
+      await this.historyAccess(info, true);
+      const doc = await this.document(info);
+      return this.history.capture({
+        info,
+        doc,
+        kind: "named",
+        label: info.label,
+        author: info,
+      });
+    });
+  }
+
+  async restoreHistory(
+    info: HistoryDocument & HistoryAuthor & { versionId: string },
+  ) {
+    return this.serial(async () => {
+      await this.historyAccess(info, true);
+      await this.history.collect(info.projectId);
+      const snapshot = await this.history.read(info, info.versionId);
+      const doc = await this.document(info);
+      // Always preserve the latest room state, including edits since the last automatic version.
+      await this.history.capture({
+        info,
+        doc,
+        kind: "before-restore",
+        author: info,
+      });
+      const candidate = new Y.Doc();
+      let update: Uint8Array;
+      let result: DocumentVersion;
+      try {
+        Y.applyUpdate(candidate, Y.encodeStateAsUpdate(doc));
+        const target = candidate.getText("source");
+        candidate.transact(() => {
+          if (target.toString() !== snapshot.value) {
+            target.delete(0, target.length);
+            target.insert(0, snapshot.value);
+          }
+        });
+        update = Y.encodeStateAsUpdate(candidate, Y.encodeStateVector(doc));
+        result = await this.history.prepare({
+          info,
+          doc: candidate,
+          kind: "restore",
+          author: info,
+          restoredFrom: info.versionId,
+        });
+      } finally {
+        candidate.destroy();
+      }
+      // Restoring is a new CRDT edit; merging the old state would not undo deletions.
+      await this.apply(
+        { ...info, clientId: 0, awareness: null },
+        update,
+        result,
+      );
+      const saved = await this.flush(info.nodeId);
+      if (!saved) throw new Error("File not found");
+      return { version: result, ...saved };
     });
   }
 
