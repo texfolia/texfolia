@@ -9,7 +9,7 @@ import type { createAuth } from "#/lib/auth";
 import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
-import { compileDeltaSchema } from "#/lib/latex/source-sync";
+import { compileDeltaSchema, hashSource } from "#/lib/latex/source-sync";
 import { streamProjectResponse } from "#/lib/live-project.server";
 import { lockProject } from "#/lib/project-access.server";
 
@@ -56,6 +56,64 @@ const noStore = { "Cache-Control": "no-store" };
 
 function json(data: unknown, status = 200, headers: HeadersInit = noStore) {
   return Response.json(data, { status, headers });
+}
+
+function submissionResponse({
+  id,
+  projectId,
+  revision,
+  sourceRevision,
+}: {
+  id: string;
+  projectId: string;
+  revision?: number;
+  sourceRevision?: number;
+}) {
+  const statusUrl = `/api/compile/${projectId}?job=${id}`;
+  return json(
+    {
+      id,
+      revision,
+      sourceRevision,
+      status: "queued",
+      statusUrl,
+      previewUrl: `${statusUrl}&preview=pdf`,
+    },
+    202,
+    { ...noStore, Location: statusUrl, "Retry-After": "1" },
+  );
+}
+
+function compileRequestDigest({
+  request,
+  projectId,
+  userId,
+  body,
+}: {
+  request: Request;
+  projectId: string;
+  userId: string;
+  body: z.infer<typeof compileDeltaSchema>;
+}) {
+  return hashSource(
+    new TextEncoder().encode(
+      JSON.stringify({
+        projectId,
+        userId,
+        clean: request.headers.get("X-Clean-Build") === "1",
+        metadata: request.headers.get("X-Source-Metadata") ?? "",
+        editorId: request.headers.get("X-Editor-Id"),
+        editorSequence: request.headers.get("X-Editor-Sequence"),
+        mainFile: body.mainFile,
+        baseRevision: body.baseRevision,
+        revision: body.revision,
+        files: Object.keys(body.files)
+          .sort()
+          .map((path) => [path, body.files[path]]),
+        deleted: [...body.deleted].sort(),
+      }),
+    ),
+  );
 }
 
 async function checkProject(
@@ -232,13 +290,35 @@ export const Route = createFileRoute("/api/compile/$projectId")({
         const id =
           idSchema.safeParse(request.headers.get("X-Compilation-Id")).data ??
           crypto.randomUUID();
-        const plan = await compilePlan(db, denied.userId);
-        await db.insert(projectJob).values({
-          id,
+        const requestDigest = await compileRequestDigest({
+          request,
           projectId: params.projectId,
-          status: "queued",
-          sizeBytes: 0n,
+          userId: denied.userId,
+          body,
         });
+        const plan = await compilePlan(db, denied.userId);
+        const [reserved] = await db
+          .insert(projectJob)
+          .values({
+            id,
+            projectId: params.projectId,
+            requestDigest,
+            status: "queued",
+            sizeBytes: 0n,
+          })
+          .onConflictDoNothing({ target: projectJob.id })
+          .returning({ id: projectJob.id });
+        if (!reserved) {
+          const existing = await db.query.projectJob.findFirst({
+            columns: { id: true },
+            where: { id, projectId: params.projectId, requestDigest },
+          });
+          if (!existing)
+            return json({ error: "Compilation ID already used" }, 409);
+          // The reserving request owns submission, even while its response is
+          // uncertain. Reconcile through GET without resubmitting newer sources.
+          return submissionResponse({ id, projectId: params.projectId });
+        }
 
         let submitted = false;
         let revision: number | undefined;
@@ -385,23 +465,12 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           plan,
           submissionMs: performance.now() - started,
         });
-        const statusUrl = `/api/compile/${params.projectId}?job=${id}`;
-        return json(
-          {
-            id,
-            revision,
-            sourceRevision,
-            status: "queued",
-            statusUrl,
-            previewUrl: `${statusUrl}&preview=pdf`,
-          },
-          202,
-          {
-            ...noStore,
-            Location: statusUrl,
-            "Retry-After": "1",
-          },
-        );
+        return submissionResponse({
+          id,
+          projectId: params.projectId,
+          revision,
+          sourceRevision,
+        });
       },
       PATCH: async ({ request, params, context }) => {
         const denied = await checkProject(request, params.projectId, context);

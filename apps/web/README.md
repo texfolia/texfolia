@@ -150,6 +150,27 @@ The authenticated compile route compares that digest with current database state
 if they differ, it rebuilds the submission from saved R2 sources. This prevents a
 stale session from omitting new files or restoring deleted files in the build.
 
+Compile POSTs reserve `X-Compilation-Id` atomically in Postgres. The stored SHA-256
+digest covers the authenticated user, project, parsed delta including content,
+metadata version, clean-build flag, and editor headers. Matching retries return
+202 with the existing status and preview URLs without submitting again. They omit
+accepted revisions so the client reconciles through the authenticated GET route,
+including after an uncertain compiler response. Reusing an ID with different
+inputs, another user, or an older job without a digest returns a generic 409.
+Each retry rechecks session and project write access.
+
+Apply `packages/db/sql/20261114_compile_request_digest.sql` before deploying this
+route, or use `bun run db:push` locally. Run its Postgres regression check with:
+
+```sh
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:compile-route
+```
+
+The check runs the production POST and GET handlers with signed sessions,
+Postgres, local R2, and the compiler coordinator. Only the TeX engine and a lost
+compiler response are fixtures. It covers concurrent and completed retries,
+request conflicts, source resync, authorization, and status reconciliation.
+
 `y-codemirror.next` binds the editor, remote selections, and user cursors to Yjs.
 Undo affects the local user's edits. Formatting keeps the existing minimal-diff
 path. The WebSocket route authenticates the session and checks the request

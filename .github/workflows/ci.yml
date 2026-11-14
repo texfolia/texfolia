@@ -34,6 +34,8 @@ jobs:
         run: bun run db:push
       - name: Exercise app database operations
         run: bun run apps/web/test/postgres.ts
+      - name: Exercise authenticated compile retries with Postgres
+        run: bun run --cwd apps/web test:compile-route
       - name: Install Chromium
         run: bun run --cwd apps/web playwright install --with-deps chromium
       - name: Exercise real-time collaboration locally

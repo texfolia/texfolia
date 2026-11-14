@@ -37,6 +37,11 @@ cannot erase pending cleanup. The hourly source sweep removes a registration
 only after the collaboration object confirms project deletion and purges its state.
 The script is safe to run again. New rooms register before writing SQLite state.
 
+Before deploying compilation-ID retry handling, apply
+`sql/20261114_compile_request_digest.sql`. It adds a nullable request digest to
+`project_job` and is safe to run again. Jobs created before this change keep a
+null digest and remain readable, but their IDs cannot be reused for submissions.
+
 1. Edit `src/db/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root.
 2. Run `bun run db:push` against your local database.
 3. Run the integration check.
