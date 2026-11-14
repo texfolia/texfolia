@@ -1,5 +1,10 @@
 Welcome to your new TanStack Start app!
 
+# Authentication
+
+See [Public auth abuse protection](../../docs/auth-abuse-protection.md) for the
+enabled routes, CAPTCHA policy, rate limits, and verification commands.
+
 # Public templates
 
 `/templates` is a paginated, server-rendered public gallery. A snapshot's stable

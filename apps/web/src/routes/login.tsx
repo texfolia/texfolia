@@ -26,6 +26,7 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "#/components/ui/input-otp";
+import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth-captcha";
 import { authClient } from "#/lib/auth-client";
 
 export const loginSearchSchema = z.object({
@@ -223,6 +224,7 @@ function RouteComponent() {
                   </form.Subscribe>
                   <Field>
                     <Turnstile
+                      action={AUTH_EMAIL_CAPTCHA_ACTION}
                       onError={() => form.setFieldValue("emailStep.token", "")}
                       onExpire={() => form.setFieldValue("emailStep.token", "")}
                       onVerify={(token) =>
