@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
-import { compileResync } from "#/lib/compile-source.server";
+import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema } from "#/lib/latex/source-sync";
@@ -240,11 +240,13 @@ export const Route = createFileRoute("/api/compile/$projectId")({
           sizeBytes: 0n,
         });
 
+        let submitted = false;
         let revision: number | undefined;
         let sourceRevision: number | undefined;
         try {
-          const send = (sources: object) =>
-            fetchCompiler(`/projects/${params.projectId}/compile`, {
+          const send = (sources: object) => {
+            submitted = true;
+            return fetchCompiler(`/projects/${params.projectId}/compile`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -265,7 +267,22 @@ export const Route = createFileRoute("/api/compile/$projectId")({
               },
               body: JSON.stringify(sources),
             });
-          let response = await send(body);
+          };
+          // Keep metadata writes behind the project lock until the compiler
+          // accepts this snapshot. Later changes then invalidate that build.
+          let response = await withCompileSources({
+            db,
+            bucket: env.SOURCES,
+            projectId: params.projectId,
+            userId: denied.userId,
+            mainFile: body.mainFile,
+            sourceRevision: body.baseRevision,
+            client: {
+              version: request.headers.get("X-Source-Metadata") ?? "",
+              delta: body,
+            },
+            submit: send,
+          });
           if (response.status === 409) {
             const resync = z
               .object({
@@ -279,29 +296,16 @@ export const Route = createFileRoute("/api/compile/$projectId")({
                   .catch(() => null),
               );
             if (resync.success) {
-              let sources: Awaited<ReturnType<typeof compileResync>>;
-              try {
-                sources = await compileResync({
-                  db,
-                  bucket: env.SOURCES,
-                  projectId: params.projectId,
-                  userId: denied.userId,
-                  mainFile: body.mainFile,
-                  sourceRevision: resync.data.sourceRevision,
-                });
-              } catch (error) {
-                const detail = {
-                  error:
-                    error instanceof Error
-                      ? error.message
-                      : "Source resync failed",
-                  status: "failed" as const,
-                  finishedAt: new Date(),
-                };
-                await updateJob(db, id, detail);
-                return json({ error: detail.error }, 502);
-              }
-              response = await send(sources);
+              submitted = false;
+              response = await withCompileSources({
+                db,
+                bucket: env.SOURCES,
+                projectId: params.projectId,
+                userId: denied.userId,
+                mainFile: body.mainFile,
+                sourceRevision: resync.data.sourceRevision,
+                submit: send,
+              });
             }
           }
           if (response.status === 202) {
@@ -352,6 +356,21 @@ export const Route = createFileRoute("/api/compile/$projectId")({
             throw new Error(`Compiler submission returned ${response.status}`);
           }
         } catch (error) {
+          if (!submitted) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Source synchronization failed";
+            await updateJob(db, id, {
+              status: "failed",
+              error: message,
+              finishedAt: new Date(),
+            });
+            return json(
+              { error: message },
+              message === "Project not found" ? 404 : 409,
+            );
+          }
           // A lost response can follow a successful submission. Let the client
           // check the reserved ID before asking the user to submit new work.
           console.error("Compile submission response failed", {

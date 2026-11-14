@@ -52,6 +52,7 @@ import {
   serializeSourceDrafts,
   type SourceDraft,
 } from "#/lib/project-drafts";
+import { projectMetadataVersion } from "#/lib/project-metadata";
 import { projectPaths } from "#/lib/project-paths";
 import { encodeSource, type SourceFiles } from "#/lib/project-source";
 import { saveProjectSource } from "#/lib/project-source.functions";
@@ -244,6 +245,12 @@ export function ProjectWorkspace({
   userId: string;
 }) {
   const files = useProjectFiles();
+  const fileStatus = useSyncExternalStore(
+    files.subscribe,
+    files.getStatus,
+    files.getStatus,
+  );
+  const canWrite = fileStatus.canWrite ?? project.canWrite;
   const { id: projectId, name } = project;
   const { data: nodes } = useLiveQuery(files.nodes);
   const api = useRef<DockviewApi | null>(null);
@@ -478,7 +485,7 @@ export function ProjectWorkspace({
   const mainDraft = mainId ? drafts.current.get(mainId) : undefined;
 
   function addSymbolPackage(packageName: string) {
-    if (!project.canWrite || Object.keys(recovery).length || !mainId) return;
+    if (!canWrite || Object.keys(recovery).length || !mainId) return;
     const view = editors.current.get(mainId);
     if (view) {
       addLatexPackage(packageName)(view);
@@ -497,38 +504,41 @@ export function ProjectWorkspace({
   }
 
   async function sourceFiles(): Promise<SourceFiles>;
-  async function sourceFiles(mode: "compile"): Promise<CompileSources>;
-  async function sourceFiles(mode?: "compile"): Promise<CompileSources> {
-    for (const node of nodes) {
-      if (
-        node.kind === "text" &&
-        !collaboration.current.get(node.id)?.getStatus().ready
-      )
-        throw new Error(
-          "Wait for project files to synchronize before exporting or compiling.",
-        );
-    }
+  async function sourceFiles(
+    mode: "compile",
+  ): Promise<{ sources: CompileSources; metadataVersion: string }>;
+  async function sourceFiles(
+    mode?: "compile",
+  ): Promise<
+    SourceFiles | { sources: CompileSources; metadataVersion: string }
+  > {
+    await files.refresh();
+    const nodes = files.nodes.toArray;
+    const paths = projectPaths(nodes);
+    const snapshotVersions = { ...versions };
+    const metadataVersion = await projectMetadataVersion({
+      nodes,
+      sourceVersions: snapshotVersions,
+    });
+    await synchronizeTextFiles(nodes);
     const saved = mode === "compile";
-    const sources: CompileSources = Object.fromEntries(
-      nodes.flatMap((node) => {
-        const path = paths.get(node.id);
-        return node.kind === "text" && path
-          ? [
-              [
-                path,
-                (saved
-                  ? drafts.current.get(node.id)?.savedValue
-                  : drafts.current.get(node.id)?.value) ?? "",
-              ],
-            ]
-          : [];
-      }),
-    );
+    const sources: CompileSources = {};
+    for (const node of nodes) {
+      const path = paths.get(node.id);
+      if (node.kind !== "text" || !path) continue;
+      const objectKey = snapshotVersions[node.id]?.objectKey;
+      const hash = objectKey?.split("/").at(-1);
+      sources[path] = saved
+        ? hash
+          ? { hash }
+          : ""
+        : (collaboration.current.get(node.id)?.text.toString() ?? "");
+    }
     for (const node of nodes) {
       const path = paths.get(node.id);
       if (node.kind !== "binary" || !path) continue;
       if (mode === "compile") {
-        const hash = versions[node.id]?.objectKey?.split("/").at(-1);
+        const hash = snapshotVersions[node.id]?.objectKey?.split("/").at(-1);
         if (!hash) throw new Error(`Save ${path} before compiling`);
         sources[path] = { hash };
       } else {
@@ -539,11 +549,22 @@ export function ProjectWorkspace({
         };
       }
     }
-    return sources;
+    if (mode === "compile") return { sources, metadataVersion };
+    const current = await files.refresh();
+    if ((await projectMetadataVersion(current)) !== metadataVersion)
+      throw new Error(
+        "Project files changed during export. Try downloading again.",
+      );
+    // Export uses live collaborative text; compiled sources use saved hashes.
+    const exported: SourceFiles = {};
+    for (const [path, source] of Object.entries(sources)) {
+      if (typeof source === "string" || "base64" in source)
+        exported[path] = source;
+    }
+    return exported;
   }
 
-  useEffect(() => {
-    if (!ready) return;
+  function reconcileTextFiles(nodes: ProjectNode[]) {
     const ids = new Set(
       nodes.filter((node) => node.kind === "text").map((node) => node.id),
     );
@@ -557,7 +578,26 @@ export function ProjectWorkspace({
           projectId,
           nodeId: id,
           userId,
-          canWrite: project.canWrite,
+          canWrite: canWrite,
+          onSaved: (saved) => {
+            const previous = versions[id];
+            if (previous && previous.updatedAt > saved.updatedAt) return;
+            versions[id] = {
+              objectKey: saved.objectKey,
+              updatedAt: saved.updatedAt,
+            };
+            const value =
+              collaboration.current.get(id)?.text.toString() ?? saved.value;
+            drafts.current.set(id, { value, savedValue: saved.value });
+            const node = files.nodes.get(id);
+            if (node)
+              api.current
+                ?.getPanel(id)
+                ?.api.setTitle(
+                  `${node.name}${value !== saved.value ? " ●" : ""}`,
+                );
+            setCollaborationRevision((revision) => revision + 1);
+          },
           onChange: (value) => {
             observeChange.current(id, value);
             if (!initialized) {
@@ -570,13 +610,30 @@ export function ProjectWorkspace({
       changed = true;
     }
     for (const [id, file] of collaboration.current) {
-      if (ids.has(id)) continue;
-      file.destroy();
-      collaboration.current.delete(id);
-      changed = true;
+      if (!files.getStatus().deleted.has(id)) continue;
+      // Keep deleted documents and their panels available for copying/recovery.
+      // Retiring stops reconnects without discarding the IndexedDB document.
+      file.retire();
     }
     if (changed) setCollaborationRevision((value) => value + 1);
-  }, [ready, nodes, projectId, project.canWrite, userId]);
+  }
+
+  async function synchronizeTextFiles(nodes: ProjectNode[]) {
+    reconcileTextFiles(nodes);
+    await Promise.all(
+      nodes
+        .filter((node) => node.kind === "text")
+        .map(async (node) => {
+          const file = collaboration.current.get(node.id);
+          if (!file) throw new Error("Could not synchronize project files");
+          await file.whenConnected();
+        }),
+    );
+  }
+
+  useEffect(() => {
+    if (ready) reconcileTextFiles(nodes);
+  }, [ready, nodes, projectId, canWrite, userId, fileStatus.deleted]);
 
   useEffect(
     () => () => {
@@ -601,7 +658,7 @@ export function ProjectWorkspace({
 
   async function saveSources() {
     if (
-      !project.canWrite ||
+      !canWrite ||
       !ready ||
       Object.keys(recovery).length ||
       saveInProgress.current
@@ -611,6 +668,11 @@ export function ProjectWorkspace({
     setSaving(true);
     setSourceError("");
     try {
+      const metadata = await files.refresh();
+      if (!metadata.canWrite)
+        throw new Error("Viewers cannot save project files");
+      const nodes = files.nodes.toArray;
+      await synchronizeTextFiles(nodes);
       for (const node of nodes) {
         if (node.kind !== "text") continue;
         const file = collaboration.current.get(node.id);
@@ -646,7 +708,7 @@ export function ProjectWorkspace({
   async function compileProject(clean = false) {
     const snapshot = revision.current;
     const events = buildEvents.current;
-    if (!main || !events || !project.canWrite || !(await saveSources())) return;
+    if (!main || !events || !canWrite || !(await saveSources())) return;
     compilation.current?.abort();
     const startedAt = performance.now();
     const editedAt = lastEditAt.current;
@@ -658,7 +720,7 @@ export function ProjectWorkspace({
     const sequence = ++editSequence.current;
     clearTimeout(notification.current);
     try {
-      const files = await sourceFiles("compile");
+      const { sources, metadataVersion } = await sourceFiles("compile");
       const result = await requestCompilation({
         projectId,
         events,
@@ -667,7 +729,8 @@ export function ProjectWorkspace({
         startedAt,
         lastEditAt: editedAt,
         mainFile: main,
-        files,
+        files: sources,
+        metadataVersion,
         signal: AbortSignal.any([
           controller.signal,
           AbortSignal.timeout(10 * 60_000),
@@ -779,7 +842,7 @@ export function ProjectWorkspace({
   }
 
   function change(id: string, value: string) {
-    if (!project.canWrite) return;
+    if (!canWrite) return;
     const file = collaboration.current.get(id);
     if (file) file.replace(value);
   }
@@ -796,7 +859,7 @@ export function ProjectWorkspace({
     if (path && previous.value !== value) {
       lastEditAt.current = performance.now();
       setSourceChanged(true);
-      if (project.canWrite) notifySourceEdit();
+      if (canWrite) notifySourceEdit();
       update(path, value);
       setCompileProblems((current) => (current.length ? [] : current));
     }
@@ -925,7 +988,7 @@ export function ProjectWorkspace({
       localDrafts.current = { ...migrate, ...recover };
       for (const [id, draft] of Object.entries(migrate)) {
         if (api.current !== dock) return;
-        if (!project.canWrite) {
+        if (!canWrite) {
           recover[id] = draft;
           continue;
         }
@@ -996,7 +1059,7 @@ export function ProjectWorkspace({
       value={{
         collaboration: new Map(collaboration.current),
         projectId,
-        canWrite: project.canWrite && Object.keys(recovery).length === 0,
+        canWrite: canWrite && Object.keys(recovery).length === 0,
         build: buildMetadata,
         stale,
         drafts: drafts.current,
@@ -1053,7 +1116,7 @@ export function ProjectWorkspace({
               compiling ||
               saving ||
               !ready ||
-              !project.canWrite ||
+              !canWrite ||
               Object.keys(recovery).length > 0
             }
             aria-label="Clean build"
@@ -1066,10 +1129,7 @@ export function ProjectWorkspace({
           <Button
             variant="outline"
             disabled={
-              saving ||
-              !ready ||
-              !project.canWrite ||
-              Object.keys(recovery).length > 0
+              saving || !ready || !canWrite || Object.keys(recovery).length > 0
             }
             onClick={() => void saveSources()}
           >
@@ -1080,7 +1140,7 @@ export function ProjectWorkspace({
               !main ||
               saving ||
               !ready ||
-              !project.canWrite ||
+              !canWrite ||
               Object.keys(recovery).length > 0
             }
             onClick={() => void compileProject()}
@@ -1106,12 +1166,12 @@ export function ProjectWorkspace({
                 Loading server sources and checking browser drafts…
               </p>
             )}
-            {sourceError && (
+            {(sourceError || fileStatus.error) && (
               <p
                 role="alert"
                 className="text-destructive border-b px-3 py-2 text-sm"
               >
-                {sourceError}
+                {sourceError || fileStatus.error}
               </p>
             )}
             {Object.keys(recovery).length > 0 && (
@@ -1127,7 +1187,7 @@ export function ProjectWorkspace({
                 <Button
                   size="sm"
                   disabled={
-                    !project.canWrite ||
+                    !canWrite ||
                     Object.keys(recovery).some(
                       (id) => !collaboration.current.get(id)?.getStatus().ready,
                     )

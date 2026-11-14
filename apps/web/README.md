@@ -135,6 +135,21 @@ The workspace keeps those documents connected while file tabs open and close,
 so analysis, export, and compile inputs include changes to closed files.
 Binary files retain their existing source-storage path.
 
+Open workspaces fetch `/api/projects/:projectId/metadata` after each two-second
+refresh interval, on focus, and on reconnect. Each request checks current project
+access under the same database lock as source writes. Snapshots contain the file
+tree, saved source versions, and write permission. Reconciliation preserves
+optimistic writes, Yjs documents, tabs, selections, and offline caches. Deleted
+text files leave the tree, but their open panels remain read-only so you can copy
+local text. Revoked sessions stop receiving metadata and retain their local drafts.
+
+Compile and export refresh metadata before collecting sources. Export checks the
+snapshot again before creating the ZIP and asks you to retry if files changed.
+Compile sends saved source hashes and a digest of the tree and saved versions.
+The authenticated compile route compares that digest with current database state;
+if they differ, it rebuilds the submission from saved R2 sources. This prevents a
+stale session from omitting new files or restoring deleted files in the build.
+
 `y-codemirror.next` binds the editor, remote selections, and user cursors to Yjs.
 Undo affects the local user's edits. Formatting keeps the existing minimal-diff
 path. The WebSocket route authenticates the session and checks the request
@@ -497,3 +512,18 @@ Loaders simplify your data fetching logic dramatically. Check out more informati
 You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
 
 For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+
+Run the complete workspace metadata check against an isolated test database:
+
+```sh
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:workspace-metadata
+```
+
+This builds and serves the production app in workerd with real Postgres, local R2,
+and the collaboration Durable Object. Two Chromium sessions use signed Better
+Auth cookies, production loaders, and authenticated RPC and API routes. The check
+covers creation, folders, binary uploads and version changes, delayed snapshots,
+changes during compilation, stale compile submissions, ZIP contents, editor
+selection, offline recovery after reload, and personal and organization access
+revocation. A compiler fixture holds jobs open so metadata changes can occur
+during a build. CI runs this check after applying the database schema.
