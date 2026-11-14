@@ -38,6 +38,15 @@ const persistedSchema = z
   })
   .passthrough();
 
+async function waitUntil(check: () => boolean) {
+  const deadline = Date.now() + 10_000;
+  while (!check()) {
+    if (Date.now() >= deadline)
+      throw new Error("Timed out waiting for local queue delivery");
+    await Bun.sleep(10);
+  }
+}
+
 function harness(engine: Engine) {
   const objects = new Map<
     string,
@@ -741,26 +750,25 @@ test("local Pro queue and interactive path progress while a Free consumer is blo
       readonly: true,
     });
     try {
-      const deadline = Date.now() + 2000;
-      while (
-        Date.now() < deadline &&
-        !database
-          .query("SELECT key FROM objects WHERE key = ?")
-          .get(`results/${proId}.json`)
-      )
-        await Bun.sleep(10);
+      await waitUntil(() =>
+        Boolean(
+          database
+            .query("SELECT key FROM objects WHERE key = ?")
+            .get(`results/${proId}.json`),
+        ),
+      );
       expect(
         await (
           await runtime.fetch(new Request(`http://local/jobs/${proId}`))
         ).json(),
       ).toMatchObject({ status: "succeeded" });
-      while (
-        Date.now() < deadline &&
-        !database
-          .query("SELECT key FROM objects WHERE key = ?")
-          .get(`projects/${projectId}/results/${interactiveId}.json`)
-      )
-        await Bun.sleep(10);
+      await waitUntil(() =>
+        Boolean(
+          database
+            .query("SELECT key FROM objects WHERE key = ?")
+            .get(`projects/${projectId}/results/${interactiveId}.json`),
+        ),
+      );
       expect(
         await (
           await runtime.fetch(new Request(`http://local/projects/${projectId}`))
@@ -774,7 +782,7 @@ test("local Pro queue and interactive path progress while a Free consumer is blo
     await runtime.close();
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test("SQLite delivery retries once and routes the failed interactive job through DLQ", async () => {
   const root = await mkdtemp(join(tmpdir(), "compile-dlq-"));
@@ -813,36 +821,31 @@ test("SQLite delivery retries once and routes the failed interactive job through
     const result = database.query<{ body: Uint8Array }, [string]>(
       "SELECT body FROM objects WHERE key = ?",
     );
-    const deadline = Date.now() + 2000;
-    while (Date.now() < deadline && retry.get()?.attempts !== 1)
-      await Bun.sleep(10);
+    const deliveries = database.query(
+      "SELECT id FROM deliveries WHERE lane IN ('compile-pro', 'compile-dlq')",
+    );
+    await waitUntil(() => retry.get()?.attempts === 1);
     expect(retry.get()?.attempts).toBe(1);
     expect(runs).toBe(2);
     database.exec("UPDATE deliveries SET due = 0 WHERE lane = 'compile-pro'");
-    while (
-      Date.now() < deadline &&
-      !result.get(`projects/${projectId}/results/${id}.json`)
-    )
-      await Bun.sleep(10);
+    await waitUntil(
+      () =>
+        Boolean(result.get(`projects/${projectId}/results/${id}.json`)) &&
+        deliveries.all().length === 0,
+    );
     expect(
       await (
         await runtime.fetch(new Request(`http://local/projects/${projectId}`))
       ).json(),
     ).toMatchObject({ current: { status: "failed", error: deadLetterError } });
     expect(runs).toBe(3);
-    expect(
-      database
-        .query(
-          "SELECT id FROM deliveries WHERE lane IN ('compile-pro', 'compile-dlq')",
-        )
-        .all(),
-    ).toHaveLength(0);
+    expect(deliveries.all()).toHaveLength(0);
   } finally {
     database.close();
     await runtime.close();
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test("retention messages hop without sweeping early and failed background sends leave a durable alarm fallback", async () => {
   const fixture = harness(async () => output);

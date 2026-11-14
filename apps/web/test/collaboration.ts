@@ -424,34 +424,44 @@ try {
   let largeSocket = largeResponse.webSocket;
   assert(largeSocket);
   largeSocket.accept();
-  function largeMessage(type: ServerMessage["type"]) {
+  function largeMessage(
+    expected: { type: "sync" | "error" } | { type: "saved"; id: string },
+  ) {
+    const socket = largeSocket;
+    assert(socket);
     return new Promise<ServerMessage>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("Large document timed out")),
-        20_000,
-      );
+      const timer = setTimeout(() => {
+        socket.removeEventListener("message", listener);
+        reject(new Error(`Large document ${expected.type} timed out`));
+      }, 20_000);
       const listener = (event: RuntimeMessageEvent) => {
         try {
           const message = serverMessageSchema.parse(
             JSON.parse(String(event.data)),
           );
-          if (message.type === "error") throw new Error(message.message);
-          if (message.type === type) {
-            clearTimeout(timer);
-            largeSocket?.removeEventListener("message", listener);
-            resolve(message);
-          }
+          if (expected.type === "saved") {
+            if (
+              (message.type !== "saved" && message.type !== "error") ||
+              message.id !== expected.id
+            )
+              return;
+          } else if (message.type !== expected.type) return;
+          if (message.type === "error" && expected.type !== "error")
+            throw new Error(message.message);
+          clearTimeout(timer);
+          socket.removeEventListener("message", listener);
+          resolve(message);
         } catch (error) {
           clearTimeout(timer);
-          largeSocket?.removeEventListener("message", listener);
+          socket.removeEventListener("message", listener);
           reject(error);
         }
       };
-      largeSocket?.addEventListener("message", listener);
+      socket.addEventListener("message", listener);
     });
   }
   const largeDoc = new Y.Doc();
-  const synced = largeMessage("sync");
+  const synced = largeMessage({ type: "sync" });
   largeSocket.send(
     JSON.stringify({
       type: "sync",
@@ -463,11 +473,12 @@ try {
   Y.applyUpdate(largeDoc, decodeSource(initialLarge.update));
   assert.equal(largeDoc.getText("source").toString(), largeText);
   largeDoc.getText("source").insert(0, "large ");
-  const largeSaved = largeMessage("saved");
+  const largeSaveId = crypto.randomUUID();
+  const largeSaved = largeMessage({ type: "saved", id: largeSaveId });
   largeSocket.send(
     JSON.stringify({
       type: "save",
-      id: crypto.randomUUID(),
+      id: largeSaveId,
       update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
     }),
   );
@@ -505,11 +516,12 @@ try {
     largeSource.length,
     "q".repeat(10 * 1024 * 1024 - largeSource.length),
   );
-  const rejectedSave = largeMessage("saved");
+  const rejectedSaveId = crypto.randomUUID();
+  const rejectedSave = largeMessage({ type: "saved", id: rejectedSaveId });
   largeSocket.send(
     JSON.stringify({
       type: "save",
-      id: crypto.randomUUID(),
+      id: rejectedSaveId,
       update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
     }),
   );
@@ -522,23 +534,34 @@ try {
     { headers: { Upgrade: "websocket", Cookie: `test-user=${ownerId}` } },
   );
   assert.equal(resumed.status, 101);
-  largeSocket = resumed.webSocket;
-  assert(largeSocket);
-  largeSocket.accept();
-  const restored = largeMessage("sync");
-  largeSocket.send(
-    JSON.stringify({
-      type: "sync",
-      vector: encodeSource(Y.encodeStateVector(largeDoc)),
+  const resumedSocket = resumed.webSocket;
+  assert(resumedSocket);
+  largeSocket = resumedSocket;
+  resumedSocket.accept();
+  const restored = largeMessage({ type: "sync" });
+  const backgroundQuotaError = largeMessage({ type: "error" });
+  await Promise.all([
+    restored,
+    backgroundQuotaError.then((message) => {
+      assert(message.type === "error");
+      assert.equal(message.id, undefined);
+      assert.match(message.message, /Project exceeds 50 MiB/);
+      resumedSocket.send(
+        JSON.stringify({
+          type: "sync",
+          vector: encodeSource(Y.encodeStateVector(largeDoc)),
+        }),
+      );
     }),
-  );
+  ]);
   assert.equal((await restored).type, "sync");
   largeSource.delete(9 * 1024 * 1024, 1024 * 1024);
-  const repaired = largeMessage("saved");
+  const repairedSaveId = crypto.randomUUID();
+  const repaired = largeMessage({ type: "saved", id: repairedSaveId });
   largeSocket.send(
     JSON.stringify({
       type: "save",
-      id: crypto.randomUUID(),
+      id: repairedSaveId,
       update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
     }),
   );
