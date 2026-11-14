@@ -58,7 +58,9 @@ export const project = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("project_owner_id_name_idx").on(t.ownerId, t.name),
+    uniqueIndex("project_owner_id_name_idx")
+      .on(t.ownerId, t.name)
+      .where(sql`${t.deletedAt} IS NULL`),
     index("project_organization_id_idx").on(t.organizationId),
     check(
       "project_owner_check",
