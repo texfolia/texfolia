@@ -10,7 +10,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { getPlatformProxy } from "wrangler";
 
 import { compileResync } from "../src/lib/compile-source.server";
-import { createProjectNode } from "../src/lib/project-node.server";
+import { projectMetadataVersion } from "../src/lib/project-metadata";
+import { getProjectMetadata } from "../src/lib/project-metadata.server";
+import {
+  createProjectNode,
+  renameProjectNode,
+} from "../src/lib/project-node.server";
 import {
   encodeSource,
   maxSourceFileBytes,
@@ -77,6 +82,220 @@ try {
     { projectId, userId: viewerId, role: "viewer" },
     { projectId, userId: editorId, role: "editor" },
   ]);
+  const pathProject = await createProject({
+    db,
+    ownerId,
+    data: { id: crypto.randomUUID(), name: `Paths ${crypto.randomUUID()}` },
+  });
+  const pathDetails = await getProject({
+    db,
+    bucket,
+    ownerId,
+    projectId: pathProject.id,
+  });
+  const pathRoot = pathDetails.nodes.find((node) => node.parentId === null);
+  assert(pathRoot);
+  const pathFolder = await createProjectNode({
+    db,
+    bucket,
+    ownerId,
+    data: {
+      id: crypto.randomUUID(),
+      projectId: pathProject.id,
+      parentId: pathRoot.id,
+      name: "a".repeat(230),
+      kind: "folder",
+    },
+  });
+  const objectsBefore = (
+    await bucket.list({ prefix: `projects/${pathProject.id}/sources/` })
+  ).objects;
+  for (const [parentId, name] of [
+    [pathRoot.id, "chapter:1.tex"],
+    [pathRoot.id, "a".repeat(241)],
+    [pathRoot.id, "é".repeat(121)],
+    [pathRoot.id, "OUT"],
+    [pathFolder.id, "a".repeat(10)],
+  ]) {
+    const id = crypto.randomUUID();
+    await assert.rejects(
+      createProjectNode({
+        db,
+        bucket,
+        ownerId,
+        data: {
+          id,
+          projectId: pathProject.id,
+          parentId: parentId ?? "",
+          name: name ?? "",
+          kind: "binary",
+          content: source("must not store"),
+        },
+      }),
+    );
+    assert.equal(
+      await db.query.projectNode.findFirst({ where: { id } }),
+      undefined,
+    );
+  }
+  assert.deepEqual(
+    (await bucket.list({ prefix: `projects/${pathProject.id}/sources/` }))
+      .objects,
+    objectsBefore,
+  );
+  const boundary = await createProjectNode({
+    db,
+    bucket,
+    ownerId,
+    data: {
+      id: crypto.randomUUID(),
+      projectId: pathProject.id,
+      parentId: pathFolder.id,
+      name: "12345.tex",
+      kind: "text",
+      content: source("preserved source"),
+    },
+  });
+  await assert.rejects(
+    renameProjectNode({
+      db,
+      userId: ownerId,
+      data: {
+        projectId: pathProject.id,
+        nodeId: pathFolder.id,
+        parentId: pathRoot.id,
+        name: "b".repeat(231),
+      },
+    }),
+    /240 UTF-8 bytes/,
+  );
+  // Simulate previously stored invalid paths, including an unreferenced source.
+  await db
+    .update(projectNode)
+    .set({ name: "chapter:1.tex" })
+    .where(eq(projectNode.id, boundary.id));
+  await assert.rejects(
+    compileResync({
+      db,
+      bucket,
+      userId: ownerId,
+      projectId: pathProject.id,
+      mainFile: "main.tex",
+      sourceRevision: 0,
+    }),
+    /Repair source paths/,
+  );
+  const invalidMetadata = await getProjectMetadata({
+    db,
+    projectId: pathProject.id,
+    userId: ownerId,
+  });
+  await assert.rejects(
+    compileResync({
+      db,
+      bucket,
+      userId: ownerId,
+      projectId: pathProject.id,
+      mainFile: "main.tex",
+      sourceRevision: 0,
+      client: {
+        version: await projectMetadataVersion(invalidMetadata),
+        delta: {
+          mainFile: "main.tex",
+          baseRevision: 0,
+          revision: 1,
+          files: {},
+          deleted: [],
+        },
+      },
+    }),
+    /Repair source paths/,
+  );
+  await assert.rejects(
+    renameProjectNode({
+      db,
+      userId: viewerId,
+      data: {
+        projectId: pathProject.id,
+        nodeId: boundary.id,
+        parentId: pathFolder.id,
+        name: "intro.tex",
+      },
+    }),
+    /Project not found/,
+  );
+  await renameProjectNode({
+    db,
+    userId: ownerId,
+    data: {
+      projectId: pathProject.id,
+      nodeId: pathFolder.id,
+      parentId: pathRoot.id,
+      name: "chapters",
+    },
+  });
+  await renameProjectNode({
+    db,
+    userId: ownerId,
+    data: {
+      projectId: pathProject.id,
+      nodeId: boundary.id,
+      parentId: pathFolder.id,
+      name: "intro.tex",
+    },
+  });
+  const recovered = await db.query.projectNode.findFirst({
+    where: { id: boundary.id },
+  });
+  assert.equal(recovered?.parentId, pathFolder.id);
+  assert.equal(recovered?.objectKey, boundary.sourceVersion.objectKey);
+  assert.equal(
+    await (await bucket.get(recovered?.objectKey ?? ""))?.text(),
+    "preserved source",
+  );
+  const recoveredSources = await compileResync({
+    db,
+    bucket,
+    userId: ownerId,
+    projectId: pathProject.id,
+    mainFile: "main.tex",
+    sourceRevision: 0,
+  });
+  assert.equal(
+    recoveredSources.files["chapters/intro.tex"]?.content,
+    "preserved source",
+  );
+  await renameProjectNode({
+    db,
+    userId: ownerId,
+    data: {
+      projectId: pathProject.id,
+      nodeId: boundary.id,
+      parentId: pathRoot.id,
+      name: "intro.tex",
+    },
+  });
+  const moved = await db.query.projectNode.findFirst({
+    where: { id: boundary.id },
+  });
+  assert.equal(moved?.parentId, pathRoot.id);
+  assert.equal(moved?.objectKey, boundary.sourceVersion.objectKey);
+  await assert.rejects(
+    renameProjectNode({
+      db,
+      userId: ownerId,
+      data: {
+        projectId: pathProject.id,
+        nodeId: pathFolder.id,
+        parentId: pathFolder.id,
+        name: "chapters",
+      },
+    }),
+    /subtree/,
+  );
+  await deleteProject({ db, ownerId, projectId: pathProject.id });
+  await collectProjectSources({ db, bucket });
+
   const saved = await saveProjectSource({
     db,
     bucket,

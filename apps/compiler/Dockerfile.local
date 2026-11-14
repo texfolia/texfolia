@@ -4,9 +4,11 @@ COPY package.json bun.lock ./
 COPY apps/compiler/package.json apps/compiler/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/project-paths/package.json packages/project-paths/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 RUN bun install --filter compiler --production --frozen-lockfile
 COPY --chown=bun:bun apps/compiler/src ./apps/compiler/src
+COPY packages/project-paths/src ./packages/project-paths/src
 RUN mkdir -p /app/apps/compiler/.cache && chown bun:bun /app/apps/compiler/.cache
 WORKDIR /app/apps/compiler
 ENV HOST=0.0.0.0 PORT=8080

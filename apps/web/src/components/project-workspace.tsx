@@ -1,12 +1,14 @@
-import "dockview-react/dist/styles/dockview.css";
 import {
   IconAlertCircle,
   IconArrowLeft,
   IconRefresh,
 } from "@tabler/icons-react";
+
+import "dockview-react/dist/styles/dockview.css";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
+import { InvalidSourcePathError } from "@texfolia/project-paths";
 import type { EditorView } from "@uiw/react-codemirror";
 import {
   type DockviewApi,
@@ -53,7 +55,7 @@ import {
   type SourceDraft,
 } from "#/lib/project-drafts";
 import { projectMetadataVersion } from "#/lib/project-metadata";
-import { projectPaths } from "#/lib/project-paths";
+import { assertProjectSourcePaths, projectPaths } from "#/lib/project-paths";
 import { encodeSource, type SourceFiles } from "#/lib/project-source";
 import { saveProjectSource } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
@@ -275,6 +277,7 @@ export function ProjectWorkspace({
   const [saving, setSaving] = useState(false);
   const saveInProgress = useRef(false);
   const paths = useMemo(() => projectPaths(nodes), [nodes]);
+  const previousPaths = useRef(paths);
   const filenames = useMemo(() => [...paths.values()], [paths]);
   const { result, update, revision } = useLatexAnalysis(filenames);
   const currentAnalysis = useRef(result.analysis);
@@ -514,6 +517,7 @@ export function ProjectWorkspace({
   > {
     await files.refresh();
     const nodes = files.nodes.toArray;
+    if (mode === "compile") assertProjectSourcePaths(nodes);
     const paths = projectPaths(nodes);
     const snapshotVersions = { ...versions };
     const metadataVersion = await projectMetadataVersion({
@@ -634,6 +638,25 @@ export function ProjectWorkspace({
   useEffect(() => {
     if (ready) reconcileTextFiles(nodes);
   }, [ready, nodes, projectId, canWrite, userId, fileStatus.deleted]);
+
+  useEffect(() => {
+    if (!ready) return;
+    for (const node of nodes) {
+      const path = paths.get(node.id);
+      if (!path || previousPaths.current.get(node.id) === path) continue;
+      const draft = drafts.current.get(node.id);
+      if (draft) update(path, draft.value);
+      const panel = api.current?.getPanel(node.id);
+      panel?.api.updateParameters({ node });
+      panel?.api.setTitle(
+        `${node.name}${draft && draft.value !== draft.savedValue ? " ●" : ""}`,
+      );
+      api.current
+        ?.getPanel(`markdown:${node.id}`)
+        ?.api.setTitle(`Preview: ${node.name}`);
+    }
+    previousPaths.current = paths;
+  }, [nodes, paths, ready, update]);
 
   useEffect(
     () => () => {
@@ -777,7 +800,9 @@ export function ProjectWorkspace({
       setCompileError(
         error instanceof DOMException && error.name === "TimeoutError"
           ? "The compile job is taking longer than expected. Try again in a few minutes."
-          : "The compiler could not be reached. Try again.",
+          : error instanceof InvalidSourcePathError
+            ? error.message
+            : "The compiler could not be reached. Try again.",
       );
     } finally {
       if (compilation.current === controller) {
@@ -1169,7 +1194,7 @@ export function ProjectWorkspace({
             {(sourceError || fileStatus.error) && (
               <p
                 role="alert"
-                className="text-destructive border-b px-3 py-2 text-sm"
+                className="text-destructive border-b px-3 py-2 text-sm wrap-anywhere"
               >
                 {sourceError || fileStatus.error}
               </p>
@@ -1234,7 +1259,7 @@ export function ProjectWorkspace({
             {compileError && (
               <p
                 role="alert"
-                className="text-destructive border-b px-3 py-2 text-sm"
+                className="text-destructive border-b px-3 py-2 text-sm wrap-anywhere"
               >
                 {compileError}
               </p>

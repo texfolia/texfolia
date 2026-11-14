@@ -46,6 +46,7 @@ createRoot(root).render(<RouterProvider router={router} />);
 
 const api = {
   create: files.create,
+  refresh: () => files.refresh(),
   nodes: () => files.nodes.toArray,
   versions: () => files.sourceVersions,
   snapshotVersions: () => project.sourceVersions,

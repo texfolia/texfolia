@@ -40,7 +40,7 @@ func hashSource(content []byte) string {
 }
 
 func sourcePath(path string) bool {
-	return validPath(path) && path != "out" && !strings.HasPrefix(path, "out/")
+	return len(path) <= 240 && validPath(path) && !strings.EqualFold(strings.Split(path, "/")[0], "out")
 }
 
 func decodeContent(raw json.RawMessage) ([]byte, error) {

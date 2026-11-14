@@ -1,3 +1,4 @@
+import { sourcePathSchema } from "@texfolia/project-paths";
 import { z } from "zod";
 
 export const templateLicenses = [
@@ -24,7 +25,9 @@ export const publishTemplateSchema = z.object({
   projectId: z.uuid(),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(4000),
-  mainFile: z.string().min(1).max(240).default("main.tex"),
+  mainFile: sourcePathSchema
+    .refine((path) => path.endsWith(".tex"), "Select a .tex main file.")
+    .default("main.tex"),
   tags: z
     .array(z.string().trim().min(1).max(32))
     .max(8)
@@ -47,7 +50,7 @@ export const templateSnapshotSchema = z
     z.object({
       id: z.uuid(),
       parentId: z.uuid().nullable(),
-      name: z.string().min(1).max(240),
+      name: z.string().min(1).max(255),
       kind: z.enum(["folder", "text", "binary"]),
       objectKey: z.string().nullable(),
       sizeBytes: z

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
 
 import { ensureSession } from "./auth.functions";
-import { createNodeSchema } from "./project-node.schema";
+import { createNodeSchema, renameNodeSchema } from "./project-node.schema";
 
 export const createProjectNode = createServerFn({ method: "POST" })
   .validator(createNodeSchema)
@@ -14,5 +14,17 @@ export const createProjectNode = createServerFn({ method: "POST" })
       ownerId: session.user.id,
       data,
       bucket: env.SOURCES,
+    });
+  });
+
+export const renameProjectNode = createServerFn({ method: "POST" })
+  .validator(renameNodeSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-node.server");
+    return server.renameProjectNode({
+      db: context.db,
+      userId: session.user.id,
+      data,
     });
   });

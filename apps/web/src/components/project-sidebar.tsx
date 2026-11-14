@@ -5,6 +5,7 @@ import { CreateNodeForm } from "#/components/create-node-form";
 import { GeneratedFiles } from "#/components/generated-files";
 import { ProjectExport } from "#/components/project-export";
 import { ProjectFileTree } from "#/components/project-file-tree";
+import { RepairSourcePaths } from "#/components/repair-source-paths";
 import { SettingsDialog } from "#/components/settings-dialog";
 import {
   Sidebar,
@@ -125,6 +126,7 @@ export function ProjectSidebar({
                   onCreated={onOpen}
                 />
               )}
+              {ready && <RepairSourcePaths nodes={nodes} canWrite={canWrite} />}
               <SidebarGroupContent aria-busy={!ready}>
                 <ProjectFileTree
                   nodes={nodes}

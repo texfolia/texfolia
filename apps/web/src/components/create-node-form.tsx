@@ -5,7 +5,7 @@ import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { nodeNameSchema } from "#/lib/project-node.schema";
-import { projectNodePaths } from "#/lib/project-paths";
+import { newProjectNodePath, projectNodePaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
@@ -80,11 +80,12 @@ export function CreateNodeForm({
           setError(parsed.error.issues[0]?.message ?? "Enter a valid name.");
           return;
         }
-        if (
-          nodes.find((node) => node.id === parentId)?.parentId === null &&
-          parsed.data.toLowerCase() === "out"
-        ) {
-          setError("out/ is reserved for generated build files.");
+        try {
+          newProjectNodePath(nodes, parentId, parsed.data);
+        } catch (error) {
+          setError(
+            error instanceof Error ? error.message : "Enter a valid path.",
+          );
           return;
         }
         if (
@@ -107,9 +108,11 @@ export function CreateNodeForm({
           });
           setKind(null);
           if (node.kind === "text") onCreated(node, true);
-        } catch {
+        } catch (error) {
           setError(
-            "Could not create this item. Check the name and your connection, then try again.",
+            error instanceof Error
+              ? error.message
+              : "Could not create this item. Check your connection and try again.",
           );
         } finally {
           setPending(false);
