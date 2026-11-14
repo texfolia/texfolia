@@ -1,4 +1,4 @@
-import { IconAlertCircle, IconFiles } from "@tabler/icons-react";
+import { IconAlertCircle, IconFiles, IconHistory } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 
 import { CreateNodeForm } from "#/components/create-node-form";
@@ -36,8 +36,10 @@ export function ProjectSidebar({
   onToggleProblems,
   onOpenGenerated,
   sources,
+  onOpenHistory,
 }: {
   name: string;
+  onOpenHistory: () => void;
   nodes: ProjectNode[];
   activeId: string | undefined;
   ready: boolean;
@@ -78,6 +80,17 @@ export function ProjectSidebar({
                   >
                     <IconFiles />
                     <span className="sr-only">Project files</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Document history"
+                    aria-label="Document history"
+                    disabled={!ready}
+                    onClick={onOpenHistory}
+                  >
+                    <IconHistory />
+                    <span className="sr-only">Document history</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>

@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
+import { historyPolicy } from "#/lib/document-history";
 
 export const Route = createFileRoute("/pricing")({
   component: RouteComponent,
@@ -35,6 +36,7 @@ const PLANS = [
     buttonVariant: "outline",
     buttonText: "Get started for free",
     features: [
+      historyPolicy,
       "100 projects",
       "4 editors per project",
       "1 GB storage",
@@ -49,6 +51,7 @@ const PLANS = [
     buttonVariant: "default",
     buttonText: "Upgrade to Pro",
     features: [
+      historyPolicy,
       "Unlimited projects",
       "10 editors per project",
       "10 GB storage",
@@ -63,6 +66,7 @@ const PLANS = [
     buttonVariant: "outline",
     buttonText: "Contact Sales",
     features: [
+      historyPolicy,
       "Unlimited projects",
       "Unlimited editors per project",
       "100 GB storage / user",

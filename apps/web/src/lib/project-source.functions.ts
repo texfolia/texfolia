@@ -20,6 +20,7 @@ export const saveProjectSource = createServerFn({ method: "POST" })
       return env.COLLABORATION.getByName(data.projectId).saveSource({
         data,
         userId: session.user.id,
+        name: session.user.name,
       });
     const server = await import("./project-source.server");
     return server.saveProjectSource({
