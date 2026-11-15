@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useContext } from "react";
 
 import type { BuildSnapshot } from "#/lib/build";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
+import type { EditorCommand } from "#/lib/editor-command";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import type { latexCompletion } from "#/lib/latex/completion";
 import type { FormatSettings } from "#/lib/latex/format";
@@ -18,6 +19,18 @@ export type Workspace = {
   paths: ReadonlyMap<string, string>;
   completion: ReturnType<typeof latexCompletion>;
   problems: ReadonlyMap<string, LatexProblem[]>;
+  allProblems: LatexProblem[];
+  reveal: (path: string, line?: number) => void;
+  closeTabs: (id: string, mode: "one" | "others" | "all" | "right") => void;
+  reportGitBranch: (branch: string | null) => void;
+  registerCommands: (
+    id: string,
+    run: ((command: EditorCommand) => void) | null,
+  ) => void;
+  reportCursor: (
+    id: string,
+    position: { line: number; column: number },
+  ) => void;
   reportSyntax: (path: string, problems: LatexProblem[]) => void;
   jump: { id: string; line: number } | undefined;
   pdf: File | null;

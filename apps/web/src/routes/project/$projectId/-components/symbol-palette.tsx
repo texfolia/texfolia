@@ -119,7 +119,7 @@ export function SymbolPalette({
                       </span>
                     ) : (
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         className="h-auto min-h-8 text-xs break-all whitespace-normal"
                         title={`Add to ${preamble.filename}`}

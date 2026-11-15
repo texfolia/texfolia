@@ -1,22 +1,35 @@
 import { IconDownload } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, useImperativeHandle, type Ref } from "react";
 
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "#/components/ui/dialog";
 import { buildFileUrl } from "#/lib/build";
 import { downloadFile } from "#/lib/download-file";
 import { decodeSource, type SourceFiles } from "#/lib/project-source";
 import { createZip } from "#/lib/zip";
 import { useWorkspace } from "#/providers/workspace-provider";
 
+export type ProjectExportHandle = { open: () => void };
+
 export function ProjectExport({
+  ref,
   name,
   sources,
 }: {
+  ref?: Ref<ProjectExportHandle>;
   name: string;
   sources: () => Promise<SourceFiles>;
 }) {
   const { build, projectId } = useWorkspace();
+  const [open, setOpen] = useState(false);
+  useImperativeHandle(ref, () => ({ open: () => setOpen(true) }));
   const [includeBuild, setIncludeBuild] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -51,30 +64,42 @@ export function ProjectExport({
     }
   }
   return (
-    <details className="shrink-0 border-t px-2 py-1 text-xs">
-      <summary className="cursor-pointer py-1">Export project</summary>
-      <label className="flex items-center gap-2 py-2">
-        <Checkbox
-          checked={includeBuild}
-          disabled={pending || !build?.artifacts}
-          onCheckedChange={setIncludeBuild}
-        />
-        Include generated out/ files
-      </label>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => void download()}
-      >
-        <IconDownload />
-        {pending ? "Exporting…" : "Download zip"}
-      </Button>
-      {error && (
-        <p role="alert" className="text-destructive pt-2">
-          {error}
-        </p>
-      )}
-    </details>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!pending) setOpen(next);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Export project</DialogTitle>
+          <DialogDescription>
+            Download a ZIP of the current project sources.
+          </DialogDescription>
+        </DialogHeader>
+        <label className="flex items-center gap-2 py-2">
+          <Checkbox
+            checked={includeBuild}
+            disabled={pending || !build?.artifacts}
+            onCheckedChange={setIncludeBuild}
+          />
+          Include generated out/ files
+        </label>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={() => void download()}
+        >
+          <IconDownload />
+          {pending ? "Exporting…" : "Download zip"}
+        </Button>
+        {error && (
+          <p role="alert" className="text-destructive pt-2">
+            {error}
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

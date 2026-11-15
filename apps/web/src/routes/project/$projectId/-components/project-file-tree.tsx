@@ -128,7 +128,13 @@ export function ProjectFileTree({
   isPending,
   onOpen,
   canManage = false,
+  onCreate,
+  onUpload,
+  onDownload,
 }: {
+  onCreate: (kind: "text" | "folder", parentId: string) => void;
+  onUpload: (parentId: string) => void;
+  onDownload: (node: ProjectNode) => void;
   canManage?: boolean;
   nodes: ProjectNode[];
   activeId: string | undefined;
@@ -155,52 +161,66 @@ export function ProjectFileTree({
   function branch(parentId: string | null, depth = 0) {
     return (
       <SidebarMenu
-        className="gap-0"
+        className="m-0 gap-0 p-0"
         aria-label={parentId === null ? "Project files" : undefined}
       >
         {children.get(parentId)?.map((node) => (
           <SidebarMenuItem key={node.id} className="group/node relative">
-            {node.kind === "folder" ? (
-              <Collapsible defaultOpen className="group/folder">
-                <CollapsibleTrigger
+            <ProjectNodeActions
+              node={node}
+              nodes={nodes}
+              canManage={
+                canManage && node.projectId !== "out" && !isPending(node.id)
+              }
+              onOpen={() => onOpen(node, true)}
+              onDownload={() => onDownload(node)}
+              onCreate={(kind) => onCreate(kind, node.id)}
+              onUpload={() => onUpload(node.id)}
+            >
+              {node.kind === "folder" ? (
+                <Collapsible defaultOpen className="group/folder">
+                  <CollapsibleTrigger
+                    disabled={isPending(node.id)}
+                    render={
+                      <SidebarMenuButton
+                        size="sm"
+                        className="h-6 rounded-none p-0"
+                      />
+                    }
+                    style={{ paddingLeft: depth * 14 }}
+                  >
+                    <IconChevronRight className="transition-transform in-aria-expanded:rotate-90" />
+                    <IconFolder className="in-aria-expanded:hidden" />
+                    <IconFolderOpen className="hidden in-aria-expanded:block" />
+                    <span>{node.name}</span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    {branch(node.id, depth + 1)}
+                  </CollapsibleContent>
+                </Collapsible>
+              ) : (
+                <SidebarMenuButton
+                  size="sm"
+                  className="h-6 rounded-none p-0"
                   disabled={isPending(node.id)}
-                  render={<SidebarMenuButton size="sm" className="pr-7" />}
-                  style={{ paddingLeft: 8 + depth * 14 }}
+                  style={{ paddingLeft: 14 + depth * 14 }}
+                  isActive={activeId === node.id}
+                  aria-current={activeId === node.id ? "true" : undefined}
+                  title={node.name}
+                  onClick={(event) => onOpen(node, event.detail === 0)}
+                  onDoubleClick={() => onOpen(node, true)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowRight") {
+                      event.preventDefault();
+                      onOpen(node, true);
+                    }
+                  }}
                 >
-                  <IconChevronRight className="transition-transform in-aria-expanded:rotate-90" />
-                  <IconFolder className="in-aria-expanded:hidden" />
-                  <IconFolderOpen className="hidden in-aria-expanded:block" />
+                  <ProjectFileIcon name={node.name} kind={node.kind} />
                   <span>{node.name}</span>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  {branch(node.id, depth + 1)}
-                </CollapsibleContent>
-              </Collapsible>
-            ) : (
-              <SidebarMenuButton
-                size="sm"
-                className="pr-7"
-                disabled={isPending(node.id)}
-                style={{ paddingLeft: 22 + depth * 14 }}
-                isActive={activeId === node.id}
-                aria-current={activeId === node.id ? "true" : undefined}
-                title={node.name}
-                onClick={(event) => onOpen(node, event.detail === 0)}
-                onDoubleClick={() => onOpen(node, true)}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowRight") {
-                    event.preventDefault();
-                    onOpen(node, true);
-                  }
-                }}
-              >
-                <ProjectFileIcon name={node.name} kind={node.kind} />
-                <span>{node.name}</span>
-              </SidebarMenuButton>
-            )}
-            {canManage && node.parentId && !isPending(node.id) && (
-              <ProjectNodeActions node={node} nodes={nodes} />
-            )}
+                </SidebarMenuButton>
+              )}
+            </ProjectNodeActions>
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
@@ -210,8 +230,6 @@ export function ProjectFileTree({
   return nodes.length ? (
     branch(null)
   ) : (
-    <p className="text-muted-foreground px-2 py-3 text-xs">
-      No files in this project.
-    </p>
+    <p className="text-muted-foreground text-xs">No files in this project.</p>
   );
 }

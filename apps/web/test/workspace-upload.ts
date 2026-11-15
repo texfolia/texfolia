@@ -313,6 +313,8 @@ const vite = await createServer({
     alias: {
       "#/lib/project-node.functions": rpc,
       "#/lib/project-source.functions": rpc,
+      "#/lib/git.functions": rpc,
+      "#/lib/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },
@@ -343,6 +345,14 @@ try {
     if (frame === page.mainFrame()) navigations++;
   });
   await page.goto(vite.resolvedUrls?.local[0] ?? "");
+  async function fileMenu(item: string) {
+    await page
+      .locator('[data-slot="menubar-trigger"]')
+      .filter({ hasText: /^File$/ })
+      .click();
+    await page.getByRole("menuitem", { name: item, exact: true }).focus();
+    await page.keyboard.press("Enter");
+  }
   console.info("Checking workspace initialization");
   await page
     .locator('.cm-content[contenteditable="true"]')
@@ -352,7 +362,7 @@ try {
       throw error;
     });
   console.info("Checking source name validation before any upload is stored");
-  await page.getByRole("button", { name: "New file", exact: true }).click();
+  await fileMenu("New file");
   await page.getByLabel("File name", { exact: true }).fill("chapter:1.tex");
   await page.getByRole("button", { name: "Create file", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "colons" }).waitFor();
@@ -474,7 +484,7 @@ try {
     "Rejected optimistic deletion must leave the collaborative editor connected",
   );
   await page
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   console.info("Checking compile submission");
   await page
@@ -494,8 +504,9 @@ try {
     "Compiler unavailable",
   );
   await page
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
+  await page.getByRole("button", { name: "output.pdf", exact: true }).click();
   await page
     .locator(".react-pdf__Page__canvas")
     .waitFor()
@@ -567,16 +578,12 @@ try {
   });
   project.sourceVersions[legacyId] = { objectKey: null, updatedAt: 0 };
   await page.evaluate(() => window.uploadTest.refresh());
-  const repair = page
-    .locator("details")
-    .filter({ has: page.getByText("Repair source paths", { exact: true }) });
-  await repair.getByText("These paths prevent compilation:").waitFor();
   await page
     .getByRole("button", { name: "chapter:1.tex", exact: true })
     .click();
   await page.getByRole("tab", { name: /^chapter:1\.tex/ }).waitFor();
   await page
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   await page
     .getByRole("alert")
@@ -588,9 +595,15 @@ try {
     "Invalid legacy path must not reach the compiler",
   );
   const download = page.waitForEvent("download");
-  await page.getByText("Export project", { exact: true }).click();
+  await fileMenu("Export project");
   await page.getByRole("button", { name: "Download zip", exact: true }).click();
   assert.match((await download).suggestedFilename(), /\.zip$/);
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  await fileMenu("Repair source paths");
+  const repair = page.getByRole("dialog", { name: "Repair source paths" });
+  await repair.getByText("These paths prevent compilation:").waitFor();
+
   await repair
     .getByLabel("File or folder", { exact: true })
     .selectOption(legacyId);
@@ -622,11 +635,11 @@ try {
       new URL(response.url()).pathname === `/api/compile/${projectId}`,
   );
   await page
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   assert.equal((await repairedCompile).status(), 200);
   await page
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .waitFor();
   assert.equal(submissions.length, 3);
   assert(Object.hasOwn(submissions[2]?.files ?? {}, "figures/recovered.tex"));

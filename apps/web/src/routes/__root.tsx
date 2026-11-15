@@ -74,7 +74,7 @@ function RootDocument() {
     <html
       lang="en"
       suppressHydrationWarning
-      className="caret-foreground **:border-border **:outline-ring/50 [scrollbar-color:var(--border)_var(--background)] font-sans selection:bg-(--selection) selection:text-(--selection-foreground) [&_[data-slot=input]]:text-(--input-foreground) [&_[data-slot=input]]:placeholder:text-(--input-placeholder) [&_[data-slot=textarea]]:text-(--input-foreground) [&_[data-slot=textarea]]:placeholder:text-(--input-placeholder) [&_select]:text-(--input-foreground)"
+      className="caret-foreground [:where(&)_*]:border-border [:where(&)_*]:outline-ring/50 [scrollbar-color:var(--border)_var(--background)] font-sans selection:bg-(--selection) selection:text-(--selection-foreground) [&_[data-slot=input]]:text-(--input-foreground) [&_[data-slot=input]]:placeholder:text-(--input-placeholder) [&_[data-slot=textarea]]:text-(--input-foreground) [&_[data-slot=textarea]]:placeholder:text-(--input-placeholder) [&_select]:text-(--input-foreground)"
     >
       <head>
         <HeadContent />

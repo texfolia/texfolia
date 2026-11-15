@@ -8,6 +8,8 @@ import { createDb } from "@texfolia/db";
 import {
   aiRequest,
   aiRun,
+  aiThread,
+  aiMessage,
   project,
   projectNode,
   projectGit,
@@ -20,6 +22,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import { z } from "zod";
 
+import { threadHistorySchema, threadSchema } from "../src/lib/ai/threads";
 import { GitRepository } from "../src/lib/git-repository.server";
 import { hashSource } from "../src/lib/latex/source-sync";
 import { createProject } from "../src/lib/project.server";
@@ -473,7 +476,14 @@ try {
     ).status,
     400,
   );
-  const body = chatBody();
+  const firstThreadResponse = await send(`${path}?threads=1`, userId, "POST", {
+    kind: "create",
+  });
+  assert.equal(firstThreadResponse.status, 200);
+  const firstThread = threadHistorySchema.parse(
+    await firstThreadResponse.json(),
+  );
+  const body = { ...chatBody(), threadId: firstThread.thread.id };
   const response = await send(path, userId, "POST", body);
   assert.equal(response.status, 200, await response.clone().text());
   const stream = await response.text();
@@ -489,6 +499,59 @@ try {
           .where(eq(aiRun.clientRunId, body.runId))
       ).every((r) => r.ai_request.status === "reported"),
     "successful run bills",
+  );
+  const savedHistory = threadHistorySchema.parse(
+    await (
+      await send(`${path}?threads=1&thread=${body.threadId}`, userId)
+    ).json(),
+  );
+  assert(savedHistory.messages.some((message) => message.role === "user"));
+  assert(
+    savedHistory.messages.some((message) =>
+      message.parts.some((part) => part.type === "tool-call"),
+    ),
+    "tool calls survive server hydration",
+  );
+  assert(
+    savedHistory.messages.some((message) =>
+      message.parts.some(
+        (part) =>
+          part.type === "text" && part.content.includes("Updated main.tex"),
+      ),
+    ),
+  );
+  const otherProject = await createProject({
+    db,
+    ownerId: userId,
+    data: { id: crypto.randomUUID(), name: "Other assistant project" },
+  });
+  projectIds.push(otherProject.id);
+  assert.equal(
+    (
+      await send(
+        `/api/ai/${otherProject.id}?threads=1&thread=${body.threadId}`,
+        userId,
+      )
+    ).status,
+    404,
+    "threads are isolated by project",
+  );
+  assert.equal(
+    (
+      await send(`${path}?threads=1`, userId, "POST", {
+        kind: "rename",
+        id: body.threadId,
+        title: "Saved conversation",
+      })
+    ).status,
+    200,
+  );
+  const list = z
+    .object({ threads: z.array(threadSchema) })
+    .parse(await (await send(`${path}?threads=1`, userId)).json());
+  assert.equal(
+    list.threads.find((thread) => thread.id === body.threadId)?.title,
+    "Saved conversation",
   );
   assert.equal(inference.length, 6);
   assert.equal(meterEvents.length, 6);
@@ -563,7 +626,12 @@ try {
     503,
     "failed generation reports an error instead of suggesting a partial message",
   );
-  const failure = chatBody();
+  const failureThread = threadHistorySchema.parse(
+    await (
+      await send(`${path}?threads=1`, userId, "POST", { kind: "create" })
+    ).json(),
+  );
+  const failure = { ...chatBody(), threadId: failureThread.thread.id };
   const failed = await send(path, userId, "POST", failure);
   const failureStream = await failed.text();
   assert(failureStream.includes("RUN_ERROR"), failureStream);
@@ -597,6 +665,17 @@ try {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(`${origin}/project/${paidProject}`);
+  await page
+    .getByRole("toolbar", { name: "Right sidebar views" })
+    .getByRole("button", { name: "Git", exact: true })
+    .click();
+  assert.equal(
+    await page
+      .getByRole("complementary", { name: "Agent history", exact: true })
+      .count(),
+    0,
+    "History is hidden by default",
+  );
   const gitPanel = page.locator('[data-testid="git-panel"]');
   await gitPanel.getByLabel("Current branch").waitFor();
   await gitPanel
@@ -630,10 +709,10 @@ try {
     path: join(gitScreenshots, "git-connected-desktop.png"),
     fullPage: true,
   });
-  await page.setViewportSize({ width: 375, height: 812 });
   await page
-    .getByRole("button", { name: "Toggle project sidebar", exact: true })
+    .getByRole("button", { name: "Close assistant", exact: true })
     .click();
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.waitForFunction(
     () =>
       !!document.querySelector<HTMLTextAreaElement>(
@@ -649,6 +728,10 @@ try {
     .getByRole("button", { name: "Close project sidebar", exact: true })
     .click();
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page
+    .getByRole("toolbar", { name: "Right sidebar views" })
+    .getByRole("button", { name: "Git", exact: true })
+    .click();
   await gitPanel.getByLabel("Commit message").fill("Save revised document");
   await gitPanel
     .getByRole("button", { name: "Commit changes", exact: true })
@@ -678,8 +761,10 @@ try {
     ).length,
     0,
   );
-  await page.getByRole("button", { name: "Toggle assistant" }).click();
-  await page.getByRole("combobox", { name: "Model for this chat" }).waitFor();
+  console.info("Checking persistent assistant UI");
+  await page.getByRole("button", { name: "Toggle agents sidebar" }).click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "Model for this chat" }).waitFor();
   await page
     .getByRole("textbox", { name: "Message the assistant" })
     .fill("Explain this project.");
@@ -688,6 +773,14 @@ try {
     .getByRole("log")
     .getByText("Updated main.tex and submitted a compile.")
     .waitFor();
+  await page
+    .getByRole("button", { name: "Retry message", exact: true })
+    .click();
+  await page
+    .getByRole("log")
+    .getByText("Updated main.tex and submitted a compile.")
+    .waitFor();
+  console.info("Checking Stop after retry");
   mode = "slow";
   await page
     .getByRole("textbox", { name: "Message the assistant" })
@@ -739,17 +832,16 @@ try {
     "restoring the cap resumes chat",
   );
   await page.locator("aside details").first().locator("summary").click();
+  await page.getByRole("button", { name: "Model for this chat" }).click();
   await page
-    .getByRole("combobox", { name: "Model for this chat" })
-    .selectOption("@cf/test/model");
+    .getByRole("menuitemradio", { name: "Fixture model", exact: true })
+    .click();
+  console.info("Checking per-chat model override and new chat");
   await page.getByRole("button", { name: "New chat" }).click();
-  assert.equal(
-    await page
-      .getByRole("combobox", { name: "Model for this chat" })
-      .inputValue(),
-    "@cf/test/second",
-    "New chat restores the saved default instead of a chat override",
-  );
+  await page
+    .getByRole("button", { name: "Model for this chat" })
+    .getByText("Second model", { exact: true })
+    .waitFor();
   await page
     .getByRole("textbox", { name: "Message the assistant" })
     .fill("Explain this project.");
@@ -758,8 +850,125 @@ try {
     .getByRole("log")
     .getByText("Updated main.tex and submitted a compile.")
     .waitFor();
-  const screenshots = new URL("../../../.audit/nat-266/", import.meta.url)
-    .pathname;
+  await page.getByRole("button", { name: "Send", exact: true }).waitFor();
+  await page.reload();
+  await page
+    .getByRole("log")
+    .getByText("Updated main.tex and submitted a compile.")
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Toggle chat history", exact: true })
+    .click();
+  await page
+    .getByRole("complementary", { name: "Agent history", exact: true })
+    .waitFor();
+  const historyLayout = await page.evaluate(() => {
+    const history = document.querySelector('[aria-label="Agent history"]');
+    const agents = document.querySelector('[aria-label="AI assistant"]');
+    const editor = document.querySelector(".cm-editor");
+    if (!history || !agents || !editor) throw new Error("Missing agent layout");
+    return {
+      history: history.getBoundingClientRect().x,
+      agents: agents.getBoundingClientRect().x,
+      editor: editor.getBoundingClientRect().x,
+    };
+  });
+  assert(
+    historyLayout.history < historyLayout.agents &&
+      historyLayout.agents < historyLayout.editor,
+    "History is a separate pane to the left of Agents",
+  );
+
+  assert(
+    await page
+      .getByRole("navigation", { name: "Chat history" })
+      .getByRole("button")
+      .count(),
+  );
+  const finalThreads = await db
+    .select()
+    .from(aiThread)
+    .where(eq(aiThread.projectId, paidProject));
+  assert(finalThreads.length >= 4);
+  const disposable = threadHistorySchema.parse(
+    await (
+      await send(`${path}?threads=1`, userId, "POST", { kind: "create" })
+    ).json(),
+  );
+  assert.equal(
+    (
+      await send(`${path}?threads=1`, userId, "POST", {
+        kind: "delete",
+        id: disposable.thread.id,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await send(`${path}?threads=1&thread=${disposable.thread.id}`, userId))
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await db
+        .select()
+        .from(aiMessage)
+        .where(eq(aiMessage.threadId, disposable.thread.id))
+    ).length,
+    0,
+  );
+  await page
+    .getByRole("button", { name: /^Manage chat / })
+    .first()
+    .click();
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Chat name" })
+    .fill("Reviewed thread");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Chat history" })
+    .getByRole("button", { name: "Reviewed thread", exact: true })
+    .waitFor();
+  await page.reload();
+  await page
+    .getByRole("navigation", { name: "Chat history" })
+    .getByRole("button", { name: "Reviewed thread", exact: true })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Manage chat Reviewed thread", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Reviewed thread", exact: true })
+    .waitFor({ state: "detached" });
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  await page
+    .getByRole("button", { name: "Model for this chat", exact: true })
+    .waitFor();
+  await page
+    .getByRole("navigation", { name: "Chat history" })
+    .getByRole("button", { name: "Saved conversation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Model for this chat", exact: true })
+    .waitFor();
+  assert(
+    await page.locator('[data-slot="trace"]').count(),
+    "saved tool calls use the structured Tool pattern",
+  );
+  const screenshots = new URL(
+    "../../../.audit/nat-314/assistant/",
+    import.meta.url,
+  ).pathname;
   await mkdir(screenshots, { recursive: true });
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({
@@ -768,6 +977,15 @@ try {
     animations: "disabled",
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("complementary", { name: "AI assistant", exact: true })
+    .waitFor({ state: "hidden" });
+  await page
+    .getByRole("button", { name: "Toggle agents sidebar", exact: true })
+    .click();
+  await page
+    .getByRole("complementary", { name: "AI assistant", exact: true })
+    .waitFor();
   await page.screenshot({
     path: join(screenshots, "assistant-mobile.png"),
     fullPage: true,

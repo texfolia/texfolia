@@ -2,6 +2,12 @@ import { IconRefresh, IconUsers } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "#/components/ui/context-menu";
 import { Input } from "#/components/ui/input";
 import {
   NativeSelect,
@@ -76,38 +82,106 @@ export function ProjectCollaboration() {
       )}
       <ul className="divide-y">
         {access?.people.map((person) => (
-          <li key={person.id} className="flex items-center gap-2 px-2 py-1.5">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate" title={person.email}>
-                {person.name}
-              </span>
-              <span className="text-muted-foreground">
-                {person.role === "viewer"
-                  ? "Can view"
-                  : person.role === "editor"
-                    ? "Can edit"
-                    : person.role}
-              </span>
-            </span>
-            {access.canManage && person.role !== "owner" && (
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled={busy}
-                aria-label={`Remove ${person.name}`}
-                onClick={() =>
-                  void run(
-                    () =>
-                      revokeProjectAccess({
-                        data: { projectId, userId: person.id },
-                      }),
-                    `Access removed for ${person.name}.`,
-                  )
-                }
+          <li key={person.id}>
+            <ContextMenu>
+              <ContextMenuTrigger
+                render={<div />}
+                className="flex items-center gap-2 px-2 py-1.5"
               >
-                Remove
-              </Button>
-            )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate" title={person.email}>
+                    {person.name}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {person.role === "viewer"
+                      ? "Can view"
+                      : person.role === "editor"
+                        ? "Can edit"
+                        : person.role}
+                  </span>
+                </span>
+                {access.canManage && person.role !== "owner" && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={busy}
+                    aria-label={`Remove ${person.name}`}
+                    onClick={() =>
+                      void run(
+                        () =>
+                          revokeProjectAccess({
+                            data: { projectId, userId: person.id },
+                          }),
+                        `Access removed for ${person.name}.`,
+                      )
+                    }
+                  >
+                    Remove
+                  </Button>
+                )}
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem disabled>
+                  {" "}
+                  {person.name} · {person.role}
+                </ContextMenuItem>
+                {access.canManage && person.role !== "owner" && (
+                  <>
+                    <ContextMenuItem
+                      disabled={busy || person.role === "viewer"}
+                      onClick={() =>
+                        void run(
+                          () =>
+                            grantProjectAccess({
+                              data: {
+                                projectId,
+                                email: person.email,
+                                role: "viewer",
+                              },
+                            }),
+                          `Access updated for ${person.name}.`,
+                        )
+                      }
+                    >
+                      Can view
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      disabled={busy || person.role === "editor"}
+                      onClick={() =>
+                        void run(
+                          () =>
+                            grantProjectAccess({
+                              data: {
+                                projectId,
+                                email: person.email,
+                                role: "editor",
+                              },
+                            }),
+                          `Access updated for ${person.name}.`,
+                        )
+                      }
+                    >
+                      Can edit
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      variant="destructive"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(
+                          () =>
+                            revokeProjectAccess({
+                              data: { projectId, userId: person.id },
+                            }),
+                          `Access removed for ${person.name}.`,
+                        )
+                      }
+                    >
+                      Remove
+                    </ContextMenuItem>
+                  </>
+                )}
+              </ContextMenuContent>
+            </ContextMenu>
           </li>
         ))}
       </ul>

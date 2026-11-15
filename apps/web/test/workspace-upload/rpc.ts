@@ -40,3 +40,32 @@ export async function renameProjectNode({
   });
   if (!response.ok) throw new Error(await response.text());
 }
+
+// The upload harness isolates unrelated account/sharing transports; their real
+// Worker paths are exercised by the git, assistant, and workspace UI suites.
+export async function gitAction() {
+  return {
+    status: {
+      remote: null,
+      branch: null,
+      branches: [],
+      commits: [],
+      changes: [],
+    },
+  };
+}
+export async function getGitAccounts() {
+  return { github: false, gitlab: false };
+}
+export async function importGitProject() {
+  throw new Error("Git import is outside the upload fixture");
+}
+export async function getProjectAccess() {
+  return { canManage: false, people: [] };
+}
+export async function grantProjectAccess() {
+  throw new Error("Sharing is outside the upload fixture");
+}
+export async function revokeProjectAccess() {
+  throw new Error("Sharing is outside the upload fixture");
+}

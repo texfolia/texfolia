@@ -437,7 +437,7 @@ try {
   submissionGate = accepted.promise;
   const before = submissions.length;
   await editor
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   await eventually(
     () => submissions.length > before,
@@ -591,7 +591,7 @@ try {
   );
   const activeCompile = submissions.length;
   await editor
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   await eventually(
     () => submissions.length > activeCompile,

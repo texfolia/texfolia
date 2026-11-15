@@ -1,4 +1,4 @@
-import { IconDownload, IconLock } from "@tabler/icons-react";
+import { IconDownload } from "@tabler/icons-react";
 import CodeMirror from "@uiw/react-codemirror";
 import type { IDockviewPanelProps } from "dockview-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -13,7 +13,7 @@ const PdfViewer = lazy(() => import("./pdf"));
 export function GeneratedFile({
   params,
 }: IDockviewPanelProps<{ path: string }>) {
-  const { build, projectId, stale } = useWorkspace();
+  const { build, projectId, stale, pdf: compiledPdf } = useWorkspace();
   const { theme } = useTheme();
   const file = build?.artifacts?.files.find(
     (file) => file.path === params.path,
@@ -73,13 +73,40 @@ export function GeneratedFile({
       </p>
     );
   const content = loaded?.url === url ? loaded : null;
+  if (/\.pdf$/i.test(file.path)) {
+    const output =
+      build?.artifacts?.pdf === file.path ? (compiledPdf ?? pdf) : pdf;
+    if (!output)
+      return (
+        <p role={error ? "alert" : "status"} className="p-3 text-sm">
+          {error || "Loading PDF…"}
+        </p>
+      );
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {stale && (
+          <p
+            role="status"
+            className="text-muted-foreground border-b px-2 py-1 text-xs"
+          >
+            Out of date, recompile
+          </p>
+        )}
+        <div className="min-h-0 flex-1">
+          <Suspense
+            fallback={<p className="p-3 text-sm">Loading PDF viewer…</p>}
+          >
+            <PdfViewer file={output} filename={file.path} />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 text-sm">
-        <IconLock size={16} aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">
-          out/{file.path} · Read-only
-        </span>
+        <span className="min-w-0 flex-1 truncate">out/{file.path}</span>
         <Button
           size="sm"
           variant="ghost"
@@ -108,10 +135,6 @@ export function GeneratedFile({
         <p role="status" className="p-4 text-sm">
           Loading build file…
         </p>
-      ) : file.path.endsWith(".pdf") ? (
-        <Suspense fallback={<p className="p-4">Loading PDF viewer…</p>}>
-          <PdfViewer file={pdf} filename={file.path} />
-        </Suspense>
       ) : content.text !== null ? (
         <CodeMirror
           value={content.text}

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +24,7 @@ import {
   revokeProjectAccess,
 } from "../src/lib/project-sharing.server";
 import { createProject } from "../src/lib/project.server";
+import { pdfFixture } from "./pdf-fixture";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -34,7 +35,7 @@ const db = createDb(connectionString);
 const root = new URL("../dist/server/", import.meta.url).pathname;
 const filenames = await readdir(root, { recursive: true });
 const directory = await mkdtemp(join(tmpdir(), "texfolia-ui-"));
-const screenshots = new URL("../../../.audit/nat-286/", import.meta.url)
+const screenshots = new URL("../../../.audit/nat-314/", import.meta.url)
   .pathname;
 await mkdir(screenshots, { recursive: true });
 const secret = "ui-overhaul-test-secret-not-for-production";
@@ -43,6 +44,7 @@ const readerId = crypto.randomUUID();
 const organizationId = crypto.randomUUID();
 const invitationId = crypto.randomUUID();
 const templateId = crypto.randomUUID();
+let showArtifacts = false;
 const portReservation = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -87,6 +89,15 @@ const mf = new Miniflare({
     serviceBindings: {
       COMPILER: async (request) => {
         const path = new URL(request.url).pathname;
+        if (path.endsWith("/build/files"))
+          return new Response(
+            new URL(request.url).searchParams.get("path")?.endsWith(".pdf")
+              ? pdfFixture()
+              : "Generated output fixture\n",
+            {
+              headers: { "Content-Type": "text/plain" },
+            },
+          );
         if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
         if (path.endsWith("/changed"))
           return new Response(null, { status: 204 });
@@ -95,7 +106,22 @@ const mf = new Miniflare({
           current: null,
           latestBuild: null,
           stale: false,
-          artifacts: null,
+          artifacts: showArtifacts
+            ? {
+                id: "fixture-build",
+                revision: 0,
+                digest: "fixture",
+                builtAt: new Date().toISOString(),
+                builtBy: "UI fixture",
+                engine: "tectonic",
+                pdf: null,
+                files: [
+                  { path: "output.pdf", key: "pdf-v1", sizeBytes: 500 },
+                  { path: "main.log", key: "log-v1", sizeBytes: 25 },
+                  { path: "nested/main.aux", key: "aux-v1", sizeBytes: 25 },
+                ],
+              }
+            : null,
         };
         if (path.endsWith("/events"))
           return new Response(`data: ${JSON.stringify(snapshot)}\n\n`, {
@@ -110,6 +136,34 @@ const mf = new Miniflare({
 });
 const browser = await chromium.launch({ headless: true });
 const errors: string[] = [];
+async function workspaceMenu(page: Page, menu: string, item: string) {
+  await page
+    .locator('[data-slot="menubar-trigger"]')
+    .filter({ hasText: new RegExp(`^${menu}$`) })
+    .click();
+  const entry = page.getByRole("menuitem", { name: item, exact: true });
+  await entry.focus();
+  await page.keyboard.press("Enter");
+}
+async function sidebarView(page: Page, view: string) {
+  const names: Record<string, string> = {
+    files: "Files",
+    outline: "Outline",
+    git: "Git",
+    collaboration: "Collaboration",
+  };
+  const button = page
+    .getByRole("toolbar", { name: "Right sidebar views" })
+    .getByRole("button", { name: names[view] ?? view, exact: true });
+  if ((await button.getAttribute("aria-pressed")) !== "true")
+    await button.click();
+}
+async function fileMenu(page: Page, name: string, item: string) {
+  await page
+    .getByRole("button", { name, exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: item, exact: true }).click();
+}
 function monitor(page: Page) {
   page.setDefaultTimeout(20_000);
   page.on("pageerror", (error) => errors.push(error.message));
@@ -172,6 +226,18 @@ try {
   });
   const rootNode = nodes.find((node) => node.parentId === null);
   assert(rootNode);
+  const referencePdf = pdfFixture();
+  const pdfKey = `projects/${project.id}/sources/${createHash("sha256").update(referencePdf).digest("hex")}`;
+  await (await mf.getR2Bucket("SOURCES")).put(pdfKey, referencePdf);
+  await db.insert(projectNode).values({
+    projectId: project.id,
+    parentId: rootNode.id,
+    name: "reference.pdf",
+    kind: "binary",
+    objectKey: pdfKey,
+    sizeBytes: BigInt(referencePdf.length),
+  });
+
   await db.insert(projectNode).values({
     projectId: project.id,
     parentId: rootNode.id,
@@ -343,18 +409,16 @@ try {
     .focus();
   await owner.keyboard.press("Enter");
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
+  await sidebarView(owner, "collaboration");
   await owner.getByRole("form", { name: "Share project" }).waitFor();
   await owner
     .getByText("Only the owner has access.", { exact: true })
     .waitFor();
+  await sidebarView(owner, "files");
   const geometry = await owner.evaluate(() => {
-    const sidebar = document.querySelector(
-      '[data-slot="sidebar-container"][data-side="right"]',
-    );
+    const sidebar = document.querySelector('[aria-label="Project sidebar"]');
     const editor = document.querySelector(".cm-editor");
-    const row = document.querySelector(
-      '[aria-label="Project files"] [data-slot="sidebar-menu-button"]',
-    );
+    const row = document.querySelector('[aria-label="Project files"] button');
     if (!sidebar || !editor || !row)
       throw new Error("Workspace layout missing");
     return {
@@ -365,25 +429,121 @@ try {
     };
   });
   assert(geometry.sidebarX > geometry.editorX);
+  assert.equal(geometry.rowRadius, "0px", "File rows are square and flush");
+  assert.equal(geometry.rowHeight, 24);
+  assert.equal(await owner.locator('[data-slot="menubar"]').count(), 1);
   assert.equal(
-    geometry.rowRadius,
-    "0px",
-    "File rows use the square editor style",
+    await owner.getByRole("complementary", { name: "Project sidebar" }).count(),
+    1,
   );
-  assert.equal(geometry.rowHeight, 28);
+  assert.equal(
+    await owner.locator('[aria-label="Workspace navigation"]').count(),
+    0,
+  );
+  await owner.getByRole("complementary", { name: "AI assistant" }).waitFor();
   assert.equal(
     await owner
-      .getByRole("link", { name: "Back to Projects", exact: true })
-      .evaluate((link) => getComputedStyle(link).borderRadius),
-    "0px",
-    "Link buttons also use the square editor style",
+      .getByRole("button", { name: "Find and replace", exact: true })
+      .evaluate((button) => getComputedStyle(button).borderColor),
+    "rgba(0, 0, 0, 0)",
+    "Ghost panel tools have no visible border",
+  );
+  const treeGeometry = await owner.evaluate(() => {
+    const sidebar = document.querySelector('[aria-label="Project sidebar"]');
+    const root = document.querySelector('[aria-label="Project files"] button');
+    if (!sidebar || !root) throw new Error("Missing file tree");
+    return {
+      left:
+        root.getBoundingClientRect().left -
+        sidebar.getBoundingClientRect().left,
+      top:
+        root.getBoundingClientRect().top - sidebar.getBoundingClientRect().top,
+    };
+  });
+  assert.deepEqual(
+    treeGeometry,
+    { left: 0, top: 0 },
+    "Files view is only a flush tree",
   );
   await capture(owner, "workspace-desktop");
+  await owner.getByRole("button", { name: "notes.tex", exact: true }).click();
+  await owner.getByRole("tab", { name: "notes.tex", exact: true }).waitFor();
+  assert.equal(
+    await owner
+      .getByRole("tab", { name: "notes.tex", exact: true })
+      .evaluate(
+        (tab) =>
+          getComputedStyle(
+            tab.querySelector("[data-slot=context-menu-trigger]") ?? tab,
+          ).fontStyle,
+      ),
+    "italic",
+  );
   await owner
-    .getByRole("button", { name: "Close PDF Preview", exact: true })
+    .getByRole("button", { name: "notes.tex", exact: true })
+    .dblclick();
+  assert.equal(
+    await owner
+      .getByRole("tab", { name: "notes.tex", exact: true })
+      .evaluate(
+        (tab) =>
+          getComputedStyle(
+            tab.querySelector("[data-slot=context-menu-trigger]") ?? tab,
+          ).fontStyle,
+      ),
+    "normal",
+  );
+  await owner
+    .getByRole("tab", { name: "notes.tex", exact: true })
+    .click({ button: "right" });
+  await owner.getByRole("menuitem", { name: "Close", exact: true }).click();
+  await owner.getByRole("tab", { name: "main.tex", exact: true }).click();
+  await owner.locator('.cm-content[contenteditable="true"]').fill("Bold text");
+  await owner.keyboard.press("ControlOrMeta+A");
+  await owner.keyboard.press("ControlOrMeta+B");
+  assert.match(
+    await owner.locator('.cm-content[contenteditable="true"]').innerText(),
+    /\\textbf\{Bold text\}/,
+  );
+  assert.equal(
+    await owner
+      .getByRole("toolbar", { name: "Right sidebar views" })
+      .getByRole("button", { name: "Files", exact: true })
+      .getAttribute("aria-pressed"),
+    "true",
+    "Editor bold does not toggle the sidebar",
+  );
+  await owner
+    .locator('.cm-content[contenteditable="true"]')
+    .fill("\\section{Workspace heading}\n");
+  await sidebarView(owner, "outline");
+  await owner
+    .getByRole("navigation", { name: "Document outline" })
+    .getByRole("button", { name: "Workspace heading", exact: true })
     .click();
-  await owner.getByRole("button", { name: "PDF preview", exact: true }).click();
-  await owner.getByRole("tab", { name: "PDF Preview", exact: true }).waitFor();
+  assert.equal(await owner.getByRole("tab", { name: /^main\.tex/ }).count(), 1);
+  await owner.locator('.cm-content[contenteditable="true"]').fill("");
+  await sidebarView(owner, "files");
+
+  assert.equal(
+    await owner.getByRole("tab", { name: "PDF Preview", exact: true }).count(),
+    0,
+    "No permanent or empty PDF viewer",
+  );
+  await owner
+    .getByRole("button", { name: "reference.pdf", exact: true })
+    .click();
+  await owner
+    .getByRole("tab", { name: "reference.pdf", exact: true })
+    .waitFor();
+  await owner.locator(".react-pdf__Page__canvas").waitFor();
+  await capture(owner, "pdf-source-tab");
+  await owner
+    .getByRole("tab", { name: "reference.pdf", exact: true })
+    .getByRole("button", { name: "Close tab" })
+    .click();
+  await owner.getByRole("tab", { name: /^main\.tex/ }).click();
+  await sidebarView(owner, "collaboration");
   const share = owner.getByRole("form", { name: "Share project" });
   await share.getByRole("textbox").fill(`${crypto.randomUUID()}@example.com`);
   await share.getByRole("button", { name: "Share", exact: true }).click();
@@ -444,15 +604,22 @@ try {
   await share.getByRole("button", { name: "Share", exact: true }).click();
   await reader.locator('.cm-content[contenteditable="true"]').waitFor();
   await reader
-    .getByRole("button", { name: "Manage notes.tex", exact: true })
-    .waitFor();
+    .getByRole("button", { name: "notes.tex", exact: true })
+    .click({ button: "right" });
+  await reader.getByRole("menuitem", { name: "Rename", exact: true }).waitFor();
+  await reader.keyboard.press("Escape");
   await share.getByRole("textbox").fill(`${readerId}@example.com`);
   await share.getByRole("combobox").selectOption("viewer");
   await share.getByRole("button", { name: "Share", exact: true }).click();
   await reader.locator('.cm-content[contenteditable="false"]').waitFor();
   await reader
-    .getByRole("button", { name: "Manage notes.tex", exact: true })
-    .waitFor({ state: "detached" });
+    .getByRole("button", { name: "notes.tex", exact: true })
+    .click({ button: "right" });
+  assert.equal(
+    await reader.getByRole("menuitem", { name: "Rename", exact: true }).count(),
+    0,
+  );
+  await reader.keyboard.press("Escape");
   await owner
     .getByRole("button", { name: "Remove Emmy Reader", exact: true })
     .focus();
@@ -491,21 +658,12 @@ try {
   console.info(
     "Real viewer/editor grants, role changes, authorization, and live revocation passed",
   );
-  await owner
-    .getByRole("button", { name: "Manage notes.tex", exact: true })
-    .focus();
-  await owner.keyboard.press("Enter");
+  await sidebarView(owner, "files");
+  await fileMenu(owner, "notes.tex", "Rename");
   await owner.getByRole("dialog").waitFor();
   await owner.keyboard.press("Escape");
   await owner.getByRole("dialog").waitFor({ state: "detached" });
-  assert.equal(
-    await owner
-      .getByRole("button", { name: "Manage notes.tex", exact: true })
-      .evaluate((button) => button === document.activeElement),
-    true,
-    "Closing management returns keyboard focus to the file action",
-  );
-  await owner.keyboard.press("Enter");
+  await fileMenu(owner, "notes.tex", "Move");
   await owner
     .getByRole("dialog")
     .getByLabel("Name", { exact: true })
@@ -518,7 +676,7 @@ try {
     .getByRole("button", { name: "Save changes", exact: true })
     .click();
   await owner
-    .getByRole("button", { name: "Manage appendix.tex", exact: true })
+    .getByRole("button", { name: "appendix.tex", exact: true })
     .waitFor();
   assert(
     await db.query.projectNode.findFirst({
@@ -536,8 +694,7 @@ try {
   await owner.keyboard.press("Enter");
   const exportMarker = "% NAT-298 export verification";
   await owner.keyboard.insertText(exportMarker);
-  await owner.getByText("Export project", { exact: true }).focus();
-  await owner.keyboard.press("Enter");
+  await workspaceMenu(owner, "File", "Export project");
   assert.equal(
     await owner
       .getByRole("checkbox", { name: "Include generated out/ files" })
@@ -559,6 +716,7 @@ try {
   assert.deepEqual(listing.stdout.toString().trim().split("\n").sort(), [
     "chapters/appendix.tex",
     "main.tex",
+    "reference.pdf",
   ]);
   const mainSource = Bun.spawnSync(["unzip", "-p", zipPath, "main.tex"]);
   assert.equal(mainSource.exitCode, 0);
@@ -566,38 +724,83 @@ try {
     mainSource.stdout.toString().includes(exportMarker),
     "Export contains current editor content",
   );
-  await owner.getByRole("button", { name: "Save", exact: true }).focus();
-  await owner.keyboard.press("Enter");
+  showArtifacts = true;
+  await owner.reload();
+  await owner.getByRole("button", { name: "out", exact: true }).waitFor();
+  assert.equal(
+    await owner.getByRole("tab", { name: "output.pdf", exact: true }).count(),
+    0,
+    "A PDF existing does not open a tab automatically",
+  );
+  await owner.getByRole("button", { name: "output.pdf", exact: true }).click();
+  await owner.locator(".react-pdf__Page__canvas").waitFor();
+  await capture(owner, "pdf-generated-tab");
+
+  assert.equal(
+    await owner
+      .getByText("Generated build files (read-only)", { exact: true })
+      .count(),
+    0,
+  );
+  await owner.getByRole("button", { name: "main.log", exact: true }).click();
+  await owner.getByRole("tab", { name: "main.log", exact: true }).waitFor();
+  await owner.getByRole("button", { name: "main.aux", exact: true }).click();
+  await owner
+    .getByRole("tab", { name: "main.log", exact: true })
+    .waitFor({ state: "detached" });
+  await owner.getByRole("tab", { name: "main.aux", exact: true }).waitFor();
+  await owner.getByRole("button", { name: "main.aux", exact: true }).dblclick();
+  assert.equal(
+    await owner
+      .getByRole("tab", { name: "main.aux", exact: true })
+      .evaluate(
+        (tab) =>
+          getComputedStyle(
+            tab.querySelector("[data-slot=context-menu-trigger]") ?? tab,
+          ).fontStyle,
+      ),
+    "normal",
+  );
+  await owner
+    .getByRole("button", { name: "main.aux", exact: true })
+    .click({ button: "right" });
+  await owner
+    .getByRole("menuitem", { name: "Download", exact: true })
+    .waitFor();
+  assert.equal(
+    await owner.getByRole("menuitem", { name: "Rename", exact: true }).count(),
+    0,
+  );
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("tab", { name: /^main\.tex/ }).click();
+  await workspaceMenu(owner, "File", "Save");
   await owner.getByRole("tab", { name: "main.tex", exact: true }).waitFor();
   console.info(
     "Keyboard project navigation, file dialog focus, and source ZIP download passed",
   );
-  await owner
-    .getByRole("button", { name: "Manage appendix.tex", exact: true })
-    .click();
-  await owner.getByRole("button", { name: "Delete…", exact: true }).click();
+  await fileMenu(owner, "appendix.tex", "Delete");
   await owner
     .getByRole("button", { name: "Delete permanently", exact: true })
     .click();
   await eventually(
     async () =>
       !(await owner
-        .getByRole("button", { name: "Manage appendix.tex", exact: true })
+        .getByRole("button", { name: "appendix.tex", exact: true })
         .count()),
     "Deleted file disappears",
   );
   console.info("Rendered file rename, move, and deletion passed");
-  await owner.getByRole("button", { name: "Settings", exact: true }).click();
+  await workspaceMenu(owner, "File", "Settings");
   await owner
     .getByRole("dialog")
     .getByLabel("Theme", { exact: true })
     .selectOption("oneDark");
-  assert.equal(
+  assert.notEqual(
     await owner
       .getByRole("dialog")
       .evaluate((dialog) => getComputedStyle(dialog).borderRadius),
     "0px",
-    "Editor settings use the square editor style",
+    "Editor settings use standard shadcn radius",
   );
   await capture(owner, "settings-dark");
   await owner.keyboard.press("Escape");
@@ -605,33 +808,73 @@ try {
     .locator('[data-slot="dialog-content"]')
     .waitFor({ state: "detached" });
   await capture(owner, "workspace-dark");
+  await sidebarView(owner, "git");
   await owner.locator('[data-testid="git-panel"]').waitFor();
   await capture(owner, "git-dark");
-  await owner.setViewportSize({ width: 375, height: 812 });
+  // Sidebar dimensions, visibility, selection and dock arrangement survive a real reload.
+  await owner.getByRole("separator", { name: "Resize agents sidebar" }).focus();
+  await owner.keyboard.press("ArrowRight");
+  await owner.getByRole("separator", { name: "Resize right sidebar" }).focus();
+  await owner.keyboard.press("ArrowLeft");
   await owner
-    .getByRole("button", { name: "Toggle project sidebar", exact: true })
+    .getByRole("button", { name: "Toggle agents sidebar", exact: true })
     .click();
+  await workspaceMenu(owner, "View", "Problems");
+  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await owner
+    .getByRole("tab", { name: "main.tex", exact: true })
+    .click({ button: "right" });
+  await owner
+    .getByRole("menuitem", { name: "Close others", exact: true })
+    .click();
+  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await owner
+    .getByRole("tab", { name: "main.tex", exact: true })
+    .click({ button: "right" });
+  await owner.getByRole("menuitem", { name: "Close all", exact: true }).click();
+  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await sidebarView(owner, "files");
+  await owner.getByRole("button", { name: "main.tex", exact: true }).dblclick();
+  await sidebarView(owner, "git");
+  await owner.reload();
+  await owner.getByRole("toolbar", { name: "Right sidebar views" }).waitFor();
+  assert.equal(
+    await owner
+      .getByRole("toolbar", { name: "Right sidebar views" })
+      .getByRole("button", { name: "Git", exact: true })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  assert.equal(
+    await owner
+      .getByRole("button", { name: "Toggle agents sidebar", exact: true })
+      .getAttribute("aria-pressed"),
+    "false",
+  );
+  assert.equal(
+    await owner
+      .getByRole("separator", { name: "Resize right sidebar" })
+      .getAttribute("aria-valuenow"),
+    "304",
+  );
+  await owner
+    .getByRole("button", { name: "Toggle agents sidebar", exact: true })
+    .click();
+  assert.equal(
+    await owner
+      .getByRole("separator", { name: "Resize agents sidebar" })
+      .getAttribute("aria-valuenow"),
+    "336",
+  );
+  await owner.setViewportSize({ width: 375, height: 812 });
   await owner
     .getByRole("button", { name: "Close project sidebar", exact: true })
     .waitFor();
-  await owner.waitForFunction(() => {
-    const popup = document.querySelector(
-      '[data-slot="sidebar"][data-mobile="true"]',
-    );
-    if (!popup) return false;
-    return (
-      !popup.hasAttribute("data-starting-style") &&
-      getComputedStyle(popup).opacity === "1" &&
-      popup.getBoundingClientRect().right <= innerWidth + 1
-    );
-  });
   await capture(owner, "workspace-mobile-sidebar");
   await owner
     .getByRole("button", { name: "Close project sidebar", exact: true })
     .click();
-  await owner
-    .locator('[data-slot="sidebar"][data-mobile="true"]')
-    .waitFor({ state: "detached" });
   await owner.getByRole("tab", { name: "main.tex", exact: true }).click();
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
   await capture(owner, "workspace-mobile");
@@ -672,9 +915,7 @@ try {
   await owner
     .getByRole("heading", { name: "A new beginning", exact: true })
     .waitFor();
-  await owner
-    .getByRole("link", { name: "Back to Projects", exact: true })
-    .click();
+  await workspaceMenu(owner, "File", "Back to Projects");
   await owner
     .getByRole("textbox", { name: "Search projects", exact: true })
     .fill("A new beginning");

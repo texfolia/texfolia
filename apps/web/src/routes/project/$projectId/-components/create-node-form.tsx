@@ -1,7 +1,14 @@
 import { IconFilePlus, IconFolderPlus } from "@tabler/icons-react";
-import { useId, useState } from "react";
+import { useId, useState, useImperativeHandle, type Ref } from "react";
 
 import { Button } from "#/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "#/components/ui/dialog";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -13,11 +20,19 @@ import { newProjectNodePath, projectNodePaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
+export type CreateNodeHandle = {
+  start: (kind: "text" | "folder", parentId?: string) => void;
+};
+
 export function CreateNodeForm({
+  ref,
+  hideTrigger = false,
   nodes,
   activeId,
   onCreated,
 }: {
+  ref?: Ref<CreateNodeHandle>;
+  hideTrigger?: boolean;
   nodes: ProjectNode[];
   activeId: string | undefined;
   onCreated: (node: ProjectNode, permanent: boolean) => void;
@@ -35,11 +50,12 @@ export function CreateNodeForm({
   );
   const folderPaths = projectNodePaths(nodes);
 
-  function start(nextKind: "text" | "folder") {
+  function start(nextKind: "text" | "folder", targetParentId?: string) {
     const active = nodes.find((node) => node.id === activeId);
     const parent = active?.kind === "folder" ? active.id : active?.parentId;
     setParentId(
-      parent ??
+      targetParentId ??
+        parent ??
         folders.find((node) => node.parentId === null)?.id ??
         folders[0]?.id ??
         "",
@@ -49,11 +65,13 @@ export function CreateNodeForm({
     setKind(nextKind);
   }
 
+  useImperativeHandle(ref, () => ({ start }));
+
   if (!kind)
-    return (
+    return hideTrigger ? null : (
       <div className="flex gap-0">
         <Button
-          size="icon-sm"
+          size="icon-xs"
           variant="ghost"
           disabled={!folders.length}
           title="New file"
@@ -63,7 +81,7 @@ export function CreateNodeForm({
           <span className="sr-only">New file</span>
         </Button>
         <Button
-          size="icon-sm"
+          size="icon-xs"
           variant="ghost"
           disabled={!folders.length}
           title="New folder"
@@ -75,7 +93,7 @@ export function CreateNodeForm({
       </div>
     );
 
-  return (
+  const form = (
     <form
       className="w-full space-y-3 p-2"
       onSubmit={async (event) => {
@@ -180,5 +198,27 @@ export function CreateNodeForm({
         </Button>
       </div>
     </form>
+  );
+  return hideTrigger ? (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !pending) setKind(null);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {kind === "text" ? "New file" : "New folder"}
+          </DialogTitle>
+          <DialogDescription>
+            Choose a name and folder in this project.
+          </DialogDescription>
+        </DialogHeader>
+        {form}
+      </DialogContent>
+    </Dialog>
+  ) : (
+    form
   );
 }

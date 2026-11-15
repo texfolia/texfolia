@@ -62,6 +62,7 @@ export const gitBranchSchema = z
     "Enter a valid git branch name.",
   );
 export const gitActionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("initialize") }),
   z.object({ kind: z.literal("status") }),
   z.object({ kind: z.literal("diff") }),
   z.object({ kind: z.literal("fetch") }),
