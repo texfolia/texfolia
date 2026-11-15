@@ -45,10 +45,6 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
-import {
-  SymbolPalette,
-  type SymbolPreamble,
-} from "#/components/symbol-palette";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
@@ -63,6 +59,8 @@ import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
 import { addLatexPackage, insertLatexSymbol } from "#/lib/latex/symbols";
 import { useSettings } from "#/providers/settings-provider";
 import { useTheme } from "#/providers/theme-provider";
+
+import { SymbolPalette, type SymbolPreamble } from "./symbol-palette";
 
 type EditorProps = {
   collaboration?: CollaborativeFile;

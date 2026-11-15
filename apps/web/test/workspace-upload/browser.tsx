@@ -6,7 +6,6 @@ import {
 } from "@tanstack/react-router";
 import { createRoot } from "react-dom/client";
 
-import { ProjectWorkspace } from "../../src/components/project-workspace";
 import type { ProjectDetails } from "../../src/lib/project.functions";
 import {
   createProjectFilesStore,
@@ -14,6 +13,7 @@ import {
 } from "../../src/providers/project-files-provider";
 import { SettingsProvider } from "../../src/providers/settings-provider";
 import { ThemeProvider } from "../../src/providers/theme-provider";
+import { ProjectWorkspace } from "../../src/routes/project/$projectId/-components/project-workspace";
 
 import "../../src/styles.css";
 

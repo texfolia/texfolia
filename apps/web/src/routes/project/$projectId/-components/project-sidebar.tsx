@@ -8,13 +8,7 @@ import {
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { cn } from "cn";
 
-import { CreateNodeForm } from "#/components/create-node-form";
 import { editorChrome } from "#/components/editor-chrome";
-import { GeneratedFiles } from "#/components/generated-files";
-import { ProjectCollaboration } from "#/components/project-collaboration";
-import { ProjectExport } from "#/components/project-export";
-import { ProjectFileTree } from "#/components/project-file-tree";
-import { RepairSourcePaths } from "#/components/repair-source-paths";
 import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import {
@@ -29,11 +23,18 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "#/components/ui/sidebar";
-import { UploadSource } from "#/components/upload-source";
 import type { SourceFiles } from "#/lib/project-source";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
+
+import { CreateNodeForm } from "./create-node-form";
+import { GeneratedFiles } from "./generated-files";
+import { ProjectCollaboration } from "./project-collaboration";
+import { ProjectExport } from "./project-export";
+import { ProjectFileTree } from "./project-file-tree";
+import { RepairSourcePaths } from "./repair-source-paths";
+import { UploadSource } from "./upload-source";
 
 export function ProjectSidebar({
   name,

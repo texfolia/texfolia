@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { ProjectList } from "#/components/project-list";
 import { SidebarProvider } from "#/components/ui/sidebar";
 import { getProjects } from "#/lib/project.functions";
 import {
@@ -9,6 +8,8 @@ import {
 } from "#/providers/projects-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
+
+import { ProjectList } from "./-components/project-list";
 
 export const Route = createFileRoute("/projects")({
   ssr: false,
