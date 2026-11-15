@@ -262,8 +262,8 @@ export function ProjectList() {
         <DialogHeader>
           <DialogTitle>New Project</DialogTitle>
           <DialogDescription>
-            Give your workspace a name. You can add files and invite
-            collaborators inside.
+            Give your workspace a name. You can add files and share with
+            existing Texfolia accounts inside.
           </DialogDescription>
         </DialogHeader>
         <ProjectForm />
