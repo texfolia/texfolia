@@ -50,8 +50,8 @@ jobs:
         run: bun run --cwd apps/web test:workspace-metadata
       - name: Exercise project controls, sharing, and keyboard access
         run: bun run --cwd apps/web test/ui-overhaul.ts
-      - name: Exercise document history in authenticated workspaces
-        run: bun run --cwd apps/web test:document-history
+      - name: Exercise GitHub and GitLab integration with Postgres and local R2
+        run: bun run --cwd apps/web test:git
       - name: Exercise project source storage with local R2
         run: bun run apps/web/test/source-storage.ts
       - name: Exercise templates with Postgres and local R2
