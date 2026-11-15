@@ -19,6 +19,14 @@ Organization projects inherit access from membership. The workspace explains thi
 
 The public header links to Templates and Pricing. Git integration is canceled and has no launch claim or workspace control. The Pro AI assistant is part of v1.
 
+## Release policy content
+
+NAT-299 remains open in the v1 UI and content pass. The privacy page and release
+terms need product-owner approval before publication. The
+[policy review draft](release/nat-299-policy-review.md) records source-backed copy,
+the missing owner decisions, and the remaining release checks. Privacy and Terms
+are already linked from the shared footer and sign-in page.
+
 ## Verification
 
 `apps/web/test/ui-overhaul.ts` exercises authenticated project creation, listing, opening, deletion, sharing errors, grants, role changes in both directions, live revocation, file management, and ZIP export. Keyboard checks cover navigation, file action dialogs, focus restoration, access removal, saving, and export. Public pages and the workspace are captured at desktop and mobile sizes. CI runs this suite against an isolated Postgres test database and local Worker services after the web build. `bun run --cwd apps/web test:ui` builds the app and runs the same checks locally when `INTEGRATION_DATABASE_URL` points to an isolated database with the current schema and `test` in its name.
