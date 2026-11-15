@@ -6,7 +6,6 @@ import {
   organization,
   project,
   projectCollaborator,
-  projectNodeText,
   user,
 } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -129,7 +128,7 @@ try {
     /reserved for generated build files/,
   );
 
-  const node = await createProjectNode({
+  await createProjectNode({
     db,
     ownerId,
     data: {
@@ -140,12 +139,6 @@ try {
       kind: "text",
     },
   });
-  const bytes = Buffer.from([0, 1, 127, 128, 255]);
-  await db.insert(projectNodeText).values({ nodeId: node.id, yjsState: bytes });
-  const stored = await db.query.projectNodeText.findFirst({
-    where: { nodeId: node.id },
-  });
-  assert.deepEqual(stored?.yjsState, bytes);
   await assert.rejects(
     createProjectNode({
       db,
@@ -316,7 +309,7 @@ try {
   assert.equal(otherOwnerProject.name, created.name);
 
   console.log(
-    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, deleted project name reuse, concurrent active name uniqueness, binary text state, and transaction rollback",
+    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, deleted project name reuse, concurrent active name uniqueness, and transaction rollback",
   );
 } finally {
   await db.delete(organization).where(eq(organization.id, organizationId));

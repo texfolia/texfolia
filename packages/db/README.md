@@ -73,8 +73,8 @@ Source storage deliberately uploads immutable R2 objects while holding the
 project row lock. This serializes byte quotas, source versions, deletion, and
 garbage collection. Metadata commits only after the upload succeeds; the source
 sweep removes objects left by rolled-back SQL transactions. See
-`apps/web/README.md` for storage behavior and verification. The previously
-referenced `sql/20261111_project_sources.sql` is absent. For an existing database,
+[the web reference](../../apps/web/README.md#project-source-storage) for storage
+behavior and verification. For an existing database,
 prepare and review an upgrade against its actual schema before deploying.
 For a new database at launch, use the baseline described in the deployment guide.
 
@@ -86,7 +86,7 @@ Create an isolated database with `test` in its name, apply the schema to it with
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/postgres.ts
 ```
 
-This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, binary text state, constraint rollback, ownership checks, create/delete/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
+This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, constraint rollback, ownership checks, create/delete/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
 
 Verify the name-index upgrade separately after applying the schema:
 
@@ -105,3 +105,13 @@ per-user settings, run records, and the durable request ledger. Billing records
 retain their original payer after account or project deletion. See
 [Configure the managed assistant](../../docs/ai-assistant.md) for reconciliation
 and verification.
+
+## Collaboration persistence
+
+Yjs snapshots and update journals live in `ProjectCollaboration` Durable Object
+SQLite. R2 stores merged source text, and Postgres stores source versions and the
+cleanup registry. The unused `project_node_text` table and its composite node-kind
+constraint are no longer part of the Drizzle schema. No application path reads
+or writes that table. Review removal from any existing database alongside the
+first-deploy baseline or an explicit upgrade. This cleanup includes no destructive
+rollout SQL.

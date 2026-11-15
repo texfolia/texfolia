@@ -2,9 +2,11 @@
 
 Editor attachment now starts and restores the project's own container before
 compilation is requested. A warm process keeps its generated-file cache in
-memory. A fresh process restores that cache with one object-store read, not a
-read for every generated file. PoolManager spare claims and container snapshots
-are not part of this implementation.
+memory. A fresh process restores that cache with one object-store read.
+Cloudflare now selects a persisted PoolManager assignment, which can claim a
+ready spare. Project cache restoration still happens separately. No container
+snapshots are used. The November 12 local measurements below predate the pool
+and do not measure spare claims. See [Container pool](docs/container-pool.md).
 
 ## Actual path
 
@@ -12,7 +14,9 @@ are not part of this implementation.
    coordinator returns its current snapshot immediately and starts preparation
    as background work. The Durable Object retains the preparation with
    `ctx.waitUntil`.
-2. The engine client requests `/health` on `project:<id>`. The installed
+2. On Cloudflare, the coordinator selects its persisted container assignment
+   from PoolManager, reassigning a stopped container. The engine client requests
+   `/health` on that assigned container. The installed
    Containers SDK starts a stopped container and waits for its port before
    forwarding that request. The image starts the static Go binary, checks
    Tectonic availability, and listens on port 8080. Image construction has
@@ -41,8 +45,8 @@ the primary PDF, but includes logs, auxiliaries, SyncTeX, and custom outputs.
 It does not snapshot the container or its Tectonic package/font download cache.
 That cache starts with the packages present in the image's base-format warmup.
 
-The container still sleeps after 10 minutes without proxied activity. SSE
-heartbeats do not ping it. If an editor stays open longer without compiling, its
+Cloudflare containers sleep after 10 minutes without proxied activity for Free
+or 30 minutes for Pro and Team. SSE heartbeats do not ping them. If an editor stays open longer without compiling, its
 next compile can therefore be cold again. Clearing/deleting the build or the
 30-day retention cleanup removes the archive along with the other project
 objects; the next compile bypasses any still-resident cache.
@@ -73,7 +77,7 @@ even when editor prewarm already restored the cache. Use `archiveStatus`,
 `cacheUsed`, and `prewarmed` together rather than treating `temperature` as a
 container-readiness measurement.
 
-## Local measurements — November 12, 2026 UTC
+## Historical local measurements, November 12, 2026 UTC
 
 This measures the real Docker/Go/Tectonic path with the SQLite coordinator and
 object store. It does **not** measure Cloudflare VM provisioning, R2 network

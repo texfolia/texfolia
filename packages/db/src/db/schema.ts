@@ -1,16 +1,13 @@
 import { defineRelations, sql } from "drizzle-orm";
 import {
   bigint,
-  bytea,
   check,
-  foreignKey,
   index,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
-  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -156,7 +153,6 @@ export const projectNode = pgTable(
       "project_node_object_size_check",
       sql`${t.sizeBytes} >= 0 AND (${t.objectKey} IS NOT NULL OR ${t.sizeBytes} = 0)`,
     ),
-    unique("project_node_id_kind_unique").on(t.id, t.kind),
     uniqueIndex("nodes_sibling_name_unique")
       .on(
         t.projectId,
@@ -173,38 +169,12 @@ export const projectNode = pgTable(
   ],
 );
 
-export const projectNodeText = pgTable(
-  "project_node_text",
-  {
-    nodeId: uuid("node_id").primaryKey(),
-    // The discriminator keeps Yjs state attached only to text nodes.
-    kind: projectNodeKind("kind").$type<"text">().notNull().default("text"),
-    // Full document state: Buffer.from(Y.encodeStateAsUpdate(doc)).
-    yjsState: bytea("yjs_state").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
-  },
-  (t) => [
-    check("project_node_text_kind_check", sql`${t.kind} = 'text'`),
-    foreignKey({
-      columns: [t.nodeId, t.kind],
-      foreignColumns: [projectNode.id, projectNode.kind],
-    }).onDelete("cascade"),
-  ],
-);
-
 export const relations = defineRelations(
   {
     project,
     projectCollaborator,
     projectJob,
     projectNode,
-    projectNodeText,
     user,
   },
   (r) => ({
@@ -234,10 +204,6 @@ export const relations = defineRelations(
       }),
     },
     projectNode: {
-      text: r.one.projectNodeText({
-        from: r.projectNode.id,
-        to: r.projectNodeText.nodeId,
-      }),
       children: r.many.projectNode({
         from: r.projectNode.id,
         to: r.projectNode.parentId,
@@ -249,13 +215,6 @@ export const relations = defineRelations(
       project: r.one.project({
         from: r.projectNode.projectId,
         to: r.project.id,
-      }),
-    },
-    projectNodeText: {
-      node: r.one.projectNode({
-        from: r.projectNodeText.nodeId,
-        to: r.projectNode.id,
-        optional: false,
       }),
     },
     user: {

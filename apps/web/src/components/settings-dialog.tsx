@@ -46,7 +46,7 @@ const sections = [
 ] satisfies { title: SettingsSection; icon: typeof IconCode }[];
 
 const shortcuts = [
-  ["Save and compile", "Mod + S"],
+  ["Save sources", "Mod + S"],
   ["Bold", "Mod + B"],
   ["Italic", "Mod + I"],
   ["Underline", "Mod + U"],
@@ -210,8 +210,8 @@ export function SettingsDialog({
                         </FieldLabel>
                       </Field>
                       <p className="text-muted-foreground text-xs">
-                        Save with Mod+S to sync your project sources and compile
-                        the PDF.
+                        Save with Mod+S to sync your project sources. Use Save
+                        &amp; compile to update the PDF.
                       </p>
                     </>
                   )}

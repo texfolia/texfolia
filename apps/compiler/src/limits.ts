@@ -120,7 +120,7 @@ export class CompileUsageCore {
   }
 }
 
-export function fairUseError(userId: string, plan: Plan, retryAfter: number) {
+function fairUseError(userId: string, plan: Plan, retryAfter: number) {
   console.info({
     event: "compile_fair_use_hit",
     telemetryVersion: 1,

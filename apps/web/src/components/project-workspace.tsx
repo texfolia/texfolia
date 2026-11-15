@@ -200,8 +200,7 @@ function FileTab(props: IDockviewPanelHeaderProps<FilePanelParams>) {
   const workspace = useWorkspace();
   return (
     <div
-      className="h-full"
-      style={{ fontStyle: props.params.preview ? "italic" : "normal" }}
+      className={cn("h-full", props.params.preview ? "italic" : "not-italic")}
     >
       <DockviewDefaultTab
         {...props}

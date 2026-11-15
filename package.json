@@ -10,6 +10,8 @@
     "auth:schema": "turbo run auth:schema",
     "build": "turbo run build",
     "cf:typegen": "turbo run cf:typegen",
+    "check:repo": "bun run scripts/check-repo.mjs",
+    "check:unused": "knip",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:push": "turbo run db:push",
@@ -17,15 +19,17 @@
     "dev": "turbo run dev",
     "format": "oxfmt && turbo run format",
     "format:check": "oxfmt --check && turbo run format:check",
-    "lint": "oxlint && turbo run lint",
+    "lint": "bun run check:repo && bun run check:unused && oxlint && turbo run lint",
     "lint:fix": "oxlint --fix",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "@texfolia/typescript-config": "workspace:*",
+    "knip": "6.45.1",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
+    "postcss": "8.5.33",
     "turbo": "latest"
   },
   "devEngines": {
