@@ -4,6 +4,10 @@ import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import { Textarea } from "#/components/ui/textarea";
 import {
   bundledThemeIdSchema,
@@ -52,7 +56,7 @@ export function AppearanceSettings() {
       )}
       <Field>
         <FieldLabel htmlFor={`${id}-theme`}>Theme</FieldLabel>
-        <select
+        <NativeSelect
           id={`${id}-theme`}
           value={
             selection.kind === "system"
@@ -61,7 +65,7 @@ export function AppearanceSettings() {
                 ? "imported"
                 : selection.id
           }
-          className="border-border bg-input text-foreground focus-visible:ring-ring h-9 w-full rounded-md border px-2 text-sm outline-none focus-visible:ring-2"
+          className="w-full"
           onChange={(event) => {
             if (event.target.value === "system") choose({ kind: "system" });
             else {
@@ -70,16 +74,20 @@ export function AppearanceSettings() {
             }
           }}
         >
-          <option value="system">Follow system appearance</option>
+          <NativeSelectOption value="system">
+            Follow system appearance
+          </NativeSelectOption>
           {Object.entries(bundledThemes).map(([id, theme]) => (
-            <option key={id} value={id}>
+            <NativeSelectOption key={id} value={id}>
               {theme.name}
-            </option>
+            </NativeSelectOption>
           ))}
           {selection.kind === "imported" && (
-            <option value="imported">{selection.theme.name} (imported)</option>
+            <NativeSelectOption value="imported">
+              {selection.theme.name} (imported)
+            </NativeSelectOption>
           )}
-        </select>
+        </NativeSelect>
         <p className="text-muted-foreground text-xs" role="status">
           {theme.name} · {theme.mode}
         </p>

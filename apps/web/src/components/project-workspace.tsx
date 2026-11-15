@@ -3,12 +3,13 @@ import {
   IconArrowLeft,
   IconRefresh,
 } from "@tabler/icons-react";
-
-import "dockview-react/dist/styles/dockview.css";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
+
+import "dockview-react/dist/styles/dockview.css";
 import { ClientOnly, Link } from "@tanstack/react-router";
 import type { EditorView } from "@uiw/react-codemirror";
+import { cn } from "cn";
 import {
   type DockviewApi,
   DockviewDefaultTab,
@@ -30,6 +31,7 @@ import {
 
 import { DocumentHistoryPanel } from "#/components/document-history";
 import { Editor } from "#/components/editor";
+import { editorChrome } from "#/components/editor-chrome";
 import { GeneratedFile } from "#/components/generated-file";
 import {
   MarkdownPreview,
@@ -269,6 +271,37 @@ export function ProjectWorkspace({
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const [activeId, setActiveId] = useState<string>();
   const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!ready) return;
+    const narrow = window.matchMedia("(max-width: 767px)");
+    let merged = narrow.matches;
+    const layout = () => {
+      const dock = api.current;
+      const preview = dock?.getPanel("pdf");
+      const source = dock?.panels.find(
+        (panel) => panel.api.component === "editor",
+      );
+      if (!preview || !source) return;
+      if (narrow.matches && preview.group !== source.group) {
+        preview.api.moveTo({
+          group: source.group,
+          position: "center",
+          skipSetActive: true,
+        });
+        merged = true;
+      } else if (!narrow.matches && merged) {
+        preview.api.moveTo({
+          group: source.group,
+          position: "right",
+          skipSetActive: true,
+        });
+        merged = false;
+      }
+    };
+    layout();
+    narrow.addEventListener("change", layout);
+    return () => narrow.removeEventListener("change", layout);
+  }, [ready]);
   const collaboration = useRef(new Map<string, CollaborativeFile>());
   const [, setCollaborationRevision] = useState(0);
   const observeChange = useRef<(id: string, value: string) => void>(() => {});
@@ -576,7 +609,11 @@ export function ProjectWorkspace({
     );
     let changed = false;
     for (const id of ids) {
-      if (collaboration.current.has(id)) continue;
+      const existing = collaboration.current.get(id);
+      if (existing) {
+        existing.refreshAccess(canWrite);
+        continue;
+      }
       let initialized = false;
       collaboration.current.set(
         id,
@@ -999,6 +1036,32 @@ export function ProjectWorkspace({
     });
   }
 
+  function openPdfPreview() {
+    const dock = api.current;
+    if (!dock) return;
+    const existing = dock.getPanel("pdf");
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+    const source = dock.panels.find(
+      (panel) => panel.api.component === "editor",
+    );
+    dock.addPanel({
+      id: "pdf",
+      component: "pdf",
+      title: "PDF Preview",
+      position: source
+        ? {
+            referencePanel: source.id,
+            direction: window.matchMedia("(max-width: 767px)").matches
+              ? "within"
+              : "right",
+          }
+        : undefined,
+    });
+  }
+
   async function onReady({ api: dock }: DockviewReadyEvent) {
     api.current = dock;
     for (const [id, value] of Object.entries(project.sourceContents)) {
@@ -1069,14 +1132,7 @@ export function ProjectWorkspace({
       nodes.find((node) => node.kind === "text" && node.name === "main.tex") ??
       nodes.find((node) => node.kind === "text");
     if (first) openFile(first, true);
-    dock.addPanel({
-      id: "pdf",
-      component: "pdf",
-      title: "PDF Preview",
-      position: first
-        ? { referencePanel: first.id, direction: "right" }
-        : undefined,
-    });
+    openPdfPreview();
     if (first) dock.getPanel(first.id)?.api.setActive();
     setReady(true);
   }
@@ -1111,9 +1167,12 @@ export function ProjectWorkspace({
     >
       <SidebarProvider
         ref={container}
-        className="h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2.25rem] [--workspace-header-height:3rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none"
+        className={cn(
+          "h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:1.75rem] [--workspace-header-height:2.5rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none [&_[data-slot=sidebar-footer]]:p-0 [&_[data-slot=sidebar-group]]:p-0 [&_[data-slot=sidebar-menu]]:gap-0",
+          editorChrome,
+        )}
       >
-        <header className="z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b bg-(--activity-background) px-3 text-(--activity-foreground)">
+        <header className="z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b bg-(--activity-background) px-1 text-(--activity-foreground)">
           <Button
             render={<Link to="/projects" />}
             variant="ghost"
@@ -1123,7 +1182,6 @@ export function ProjectWorkspace({
           >
             <IconArrowLeft />
           </Button>
-          <SidebarTrigger />
           <span className="bg-border mx-1 h-4 w-px shrink-0" />
           <h1
             className="min-w-0 flex-1 truncate text-sm font-medium"
@@ -1132,7 +1190,10 @@ export function ProjectWorkspace({
             {name}
           </h1>
           {pdf && stale && (
-            <span role="status" className="text-muted-foreground text-xs">
+            <span
+              role="status"
+              className="text-muted-foreground hidden text-xs sm:inline"
+            >
               Out of date, recompile
             </span>
           )}
@@ -1172,34 +1233,21 @@ export function ProjectWorkspace({
             }
             onClick={() => void compileProject()}
           >
-            {compiling ? "Compiling…" : "Save & compile"}
+            {compiling ? (
+              "Compiling…"
+            ) : (
+              <>
+                <span className="sm:hidden">Compile</span>
+                <span className="hidden sm:inline">Save & compile</span>
+              </>
+            )}
           </Button>
+          <SidebarTrigger
+            className="ml-1"
+            aria-label="Toggle project sidebar"
+          />
         </header>
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <ProjectSidebar
-            name={name}
-            onOpenHistory={() => {
-              const existing = api.current?.getPanel("document-history");
-              if (existing) {
-                existing.api.setActive();
-                return;
-              }
-              api.current?.addPanel({
-                id: "document-history",
-                component: "history",
-                title: "Document history",
-                params: { nodeId: activeId },
-              });
-            }}
-            nodes={nodes}
-            activeId={activeId}
-            ready={ready}
-            onOpen={openFile}
-            onOpenGenerated={openGenerated}
-            sources={sourceFiles}
-            showProblems={showProblems}
-            onToggleProblems={() => setShowProblems(!showProblems)}
-          />
           <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {!ready && (
               <p role="status" className="border-b px-3 py-2 text-sm">
@@ -1282,7 +1330,7 @@ export function ProjectWorkspace({
             <div className="min-h-0 flex-1">
               <ClientOnly>
                 <DockviewReact
-                  className="size-full"
+                  className="isolate size-full"
                   theme={{
                     name: "texfolia",
                     className: "dockview-theme-texfolia",
@@ -1335,6 +1383,37 @@ export function ProjectWorkspace({
               </section>
             )}
           </main>
+          <ProjectSidebar
+            name={name}
+            onOpenPreview={openPdfPreview}
+            onOpenHistory={() => {
+              const existing = api.current?.getPanel("document-history");
+              if (existing) {
+                existing.api.setActive();
+                return;
+              }
+              const source = api.current?.panels.find(
+                (panel) => panel.api.component === "editor",
+              );
+              api.current?.addPanel({
+                id: "document-history",
+                component: "history",
+                title: "Document history",
+                params: { nodeId: activeId },
+                position: source
+                  ? { referencePanel: source.id, direction: "within" }
+                  : undefined,
+              });
+            }}
+            nodes={nodes}
+            activeId={activeId}
+            ready={ready}
+            onOpen={openFile}
+            onOpenGenerated={openGenerated}
+            sources={sourceFiles}
+            showProblems={showProblems}
+            onToggleProblems={() => setShowProblems(!showProblems)}
+          />
         </div>
         <footer className="z-20 flex h-(--workspace-footer-height) shrink-0 items-center justify-between gap-3 border-t bg-(--status-background) px-3 text-xs text-(--status-foreground)">
           <Button

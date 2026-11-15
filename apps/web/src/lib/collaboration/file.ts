@@ -71,6 +71,16 @@ export class CollaborativeFile {
     void this.start();
   }
 
+  refreshAccess(canWrite: boolean) {
+    if (this.options.canWrite === canWrite) return;
+    this.options.canWrite = canWrite;
+    if (!canWrite) this.setStatus({ canWrite: false });
+    this.send({
+      type: "sync",
+      vector: encodeSource(Y.encodeStateVector(this.doc)),
+    });
+  }
+
   getStatus = () => this.status;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);

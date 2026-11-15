@@ -1,4 +1,11 @@
-import { IconFolderOpen, IconSearch } from "@tabler/icons-react";
+import {
+  IconFolderOpen,
+  IconSearch,
+  IconLayoutGrid,
+  IconTemplate,
+  IconLogout,
+  IconPlus,
+} from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useFormatForDisplay, useHotkey } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
@@ -43,6 +50,7 @@ import {
   SidebarInset,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarMenuButton,
   SidebarTrigger,
 } from "#/components/ui/sidebar";
 import {
@@ -53,6 +61,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
+import { authClient } from "#/lib/auth-client";
 import { features } from "#/lib/features";
 import { useProjects } from "#/providers/projects-provider";
 
@@ -62,6 +71,8 @@ function SearchShortcut() {
 }
 
 export function ProjectList() {
+  const [query, setQuery] = useState("");
+  const [signOutError, setSignOutError] = useState("");
   const [creating, setCreating] = useState(false);
   const store = useProjects();
   const { data: projects } = useLiveQuery(store.projects);
@@ -79,51 +90,104 @@ export function ProjectList() {
     key: "projects",
     features,
     columns,
-    data: projects,
+    data: projects.filter((project) =>
+      project.name.toLowerCase().includes(query.trim().toLowerCase()),
+    ),
   });
 
   return (
     <Dialog open={creating} onOpenChange={setCreating}>
-      <Sidebar variant="inset">
-        <SidebarHeader>
+      <Sidebar>
+        <SidebarHeader className="h-20 justify-center px-6">
           <SidebarMenu>
             <SidebarMenuItem>
-              <Link to="/">Texfolia</Link>
+              <Link to="/" className="font-serif text-3xl tracking-tight">
+                Texfolia.
+              </Link>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup></SidebarGroup>
+          <SidebarGroup>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive render={<Link to="/projects" />}>
+                  <IconLayoutGrid />
+                  Projects
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={<Link to="/templates" search={{ page: 0 }} />}
+                >
+                  <IconTemplate />
+                  Templates
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
               <SettingsDialog />
+              <SidebarMenuButton
+                onClick={async () => {
+                  try {
+                    const result = await authClient.signOut();
+                    if (result.error) throw new Error();
+                    window.location.assign("/");
+                  } catch {
+                    setSignOutError("Could not sign out. Try again.");
+                  }
+                }}
+              >
+                <IconLogout />
+                Sign out
+              </SidebarMenuButton>
+              {signOutError && (
+                <p role="alert" className="text-destructive p-2 text-xs">
+                  {signOutError}
+                </p>
+              )}
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <main className="flex flex-col gap-4 p-4">
+        <div
+          id="main-content"
+          className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-10 sm:py-12"
+        >
           <div className="flex items-center gap-2">
             <SidebarTrigger />
-            <h1 className="flex-1">Projects</h1>
+            <div className="flex-1">
+              <h1 className="text-3xl font-semibold tracking-tight">
+                Projects
+              </h1>
+              <p className="text-muted-foreground mt-2 hidden text-sm sm:block">
+                Your papers, ideas, and works in progress.
+              </p>
+            </div>
             <Link
               to="/templates"
               search={{ page: 0 }}
-              className="text-sm underline"
+              className="hidden text-sm underline underline-offset-4 sm:inline"
             >
               Templates
             </Link>
-            <DialogTrigger render={<Button />}>Create Project</DialogTrigger>
+            <DialogTrigger render={<Button size="lg" />}>
+              <IconPlus />
+              New project
+            </DialogTrigger>
           </div>
           <InputGroup className="max-w-sm">
             <InputGroupInput
               ref={search}
               aria-label="Search projects"
               placeholder="Search projects..."
-              value={table.state.globalFilter || ""}
-              onChange={(e) => table.setGlobalFilter(e.target.value)}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
             />
             <InputGroupAddon>
               <IconSearch />
@@ -134,7 +198,7 @@ export function ProjectList() {
               </ClientOnly>
             </InputGroupAddon>
           </InputGroup>
-          <Card>
+          <Card className="gap-0 overflow-hidden py-0">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -192,12 +256,15 @@ export function ProjectList() {
               </TableBody>
             </Table>
           </Card>
-        </main>
+        </div>
       </SidebarInset>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New Project</DialogTitle>
-          <DialogDescription>Create a LaTeX workspace.</DialogDescription>
+          <DialogDescription>
+            Give your workspace a name. You can add files and invite
+            collaborators inside.
+          </DialogDescription>
         </DialogHeader>
         <ProjectForm />
         <DialogFooter>

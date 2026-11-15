@@ -1,3 +1,4 @@
+import { IconUpload } from "@tabler/icons-react";
 import { useId, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -59,15 +60,17 @@ export function UploadSource({
   }
 
   return (
-    <div className="px-2 pb-2">
+    <div className="min-w-0">
       <Button
-        size="sm"
-        variant="outline"
+        size="icon-sm"
+        variant="ghost"
+        title="Upload file"
+        aria-label={pending ? "Uploading…" : "Upload file"}
         disabled={pending || !parentId}
         aria-describedby={error ? `${id}-error` : undefined}
         onClick={() => input.current?.click()}
       >
-        {pending ? "Uploading…" : "Upload file"}
+        <IconUpload />
       </Button>
       <input
         ref={input}

@@ -6,9 +6,11 @@ import {
   IconWand,
 } from "@tabler/icons-react";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
+import { cn } from "cn";
 import { useId } from "react";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
+import { editorDialogChrome } from "#/components/editor-chrome";
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -44,7 +46,7 @@ const sections = [
 ] satisfies { title: SettingsSection; icon: typeof IconCode }[];
 
 const shortcuts = [
-  ["Save locally and compile", "Mod + S"],
+  ["Save and compile", "Mod + S"],
   ["Bold", "Mod + B"],
   ["Italic", "Mod + I"],
   ["Underline", "Mod + U"],
@@ -66,7 +68,13 @@ const shortcuts = [
   ["Keyboard shortcuts", "Mod + /"],
 ];
 
-export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
+export function SettingsDialog({
+  iconOnly = false,
+  variant = "default",
+}: {
+  iconOnly?: boolean;
+  variant?: "default" | "editor";
+}) {
   const {
     editor,
     updateEditor,
@@ -89,11 +97,17 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
         <IconSettings />
         <span className={iconOnly ? "sr-only" : undefined}>Settings</span>
       </DialogTrigger>
-      <DialogContent className="h-[min(580px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl">
+      <DialogContent
+        className={cn(
+          "h-[min(640px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl",
+          variant === "editor" && editorDialogChrome,
+        )}
+      >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
-          Customize the app, editor, and keyboard shortcuts. Preferences are
-          saved in this browser.
+          Customize the app, editor, and keyboard shortcuts. Appearance is saved
+          in this browser. Editor and formatting preferences sync with your
+          account.
         </DialogDescription>
         <HotkeysProvider scope={`settings-${id}`} exclusive>
           <SidebarProvider className="min-h-0 flex-col overflow-hidden md:flex-row">
@@ -158,8 +172,8 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
                           Make room for your ideas
                         </h3>
                         <p className="text-muted-foreground mt-1 text-sm">
-                          Editor preferences apply to every project in this
-                          browser.
+                          Editor preferences apply to every project on your
+                          account.
                         </p>
                       </div>
                       <Field>
@@ -196,8 +210,8 @@ export function SettingsDialog({ iconOnly = false }: { iconOnly?: boolean }) {
                         </FieldLabel>
                       </Field>
                       <p className="text-muted-foreground text-xs">
-                        Save with Mod+S to keep your project sources in this
-                        browser and compile the PDF.
+                        Save with Mod+S to sync your project sources and compile
+                        the PDF.
                       </p>
                     </>
                   )}

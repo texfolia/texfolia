@@ -4,6 +4,10 @@ import { useId, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import { nodeNameSchema } from "#/lib/project-node.schema";
 import { newProjectNodePath, projectNodePaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
@@ -47,31 +51,33 @@ export function CreateNodeForm({
 
   if (!kind)
     return (
-      <div className="flex gap-1 px-2 pb-2">
+      <div className="flex gap-0">
         <Button
-          size="sm"
+          size="icon-sm"
           variant="ghost"
           disabled={!folders.length}
+          title="New file"
           onClick={() => start("text")}
         >
           <IconFilePlus />
-          New file
+          <span className="sr-only">New file</span>
         </Button>
         <Button
-          size="sm"
+          size="icon-sm"
           variant="ghost"
           disabled={!folders.length}
+          title="New folder"
           onClick={() => start("folder")}
         >
           <IconFolderPlus />
-          New folder
+          <span className="sr-only">New folder</span>
         </Button>
       </div>
     );
 
   return (
     <form
-      className="space-y-3 p-2"
+      className="w-full space-y-3 p-2"
       onSubmit={async (event) => {
         event.preventDefault();
         if (pending) return;
@@ -136,19 +142,19 @@ export function CreateNodeForm({
       </Field>
       <Field>
         <FieldLabel htmlFor={`${id}-parent`}>In folder</FieldLabel>
-        <select
+        <NativeSelect
           id={`${id}-parent`}
           value={parentId}
           onChange={(event) => setParentId(event.target.value)}
           disabled={pending}
-          className="border-input bg-background w-full rounded-md border px-2 py-1 text-sm"
+          className="w-full"
         >
           {folders.map((folder) => (
-            <option key={folder.id} value={folder.id}>
+            <NativeSelectOption key={folder.id} value={folder.id}>
               {folderPaths.get(folder.id) || folder.name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </Field>
       {error && (
         <FieldError id={`${id}-error`} role="alert">

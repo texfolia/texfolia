@@ -288,7 +288,7 @@ function PdfPanel({
         ref={viewport}
         data-pdf-mode={appearance.pdfMode}
         data-pdf-dark={matchTheme && theme.mode === "dark" ? "true" : undefined}
-        className="pdf-viewport min-h-0 flex-1 overflow-auto"
+        className="min-h-0 flex-1 overflow-auto data-[pdf-mode=match]:bg-(--pdf-surround) data-[pdf-mode=original]:bg-(--pdf-original-surround) data-[pdf-mode=original]:text-(--pdf-original-foreground) data-[pdf-mode=original]:[--foreground:var(--pdf-original-foreground)] data-[pdf-mode=original]:[--muted-foreground:var(--pdf-original-foreground)] data-[pdf-dark=true]:[&_.react-pdf__Page]:[filter:invert(0.9)_hue-rotate(180deg)]"
       >
         {file ? (
           <Document

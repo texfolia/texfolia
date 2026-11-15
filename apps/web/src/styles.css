@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "./typeset.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
@@ -82,6 +81,25 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --input-foreground: var(--foreground);
+  --input-placeholder: var(--muted-foreground);
+  --panel-background: var(--background);
+  --pdf-original-foreground: #242424;
+  --activity-background: var(--sidebar);
+  --activity-foreground: var(--sidebar-foreground);
+  --status-background: var(--background);
+  --status-foreground: var(--muted-foreground);
+  --tab-active-background: var(--background);
+  --tab-active-foreground: var(--foreground);
+  --tab-inactive-background: var(--muted);
+  --tab-inactive-foreground: var(--muted-foreground);
+  --tab-border: var(--border);
+  --tab-header: var(--muted);
+  --selection: var(--accent);
+  --selection-foreground: var(--accent-foreground);
+  --overlay: #0000004d;
+  --pdf-original-surround: #e4e4e7;
+  --pdf-surround: var(--muted);
 }
 
 .dark {
@@ -118,51 +136,7 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
-}
-
-:root {
-  --input-foreground: var(--foreground);
-  --input-placeholder: var(--muted-foreground);
-  --panel-background: var(--background);
-  --pdf-original-foreground: #242424;
-  --activity-background: var(--sidebar);
-  --activity-foreground: var(--sidebar-foreground);
-  --status-background: var(--background);
-  --status-foreground: var(--muted-foreground);
-  --tab-active-background: var(--background);
-  --tab-active-foreground: var(--foreground);
-  --tab-inactive-background: var(--muted);
-  --tab-inactive-foreground: var(--muted-foreground);
-  --tab-border: var(--border);
-  --tab-header: var(--muted);
-  --selection: var(--accent);
-  --selection-foreground: var(--accent-foreground);
-  --overlay: #0000004d;
-  --pdf-original-surround: #e4e4e7;
-  --pdf-surround: var(--muted);
-}
-
-html[data-app-theme] {
-  scrollbar-color: var(--border) var(--background);
-  caret-color: var(--foreground);
-}
-
-html[data-app-theme] ::selection {
-  background: var(--selection);
-  color: var(--selection-foreground);
-}
-
-.dockview-theme-texfolia {
+@utility dockview-theme-texfolia {
   --dv-group-view-background-color: var(--background);
   --dv-tabs-and-actions-container-background-color: var(--tab-header);
   --dv-activegroup-visiblepanel-tab-background-color: var(
@@ -205,28 +179,4 @@ html[data-app-theme] ::selection {
   --dv-tabs-and-actions-container-height: 35px;
   --dv-tabs-and-actions-container-font-size: 13px;
   --dv-tab-font-size: 13px;
-}
-
-.pdf-viewport[data-pdf-mode="original"] {
-  background: var(--pdf-original-surround);
-  --foreground: var(--pdf-original-foreground);
-  --muted-foreground: var(--pdf-original-foreground);
-  color: var(--foreground);
-}
-
-.pdf-viewport[data-pdf-mode="match"] {
-  background: var(--pdf-surround);
-}
-
-.pdf-viewport[data-pdf-dark="true"] .react-pdf__Page {
-  filter: invert(0.9) hue-rotate(180deg);
-}
-
-html[data-app-theme] :is([data-slot="input"], [data-slot="textarea"], select) {
-  color: var(--input-foreground);
-}
-
-html[data-app-theme]
-  :is([data-slot="input"], [data-slot="textarea"])::placeholder {
-  color: var(--input-placeholder);
 }

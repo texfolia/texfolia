@@ -1,104 +1,88 @@
-import {
-  IconCopy,
-  IconDownload,
-  IconPencil,
-  IconUserPlus,
-} from "@tabler/icons-react";
+import { IconArrowUpRight, IconFileText } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 
 import { DeleteProjectButton } from "#/components/delete-project-button";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarGroup,
-  AvatarGroupCount,
-  AvatarImage,
-} from "#/components/ui/avatar";
-import { Button } from "#/components/ui/button";
-import { ButtonGroup } from "#/components/ui/button-group";
-import { Checkbox } from "#/components/ui/checkbox";
+import { buttonVariants } from "#/components/ui/button";
 import type { Features } from "#/lib/features";
 import type { Project } from "#/lib/project.functions";
+import { useProjects } from "#/providers/projects-provider";
 
 const columnHelper = createColumnHelper<Features, Project>();
 
+function ProjectActions({ project }: { project: Project }) {
+  const { ownerId } = useProjects();
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <Link
+        to="/project/$projectId"
+        params={{ projectId: project.id }}
+        aria-label={`Open ${project.name}`}
+        className={buttonVariants({ variant: "ghost", size: "icon" })}
+      >
+        <IconArrowUpRight />
+      </Link>
+      {project.ownerId === ownerId && <DeleteProjectButton project={project} />}
+    </div>
+  );
+}
+
 export const columns = columnHelper.columns([
-  columnHelper.display({
-    id: "checkbox",
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={() => row.toggleSelected()}
-      />
-    ),
-  }),
   columnHelper.accessor("name", {
-    header: "Name",
+    header: "Project",
     cell: ({ getValue, row }) => (
       <Link
         to="/project/$projectId"
-        params={{
-          projectId: row.original.id,
-        }}
+        params={{ projectId: row.original.id }}
+        className="flex min-w-40 items-center gap-3 py-3 font-medium underline-offset-4 hover:underline focus-visible:outline-2"
       >
-        {getValue()}
+        <IconFileText className="text-muted-foreground size-5 shrink-0" />
+        <span className="max-w-[min(40vw,28rem)] truncate">{getValue()}</span>
       </Link>
     ),
   }),
   columnHelper.accessor("collaborators", {
-    header: "Collaborators",
-    cell: () => (
-      <AvatarGroup>
-        <Avatar>
-          <AvatarImage
-            alt="Frida Kahlo"
-            src="https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?w=96&h=96&dpr=2&q=80"
-          />
-          <AvatarFallback>FK</AvatarFallback>
-        </Avatar>
-        <Avatar>
-          <AvatarImage
-            alt="Nadia Ekman"
-            src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?w=96&h=96&dpr=2&q=80"
-          />
-          <AvatarFallback>NE</AvatarFallback>
-        </Avatar>
-        <Avatar>
-          <AvatarImage
-            alt="Eli Wren"
-            src="https://images.unsplash.com/photo-1655874819398-c6dfbec68ac7?w=96&h=96&dpr=2&q=80"
-          />
-          <AvatarFallback>EW</AvatarFallback>
-        </Avatar>
-        <AvatarGroupCount>+2</AvatarGroupCount>
-      </AvatarGroup>
-    ),
+    header: "Access",
+    cell: ({ getValue, row }) => {
+      const people = getValue();
+      return (
+        <span
+          className="text-muted-foreground text-sm"
+          title={people
+            .map(
+              (person) =>
+                `${person.user?.name ?? "Collaborator"} (${person.role})`,
+            )
+            .join(", ")}
+        >
+          {row.original.organizationId
+            ? "Organization"
+            : people.length
+              ? `${people.length} collaborator${people.length === 1 ? "" : "s"}`
+              : "Personal"}
+        </span>
+      );
+    },
   }),
   columnHelper.accessor("updatedAt", {
-    header: "Updated At",
+    header: "Last updated",
     enableSorting: true,
-    cell: ({ getValue }) => getValue().toLocaleDateString(),
+    cell: ({ getValue }) => (
+      <time
+        dateTime={getValue().toISOString()}
+        className="text-muted-foreground text-sm tabular-nums"
+      >
+        {getValue().toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })}
+      </time>
+    ),
   }),
   columnHelper.display({
     id: "actions",
-    header: "Actions",
-    cell: ({ row }) => (
-      <ButtonGroup>
-        <Button size="icon-lg" variant="outline">
-          <IconCopy />
-        </Button>
-        <Button size="icon-lg" variant="outline">
-          <IconDownload />
-        </Button>
-        <Button size="icon-lg" variant="outline">
-          <IconUserPlus />
-        </Button>
-        <Button size="icon-lg" variant="outline">
-          <IconPencil />
-        </Button>
-        <DeleteProjectButton project={row.original} />
-      </ButtonGroup>
-    ),
+    header: () => <span className="sr-only">Actions</span>,
+    cell: ({ row }) => <ProjectActions project={row.original} />,
   }),
 ]);

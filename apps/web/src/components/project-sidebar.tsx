@@ -1,19 +1,28 @@
-import { IconAlertCircle, IconFiles, IconHistory } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconFiles,
+  IconHistory,
+  IconFileTypePdf,
+  IconX,
+} from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
+import { cn } from "cn";
 
 import { CreateNodeForm } from "#/components/create-node-form";
+import { editorChrome } from "#/components/editor-chrome";
 import { GeneratedFiles } from "#/components/generated-files";
+import { ProjectCollaboration } from "#/components/project-collaboration";
 import { ProjectExport } from "#/components/project-export";
 import { ProjectFileTree } from "#/components/project-file-tree";
 import { RepairSourcePaths } from "#/components/repair-source-paths";
 import { SettingsDialog } from "#/components/settings-dialog";
+import { Button } from "#/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -37,9 +46,11 @@ export function ProjectSidebar({
   onOpenGenerated,
   sources,
   onOpenHistory,
+  onOpenPreview,
 }: {
   name: string;
   onOpenHistory: () => void;
+  onOpenPreview: () => void;
   nodes: ProjectNode[];
   activeId: string | undefined;
   ready: boolean;
@@ -51,7 +62,7 @@ export function ProjectSidebar({
 }) {
   const files = useProjectFiles();
   const { canWrite } = useWorkspace();
-  const { setOpen, toggleSidebar } = useSidebar();
+  const { setOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
 
   useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
     ignoreInputs: false,
@@ -60,19 +71,26 @@ export function ProjectSidebar({
 
   return (
     <Sidebar
+      side="right"
       collapsible="icon"
       className="top-(--workspace-header-height) bottom-(--workspace-footer-height) h-auto overflow-hidden"
     >
-      <div className="flex size-full">
+      <div
+        className={cn(
+          "flex size-full flex-row-reverse [&_[data-slot=sidebar-footer]]:p-0",
+          editorChrome,
+        )}
+      >
         <Sidebar
           collapsible="none"
-          className="w-(--sidebar-width-icon)! shrink-0 border-r [--sidebar-foreground:var(--activity-foreground)] [--sidebar:var(--activity-background)]"
+          className="w-(--sidebar-width-icon)! shrink-0 border-l [--sidebar-foreground:var(--activity-foreground)] [--sidebar:var(--activity-background)]"
         >
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarMenu aria-label="Workspace navigation">
+          <SidebarContent className="gap-0">
+            <SidebarGroup className="p-0">
+              <SidebarMenu aria-label="Workspace navigation" className="gap-0">
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    size="sm"
                     tooltip="Project files"
                     aria-label="Project files"
                     isActive
@@ -84,6 +102,19 @@ export function ProjectSidebar({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    size="sm"
+                    tooltip="PDF preview"
+                    aria-label="PDF preview"
+                    disabled={!ready}
+                    onClick={onOpenPreview}
+                  >
+                    <IconFileTypePdf />
+                    <span className="sr-only">PDF preview</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    size="sm"
                     tooltip="Document history"
                     aria-label="Document history"
                     disabled={!ready}
@@ -95,6 +126,7 @@ export function ProjectSidebar({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    size="sm"
                     tooltip="Problems"
                     aria-label="Problems"
                     aria-expanded={showProblems}
@@ -110,7 +142,7 @@ export function ProjectSidebar({
           <SidebarFooter>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SettingsDialog iconOnly />
+                <SettingsDialog iconOnly variant="editor" />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarFooter>
@@ -119,29 +151,41 @@ export function ProjectSidebar({
           collapsible="none"
           className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"
         >
-          <SidebarHeader className="h-11 justify-center border-b px-4">
-            <h2 className="text-sm font-medium">Files</h2>
+          <SidebarHeader className="h-8 flex-row items-center justify-between border-b px-2">
+            <h2 className="text-xs font-medium">Files</h2>
+            {isMobile && (
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                aria-label="Close project sidebar"
+                onClick={() => setOpenMobile(false)}
+              >
+                <IconX />
+              </Button>
+            )}
           </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel title={name}>{name}</SidebarGroupLabel>
-              {ready && canWrite && (
-                <CreateNodeForm
-                  nodes={nodes}
-                  activeId={activeId}
-                  onCreated={onOpen}
-                />
-              )}
-              {ready && canWrite && (
-                <UploadSource
-                  nodes={nodes}
-                  activeId={activeId}
-                  onCreated={onOpen}
-                />
-              )}
+          <SidebarContent className="gap-0">
+            <SidebarGroup className="p-0">
+              <div className="flex flex-wrap items-center border-b">
+                {ready && canWrite && (
+                  <CreateNodeForm
+                    nodes={nodes}
+                    activeId={activeId}
+                    onCreated={onOpen}
+                  />
+                )}
+                {ready && canWrite && (
+                  <UploadSource
+                    nodes={nodes}
+                    activeId={activeId}
+                    onCreated={onOpen}
+                  />
+                )}
+              </div>
               {ready && <RepairSourcePaths nodes={nodes} canWrite={canWrite} />}
               <SidebarGroupContent aria-busy={!ready}>
                 <ProjectFileTree
+                  canManage={canWrite}
                   nodes={nodes}
                   activeId={activeId}
                   isPending={(id) =>
@@ -158,6 +202,9 @@ export function ProjectSidebar({
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <div className="max-h-[40%] shrink-0 overflow-auto">
+            <ProjectCollaboration />
+          </div>
           <ProjectExport name={name} sources={sources} />
         </Sidebar>
       </div>

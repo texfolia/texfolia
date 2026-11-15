@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
 import { Button } from "#/components/ui/button";
 import {
@@ -67,10 +68,12 @@ function TemplateReviewPage() {
     </div>
   );
   return (
-    <>
+    <div className="flex min-h-svh flex-col">
       <Header />
-      <main className="mx-auto max-w-4xl px-6 py-12">
-        <h1 className="font-serif text-4xl">Template review</h1>
+      <main id="main-content" className="mx-auto max-w-4xl px-6 py-12 sm:py-16">
+        <h1 className="font-serif text-4xl tracking-tight sm:text-5xl">
+          Template review
+        </h1>
         <p className="text-muted-foreground mt-4">
           Check licensing, attribution, and content before approving a snapshot.
           You cannot review your own templates.
@@ -126,6 +129,7 @@ function TemplateReviewPage() {
           ))}
         </ul>
       </main>
-    </>
+      <Footer />
+    </div>
   );
 }

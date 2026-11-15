@@ -2,6 +2,7 @@ import { IconDownload } from "@tabler/icons-react";
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import { Checkbox } from "#/components/ui/checkbox";
 import { buildFileUrl } from "#/lib/build";
 import { downloadFile } from "#/lib/download-file";
 import { decodeSource, type SourceFiles } from "#/lib/project-source";
@@ -50,14 +51,13 @@ export function ProjectExport({
     }
   }
   return (
-    <details className="border-t px-3 py-2 text-xs">
+    <details className="shrink-0 border-t px-2 py-1 text-xs">
       <summary className="cursor-pointer py-1">Export project</summary>
       <label className="flex items-center gap-2 py-2">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={includeBuild}
           disabled={pending || !build?.artifacts}
-          onChange={(event) => setIncludeBuild(event.target.checked)}
+          onCheckedChange={setIncludeBuild}
         />
         Include generated out/ files
       </label>
