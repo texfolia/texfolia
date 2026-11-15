@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 
-import { stripe } from "@better-auth/stripe";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import Stripe from "stripe";
 
 import { loginSearchSchema } from "../routes/login";
-import { authorizeOrganizationBilling, createOrganizationPlugin } from "./auth";
+import { createBillingPlugin, createOrganizationPlugin } from "./auth";
+import { enforceBillingScope } from "./billing.server";
 import type { sendEmail } from "./email";
 
 function createTestAuth() {
@@ -26,6 +26,7 @@ function createTestAuth() {
       subscription: [],
     }),
     emailAndPassword: { enabled: true },
+    hooks: { before: enforceBillingScope },
     plugins: [
       createOrganizationPlugin({
         baseURL: "http://localhost:3000",
@@ -33,15 +34,12 @@ function createTestAuth() {
           emails.push(email);
         },
       }),
-      stripe({
+      createBillingPlugin({
         stripeClient: new Stripe("sk_test_organization_integration"),
-        stripeWebhookSecret: "whsec_organization_integration",
-        organization: { enabled: true },
-        subscription: {
-          enabled: true,
-          plans: [{ name: "pro", priceId: "price_pro" }],
-          authorizeReference: authorizeOrganizationBilling,
-        },
+        webhookSecret: "whsec_organization_integration",
+        createCustomerOnSignUp: false,
+        proPriceId: "price_pro",
+        teamPriceId: "price_team",
       }),
     ],
   });
@@ -265,7 +263,7 @@ test("members cannot change organization billing through POST endpoints", async 
         body: JSON.stringify({
           customerType: "organization",
           referenceId: organization.id,
-          plan: "pro",
+          plan: "team",
           successUrl: "/projects",
           cancelUrl: "/pricing",
           returnUrl: "/projects",
@@ -290,5 +288,31 @@ test("login returns to invitation paths and rejects external redirect targets", 
     expect(loginSearchSchema.parse({ redirectTo: target }).redirectTo).toBe(
       "/projects",
     );
+  }
+});
+
+test("billing rejects personal Team, organization Pro, annual and multi-seat personal checkout", async () => {
+  const { auth } = createTestAuth();
+  const owner = await createUser(auth, "billing-scope@example.com");
+  const org = await auth.api.createOrganization({
+    headers: owner.headers,
+    body: { name: "Scope", slug: "scope" },
+  });
+  assert(org);
+  for (const body of [
+    { plan: "team" },
+    { plan: "TEAM" },
+    { plan: "Pro", customerType: "organization", referenceId: org.id },
+    { plan: "team", customerType: "user" },
+    { plan: "pro", customerType: "organization", referenceId: org.id },
+    { plan: "pro", annual: true },
+    { plan: "pro", seats: 2 },
+  ] as const) {
+    await expect(
+      auth.api.upgradeSubscription({
+        headers: owner.headers,
+        body: { ...body, successUrl: "/billing", cancelUrl: "/pricing" },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   }
 });

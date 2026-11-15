@@ -130,6 +130,9 @@ export function ProjectList() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
+              <SidebarMenuButton render={<Link to="/billing" />}>
+                Billing
+              </SidebarMenuButton>
               <SettingsDialog />
               <SidebarMenuButton
                 onClick={async () => {

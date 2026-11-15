@@ -10,6 +10,8 @@ import Stripe from "stripe";
 import { z } from "zod";
 
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./auth-captcha";
+import { canManageBilling, subscriptionPlans } from "./billing";
+import { enforceBillingScope } from "./billing.server";
 
 async function sendEmail(
   options: Parameters<typeof import("./email").sendEmail>[0],
@@ -77,12 +79,34 @@ export const authorizeOrganizationBilling: NonNullable<
     ],
   });
 
-  return (
-    membership?.role
-      .split(",")
-      .some((role) => role === "owner" || role === "admin") ?? false
-  );
+  return membership ? canManageBilling(membership.role) : false;
 };
+
+export function createBillingPlugin({
+  stripeClient,
+  webhookSecret,
+  proPriceId,
+  teamPriceId,
+  createCustomerOnSignUp = true,
+}: {
+  stripeClient: Stripe;
+  webhookSecret: string;
+  proPriceId: string;
+  teamPriceId: string;
+  createCustomerOnSignUp?: boolean;
+}) {
+  return stripe({
+    stripeClient,
+    stripeWebhookSecret: webhookSecret,
+    createCustomerOnSignUp,
+    organization: { enabled: true },
+    subscription: {
+      enabled: true,
+      authorizeReference: authorizeOrganizationBilling,
+      plans: subscriptionPlans({ proPriceId, teamPriceId }),
+    },
+  });
+}
 
 export function createAuth(db: Db) {
   const baseURL = process.env.BETTER_AUTH_URL!;
@@ -111,6 +135,7 @@ export function createAuth(db: Db) {
     },
     disabledPaths: ["/request-password-reset", "/send-verification-email"],
     rateLimit: { enabled: true },
+    hooks: { before: enforceBillingScope },
     socialProviders: {
       github: {
         clientId: process.env.GITHUB_CLIENT_ID!,
@@ -146,23 +171,11 @@ export function createAuth(db: Db) {
         ],
       }),
       createEmailOTPPlugin(sendEmail),
-      stripe({
+      createBillingPlugin({
         stripeClient,
-        stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
-        createCustomerOnSignUp: true,
-        organization: {
-          enabled: true,
-        },
-        subscription: {
-          enabled: true,
-          authorizeReference: authorizeOrganizationBilling,
-          plans: [
-            {
-              name: "pro",
-              priceId: process.env.STRIPE_PRO_PRICE_ID!,
-            },
-          ],
-        },
+        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+        proPriceId: process.env.STRIPE_PRO_PRICE_ID!,
+        teamPriceId: process.env.STRIPE_TEAM_PRICE_ID!,
       }),
       tanstackStartCookies(),
     ],

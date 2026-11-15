@@ -5,6 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
+import { compilePlan } from "#/lib/billing.server";
 import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
@@ -180,31 +181,6 @@ function updateJob(
         inArray(projectJob.status, ["queued", "running"]),
       ),
     );
-}
-
-async function compilePlan(db: Db, userId: string) {
-  const memberships = await db.query.member.findMany({
-    columns: { organizationId: true },
-    where: { userId },
-  });
-  const subscriptions = await db.query.subscription.findMany({
-    columns: { plan: true, referenceId: true },
-    where: {
-      referenceId: {
-        in: [userId, ...memberships.map((member) => member.organizationId)],
-      },
-      plan: { in: ["pro", "team"] },
-      status: { in: ["active", "trialing"] },
-    },
-  });
-  if (
-    subscriptions.some(
-      (subscription) =>
-        subscription.plan === "team" || subscription.referenceId !== userId,
-    )
-  )
-    return "team";
-  return subscriptions.length ? "pro" : "free";
 }
 
 async function readPreviewBody(request: Request) {

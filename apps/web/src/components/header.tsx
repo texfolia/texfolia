@@ -34,6 +34,14 @@ export function Header() {
           >
             Templates
           </Link>
+          {session && (
+            <Link
+              to="/billing"
+              className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+            >
+              Billing
+            </Link>
+          )}
           <Link
             to="/pricing"
             className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
