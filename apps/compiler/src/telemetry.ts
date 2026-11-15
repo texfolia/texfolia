@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const duration = z.number().finite().nonnegative();
 export const planSchema = z.enum(["free", "pro", "team", "unknown"]);
-export const engineTimingSchema = z.object({
+const engineTimingSchema = z.object({
   engine: z.enum(["tectonic", "texlive", "unknown"]),
   temperature: z.enum(["cold", "warm", "unknown"]),
   inputPrepMs: duration.nullable(),
@@ -55,7 +55,6 @@ export const jobTimingSchema = engineTimingSchema.extend({
   publishMs: duration,
   backendMs: duration,
 });
-export type JobTiming = z.infer<typeof jobTimingSchema>;
 export const previewTimingSchema = z.object({
   outcome: z.enum(["rendered", "preview_failed"]),
   submissionMs: duration,
@@ -66,7 +65,6 @@ export const previewTimingSchema = z.object({
   keystrokeToPdfMs: duration.nullable(),
   firstPdfByteMs: duration.nullable().optional(),
 });
-export type PreviewTiming = z.infer<typeof previewTimingSchema>;
 
 export function emitCompileEvent(
   event: {

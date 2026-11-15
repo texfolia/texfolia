@@ -99,19 +99,25 @@ Hello from Texfolia!
 flowchart TD
     subgraph Browser["Browser"]
         Editor["CodeMirror workspace"]
-        Drafts[("Browser storage")]
+        Drafts[("IndexedDB offline cache")]
         Workers["Analysis and formatting workers"]
-        Editor -->|Save drafts| Drafts
+        Editor <-->|Offline Yjs updates| Drafts
         Editor <-->|Source, diagnostics, and edits| Workers
     end
 
-    Editor <-->|Projects, compile requests, and PDFs| Web["TanStack Start web app"]
-    Web <-->|Accounts, file tree, and compile records| DB[("PostgreSQL")]
+    Editor <-->|Authenticated collaboration WebSocket| Collaboration["ProjectCollaboration Durable Object"]
+    Collaboration <-->|Yjs snapshots and update journal| SQLite[("DO SQLite")]
+    Collaboration -->|Persist merged text| R2[("Source R2 bucket")]
+    Editor <-->|Projects, source saves, compile requests, and PDFs| Web["TanStack Start web app"]
+    Web <-->|Read and write saved sources| R2
+    Web <-->|Accounts, file tree, source versions, and compile records| DB[("PostgreSQL")]
     Web <-->|Optional social sign-in and billing| Services["OAuth providers and Stripe"]
     Web <-->|Submit jobs, check status, and fetch PDFs| Compiler["Hono compiler API"]
 ```
 
-**Save & compile**, or Cmd/Ctrl+S, saves text drafts in the current browser and sends a snapshot to the project coordinator. Typing marks the preview stale. Compilation runs on save. PostgreSQL stores the file tree and job records.
+Text edits merge through Yjs and persist in the collaboration object before broadcast. An alarm writes merged text to R2, and IndexedDB retains offline updates. PostgreSQL stores the file tree, saved source versions, and job records.
+
+**Save** and Cmd/Ctrl+S wait for merged text to reach R2 without compiling. **Save & compile** saves first, then submits a revisioned source delta to the compiler coordinator. Binary files use their saved content hashes. Typing marks the preview stale. See the [source storage and collaboration reference](apps/web/README.md#project-source-storage).
 
 Browser workers check references as you edit and format LaTeX on request.
 
@@ -129,28 +135,29 @@ sequenceDiagram
     participant R as Artifact storage
 
     B->>W: Open project event stream
-    W->>P: Attach after verifying ownership
+    W->>P: Attach after verifying project access
     P-->>B: Current revision and latest build metadata
-    B->>W: Send source snapshot on save
-    W->>P: Accept a new project revision
+    B->>W: Save sources, then request compile
+    W->>P: Accept a revisioned source delta
     P->>P: Replace pending snapshot and debounce 300 ms
     P->>T: Cancel superseded run and wait for exit
     P->>T: Compile newest revision
-    T-->>P: PDF and diagnostics
-    P->>R: Store artifact for this revision
-    P-->>B: Push latest build metadata
-    B->>W: Fetch job status and PDF
-    W->>R: Read through authenticated compiler API
+    T-->>P: Stream PDF, then logs and artifacts
+    P-->>W: Progressive PDF stream
     W-->>B: PDF bytes for the preview
+    P->>R: Persist artifact generation
+    P-->>B: Push saved build metadata
+    B->>W: Fetch job status or saved PDF
 ```
 
 On Cloudflare, the web app calls the private compiler through a service binding.
-One SQLite-backed Durable Object coordinates each project and routes to a
-container that serves only that project. Locally, Bun runs the same coordinator
-logic with SQLite and creates dedicated Docker containers. Both runtimes use the
+One SQLite-backed Durable Object coordinates each project and persists its
+container assignment from PoolManager. Each assigned container serves only that
+project. Locally, Bun runs the same coordinator logic with SQLite and creates
+dedicated Docker containers. Both runtimes use the
 same Go engine image. R2 stores production artifacts; SQLite stores them locally.
-Queues handle infrastructure retries and legacy jobs. See the
-[compiler guide](apps/compiler/README.md) for the shared contract test.
+Queues handle infrastructure retries, legacy jobs, and background maintenance.
+See the [compiler guide](apps/compiler/README.md) for the shared contract test.
 
 ## Repository layout
 
@@ -176,6 +183,11 @@ These commands include the Bun tests, Go race tests, Go vet, TypeScript
 checks, Oxlint, and formatting checks. Run `bun run format` to apply Oxfmt and
 Gofmt. Oxlint and Oxfmt use the root `.oxlintrc.json` and `.oxfmtrc.json`
 configurations. `bun run build` builds the web app and compiler images.
+
+`bun run lint` also checks local Markdown links, Tailwind-only styles, unused files,
+and dependencies. Run `bun run check:repo` or `bun run check:unused` separately
+while editing. Knip entries include manually run scripts and integration checks;
+keep those entries current when adding a new entry point.
 
 Run `bun run lint:fix` to apply automatic Oxlint fixes.
 

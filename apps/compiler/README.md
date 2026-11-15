@@ -42,9 +42,11 @@ persisted alarm deadlines. Both adapters call the same Go engine image.
 
 The normal path calls the project's warm container directly. Workers enqueue
 infrastructure failures for recovery. A container never serves another project.
-Workers stop idle containers after ten minutes and recreate them under the same
-project identity when needed. Local Docker containers keep their project names
-across API restarts.
+Workers persist each container assignment from PoolManager. A stopped container
+gets a new assignment, from a healthy spare when available or a cold allocation.
+Assigned containers never return to the spare pool. Idle timeouts are 10 minutes
+for Free and 30 minutes for Pro and Team. Local Docker containers keep their
+project names across API restarts. See [Container pool](docs/container-pool.md).
 
 ## Run locally
 
@@ -223,8 +225,11 @@ snapshot. Simultaneous attachments and compiles share an in-flight preparation.
 If the container has slept, its new boot identity triggers another restore;
 a ready process keeps its in-memory cache even if the coordinator restarted.
 Prewarm failures do not break SSE and can be retried by the next compile.
-There are no snapshots or spare-container claims in this path. See
-[cold-start measurements](cold-start-measurements.md) for timings and limitations.
+On Cloudflare, preparation selects the persisted PoolManager assignment before
+requesting readiness. A spare may already have a running process, but project
+cache restoration remains separate. No container snapshots are used. See
+[Container pool](docs/container-pool.md) and the historical local
+[cold-start measurements](cold-start-measurements.md).
 
 **Save & compile** saves sources to the web
 Worker's R2 bucket, then POSTs a revisioned delta. Save and
@@ -269,18 +274,24 @@ coordinator keeps one pending source manifest, replacing it on each submission.
 The legacy `/compile`, `/jobs/<id>`, and `/compilations/<id>.pdf` endpoints remain
 available for existing jobs. They retain their queue and rate limit.
 
-Limits: 10 MiB of source JSON, 200 source files, 60 seconds per TeX run,
-a 20 MiB PDF, and 32 MiB of generated files per build. Cache archives are bounded
+Limits: 10 MiB of source JSON, 200 source files, a 20 MiB PDF, and 32 MiB of
+generated files per build. TeX runs have a 15-second timeout for Free and a
+300-second timeout for Pro and Team, reduced when the user has less fair-use
+allowance remaining. Cache archives are bounded
 to 33 MiB compressed, 32 MiB of file contents, and 1,024 regular files. Restore
 rejects traversal, links, duplicate paths, conflicting paths, and invalid zstd
 frames before using any contents. The engine accepts up to
 64 MiB of internal JSON to carry resync sources and the restored cache. The
 coordinator also permits 64 MiB for internal resync JSON; decoded delta projects
 retain the 10 MiB source limit even when each individual delta is small.
-The legacy API rate limits submissions to 10 per minute per Cloudflare location,
-or 10 per minute per local process. Project snapshots use debounce instead of
-that submission limit. It returns `429` with `Retry-After` when the
-limit is reached. Polls and PDF downloads do not count toward that limit.
+Both submission APIs require a user identity. Free and unknown plans allow two
+submissions per 10 seconds per user, enforced per Cloudflare location or local
+process. Pro and Team bypass this short-window limiter. All plans use durable
+per-user rolling one-hour fair-use accounting: 180 seconds of compile time for
+Free and 600 seconds for Pro and Team. Attempts reserve their allowed runtime
+before starting and reconcile actual usage afterward, including failed and
+canceled work. Rejections return `429` with `Retry-After`. Polls and downloads do
+not count as submissions. The policy is defined in [limits.ts](src/limits.ts).
 
 ## Deploy to Cloudflare
 
@@ -309,8 +320,10 @@ that still contains pending jobs. Turbo builds the web app and deploys the compi
 `texfolia-compiler`; production does not use `COMPILER_URL` or an internal token.
 The Worker calls the container through its private Durable Object binding.
 
-The configuration allows up to 20 active containers. Each project coordinator
-routes only to `project:<projectId>`. An alarm retains the newest pending
+The configuration allows up to 20 active containers, including spares. Each
+project coordinator persists a PoolManager assignment and routes only to that
+assigned container. Pool RPC failures fall back to a unique cold allocation. An
+alarm retains the newest pending
 snapshot during capacity shortages. The interactive hot path never enters a
 queue. After a direct infrastructure failure, the coordinator hands its revision
 to `compile-pro` for `X-Compile-Plan: pro`, or `compile-free` for Free, unknown,

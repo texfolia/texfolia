@@ -5,12 +5,12 @@ import type { Jobs } from "./jobs";
 import { jobIdSchema } from "./project";
 import type { planSchema } from "./telemetry";
 
-export const compileMessageSchema = z.object({
+const compileMessageSchema = z.object({
   projectId: jobIdSchema,
   revision: z.number().int().nonnegative(),
 });
 export type CompileMessage = z.infer<typeof compileMessageSchema>;
-export const backgroundMessageSchema = z.discriminatedUnion("kind", [
+const backgroundMessageSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("recover") }),
   z.object({
     kind: z.literal("maintenance"),

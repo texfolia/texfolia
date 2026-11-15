@@ -1,11 +1,19 @@
-Welcome to your new TanStack Start app!
+# Web app
 
-# Authentication
+TanStack Start runs the React workspace and authenticated API on Cloudflare Workers.
+Follow the [root setup guide](../../README.md#local-development) to start the full local stack.
+From the repository root, `bun run --cwd apps/web build` builds the web app alone.
+
+## Authentication
+
+OAuth configuration in `.env.example` covers GitHub, Google, GitLab, and Microsoft.
+Set credentials for the providers you use. The email sign-in flow uses the local
+Cloudflare email binding during development.
 
 See [Public auth abuse protection](../../docs/auth-abuse-protection.md) for the
 enabled routes, CAPTCHA policy, rate limits, and verification commands.
 
-# Public templates
+## Public templates
 
 The gallery is `/templates`, stable snapshots use `/template/$templateId`, and
 saved projects can be published at `/templates/publish`. Reviewers use
@@ -14,23 +22,6 @@ run independently of moderation, including in local development without cron.
 
 See [Template lifecycle](../../docs/templates.md) for the design, original Drizzle
 seeds, schema setup, retention, and verification commands.
-
-# Getting Started
-
-To run this application:
-
-```bash
-bun install
-bun --bun run dev
-```
-
-# Building For Production
-
-To build this application for production:
-
-```bash
-bun --bun run build
-```
 
 ## Project source storage
 
@@ -195,7 +186,6 @@ their independent bindings, and enable the configured hourly cron.
 
 Apply the schema change before deploying the Worker. Local `bun run db:push`
 updates the constraint that allows text nodes to reference R2 objects.
-The previously referenced `packages/db/sql/20261111_project_sources.sql` is absent.
 For a new database at launch, use the reviewed baseline. For an existing database,
 prepare and review an upgrade against its actual schema. Follow the
 [Neon and Hyperdrive deployment guide](../../docs/database-deployment.md).
@@ -264,7 +254,10 @@ Editor-owned linting uses the package's public `EditorView` API. Keeping syntax 
 
 [wasm-latex-tools](https://github.com/TeXlyre/wasm-latex-tools) supplies `TexFmt` in the formatting worker. Formatting retains minimal edits, isolated undo, and rejection of results after the source changes. `bun run dev` and `bun run build` copy package assets into the ignored `public/core` directory. Use `bun run latex:assets` to refresh those assets separately. Keep `core/texfmt/tex_fmt.js` and `core/texfmt/tex_fmt_bg.wasm` in deployed static assets; `TexFmt` loads them at runtime.
 
-[UIW themes](https://uiwjs.github.io/react-codemirror/#/extensions/themes-all) supply the editor colors. **Settings > Editor > Editor theme** selects a theme and saves it in browser storage. Existing font and wrapping preferences gain the default GitHub Light theme when loaded.
+**Settings > Appearance** selects the app and editor theme, including imported
+VS Code themes. Appearance is saved per account in the current browser. The
+editor theme is built with `@uiw/codemirror-themes`; the app does not use the UIW
+theme bundle. See [Themes](../../docs/themes.md) for storage and import limits.
 
 Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the integration. Completion tests exercise the installed language extension together with project suggestions.
 
@@ -308,16 +301,14 @@ bun run --cwd packages/db db:push
 
 ## Styling
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+Use Tailwind classes on components. `src/styles.css` contains imports, font setup,
+theme tokens, and the Dockview `@utility` that maps app tokens to library variables.
+Keep handwritten selector rules out of the stylesheet. Runtime theme values and
+CodeMirror styles use their libraries' APIs. Vendor stylesheets remain imported
+by the components that need them.
 
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
+`bun run check:repo` from the repository root checks this policy and local doc links.
+The production asset check verifies generated CSS and copied worker assets.
 
 ## Deploy to Cloudflare Workers
 
@@ -335,153 +326,11 @@ After changing bindings, run `bun run cf:typegen` to refresh their TypeScript ty
 Bindings are configured in `wrangler.jsonc`. See
 [Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/).
 
-## Routing
+## Routing and verification
 
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "My App" },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-});
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from "@tanstack/react-start";
-
-const getServerTime = createServerFn({
-  method: "GET",
-}).handler(async () => {
-  return new Date().toISOString();
-});
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState("");
-
-  useEffect(() => {
-    getServerTime().then(setTime);
-  }, []);
-
-  return <div>Server time: {time}</div>;
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router";
-import { json } from "@tanstack/react-start";
-
-export const Route = createFileRoute("/api/hello")({
-  server: {
-    handlers: {
-      GET: () => json({ message: "Hello, World!" }),
-    },
-  },
-});
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router";
-
-export const Route = createFileRoute("/people")({
-  loader: async () => {
-    const response = await fetch("https://swapi.dev/api/people");
-    return response.json();
-  },
-  component: PeopleComponent,
-});
-
-function PeopleComponent() {
-  const data = Route.useLoaderData();
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  );
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+File-based routes live in `src/routes`. Generate `src/routeTree.gen.ts` with
+`bun run --cwd apps/web generate-routes` from the repository root. Auth requests
+use `/api/auth/$`; unknown paths use the root route's not-found component.
 
 Run the complete workspace metadata check against an isolated test database:
 

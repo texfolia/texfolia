@@ -1,0 +1,82 @@
+# Compile telemetry
+
+Compile events are structured log objects with `telemetryVersion: 1` and a
+`jobId`. Join events by that ID. Each new compile action gets its own ID;
+retries retain it. Compiler results also retain backend timing. The browser
+reports preview timing to the authenticated compile route with PATCH after the
+PDF renders or rendering fails. Reporting is best effort and does not block
+compilation, so a successful backend job can have no preview event.
+
+## Event boundaries
+
+| Event                    | Boundary                                                                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compile_web_submission` | Authenticated web POST through compiler acceptance or rejection. `submissionMs` includes web-side source reconciliation and the compiler request. |
+| `compile_submission`     | Legacy compiler API submission. Interactive project revisions use the coordinator API.                                                            |
+| `compile_pool_claim`     | Cloudflare container assignment, with `hit`, `miss`, `reused`, or `error`. A hit describes spare readiness, not the project's auxiliary cache.    |
+| `compile_engine_request` | Engine transport and engine timing for an attempt.                                                                                                |
+| `compile_retry`          | Infrastructure retry of a legacy job.                                                                                                             |
+| `compile_backend`        | Completed compiler attempt, including failures. `attempt` distinguishes retries.                                                                  |
+| `compile_preview`        | Browser render result plus available backend timing. `outcome` is `rendered` or `preview_failed`.                                                 |
+
+## Timing fields
+
+All durations are milliseconds unless the field says otherwise. Missing or null
+fields mean unmeasured, not zero.
+
+| Field                                     | Meaning                                                                                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `queueWaitMs`                             | Time from job creation to the attempt starting. For project revisions this includes debounce and scheduling, even though the normal path uses no queue. |
+| `inputReadMs`                             | Legacy job source-object read. Project revisions report zero here because their engine client owns source loading.                                      |
+| `engineRequestMs`                         | Engine client call, including readiness, source synchronization, cache restoration when needed, and the engine response.                                |
+| `inputPrepMs`, `compileMs`, `outputMs`    | Engine source preparation, TeX execution, and output processing. These are portions of engine work, not additional backend stages to sum.               |
+| `publishMs`                               | Artifact and cache publication phase.                                                                                                                   |
+| `backendMs`                               | Job creation through backend result preparation. Overlaps the stages above.                                                                             |
+| `submissionMs`, `pollingMs`, `downloadMs` | Browser submission, waiting for the result, and fetching PDF data. The browser's `submissionMs` differs from the web POST duration of the same name.    |
+| `previewMs`                               | PDF file readiness through the browser's render result.                                                                                                 |
+| `actionToPdfMs`                           | Compile action through the first reported PDF render result.                                                                                            |
+| `keystrokeToPdfMs`                        | Last source edit through that render result, or null if no edit was recorded. Includes time spent before requesting compilation.                        |
+| `firstPdfByteMs`                          | Time to the first PDF byte at the reporting layer. Engine and browser values describe different boundaries.                                             |
+
+`engine`, `plan`, `temperature`, `artifactReused`, and `cacheUsed` identify the
+cohort. `temperature` counts TeX runs in a process; it does not prove that the
+container was cold. See [cold-start measurements](../apps/compiler/cold-start-measurements.md)
+for boot, prewarm, and archive timing fields and the limits of the historical
+local measurements. [Container pool](../apps/compiler/docs/container-pool.md)
+defines pool hit-rate accounting.
+
+## Query preview percentiles
+
+Export decoded event objects as newline-delimited JSON to `compile-events.jsonl`.
+For a DuckDB session in that directory, this query groups successfully rendered
+previews by engine, plan, and process temperature. Explicit column types retain
+optional fields even when every value is missing or null. See DuckDB
+[JSON loading](https://duckdb.org/docs/stable/data/json/loading_json) and
+[aggregate functions](https://duckdb.org/docs/stable/sql/functions/aggregates).
+
+```sql
+SELECT
+	engine,
+	plan,
+	temperature,
+	count(*) AS samples,
+	quantile_cont(actionToPdfMs, 0.50) AS action_to_pdf_p50_ms,
+	quantile_cont(actionToPdfMs, 0.95) AS action_to_pdf_p95_ms,
+	quantile_cont(keystrokeToPdfMs, 0.50) AS keystroke_to_pdf_p50_ms,
+	quantile_cont(keystrokeToPdfMs, 0.95) AS keystroke_to_pdf_p95_ms
+FROM read_json('compile-events.jsonl', format = 'newline_delimited', columns = {
+	event: 'VARCHAR', outcome: 'VARCHAR',
+	engine: 'VARCHAR', plan: 'VARCHAR', temperature: 'VARCHAR',
+	actionToPdfMs: 'DOUBLE', keystrokeToPdfMs: 'DOUBLE'
+})
+WHERE event = 'compile_preview' AND outcome = 'rendered'
+GROUP BY engine, plan, temperature;
+```
+
+Keep failures and missing preview reports visible in a separate event count.
+Do not infer end-to-end latency from backend events alone or add overlapping
+timings. Compare equivalent projects, plans, cache states, and runtime locations.
+The query describes reporting, not a production latency claim.
+
+The authoritative schemas are [compiler telemetry](../apps/compiler/src/telemetry.ts)
+and [browser preview timing](../apps/web/src/lib/latex/compile-telemetry.ts).

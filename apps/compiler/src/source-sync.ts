@@ -9,14 +9,14 @@ import {
   sourcePathSchema,
 } from "./project";
 
-export const sourceHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
+const sourceHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
 export const maxSourceSyncBytes = 64 * 1024 * 1024;
 const revisionSchema = z
   .number()
   .int()
   .nonnegative()
   .max(Number.MAX_SAFE_INTEGER);
-export const sourceContentSchema = z.union([z.string(), artifactContentSchema]);
+const sourceContentSchema = z.union([z.string(), artifactContentSchema]);
 export const sourceDeltaSchema = z
   .object({
     mainFile: sourcePathSchema.refine((value) => value.endsWith(".tex")),
@@ -64,7 +64,7 @@ export async function sourceHash(bytes: Uint8Array<ArrayBuffer>) {
     (byte) => byte.toString(16).padStart(2, "0"),
   ).join("");
 }
-export function sourceBytes(content: SourceContent) {
+function sourceBytes(content: SourceContent) {
   return typeof content === "string"
     ? new TextEncoder().encode(content)
     : decodeBase64(content.base64);
