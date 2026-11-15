@@ -21,7 +21,14 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
+import { paidPlans } from "#/lib/billing";
 import { historyPolicy } from "#/lib/document-history";
+import {
+  maxSourceFileBytes,
+  maxSourceProjectBytes,
+} from "#/lib/project-source";
+
+const storagePolicy = `${maxSourceFileBytes / 1024 ** 2} MiB per source file; ${maxSourceProjectBytes / 1024 ** 2} MiB per project`;
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({ meta: [{ title: "Pricing | Texfolia" }] }),
@@ -31,58 +38,98 @@ export const Route = createFileRoute("/pricing")({
 const PLANS = [
   {
     name: "Free",
-    description:
-      "Perfect for learning LaTeX and familiarizing yourself with the platform",
+    description: "For learning LaTeX and writing together.",
     price: 0,
+    plan: null,
+    priceUnit: "",
     buttonVariant: "outline",
     buttonText: "Get started for free",
     features: [
+      "No project or editor count limit",
+      storagePolicy,
       historyPolicy,
-      "100 projects",
-      "4 editors per project",
-      "1 GB storage",
       "15-second compile timeout",
+      "No AI assistant",
     ],
   },
   {
-    name: "Pro",
-    description: "",
-    price: 15,
+    name: paidPlans.pro.name,
+    description: "For longer compiles and an AI writing assistant.",
+    price: paidPlans.pro.monthlyUsd,
+    plan: "pro",
     priceUnit: "/month",
     buttonVariant: "default",
     buttonText: "Upgrade to Pro",
     features: [
+      "No project or editor count limit",
+      storagePolicy,
       historyPolicy,
-      "Unlimited projects",
-      "10 editors per project",
-      "10 GB storage",
       "5-minute compile timeout",
+      "AI assistant, billed separately at model cost + 20%",
+      "Monthly metered AI billing with a per-user spend cap",
     ],
   },
   {
-    name: "Team",
-    description: "",
-    price: 20,
-    priceUnit: "/seat/month",
+    name: paidPlans.team.name,
+    description: "Pro for every user, with one shared organization bill.",
+    price: paidPlans.team.monthlyUsd,
+    plan: "team",
+    priceUnit: "/user/month",
     buttonVariant: "outline",
-    buttonText: "Contact Sales",
+    buttonText: "Upgrade to Team",
     features: [
+      "Pro benefits for every organization member",
+      "No project or editor count limit",
+      storagePolicy,
       historyPolicy,
-      "Unlimited projects",
-      "Unlimited editors per project",
-      "100 GB storage / user",
       "5-minute compile timeout",
+      "AI assistant, billed separately at model cost + 20%",
+      "Monthly metered AI billing with a per-user spend cap",
+      "Shared billing; seats follow membership",
     ],
   },
 ] satisfies readonly {
   name: string;
   description: string;
   price: number;
-  priceUnit?: string;
+  plan: "pro" | "team" | null;
+  priceUnit: string;
   buttonVariant: "default" | "outline";
   buttonText: string;
   features: readonly string[];
 }[];
+
+const COMPARISON = [
+  ["Projects", "No count limit", "No count limit", "No count limit"],
+  ["Editors per project", "No count limit", "No count limit", "No count limit"],
+  ["Source storage", storagePolicy, storagePolicy, storagePolicy],
+  ["Document history", historyPolicy, historyPolicy, historyPolicy],
+  ["Compile timeout", "15 seconds", "5 minutes", "5 minutes"],
+  [
+    "AI assistant",
+    "Not included",
+    "Model cost + 20%",
+    "Model cost + 20% per user",
+  ],
+  [
+    "AI billing",
+    "Not available",
+    "Metered; invoiced monthly",
+    "Metered; shared monthly invoice",
+  ],
+  [
+    "AI spend cap",
+    "Not available",
+    "Per user; default $20/month",
+    "Per user; default $20/month",
+  ],
+  [
+    "Subscription billing",
+    "Free",
+    "Personal",
+    "$20/user/month; shared organization bill",
+  ],
+];
 
 function RouteComponent() {
   return (
@@ -116,28 +163,22 @@ function RouteComponent() {
                 </p>
               </CardHeader>
               <CardContent>
-                {plan.name === "Free" ? (
-                  <Button
-                    size="lg"
-                    variant={plan.buttonVariant}
-                    className="w-full"
-                    render={<Link to="/login" />}
-                  >
-                    {plan.buttonText}
-                  </Button>
-                ) : (
-                  <Button
-                    size="lg"
-                    variant={plan.buttonVariant}
-                    className="w-full"
-                    disabled
-                    title="Paid plan checkout is not available yet"
-                  >
-                    {plan.buttonText}
-                  </Button>
-                )}
+                <Button
+                  size="lg"
+                  variant={plan.buttonVariant}
+                  className="w-full"
+                  render={
+                    plan.plan ? (
+                      <Link to="/billing" search={{ plan: plan.plan }} />
+                    ) : (
+                      <Link to="/projects" />
+                    )
+                  }
+                >
+                  {plan.buttonText}
+                </Button>
               </CardContent>
-              <CardFooter className="mt-auto px-6 pt-4">
+              <CardFooter className="px-6 pt-4">
                 <ul className="space-y-4 text-sm">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-3">
@@ -151,13 +192,21 @@ function RouteComponent() {
           ))}
         </div>
         <p className="text-muted-foreground mt-5 text-sm">
-          Paid plan checkout is not available yet.
+          Prices are in USD. AI usage is extra, reported to Stripe after each
+          run and invoiced monthly. The launch markup is 20%; each user can
+          adjust their monthly AI spend cap, including setting it to $0 to pause
+          AI.
         </p>
         <Card className="mt-12">
           <CardContent>
-            <Table>
+            <h2 className="mb-4 text-xl font-semibold">Compare plans</h2>
+            <p className="text-muted-foreground mb-4 text-sm md:hidden">
+              Scroll horizontally to compare all plans.
+            </p>
+            <Table className="min-w-3xl" aria-label="Plan comparison">
               <TableCaption>
-                * Unlimited is subject to fair use policy.
+                Plan limits apply equally to personal and organization projects.
+                Compilation is subject to fair use.
               </TableCaption>
               <TableHeader>
                 <TableRow>
@@ -168,12 +217,21 @@ function RouteComponent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow>
-                  <TableCell></TableCell>
-                  <TableCell></TableCell>
-                  <TableCell></TableCell>
-                  <TableCell></TableCell>
-                </TableRow>
+                {COMPARISON.map(([feature, ...values]) => (
+                  <TableRow key={feature}>
+                    <TableHead
+                      scope="row"
+                      className="font-medium whitespace-normal"
+                    >
+                      {feature}
+                    </TableHead>
+                    {values.map((value, index) => (
+                      <TableCell key={index} className="whitespace-normal">
+                        {value}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </CardContent>
