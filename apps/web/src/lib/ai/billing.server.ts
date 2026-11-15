@@ -245,7 +245,7 @@ export async function reconcileAiUsage({
       and(
         inArray(aiRequest.status, ["pending", "priced"]),
         sql`${aiRun.status} <> 'running'`,
-        lte(aiRequest.nextAttemptAt, new Date()),
+        lte(aiRequest.nextAttemptAt, sql`now()`),
         runId ? eq(aiRun.id, runId) : undefined,
         userId ? eq(aiRun.userId, userId) : undefined,
       ),
@@ -258,17 +258,18 @@ export async function reconcileAiUsage({
       const [current] = await tx
         .select()
         .from(aiRequest)
-        .where(eq(aiRequest.id, row.request.id))
+        .where(
+          and(
+            eq(aiRequest.id, row.request.id),
+            inArray(aiRequest.status, ["pending", "priced"]),
+            lte(aiRequest.nextAttemptAt, sql`now()`),
+          ),
+        )
         .for("update");
-      if (
-        !current ||
-        !["pending", "priced"].includes(current.status) ||
-        current.nextAttemptAt > new Date()
-      )
-        return null;
+      if (!current) return null;
       await tx
         .update(aiRequest)
-        .set({ nextAttemptAt: new Date(Date.now() + 120_000) })
+        .set({ nextAttemptAt: sql`now() + interval '2 minutes'` })
         .where(eq(aiRequest.id, current.id));
       return current;
     });
@@ -349,9 +350,7 @@ export async function reconcileAiUsage({
           attempts,
           error: message,
           ...(needsReview ? { status: "needs_review" } : {}),
-          nextAttemptAt: new Date(
-            Date.now() + Math.min(3600, 30 * 2 ** attempts) * 1000,
-          ),
+          nextAttemptAt: sql`now() + ${Math.min(3600, 30 * 2 ** attempts)} * interval '1 second'`,
         })
         .where(eq(aiRequest.id, current.id));
       console.error({

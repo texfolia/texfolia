@@ -1,3 +1,4 @@
+import { setSystemTime, spyOn } from "bun:test";
 import assert from "node:assert/strict";
 
 import { createDb } from "@texfolia/db";
@@ -29,6 +30,12 @@ assert(
   "Use an isolated test database",
 );
 const db = createDb(connection);
+const rejectApiCall = () => {
+  throw new Error("AI billing tests must not make external API calls");
+};
+const outbound = spyOn(globalThis, "fetch").mockImplementation(
+  Object.assign(rejectApiCall, { preconnect: rejectApiCall }),
+);
 const userId = crypto.randomUUID();
 const freeId = crypto.randomUUID();
 const teamId = crypto.randomUUID();
@@ -278,8 +285,30 @@ try {
   assert.equal((await row(unpricedRequest.id)).chargedNanos, null);
   const lost = await run("aborted");
   const lostRequest = await request(lost, { logId: null, attempts: 11 });
-  await reconcileAiUsage({ db, config, runId: lost, fetcher, report });
+  setSystemTime(Date.now() - 60_000);
+  try {
+    await reconcileAiUsage({ db, config, runId: lost, fetcher, report });
+  } finally {
+    setSystemTime();
+  }
   assert.equal((await row(lostRequest.id)).status, "needs_review");
+  const scheduled = await run();
+  const scheduledRequest = await request(scheduled, {
+    nextAttemptAt: new Date(Date.now() + 10 * 60_000),
+  });
+  const beforeScheduled = events.length;
+  setSystemTime(Date.now() + 3600_000);
+  try {
+    await reconcileAiUsage({ db, config, runId: scheduled, fetcher, report });
+  } finally {
+    setSystemTime();
+  }
+  assert.equal(
+    (await row(scheduledRequest.id)).attempts,
+    0,
+    "an application clock ahead of Postgres must not bypass retry backoff",
+  );
+  assert.equal(events.length, beforeScheduled);
   assert(
     (await aiSpend(db, userId)).reserved >= 2 * nanoDollars,
     "unresolved provider calls retain their reservation",
@@ -368,10 +397,17 @@ try {
     "concurrent calls cannot overspend the remaining cap",
   );
   assert.equal(reservations.filter((r) => r.status === "rejected").length, 1);
+  assert.equal(
+    outbound.mock.calls.length,
+    0,
+    "all external calls use injected fixtures",
+  );
   console.info(
     "AI billing passed: Pro/Team access, Free denial, successful/failed/aborted runs, log delays, Stripe retries, missing cost review, crash recovery, concurrent leases and spend caps.",
   );
 } finally {
+  setSystemTime();
+  outbound.mockRestore();
   if (runIds.length) {
     await db.delete(aiRequest).where(inArray(aiRequest.runId, runIds));
     await db.delete(aiRun).where(inArray(aiRun.id, runIds));
