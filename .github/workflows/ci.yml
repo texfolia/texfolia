@@ -38,8 +38,14 @@ jobs:
         run: bun run apps/web/test/postgres.ts
       - name: Exercise authenticated compile retries with Postgres
         run: bun run --cwd apps/web test:compile-route
+      - name: Exercise AI billing with Postgres
+        run: bun run --cwd apps/web test:ai-billing
       - name: Install Chromium
         run: bun run --cwd apps/web playwright install --with-deps chromium
+      - name: Build and exercise the managed assistant
+        run: |
+          bun run --cwd apps/web build
+          bun run --cwd apps/web test:ai-assistant
       - name: Exercise real-time collaboration locally
         run: bun run --cwd apps/web test:collaboration
       - name: Exercise metadata synchronization in two authenticated workspaces

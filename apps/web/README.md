@@ -497,3 +497,8 @@ changes during compilation, stale compile submissions, ZIP contents, editor
 selection, offline recovery after reload, and personal and organization access
 revocation. A compiler fixture holds jobs open so metadata changes can occur
 during a build. CI runs this check after applying the database schema.
+
+## Managed AI assistant
+
+See [Configure the managed assistant](../../docs/ai-assistant.md) for Gateway
+credentials, the Stripe usage meter, spend controls, reconciliation, and tests.

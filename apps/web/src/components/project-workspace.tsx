@@ -2,6 +2,7 @@ import {
   IconAlertCircle,
   IconArrowLeft,
   IconRefresh,
+  IconMessageChatbot,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
@@ -29,6 +30,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { AssistantSidebar } from "#/components/assistant-sidebar";
 import { DocumentHistoryPanel } from "#/components/document-history";
 import { Editor } from "#/components/editor";
 import { editorChrome } from "#/components/editor-chrome";
@@ -271,6 +273,7 @@ export function ProjectWorkspace({
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const [activeId, setActiveId] = useState<string>();
   const [ready, setReady] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   useEffect(() => {
     if (!ready) return;
     const narrow = window.matchMedia("(max-width: 767px)");
@@ -1182,6 +1185,15 @@ export function ProjectWorkspace({
           >
             <IconArrowLeft />
           </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Toggle assistant"
+            aria-pressed={assistantOpen}
+            onClick={() => setAssistantOpen(!assistantOpen)}
+          >
+            <IconMessageChatbot />
+          </Button>
           <span className="bg-border mx-1 h-4 w-px shrink-0" />
           <h1
             className="min-w-0 flex-1 truncate text-sm font-medium"
@@ -1247,7 +1259,12 @@ export function ProjectWorkspace({
             aria-label="Toggle project sidebar"
           />
         </header>
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <AssistantSidebar
+            projectId={projectId}
+            open={assistantOpen}
+            onClose={() => setAssistantOpen(false)}
+          />
           <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {!ready && (
               <p role="status" className="border-b px-3 py-2 text-sm">

@@ -1,0 +1,674 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { createDb } from "@texfolia/db";
+import {
+  aiRequest,
+  aiRun,
+  project,
+  projectNode,
+  session,
+  subscription,
+  user,
+} from "@texfolia/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { chromium } from "playwright";
+import { z } from "zod";
+
+import { hashSource } from "../src/lib/latex/source-sync";
+import { createProject } from "../src/lib/project.server";
+
+const connection = process.env.INTEGRATION_DATABASE_URL;
+assert(
+  connection && new URL(connection).pathname.includes("test"),
+  "Use an isolated test database",
+);
+const db = createDb(connection);
+const directory = await mkdtemp(join(tmpdir(), "texfolia-ai-"));
+const root = new URL("../dist/server/", import.meta.url).pathname;
+const filenames = await readdir(root, { recursive: true });
+const userId = crypto.randomUUID();
+const freeId = crypto.randomUUID();
+const subscriptionId = crypto.randomUUID();
+const projectIds: string[] = [];
+const secret = "ai-assistant-fixture-secret-not-for-production";
+const accountId = "a".repeat(32);
+const source =
+  "\\documentclass{article}\n\\begin{document}\nOriginal text.\n\\end{document}\n";
+const sourceHash = await hashSource(new TextEncoder().encode(source));
+let objectKey = "";
+let mode: "tools" | "error" | "simple" | "slow" = "tools";
+let call = 0;
+let logCalls = 0;
+const inference: { headers: Pick<Headers, "get">; body: unknown }[] = [];
+const meterEvents: URLSearchParams[] = [];
+const compileJobs = new Map<string, string>();
+const model = {
+  id: "@cf/test/model",
+  name: "Fixture model",
+  pricing: { prompt: "0.000001", completion: "0.000002" },
+  supported_parameters: ["tools", "max_tokens"],
+  architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+};
+const portReservation = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch: () => new Response(),
+});
+const port = portReservation.port;
+portReservation.stop(true);
+assert(port);
+const origin = `http://127.0.0.1:${port}`;
+const mf = new Miniflare({
+  ...convertV4MiniflareOptions({
+    name: "ai-assistant-test",
+    modules: filenames
+      .filter((p) => p.endsWith(".js"))
+      .sort((a, b) =>
+        a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
+      )
+      .map((p) => ({ type: "ESModule", path: join(root, p) })),
+    modulesRoot: root,
+    compatibilityDate: "2025-09-02",
+    compatibilityFlags: ["nodejs_compat"],
+    assets: {
+      directory: new URL("../dist/client/", import.meta.url).pathname,
+      routerConfig: { has_user_worker: true },
+    },
+    durableObjects: {
+      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+    },
+    r2Buckets: ["SOURCES"],
+    hyperdrives: { HYPERDRIVE: connection },
+    bindings: {
+      BETTER_AUTH_SECRET: secret,
+      BETTER_AUTH_URL: origin,
+      STRIPE_SECRET_KEY: "sk_test_fixture",
+      STRIPE_AI_PRICE_ID: "price_ai",
+      STRIPE_AI_METER_EVENT_NAME: "ai_nanos",
+      CLOUDFLARE_ACCOUNT_ID: accountId,
+      CLOUDFLARE_AI_GATEWAY_ID: "test",
+      CLOUDFLARE_AI_API_TOKEN: "fixture-ai-token",
+      ...Object.fromEntries(
+        ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((p) => [
+          [`${p}_CLIENT_ID`, "fixture"],
+          [`${p}_CLIENT_SECRET`, "fixture"],
+        ]),
+      ),
+    },
+    outboundService: async (request) => {
+      const url = new URL(request.url);
+      if (url.hostname === "api.stripe.com") {
+        if (url.pathname === "/v1/prices/price_ai")
+          return Response.json({
+            id: "price_ai",
+            currency: "usd",
+            unit_amount_decimal: "0.0000001",
+            recurring: {
+              interval: "month",
+              interval_count: 1,
+              usage_type: "metered",
+              meter: "mtr_ai",
+            },
+          });
+        if (url.pathname === "/v1/subscriptions/sub_pro")
+          return Response.json({
+            id: "sub_pro",
+            customer: "cus_pro",
+            status: "active",
+            items: { data: [{ id: "si_ai", price: { id: "price_ai" } }] },
+          });
+        if (url.pathname === "/v1/billing/meters/mtr_ai")
+          return Response.json({
+            id: "mtr_ai",
+            event_name: "ai_nanos",
+            status: "active",
+            default_aggregation: { formula: "sum" },
+            customer_mapping: {
+              type: "by_id",
+              event_payload_key: "stripe_customer_id",
+            },
+            value_settings: { event_payload_key: "value" },
+          });
+        if (url.pathname === "/v1/billing/meter_events") {
+          const body = new URLSearchParams(await request.text());
+          meterEvents.push(body);
+          assert.equal(body.get("payload[value]"), "12000000");
+          assert.equal(body.get("payload[stripe_customer_id]"), "cus_pro");
+          assert.equal(
+            request.headers.get("Idempotency-Key"),
+            body.get("identifier"),
+          );
+          return Response.json({
+            object: "billing.meter_event",
+            identifier: body.get("identifier"),
+          });
+        }
+      }
+      if (url.hostname === "api.cloudflare.com") {
+        assert.equal(
+          request.headers.get("Authorization"),
+          "Bearer fixture-ai-token",
+        );
+        if (url.pathname.endsWith("/ai/models/search"))
+          return Response.json({
+            data: [
+              model,
+              { ...model, id: "@cf/test/second", name: "Second model" },
+            ],
+          });
+        if (url.pathname.includes("/logs/")) {
+          logCalls++;
+          return Response.json({
+            success: true,
+            result: {
+              id: url.pathname.split("/").at(-1),
+              model: model.id,
+              cost: 0.01,
+              tokens_in: 80,
+              tokens_out: 20,
+            },
+          });
+        }
+        if (url.pathname.endsWith("/ai/v1/chat/completions")) {
+          inference.push({
+            headers: request.headers,
+            body: await request.json(),
+          });
+          assert.equal(request.headers.get("cf-aig-gateway-id"), "test");
+          assert.equal(request.headers.get("cf-aig-max-attempts"), "1");
+          const metadata = z
+            .object({ runId: z.uuid(), requestId: z.uuid() })
+            .parse(JSON.parse(request.headers.get("cf-aig-metadata") ?? "{}"));
+          const [reserved] = await db
+            .select()
+            .from(aiRequest)
+            .where(eq(aiRequest.id, metadata.requestId));
+          assert(reserved, "Usage reservation is durable before inference");
+          const headers = {
+            "Content-Type": "text/event-stream",
+            "cf-aig-log-id": crypto.randomUUID(),
+          };
+          if (mode === "error")
+            return Response.json(
+              {
+                error: {
+                  message: "Provider fixture failed",
+                  type: "provider_error",
+                },
+              },
+              { status: 500, headers },
+            );
+          const toolCalls = [
+            { name: "list_files", args: {} },
+            { name: "read_file", args: { path: "main.tex" } },
+            {
+              name: "edit_file",
+              args: {
+                path: "main.tex",
+                version: objectKey,
+                oldText: "Original text.",
+                newText: "Revised text.",
+              },
+            },
+            { name: "compile", args: { mainFile: "main.tex" } },
+            {
+              name: "read_compile_logs",
+              args: {
+                jobId: [...compileJobs.keys()].at(-1) ?? crypto.randomUUID(),
+                mainFile: "main.tex",
+              },
+            },
+          ];
+          const tool = mode === "tools" ? toolCalls[call++] : undefined;
+          const chunk = (delta: unknown, finish: string | null = null) => ({
+            id: "completion-fixture",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: model.id,
+            choices: [{ index: 0, delta, finish_reason: finish }],
+          });
+          const chunks: Array<
+            ReturnType<typeof chunk> & {
+              usage?: {
+                prompt_tokens: number;
+                completion_tokens: number;
+                total_tokens: number;
+              };
+            }
+          > = tool
+            ? [
+                chunk({
+                  role: "assistant",
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: `call-${call}`,
+                      type: "function",
+                      function: {
+                        name: tool.name,
+                        arguments: JSON.stringify(tool.args),
+                      },
+                    },
+                  ],
+                }),
+                chunk({}, "tool_calls"),
+              ]
+            : [
+                chunk({
+                  role: "assistant",
+                  content: "Updated main.tex and submitted a compile.",
+                }),
+                chunk({}, "stop"),
+              ];
+          chunks.push({
+            ...chunk({}),
+            choices: [],
+            usage: {
+              prompt_tokens: 80,
+              completion_tokens: 20,
+              total_tokens: 100,
+            },
+          });
+          const data =
+            chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
+            "data: [DONE]\n\n";
+          if (mode === "slow") {
+            const encoder = new TextEncoder();
+            let timer: ReturnType<typeof setTimeout>;
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify(chunk({ role: "assistant", content: "Working…" }))}\n\n`,
+                    ),
+                  );
+                  timer = setTimeout(() => {
+                    controller.enqueue(encoder.encode(data));
+                    controller.close();
+                  }, 2000);
+                },
+                cancel() {
+                  clearTimeout(timer);
+                },
+              }),
+              { headers },
+            );
+          }
+          return new Response(data, { headers });
+        }
+      }
+      throw new Error(
+        `Unexpected external request: ${url.hostname}${url.pathname}`,
+      );
+    },
+    serviceBindings: {
+      COMPILER: async (request) => {
+        const path = new URL(request.url).pathname;
+        if (path.endsWith("/changed"))
+          return new Response(null, { status: 204 });
+        if (path.endsWith("/compile")) {
+          const id = request.headers.get("X-Compilation-Id");
+          assert(id);
+          compileJobs.set(id, path);
+          return Response.json(
+            { id, status: "queued", revision: 1, sourceRevision: 1 },
+            { status: 202 },
+          );
+        }
+        if (path.includes("/jobs/"))
+          return Response.json({
+            id: path.split("/").at(-1),
+            status: "failed",
+            error: "Fixture diagnostic",
+            log: "main.tex:3: Undefined control sequence.",
+          });
+        if (path.endsWith("/events"))
+          return new Response(
+            `data: ${JSON.stringify({ revision: 0, current: null, latestBuild: null, stale: false, artifacts: null })}\n\n`,
+            { headers: { "Content-Type": "text/event-stream" } },
+          );
+        if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
+        return Response.json({
+          revision: 0,
+          current: null,
+          latestBuild: null,
+          stale: false,
+          artifacts: null,
+        });
+      },
+    },
+  }),
+  port,
+  resourcePersistencePath: directory,
+});
+const cookies = new Map<string, string>();
+async function actor(id: string) {
+  await db.insert(user).values({
+    id,
+    name: "Assistant fixture",
+    email: `${id}@example.com`,
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const token = crypto.randomUUID();
+  await db.insert(session).values({
+    id: crypto.randomUUID(),
+    userId: id,
+    token,
+    expiresAt: new Date(Date.now() + 3600_000),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const signature = createHmac("sha256", secret).update(token).digest("base64");
+  cookies.set(
+    id,
+    `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`,
+  );
+  const created = await createProject({
+    db,
+    ownerId: id,
+    data: { id: crypto.randomUUID(), name: "Assistant test" },
+  });
+  projectIds.push(created.id);
+  return created.id;
+}
+async function send(path: string, id: string, method = "GET", body?: unknown) {
+  return mf.dispatchFetch(`${origin}${path}`, {
+    method,
+    headers: {
+      Cookie: cookies.get(id) ?? "",
+      Origin: origin,
+      "Content-Type": "application/json",
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+function chatBody(modelId = model.id) {
+  return {
+    threadId: crypto.randomUUID(),
+    runId: crypto.randomUUID(),
+    messages: [
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: "Change Original text to Revised text and compile.",
+      },
+    ],
+    tools: [],
+    context: [],
+    forwardedProps: { model: modelId },
+  };
+}
+async function eventually(check: () => Promise<boolean>, label: string) {
+  const deadline = Date.now() + 20_000;
+  while (!(await check())) {
+    assert(Date.now() < deadline, label);
+    await Bun.sleep(50);
+  }
+}
+const browser = await chromium.launch({ headless: true });
+try {
+  await mf.ready;
+  const paidProject = await actor(userId);
+  const freeProject = await actor(freeId);
+  await db.insert(subscription).values({
+    id: subscriptionId,
+    referenceId: userId,
+    plan: "pro",
+    status: "active",
+    stripeCustomerId: "cus_pro",
+    stripeSubscriptionId: "sub_pro",
+  });
+  objectKey = `projects/${paidProject}/sources/${sourceHash}`;
+  const bucket = await mf.getR2Bucket("SOURCES");
+  await bucket.put(objectKey, source);
+  await db
+    .update(projectNode)
+    .set({
+      objectKey,
+      sizeBytes: BigInt(new TextEncoder().encode(source).length),
+    })
+    .where(
+      and(eq(projectNode.projectId, paidProject), eq(projectNode.kind, "text")),
+    );
+  const path = `/api/ai/${paidProject}`;
+  assert.equal(
+    (await send(`/api/ai/${freeProject}`, freeId, "POST", chatBody())).status,
+    403,
+  );
+  assert.equal((await send(path, freeId, "POST", chatBody())).status, 404);
+  assert.equal((await mf.dispatchFetch(`${origin}${path}`)).status, 401);
+  assert.equal(inference.length, 0, "denied requests never reach the model");
+  assert.equal((await send(path, userId)).status, 200);
+  assert.equal(
+    (
+      await send(path, userId, "PATCH", {
+        defaultModel: "@cf/test/second",
+        monthlyCapDollars: 25,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await send(path, userId, "PATCH", {
+        defaultModel: "invalid",
+        monthlyCapDollars: 25,
+      })
+    ).status,
+    400,
+  );
+  const body = chatBody();
+  const response = await send(path, userId, "POST", body);
+  assert.equal(response.status, 200, await response.clone().text());
+  const stream = await response.text();
+  assert(stream.includes("TEXT_MESSAGE_CONTENT"), stream);
+  assert(!stream.includes("RUN_ERROR"), stream);
+  await eventually(
+    async () =>
+      (
+        await db
+          .select()
+          .from(aiRequest)
+          .innerJoin(aiRun, eq(aiRun.id, aiRequest.runId))
+          .where(eq(aiRun.clientRunId, body.runId))
+      ).every((r) => r.ai_request.status === "reported"),
+    "successful run bills",
+  );
+  assert.equal(inference.length, 6);
+  assert.equal(meterEvents.length, 6);
+  assert.equal(
+    logCalls,
+    6,
+    "every inference request is priced from its own Gateway log",
+  );
+  assert(
+    JSON.stringify(inference.at(-1)?.body).includes(
+      "Undefined control sequence",
+    ),
+    "compile diagnostics reach the agent's next model turn",
+  );
+  assert.equal(compileJobs.size, 1);
+  const nodes = await db.query.projectNode.findMany({
+    where: { projectId: paidProject, kind: "text" },
+  });
+  const main = nodes.find((n) => n.name === "main.tex");
+  assert(main?.objectKey);
+  const saved = await bucket.get(main.objectKey);
+  assert(saved);
+  assert((await saved.text()).includes("Revised text."));
+  assert.equal(
+    (await send(path, userId, "POST", body)).status,
+    409,
+    "a duplicate run never repeats inference",
+  );
+  mode = "error";
+  const failure = chatBody();
+  const failed = await send(path, userId, "POST", failure);
+  const failureStream = await failed.text();
+  assert(failureStream.includes("RUN_ERROR"), failureStream);
+  const [failureRun] = await db
+    .select()
+    .from(aiRun)
+    .where(eq(aiRun.clientRunId, failure.runId));
+  assert(failureRun);
+  const failureRunId = failureRun.id;
+  await eventually(async () => {
+    const [r] = await db
+      .select()
+      .from(aiRequest)
+      .where(eq(aiRequest.runId, failureRunId));
+    return r?.status === "reported";
+  }, "provider errors still bill");
+  mode = "simple";
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+  });
+  const cookie = cookies.get(userId);
+  assert(cookie);
+  await context.addCookies([
+    {
+      name: "better-auth.session_token",
+      value: cookie.slice(cookie.indexOf("=") + 1),
+      url: origin,
+    },
+  ]);
+  const page = await context.newPage();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto(`${origin}/project/${paidProject}`);
+  await page.getByRole("button", { name: "Toggle assistant" }).click();
+  await page.getByRole("combobox", { name: "Model for this chat" }).waitFor();
+  await page
+    .getByRole("textbox", { name: "Message the assistant" })
+    .fill("Explain this project.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page
+    .getByRole("log")
+    .getByText("Updated main.tex and submitted a compile.")
+    .waitFor();
+  mode = "slow";
+  await page
+    .getByRole("textbox", { name: "Message the assistant" })
+    .fill("Continue, then stop.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByRole("log").getByText("Working…", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  const lastCall = inference.at(-1);
+  assert(lastCall);
+  const stoppedRunId = z
+    .object({ runId: z.uuid() })
+    .parse(JSON.parse(lastCall.headers.get("cf-aig-metadata") ?? "{}")).runId;
+  await eventually(async () => {
+    const [run] = await db
+      .select()
+      .from(aiRun)
+      .where(eq(aiRun.id, stoppedRunId));
+    const requests = await db
+      .select()
+      .from(aiRequest)
+      .where(eq(aiRequest.runId, stoppedRunId));
+    return (
+      run?.status === "aborted" &&
+      requests.length === 1 &&
+      requests[0]?.status === "reported"
+    );
+  }, "Stop aborts the provider stream and still bills its usage");
+  mode = "simple";
+  await page.locator("aside details").first().locator("summary").click();
+  await page
+    .getByRole("spinbutton", { name: "Monthly AI spend cap" })
+    .fill("0");
+  await page.getByRole("button", { name: "Save AI preferences" }).click();
+  await page.getByText("AI preferences saved.", { exact: true }).waitFor();
+  assert(
+    await page
+      .getByRole("textbox", { name: "Message the assistant" })
+      .isDisabled(),
+  );
+  await page
+    .getByRole("spinbutton", { name: "Monthly AI spend cap" })
+    .fill("25");
+  await page.getByRole("button", { name: "Save AI preferences" }).click();
+  await eventually(
+    async () =>
+      !(await page
+        .getByRole("textbox", { name: "Message the assistant" })
+        .isDisabled()),
+    "restoring the cap resumes chat",
+  );
+  await page.locator("aside details").first().locator("summary").click();
+  await page
+    .getByRole("combobox", { name: "Model for this chat" })
+    .selectOption("@cf/test/model");
+  await page.getByRole("button", { name: "New chat" }).click();
+  assert.equal(
+    await page
+      .getByRole("combobox", { name: "Model for this chat" })
+      .inputValue(),
+    "@cf/test/second",
+    "New chat restores the saved default instead of a chat override",
+  );
+  await page
+    .getByRole("textbox", { name: "Message the assistant" })
+    .fill("Explain this project.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page
+    .getByRole("log")
+    .getByText("Updated main.tex and submitted a compile.")
+    .waitFor();
+  const screenshots = new URL("../../../.audit/nat-266/", import.meta.url)
+    .pathname;
+  await mkdir(screenshots, { recursive: true });
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({
+    path: join(screenshots, "assistant-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: join(screenshots, "assistant-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  assert(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  assert.deepEqual(pageErrors, []);
+  await context.close();
+  console.info(
+    `AI assistant passed: authenticated Worker SSE, server file tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
+  );
+} finally {
+  await browser.close();
+  await mf.dispose();
+  const runs = await db
+    .select({ id: aiRun.id })
+    .from(aiRun)
+    .where(eq(aiRun.userId, userId));
+  if (runs.length) {
+    await db.delete(aiRequest).where(
+      inArray(
+        aiRequest.runId,
+        runs.map((r) => r.id),
+      ),
+    );
+    await db.delete(aiRun).where(eq(aiRun.userId, userId));
+  }
+  await db.delete(subscription).where(eq(subscription.id, subscriptionId));
+  if (projectIds.length)
+    await db.delete(project).where(inArray(project.id, projectIds));
+  await db.delete(user).where(inArray(user.id, [userId, freeId]));
+  await db.$client.end();
+  await rm(directory, { recursive: true, force: true });
+}

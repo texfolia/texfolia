@@ -97,3 +97,11 @@ INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test b
 This check creates an isolated schema with the legacy index, applies the rollout
 SQL, and verifies retained rows, name reuse, active uniqueness, and reapplication.
 CI runs it before the application integration check.
+
+## Assistant billing records
+
+Apply `sql/20261114_ai_assistant.sql` before deploying the assistant. It creates
+per-user settings, run records, and the durable request ledger. Billing records
+retain their original payer after account or project deletion. See
+[Configure the managed assistant](../../docs/ai-assistant.md) for reconciliation
+and verification.
