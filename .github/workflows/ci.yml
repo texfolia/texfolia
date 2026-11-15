@@ -50,6 +50,8 @@ jobs:
         run: bun run --cwd apps/web test:collaboration
       - name: Exercise metadata synchronization in two authenticated workspaces
         run: bun run --cwd apps/web test:workspace-metadata
+      - name: Exercise project controls, sharing, and keyboard access
+        run: bun run --cwd apps/web test/ui-overhaul.ts
       - name: Exercise document history in authenticated workspaces
         run: bun run --cwd apps/web test:document-history
       - name: Exercise project source storage with local R2

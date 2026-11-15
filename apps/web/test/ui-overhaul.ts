@@ -297,6 +297,23 @@ try {
       await capture(publicPage, `${name}-${width}`);
     }
   }
+  await publicPage.goto(origin);
+  const navigation = publicPage.getByRole("navigation", {
+    name: "Main navigation",
+  });
+  assert.deepEqual(await navigation.getByRole("link").allTextContents(), [
+    "Templates",
+    "Pricing",
+  ]);
+  assert.doesNotMatch(await publicPage.locator("main").innerText(), /\bgit\b/i);
+  await navigation
+    .getByRole("link", { name: "Templates", exact: true })
+    .focus();
+  await publicPage.keyboard.press("Enter");
+  await publicPage.waitForURL(/\/templates/);
+  await navigation.getByRole("link", { name: "Pricing", exact: true }).focus();
+  await publicPage.keyboard.press("Enter");
+  await publicPage.waitForURL(/\/pricing/);
   console.info(
     "Public routes fit desktop, tablet, and narrow mobile viewports",
   );
@@ -310,11 +327,26 @@ try {
     0,
     "No inert bulk selection",
   );
+  const projectRow = owner.getByRole("row").filter({
+    has: owner.getByRole("link", { name: project.name, exact: true }),
+  });
+  await projectRow
+    .getByRole("cell", { name: "Personal", exact: true })
+    .waitFor();
+  assert.equal(await projectRow.locator("img").count(), 0, "No demo avatars");
+  assert.equal(await projectRow.getByRole("button").count(), 1);
+  await projectRow
+    .getByRole("button", { name: `Delete ${project.name}`, exact: true })
+    .waitFor();
   await owner
-    .getByRole("link", { name: "A study of small things", exact: true })
-    .click();
+    .getByRole("link", { name: `Open ${project.name}`, exact: true })
+    .focus();
+  await owner.keyboard.press("Enter");
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
   await owner.getByRole("form", { name: "Share project" }).waitFor();
+  await owner
+    .getByText("Only the owner has access.", { exact: true })
+    .waitFor();
   const geometry = await owner.evaluate(() => {
     const sidebar = document.querySelector(
       '[data-slot="sidebar-container"][data-side="right"]',
@@ -364,8 +396,27 @@ try {
   await owner
     .getByRole("button", { name: "Remove Emmy Reader", exact: true })
     .waitFor();
-  await reader.goto(`${origin}/project/${project.id}`);
+  await reader.goto(`${origin}/projects`);
+  const sharedRow = reader.getByRole("row").filter({
+    has: reader.getByRole("link", { name: project.name, exact: true }),
+  });
+  await sharedRow
+    .getByRole("cell", { name: "1 collaborator", exact: true })
+    .waitFor();
+  assert.equal(await sharedRow.getByRole("button").count(), 0);
+  await sharedRow
+    .getByRole("link", { name: project.name, exact: true })
+    .focus();
+  await reader.keyboard.press("Enter");
   await reader.locator('.cm-content[contenteditable="false"]').waitFor();
+  assert.equal(
+    await reader.getByRole("button", { name: /^Manage / }).count(),
+    0,
+  );
+  assert.equal(
+    await reader.getByRole("button", { name: "New file", exact: true }).count(),
+    0,
+  );
   assert.equal(
     await reader.getByRole("form", { name: "Share project" }).count(),
     0,
@@ -392,9 +443,20 @@ try {
   await share.getByRole("combobox").selectOption("editor");
   await share.getByRole("button", { name: "Share", exact: true }).click();
   await reader.locator('.cm-content[contenteditable="true"]').waitFor();
+  await reader
+    .getByRole("button", { name: "Manage notes.tex", exact: true })
+    .waitFor();
+  await share.getByRole("textbox").fill(`${readerId}@example.com`);
+  await share.getByRole("combobox").selectOption("viewer");
+  await share.getByRole("button", { name: "Share", exact: true }).click();
+  await reader.locator('.cm-content[contenteditable="false"]').waitFor();
+  await reader
+    .getByRole("button", { name: "Manage notes.tex", exact: true })
+    .waitFor({ state: "detached" });
   await owner
     .getByRole("button", { name: "Remove Emmy Reader", exact: true })
-    .click();
+    .focus();
+  await owner.keyboard.press("Enter");
   await eventually(
     async () =>
       !(await owner
@@ -416,12 +478,34 @@ try {
       }),
     ),
   );
+  await reader.goto(`${origin}/projects`);
+  await reader.getByText("No projects yet", { exact: true }).waitFor();
+  await owner.goto(`${origin}/projects`);
+  await projectRow
+    .getByRole("cell", { name: "Personal", exact: true })
+    .waitFor();
+  await projectRow
+    .getByRole("link", { name: project.name, exact: true })
+    .click();
+  await owner.locator('.cm-content[contenteditable="true"]').waitFor();
   console.info(
     "Real viewer/editor grants, role changes, authorization, and live revocation passed",
   );
   await owner
     .getByRole("button", { name: "Manage notes.tex", exact: true })
-    .click();
+    .focus();
+  await owner.keyboard.press("Enter");
+  await owner.getByRole("dialog").waitFor();
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("dialog").waitFor({ state: "detached" });
+  assert.equal(
+    await owner
+      .getByRole("button", { name: "Manage notes.tex", exact: true })
+      .evaluate((button) => button === document.activeElement),
+    true,
+    "Closing management returns keyboard focus to the file action",
+  );
+  await owner.keyboard.press("Enter");
   await owner
     .getByRole("dialog")
     .getByLabel("Name", { exact: true })
@@ -445,6 +529,48 @@ try {
         deletedAt: { isNull: true },
       },
     }),
+  );
+  const editor = owner.locator('.cm-content[contenteditable="true"]');
+  await editor.focus();
+  await owner.keyboard.press("ControlOrMeta+End");
+  await owner.keyboard.press("Enter");
+  const exportMarker = "% NAT-298 export verification";
+  await owner.keyboard.insertText(exportMarker);
+  await owner.getByText("Export project", { exact: true }).focus();
+  await owner.keyboard.press("Enter");
+  assert.equal(
+    await owner
+      .getByRole("checkbox", { name: "Include generated out/ files" })
+      .isDisabled(),
+    true,
+    "Generated files cannot be requested before a build exists",
+  );
+  const downloadReady = owner.waitForEvent("download");
+  await owner
+    .getByRole("button", { name: "Download zip", exact: true })
+    .focus();
+  await owner.keyboard.press("Enter");
+  const download = await downloadReady;
+  assert.equal(download.suggestedFilename(), `${project.name}.zip`);
+  const zipPath = join(directory, "project.zip");
+  await download.saveAs(zipPath);
+  const listing = Bun.spawnSync(["unzip", "-Z1", zipPath]);
+  assert.equal(listing.exitCode, 0);
+  assert.deepEqual(listing.stdout.toString().trim().split("\n").sort(), [
+    "chapters/appendix.tex",
+    "main.tex",
+  ]);
+  const mainSource = Bun.spawnSync(["unzip", "-p", zipPath, "main.tex"]);
+  assert.equal(mainSource.exitCode, 0);
+  assert(
+    mainSource.stdout.toString().includes(exportMarker),
+    "Export contains current editor content",
+  );
+  await owner.getByRole("button", { name: "Save", exact: true }).focus();
+  await owner.keyboard.press("Enter");
+  await owner.getByRole("tab", { name: "main.tex", exact: true }).waitFor();
+  console.info(
+    "Keyboard project navigation, file dialog focus, and source ZIP download passed",
   );
   await owner
     .getByRole("button", { name: "Manage appendix.tex", exact: true })
@@ -539,6 +665,7 @@ try {
   await owner.getByRole("heading", { name: "Projects", exact: true }).waitFor();
   await capture(owner, "projects-mobile");
   await owner.getByRole("button", { name: "New project", exact: true }).click();
+  await capture(owner, "new-project-mobile");
   await owner
     .getByLabel("Project Name", { exact: true })
     .fill("A new beginning");
