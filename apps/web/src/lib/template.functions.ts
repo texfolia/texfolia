@@ -15,7 +15,7 @@ import {
 export const listTemplates = createServerFn({ method: "GET" })
   .validator(z.object({ page: z.number().int().min(0).max(1000).default(0) }))
   .handler(async ({ context, data }) => {
-    const server = await import("./template.server");
+    const server = await import("./template-catalog.server");
     return server.listTemplates({ db: context.db, page: data.page });
   });
 
@@ -23,7 +23,7 @@ export const listMyTemplates = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
     const session = await ensureSession();
-    const server = await import("./template.server");
+    const server = await import("./template-catalog.server");
     return server.listMyTemplates({ db: context.db, userId: session.user.id });
   },
 );
@@ -31,7 +31,7 @@ export const listMyTemplates = createServerFn({ method: "GET" }).handler(
 export const getTemplate = createServerFn({ method: "GET" })
   .validator(templateIdSchema)
   .handler(async ({ context, data }) => {
-    const server = await import("./template.server");
+    const server = await import("./template-catalog.server");
     const session = await getSession();
     setResponseHeader("Cache-Control", "private, no-store");
     const result = await server.getTemplate({
@@ -54,7 +54,7 @@ export const getTemplate = createServerFn({ method: "GET" })
 export const getTemplateAccount = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
-    const server = await import("./template.server");
+    const server = await import("./template-catalog.server");
     const session = await getSession();
     return session
       ? {
@@ -76,45 +76,48 @@ export const publishTemplate = createServerFn({ method: "POST" })
   .validator(publishTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("./template.server");
+    const server = await import("./template-snapshot.server");
     const result = await server.publishTemplate({
       db: context.db,
       bucket: env.SOURCES,
       userId: session.user.id,
       data,
     });
-    await server.refreshTemplatePreviews({
-      db: context.db,
-      bucket: env.SOURCES,
-      templateId: result.id,
-    });
     return result;
   });
 
 export const refreshTemplatePreview = createServerFn({ method: "POST" })
-  .validator(templateIdSchema)
+  .validator(templateIdSchema.extend({ retry: z.boolean().default(false) }))
   .handler(async ({ context, data }) => {
-    const session = await ensureSession();
-    const server = await import("./template.server");
-    const found = await server.findTemplate({
+    const session = await getSession();
+    const catalog = await import("./template-catalog.server");
+    const found = await catalog.findTemplate({
       db: context.db,
-      userId: session.user.id,
+      templateId: data.templateId,
+      userId: session?.user.id,
       reviewers: env.TEMPLATE_REVIEWER_IDS,
-      ...data,
     });
-    if (
-      !found ||
-      (found.ownerId !== session.user.id &&
-        !server.isTemplateReviewer(
-          session.user.id,
-          env.TEMPLATE_REVIEWER_IDS ?? "",
-        ))
-    )
-      throw new Error("Template not found");
-    await server.refreshTemplatePreviews({
+    if (!found) throw new Error("Template not found");
+    const previews = await import("./template-preview.server");
+    if (data.retry) {
+      if (
+        !session ||
+        (found.ownerId !== session.user.id &&
+          !catalog.isTemplateReviewer(
+            session.user.id,
+            env.TEMPLATE_REVIEWER_IDS ?? "",
+          ))
+      )
+        throw new Error("Template not found");
+      await previews.retryTemplatePreview({
+        db: context.db,
+        templateId: data.templateId,
+      });
+    }
+    await previews.refreshTemplatePreviews({
       db: context.db,
       bucket: env.SOURCES,
-      ...data,
+      templateId: data.templateId,
     });
   });
 
@@ -122,7 +125,7 @@ export const openTemplate = createServerFn({ method: "POST" })
   .validator(openTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("./template.server");
+    const server = await import("./template-snapshot.server");
     return server.openTemplate({
       db: context.db,
       bucket: env.SOURCES,
@@ -135,7 +138,7 @@ export const reportTemplate = createServerFn({ method: "POST" })
   .validator(reportTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("./template.server");
+    const server = await import("./template-review.server");
     return server.reportTemplate({
       db: context.db,
       userId: session.user.id,
@@ -147,7 +150,7 @@ export const getTemplateReviewQueue = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
     const session = await ensureSession();
-    const server = await import("./template.server");
+    const server = await import("./template-review.server");
     return server.templateReviewQueue({
       db: context.db,
       userId: session.user.id,
@@ -160,7 +163,7 @@ export const reviewTemplate = createServerFn({ method: "POST" })
   .validator(reviewTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("./template.server");
+    const server = await import("./template-review.server");
     return server.reviewTemplate({
       db: context.db,
       userId: session.user.id,
@@ -168,24 +171,3 @@ export const reviewTemplate = createServerFn({ method: "POST" })
       ...data,
     });
   });
-
-export const seedTemplateStarters = createServerFn({ method: "POST" }).handler(
-  async ({ context }) => {
-    const session = await ensureSession();
-    const server = await import("./template-seed.server");
-    const result = await server.seedTemplateStarters({
-      db: context.db,
-      bucket: env.SOURCES,
-      userId: session.user.id,
-      reviewers: env.TEMPLATE_REVIEWER_IDS,
-    });
-    const previews = await import("./template.server");
-    for (const item of result)
-      await previews.refreshTemplatePreviews({
-        db: context.db,
-        bucket: env.SOURCES,
-        templateId: item.id,
-      });
-    return result;
-  },
-);

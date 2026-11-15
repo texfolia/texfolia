@@ -10,6 +10,7 @@ import { z } from "zod";
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
 import { Button, buttonVariants } from "#/components/ui/button";
+import { useTemplatePreviews } from "#/lib/template-preview";
 import {
   getTemplate,
   getTemplateAccount,
@@ -83,6 +84,7 @@ export const Route = createFileRoute("/template/$templateId")({
 function TemplatePage() {
   const { template, account } = Route.useLoaderData();
   const router = useRouter();
+  useTemplatePreviews([template]);
   const navigate = Route.useNavigate();
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
@@ -127,7 +129,7 @@ function TemplatePage() {
               />
             ) : (
               <p className="px-8 py-24 text-center">
-                {template.status === "failed"
+                {template.previewStatus === "failed"
                   ? "Preview unavailable"
                   : "Generating the first-page preview…"}
               </p>
@@ -246,35 +248,39 @@ function TemplatePage() {
                 <h2 className="font-medium">
                   {
                     {
-                      building: "Preparing your snapshot",
-                      pending: "Waiting for publisher review",
+                      pending: "Waiting for review",
                       rejected: "Template not approved",
-                      failed: "Preview generation failed",
                     }[template.status]
                   }
                 </h2>
                 <p className="text-muted-foreground text-sm">
                   {template.error ||
                     (template.status === "pending"
-                      ? "A reviewer checks new publishers before their templates become available. Your snapshot will keep this URL."
+                      ? "A reviewer checks each snapshot before it becomes available. Your snapshot will keep this URL."
                       : "Only you and reviewers can see this page until the template is approved.")}
                 </p>
-                {template.status === "building" && (
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        await refreshTemplatePreview({
-                          data: { templateId: template.id },
-                        });
-                        await router.invalidate();
-                      })
-                    }
-                  >
-                    Check preview status
-                  </Button>
-                )}
+              </div>
+            )}
+            {template.previewStatus === "failed" && template.canManage && (
+              <div className="mt-6 space-y-3" role="status">
+                <p className="text-sm">
+                  {template.error ||
+                    "Preview unavailable. You can retry this snapshot."}
+                </p>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await refreshTemplatePreview({
+                        data: { templateId: template.id, retry: true },
+                      });
+                      await router.invalidate();
+                    })
+                  }
+                >
+                  Retry preview
+                </Button>
               </div>
             )}
             {error && (

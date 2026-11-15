@@ -96,6 +96,7 @@ export type Engine = ((
   preview?: Uint8Array;
 }>) & { prewarm?: () => Promise<void> };
 const redeliverAfterMs = 60 * 60_000;
+export const legacyRetentionMs = 24 * 60 * 60_000;
 
 export function createJobs(options: {
   store: ObjectStore;
@@ -110,8 +111,10 @@ export function createJobs(options: {
   const sourceKey = (id: string) => `sources/${id}.json`;
   const pending = async (id: string) => {
     const object = await store.head(sourceKey(id));
-    return object
-      ? queuedSchema.parse(JSON.parse(object.metadata ?? "null"))
+    if (!object) return null;
+    const job = queuedSchema.parse(JSON.parse(object.metadata ?? "null"));
+    return Date.parse(job.createdAt) > Date.now() - legacyRetentionMs
+      ? job
       : null;
   };
   const terminal = async (id: string) => {
@@ -223,6 +226,20 @@ export function createJobs(options: {
       return store.read(`compilations/${id}.${extension}`);
     },
     async recover() {
+      // Sweep every legacy namespace, including pre-job-record PDFs and partial writes.
+      // Project coordinator objects have a separate projects/ namespace and retention.
+      const before = Date.now() - legacyRetentionMs;
+      for (const prefix of [
+        "sources/",
+        "results/",
+        "compilations/",
+        "transcripts/",
+        "sent/",
+        "running/",
+        "attempts/",
+      ])
+        for await (const key of store.keys(prefix, before))
+          await store.remove(key);
       for await (const key of store.keys("sources/")) {
         const id = jobIdSchema.safeParse(
           key.slice("sources/".length, -".json".length),

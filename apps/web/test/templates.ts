@@ -7,12 +7,15 @@ import { createDb } from "@texfolia/db";
 import {
   member,
   organization,
+  project,
   projectCollaborator,
   projectNode,
   template,
   user,
 } from "@texfolia/db/schema";
-import { eq } from "drizzle-orm";
+import { seedTemplates } from "@texfolia/db/seed-templates";
+import { templateStarters } from "@texfolia/db/template-starters";
+import { eq, inArray, isNull } from "drizzle-orm";
 import { getPlatformProxy } from "wrangler";
 
 import { createProjectNode } from "../src/lib/project-node.server";
@@ -28,24 +31,30 @@ import {
   getProject,
   getProjects,
 } from "../src/lib/project.server";
-import { seedTemplateStarters } from "../src/lib/template-seed.server";
+import {
+  findTemplate,
+  getTemplate,
+  listTemplates,
+  templateArchive,
+} from "../src/lib/template-catalog.server";
+import { collectTemplateObjects } from "../src/lib/template-cleanup.server";
+import {
+  retryTemplatePreview,
+  refreshTemplatePreviews,
+} from "../src/lib/template-preview.server";
+import {
+  reportTemplate,
+  reviewTemplate,
+  templateReviewQueue,
+} from "../src/lib/template-review.server";
+import {
+  openTemplate,
+  publishTemplate,
+} from "../src/lib/template-snapshot.server";
 import {
   publishTemplateSchema,
   templateSnapshotSchema,
 } from "../src/lib/template.schema";
-import {
-  collectTemplateObjects,
-  findTemplate,
-  getTemplate,
-  listTemplates,
-  openTemplate,
-  publishTemplate,
-  refreshTemplatePreviews,
-  reportTemplate,
-  reviewTemplate,
-  templateArchive,
-  templateReviewQueue,
-} from "../src/lib/template.server";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -78,6 +87,8 @@ const png = new Uint8Array(
   ),
 );
 const submissions = new Map<string, unknown>();
+const failedJobs = new Set<string>();
+let seededIds: string[] = [];
 let serviceDown = false;
 const compiler = {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,21 +98,32 @@ const compiler = {
     const path = new URL(request.url).pathname;
     if (path === "/compile") {
       const id = request.headers.get("X-Compilation-Id");
-      assert(id && !submissions.has(id), "A snapshot should compile only once");
+      assert(id && !submissions.has(id), "An attempt should compile only once");
+      assert.equal(request.headers.get("X-Compile-Plan"), "pro");
+      assert(
+        request.headers.get("X-Compile-User")?.startsWith("template-preview:"),
+      );
       submissions.set(id, await request.json());
       return Response.json({ status: "queued" }, { status: 202 });
     }
     if (path.startsWith("/jobs/"))
       return submissions.has(path.slice(6))
-        ? Response.json({ status: "succeeded" })
+        ? Response.json({
+            status: failedJobs.has(path.slice(6)) ? "failed" : "succeeded",
+          })
         : new Response(null, { status: 404 });
     if (path.endsWith(".png"))
       return new Response(png, { headers: { "Content-Type": "image/png" } });
     throw new Error(`Unexpected compiler path ${path}`);
   },
 } satisfies Pick<Fetcher, "fetch">;
-const refresh = (templateId: string) =>
-  refreshTemplatePreviews({ db, bucket, compiler, templateId });
+const refresh = async (templateId: string) => {
+  await db
+    .update(template)
+    .set({ previewNextAttemptAt: new Date(0) })
+    .where(eq(template.id, templateId));
+  await refreshTemplatePreviews({ db, bucket, compiler, templateId });
+};
 
 try {
   for (const id of [publisherId, viewerId, editorId, reviewerId])
@@ -256,7 +278,7 @@ try {
   assert.equal(
     (await getTemplate({ db, templateId: published.id, userId: publisherId }))
       ?.status,
-    "building",
+    "pending",
   );
   assert(
     !(await listTemplates({ db })).some((item) => item.id === published.id),
@@ -275,11 +297,15 @@ try {
   assert.equal(
     (await getTemplate({ db, templateId: published.id, userId: publisherId }))
       ?.status,
-    "building",
+    "pending",
   );
   serviceDown = false;
   await refresh(published.id);
-  assert.deepEqual(submissions.get(published.id), {
+  const firstAttempt = (
+    await findTemplate({ db, templateId: published.id, userId: publisherId })
+  )?.previewJobId;
+  assert(firstAttempt);
+  assert.deepEqual(submissions.get(firstAttempt), {
     mainFile: "main.tex",
     preview: true,
     files: {
@@ -604,8 +630,58 @@ try {
     userId: viewerId,
     data: { ...data, projectId: personal.id },
   });
+  const retrySource = await findTemplate({
+    db,
+    templateId: republished.id,
+    userId: viewerId,
+  });
+  assert(retrySource);
+  failedJobs.add(retrySource.previewJobId);
   await refresh(republished.id);
   await refresh(republished.id);
+  assert.equal(
+    (await findTemplate({ db, templateId: republished.id, userId: viewerId }))
+      ?.previewStatus,
+    "failed",
+  );
+  await assert.rejects(
+    retryTemplatePreview({ db, templateId: republished.id }),
+    /Wait a minute/,
+  );
+
+  assert.equal(
+    (await getTemplate({ db, templateId: republished.id, userId: viewerId }))
+      ?.status,
+    "pending",
+  );
+  await reviewTemplate({
+    db,
+    templateId: republished.id,
+    userId: reviewerId,
+    reviewers: reviewerId,
+    decision: "approved",
+  });
+  await db
+    .update(template)
+    .set({ previewStartedAt: new Date(Date.now() - 61_000) })
+    .where(eq(template.id, republished.id));
+  const retries = await Promise.allSettled([
+    retryTemplatePreview({ db, templateId: republished.id }),
+    retryTemplatePreview({ db, templateId: republished.id }),
+  ]);
+  assert.equal(
+    retries.filter((result) => result.status === "fulfilled").length,
+    1,
+  );
+  const newAttempt = await findTemplate({ db, templateId: republished.id });
+  assert(newAttempt && newAttempt.previewJobId !== retrySource.previewJobId);
+  assert.deepEqual(newAttempt.snapshot, retrySource.snapshot);
+  await refresh(republished.id);
+  await refresh(republished.id);
+  assert.equal(
+    (await getTemplate({ db, templateId: republished.id }))?.previewStatus,
+    "ready",
+  );
   assert.equal(
     (await getTemplate({ db, templateId: republished.id }))?.status,
     "approved",
@@ -681,7 +757,7 @@ try {
     ).sourceContents[copiedMain.id],
     sourceText,
   );
-  assert.equal(submissions.size, 3);
+  assert.equal(submissions.size, 4);
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60_000);
   await db
     .update(template)
@@ -708,30 +784,44 @@ try {
     }),
     /Publishing limit reached/,
   );
+  const projectCount = (await db.select().from(project)).length;
+  let partialUploads = 0;
   await assert.rejects(
-    seedTemplateStarters({
+    seedTemplates({
       db,
-      bucket,
-      userId: publisherId,
-      reviewers: reviewerId,
+      putSource: async (key, bytes) => {
+        if (++partialUploads === 2) throw new Error("Interrupted seed upload");
+        await bucket.put(key, bytes);
+      },
     }),
-    /Not authorized/,
+    /Interrupted seed upload/,
   );
-  const seeds = await seedTemplateStarters({
-    db,
-    bucket,
-    userId: reviewerId,
-    reviewers: reviewerId,
-  });
+  assert.equal(
+    (await db.select().from(template).where(isNull(template.ownerId))).length,
+    0,
+    "An incomplete seed is not published",
+  );
+  const concurrentSeeds = await Promise.all(
+    [1, 2].map(() =>
+      seedTemplates({ db, putSource: (key, bytes) => bucket.put(key, bytes) }),
+    ),
+  );
+  const seeds = concurrentSeeds[0];
+  assert(seeds);
+  assert.deepEqual(concurrentSeeds[1], seeds);
+  seededIds = seeds.map((item) => item.id);
   assert.equal(seeds.length, 3);
   assert.deepEqual(
-    await seedTemplateStarters({
+    await seedTemplates({
       db,
-      bucket,
-      userId: reviewerId,
-      reviewers: reviewerId,
+      putSource: (key, bytes) => bucket.put(key, bytes),
     }),
     seeds,
+  );
+  assert.equal(
+    (await db.select().from(project)).length,
+    projectCount,
+    "Seeds do not create projects",
   );
   for (const seeded of seeds) {
     const stored = await findTemplate({
@@ -739,24 +829,91 @@ try {
       templateId: seeded.id,
       userId: reviewerId,
     });
-    assert(stored && stored.license === "CC0-1.0");
+    assert(
+      stored &&
+        stored.license === "CC0-1.0" &&
+        stored.ownerId === null &&
+        stored.status === "approved",
+    );
+    const originalStarter = templateStarters.find(
+      (starter) => starter.title === seeded.title,
+    );
+    assert(originalStarter);
+    assert.deepEqual(stored.tags, originalStarter.tags);
     const files = templateSnapshotSchema.parse(stored.snapshot);
+    const main = files.find((node) => node.name === "main.tex");
+    assert(main?.objectKey);
+    assert.equal(
+      await (await bucket.get(main.objectKey))!.text(),
+      originalStarter.source,
+    );
     const license = files.find((node) => node.name === "LICENSE.txt");
     assert(license?.objectKey);
     assert(
       (await (await bucket.get(license.objectKey))!.text()).includes("CC0-1.0"),
     );
   }
+  const retainedCopy = await openTemplate({
+    db,
+    bucket,
+    userId: editorId,
+    data: { templateId: seeds[0]!.id, organizationId: null },
+  });
+  assert.equal(
+    (
+      await getProject({
+        db,
+        bucket,
+        ownerId: editorId,
+        projectId: retainedCopy.id,
+      })
+    ).name,
+    "Simple article",
+  );
+  const namedCopies = await Promise.all(
+    [1, 2].map(() =>
+      openTemplate({
+        db,
+        bucket,
+        userId: editorId,
+        data: { templateId: seeds[0]!.id, organizationId: null },
+      }),
+    ),
+  );
+  const names = await Promise.all(
+    namedCopies.map((item) =>
+      getProject({ db, bucket, ownerId: editorId, projectId: item.id }).then(
+        (item) => item.name,
+      ),
+    ),
+  );
+  assert.deepEqual(names.sort(), ["Simple article (2)", "Simple article (3)"]);
   await db.delete(user).where(eq(user.id, viewerId));
+  assert.equal(await getTemplate({ db, templateId: unlisted.id }), null);
+  await collectTemplateObjects({
+    db,
+    bucket,
+    olderThan: new Date(Date.now() + 60_000),
+  });
+  assert.equal(
+    (await bucket.list({ prefix: `templates/${unlisted.id}/` })).objects.length,
+    0,
+  );
+  assert(
+    await getTemplate({ db, templateId: seeds[0]!.id }),
+    "Curated templates have no account dependency",
+  );
   assert.equal(
     (await getProject({ db, bucket, ownerId: editorId, projectId: team.id }))
       .organizationId,
     organizationId,
   );
   console.log(
-    "Template integration passed: real Postgres/local R2, immutable snapshots, text/binary/tree copies, source deletion, personal/org access and revocation, licenses, concurrent publishing limits, unlisted visibility, preview persistence, new-publisher review, reports and rejection.",
+    "Template integration passed: real Postgres/local R2, immutable snapshots, text/binary/tree copies, source deletion, personal/org access and revocation, licenses, concurrent publishing limits, unlisted visibility, preview persistence, snapshot review, reports and rejection.",
   );
 } finally {
+  if (seededIds.length)
+    await db.delete(template).where(inArray(template.id, seededIds));
   await db.delete(organization).where(eq(organization.id, organizationId));
   for (const id of [publisherId, viewerId, editorId, reviewerId])
     await db.delete(user).where(eq(user.id, id));

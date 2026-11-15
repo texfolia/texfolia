@@ -3,7 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { templateStarters } from "../../web/src/lib/template-starters";
+import { templateStarters } from "@texfolia/db/template-starters";
+
 import { createEngineClient } from "../src/engine";
 import { createLocalRuntime } from "../src/local";
 

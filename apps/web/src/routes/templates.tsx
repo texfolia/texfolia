@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
 import { buttonVariants } from "#/components/ui/button";
+import { useTemplatePreviews } from "#/lib/template-preview";
 import { listTemplates } from "#/lib/template.functions";
 
 export const Route = createFileRoute("/templates")({
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/templates")({
 
 function TemplatesPage() {
   const templates = Route.useLoaderData();
+  useTemplatePreviews(templates);
   const { page } = Route.useSearch();
   return (
     <>
@@ -59,14 +61,22 @@ function TemplatesPage() {
                   className="group block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4"
                 >
                   <div className="bg-muted overflow-hidden rounded-lg border">
-                    <img
-                      src={`/api/templates/${item.id}/preview`}
-                      alt={`First page of ${item.title}`}
-                      loading="lazy"
-                      width="600"
-                      height="780"
-                      className="aspect-[10/13] w-full object-cover object-top transition-transform duration-200 motion-safe:group-hover:scale-[1.02]"
-                    />
+                    {item.previewStatus === "ready" ? (
+                      <img
+                        src={`/api/templates/${item.id}/preview`}
+                        alt={`First page of ${item.title}`}
+                        loading="lazy"
+                        width="600"
+                        height="780"
+                        className="aspect-[10/13] w-full object-cover object-top transition-transform duration-200 motion-safe:group-hover:scale-[1.02]"
+                      />
+                    ) : (
+                      <p className="flex aspect-[10/13] items-center justify-center text-sm">
+                        {item.previewStatus === "failed"
+                          ? "Preview unavailable"
+                          : "Generating preview…"}
+                      </p>
+                    )}
                   </div>
                   <h2 className="mt-4 text-xl font-medium group-hover:underline">
                     {item.title}
@@ -97,7 +107,7 @@ function TemplatesPage() {
             <p className="text-muted-foreground mt-3">
               {page
                 ? "Return to the previous page to keep browsing."
-                : "Be among the first to share a template. New publishers are reviewed before their templates appear here."}
+                : "Be among the first to share a template. Each snapshot is reviewed before it appears here."}
             </p>
           </section>
         )}
