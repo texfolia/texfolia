@@ -207,10 +207,8 @@ checks, Oxlint, and formatting checks. Run `bun run format` to apply Oxfmt and
 Gofmt. Oxlint and Oxfmt use the root `.oxlintrc.json` and `.oxfmtrc.json`
 configurations. `bun run build` builds the web app and LaTeX engine image.
 
-`bun run lint` also checks local Markdown links, Tailwind-only styles, unused files,
-and dependencies. Run `bun run check:repo` or `bun run check:unused` separately
-while editing. Knip entries include manually run scripts and integration checks;
-keep those entries current when adding a new entry point.
+`bun run lint` also checks local Markdown links and Tailwind-only styles.
+Run `bun run check:repo` separately while editing.
 
 Run `bun run lint:fix` to apply automatic Oxlint fixes.
 

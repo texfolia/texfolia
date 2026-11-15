@@ -1,0 +1,96 @@
+import { expect, test } from "bun:test";
+
+import {
+  projectMetadataVersion,
+  type ProjectMetadata,
+} from "./project-metadata";
+
+const main = {
+  id: "main",
+  projectId: "project",
+  parentId: "root",
+  name: "main.tex",
+  kind: "text",
+} satisfies ProjectMetadata["nodes"][number];
+
+const metadata = {
+  nodes: [
+    {
+      id: "root",
+      projectId: "project",
+      parentId: null,
+      name: "Project",
+      kind: "folder",
+    },
+    main,
+    {
+      id: "folder",
+      projectId: "project",
+      parentId: "root",
+      name: "chapters",
+      kind: "folder",
+    },
+    {
+      id: "image",
+      projectId: "project",
+      parentId: "root",
+      name: "figure.png",
+      kind: "binary",
+    },
+  ],
+  sourceVersions: {
+    main: { objectKey: "sources/before.tex", updatedAt: 1 },
+    image: { objectKey: "sources/figure.png", updatedAt: 1 },
+  },
+  canWrite: true,
+} satisfies ProjectMetadata;
+
+test("live text exports tolerate autosaves while compilation detects saved text changes", async () => {
+  const saved = {
+    ...metadata,
+    sourceVersions: {
+      ...metadata.sourceVersions,
+      main: { objectKey: "sources/after.tex", updatedAt: 2 },
+    },
+  };
+  expect(await projectMetadataVersion({ ...saved, textSource: "live" })).toBe(
+    await projectMetadataVersion({ ...metadata, textSource: "live" }),
+  );
+  expect(await projectMetadataVersion(saved)).not.toBe(
+    await projectMetadataVersion(metadata),
+  );
+});
+
+test("live text exports still detect binary source changes", async () => {
+  const changed = {
+    ...metadata,
+    sourceVersions: {
+      ...metadata.sourceVersions,
+      image: { objectKey: "sources/replacement.png", updatedAt: 2 },
+    },
+  };
+  expect(
+    await projectMetadataVersion({ ...changed, textSource: "live" }),
+  ).not.toBe(await projectMetadataVersion({ ...metadata, textSource: "live" }));
+});
+
+test("live text exports detect created, deleted, renamed, and moved files", async () => {
+  const before = await projectMetadataVersion({
+    ...metadata,
+    textSource: "live",
+  });
+  for (const nodes of [
+    [...metadata.nodes, { ...main, id: "new", name: "new.tex" }],
+    metadata.nodes.filter((node) => node.id !== "main"),
+    metadata.nodes.map((node) =>
+      node.id === "main" ? { ...node, name: "renamed.tex" } : node,
+    ),
+    metadata.nodes.map((node) =>
+      node.id === "main" ? { ...node, parentId: "folder" } : node,
+    ),
+  ]) {
+    expect(
+      await projectMetadataVersion({ ...metadata, nodes, textSource: "live" }),
+    ).not.toBe(before);
+  }
+});

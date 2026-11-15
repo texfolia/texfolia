@@ -23,7 +23,10 @@ export type ProjectMetadata = z.infer<typeof projectMetadataSchema>;
 export function projectMetadataVersion({
   nodes,
   sourceVersions,
-}: Pick<ProjectMetadata, "nodes" | "sourceVersions">) {
+  textSource = "saved",
+}: Pick<ProjectMetadata, "nodes" | "sourceVersions"> & {
+  textSource?: "saved" | "live";
+}) {
   return hashSource(
     new TextEncoder().encode(
       JSON.stringify(
@@ -34,7 +37,9 @@ export function projectMetadataVersion({
             parentId,
             name,
             kind,
-            sourceVersions[id]?.objectKey ?? null,
+            kind === "text" && textSource === "live"
+              ? null
+              : (sourceVersions[id]?.objectKey ?? null),
           ]),
       ),
     ),
