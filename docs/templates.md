@@ -84,11 +84,13 @@ user accounts or projects and bypass the user publish API and its limits.
 After applying the schema, run from the repository root:
 
 ```sh
-DATABASE_URL=postgres://user:password@127.0.0.1:5432/db bun run --cwd apps/web templates:seed --local
+bun run db:seed
 ```
 
-Local seeding uses the web app's default Wrangler R2 persistence. Visit the gallery
-to generate previews. No local scheduled event is required.
+Local seeding reads the web app's database environment and uses its default
+Wrangler R2 persistence. It does not start Postgres or apply the schema.
+Start the [snapshot engine](../apps/compiler/README.md#run-locally), then visit
+the gallery to generate previews. No local scheduled event is required.
 
 For a deployed database, set `DATABASE_URL` and `TEMPLATE_SEED_BUCKET` to matching
 targets. Configure Wrangler authentication with access to that bucket. Then run:

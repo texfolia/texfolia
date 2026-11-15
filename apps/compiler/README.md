@@ -54,31 +54,46 @@ From the repository root, configure the environment files described in the
 [root setup guide](../../README.md#local-development), start Docker, and run:
 
 ```sh
-bun run dev
+bun run dev:compiler
 ```
 
-Turbo builds `texfolia-latex-engine:local` and the compiler API image, starts
-Postgres and the compiler, waits for health checks, applies the schema, and then
-starts the web app. The compiler listens at `http://localhost:8080`. Docker
-Compose reloads its Bun process when the compiler source changes.
+Turbo builds `texfolia-latex-engine:local` and starts the Hono compiler as a local
+Bun process at `http://localhost:8080`. Bun restarts the process when compiler
+source changes. This command does not start Postgres or change the database.
+`bun run dev` starts both apps and Postgres. Apply the schema explicitly with
+`bun run db:push` before the first web app run and after schema changes.
 
-Ctrl+C stops the development processes. To stop any remaining Compose services,
-run `docker compose stop` from the repository root. You can select the web
-package with `bunx turbo run dev --filter=web`; the compiler companion still starts.
+The API uses `/var/run/docker.sock` to create containers named
+`texfolia-project-<projectId>`. Each container publishes its engine port on a
+random loopback port. Set `DOCKER_SOCKET` if your Docker host uses a different
+socket path. The socket requires a trusted Docker host. Project containers keep
+their names across API restarts and retain their image until removed.
+Compiler source objects, pending manifests, revisions, and PDFs persist in
+`apps/compiler/.cache/compiler.sqlite`. `COMPILER_DB_PATH` overrides this path.
 
-Compose mounts the Docker socket into the compiler API. The API creates
-containers named `texfolia-project-<projectId>` on the Compose network. The
-socket requires a trusted Docker host. Local project containers keep their
-project names across API restarts and retain their image until removed.
-The `compiler-data` volume keeps source objects, pending manifests, revisions, and PDFs.
+`bun run build` builds the engine image and web app through Turbo.
+`bunx turbo run build --filter=compiler` builds only the engine image.
+`ENGINE_IMAGE` overrides the image used for project engines. The build command
+tags the default `texfolia-latex-engine:local` image.
 
-`bun run build` builds both compiler images and the web app through Turbo.
-`bunx turbo run build --filter=compiler` builds only the compiler images.
-The private `latex-engine` Compose service serves legacy `/compile` jobs.
+Legacy `/compile` jobs, including template previews, use `ENGINE_URL`, which
+defaults to `http://127.0.0.1:8081`. After building the engine image, start an engine
+for these jobs in a separate terminal:
 
-Project containers remain assigned until removed with
-`docker rm -f texfolia-project-<projectId>`. Stopping Compose does not remove
-containers created by the API.
+```sh
+docker run --rm --name texfolia-snapshot-engine --platform linux/amd64 -p 127.0.0.1:8081:8080 texfolia-latex-engine:local
+```
+
+Ctrl+C stops the local compiler process. Project containers remain assigned
+until removed with `docker rm -f texfolia-project-<projectId>`. Compose manages
+only Postgres, so `docker compose stop` does not stop project containers.
+
+If you used the previous Compose setup, run `docker compose down --remove-orphans`
+to stop its compiler and engine services. Remove existing project containers with
+`docker rm -f texfolia-project-<projectId>` so the API recreates them with loopback
+ports. The local process uses its own SQLite file instead of the old
+`compiler-data` volume. To retain that compiler state, copy `compiler.sqlite`
+from the stopped volume into `apps/compiler/.cache/` before starting the API.
 
 ## API reference
 
