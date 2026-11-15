@@ -605,11 +605,8 @@ try {
     .locator('[data-slot="dialog-content"]')
     .waitFor({ state: "detached" });
   await capture(owner, "workspace-dark");
-  await owner
-    .getByRole("button", { name: "Document history", exact: true })
-    .click();
-  await owner.locator('section[aria-label="Document history"]').waitFor();
-  await capture(owner, "history-dark");
+  await owner.locator('[data-testid="git-panel"]').waitFor();
+  await capture(owner, "git-dark");
   await owner.setViewportSize({ width: 375, height: 812 });
   await owner
     .getByRole("button", { name: "Toggle project sidebar", exact: true })

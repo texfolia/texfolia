@@ -17,7 +17,7 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 
 Organization projects inherit access from membership. The workspace explains this and shows no personal-project sharing form. Organization creation, invitations, and membership administration have no management UI in v1. The invitation acceptance route remains available for existing invitations.
 
-The public header links to Templates and Pricing. Git integration is canceled and has no launch claim or workspace control. The Pro AI assistant is part of v1.
+The public header links to Templates and Pricing. GitHub and GitLab integration is available from the right sidebar. Repositories can be imported from Projects. The Pro AI assistant is part of v1.
 
 ## Release policy content
 

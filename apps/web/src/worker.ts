@@ -3,6 +3,7 @@ import { createDb } from "@texfolia/db";
 
 import { reconcileAiUsage } from "./lib/ai/billing.server";
 import { aiConfig } from "./lib/ai/gateway.server";
+import { collectGitObjects } from "./lib/git.server";
 import { collectProjectSources } from "./lib/project-source.server";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
 import { refreshTemplatePreviews } from "./lib/template-preview.server";
@@ -22,6 +23,7 @@ export default {
           bucket: env.SOURCES,
           collaboration: env.COLLABORATION,
         });
+        await collectGitObjects({ db, bucket: env.SOURCES });
         await collectTemplateObjects({ db, bucket: env.SOURCES });
       } else {
         const results = await Promise.allSettled([

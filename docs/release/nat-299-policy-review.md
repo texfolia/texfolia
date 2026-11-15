@@ -4,7 +4,7 @@ Status: draft for product-owner review. This document is not approved for public
 
 Prepared on November 15, 2026 against `990686e` on main. The owner requested a source-backed draft in the NAT-299 working session. No approved Texfolia policy text was found in the issue, its comments, or the repository. The draft below describes implemented behavior. The open decisions at the end are still needed for complete release policies.
 
-The public `/privacy` and `/terms` routes remain unchanged until the owner approves the final wording. The current fair-use paragraph is preserved verbatim below.
+The git and history sections include the NAT-267 implementation changes. The public `/privacy` and `/terms` routes remain unchanged until the owner approves the final wording. The current fair-use paragraph is preserved verbatim below.
 
 ## Proposed privacy copy
 
@@ -26,7 +26,7 @@ Project metadata and account records are stored in a database. Source files, doc
 
 #### Collaboration and sharing
 
-The owner of a personal project can grant view or edit access to another existing Texfolia account and can change or remove that access. Organization projects use organization membership for access. People with project access can see the project's files and the names, email addresses, and roles shown in its collaboration panel. Live collaboration shares presence and cursor information. Document history records contributor names and identifiers.
+The owner of a personal project can grant view or edit access to another existing Texfolia account and can change or remove that access. Organization projects use organization membership for access. People with project access can see the project's files and the names, email addresses, and roles shown in its collaboration panel. Live collaboration shares presence and cursor information. Git commits record author names and email addresses.
 
 Removing access prevents further authorized access through Texfolia. It does not recall files or other copies that a collaborator has already downloaded or saved.
 
@@ -52,9 +52,9 @@ Operational logs and traces record requests, errors, and compilation activity. C
 
 Your browser stores appearance and editor preferences and workspace layout. For editors, Texfolia also caches collaborative text in IndexedDB to support reconnecting and offline edits. Closing a project or signing out does not automatically erase that local document cache. You can remove it by clearing Texfolia's site data in your browser. Clearing site data can discard edits that have not synchronized.
 
-#### Document history, deletion, and retention
+#### Git history, deletion, and retention
 
-Unnamed text-document versions are retained for 30 days on all plans. Named versions remain until the project is deleted. History covers text content. It does not provide recovery of deleted files, binary files, or the folder structure. Versions of deleted text files become inaccessible and follow the same retention rules, including keeping named versions until project deletion.
+Version history uses git through a linked GitHub or GitLab repository. Commits record project files, including binary files and folder changes. Push commits to keep them on your repository host. Unlinking removes the local repository data and keeps current project files. Copies pushed to a repository host follow that host's retention and access policies.
 
 Deleting a project removes access and starts cleanup of its saved sources, collaboration state, history, and generated build artifacts. Some cleanup runs in background jobs and retries after failures. Project and file metadata can remain marked as deleted in the database. Deletion does not mean immediate erasure of every related record or copy.
 
@@ -64,7 +64,7 @@ AI run and request billing records survive project deletion and are separate fro
 
 ### Terms of service
 
-Texfolia provides an online LaTeX workspace with project storage, compilation, document history, collaboration, templates, and a managed AI assistant. The following sections describe the current service behavior and compile fair-use policy. The owner decisions below must be resolved before this draft becomes complete release terms.
+Texfolia provides an online LaTeX workspace with project storage, compilation, git version history, collaboration, templates, and a managed AI assistant. The following sections describe the current service behavior and compile fair-use policy. The owner decisions below must be resolved before this draft becomes complete release terms.
 
 #### Accounts and access
 
@@ -72,7 +72,7 @@ Sign-in uses email codes or a supported identity provider. Personal-project owne
 
 #### Documents, history, and exports
 
-You can export current project sources as a ZIP archive. Generated files can be included when a build exists. Text-document history retains unnamed versions for 30 days, with named versions kept until project deletion. History does not recover deleted files, binary files, or folder structure.
+You can export current project sources as a ZIP archive. Generated files can be included when a build exists. Git commits can preserve project files and folder structure. Push commits to keep a copy on GitHub or GitLab.
 
 Project deletion starts server cleanup and removes access. Background cleanup can take additional time and retry failures. Export any files you want to keep before deleting the project. The privacy notice explains the different treatment of document data, browser copies, templates, and billing records.
 
@@ -90,7 +90,7 @@ AI spending limits apply per user and per UTC calendar month. The default monthl
 
 #### Using the assistant
 
-The assistant sends conversation context and the project content it reads to the selected model service through Cloudflare AI Gateway. Its file edits are saved immediately and shared with collaborators. Review its answers and changes before relying on them. Document history and project exports provide ways to inspect or keep supported text versions and current sources.
+The assistant sends conversation context and the project content it reads to the selected model service through Cloudflare AI Gateway. Its file edits are saved immediately and shared with collaborators. Review its answers and changes before relying on them. Git commits and project exports provide ways to keep versions and current sources.
 
 #### Fair use
 
@@ -98,7 +98,7 @@ Fair use applies to compilation on all plans. Compile timeouts and request rate 
 
 #### First-release scope
 
-The first release includes the editor, compilation, document history, personal-project collaboration, reviewed templates, and the managed Pro assistant. Git integration is canceled. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming and duplication have no controls in v1.
+The first release includes the editor, compilation, GitHub and GitLab integration, personal-project collaboration, reviewed templates, and the managed Pro assistant. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming and duplication have no controls in v1.
 
 ## Owner decisions needed
 
@@ -130,7 +130,7 @@ These links support the factual draft. They are not evidence of legal approval o
 | Sharing names, email addresses, and roles                                          | [Sharing service](../../apps/web/src/lib/project-sharing.server.ts)                                                                                                                                                              |
 | Browser text cache and its lifecycle                                               | [Collaborative file](../../apps/web/src/lib/collaboration/file.ts)                                                                                                                                                               |
 | Preferences and workspace layout                                                   | [Settings storage](../../apps/web/src/lib/settings.functions.ts), [theme provider](../../apps/web/src/providers/theme-provider.tsx), [workspace](../../apps/web/src/routes/project/$projectId/-components/project-workspace.tsx) |
-| History duration and cleanup                                                       | [History policy](../../apps/web/src/lib/document-history.ts), [history behavior](../document-history.md)                                                                                                                         |
+| History duration and cleanup                                                       | [History policy](../../apps/web/src/lib/git.ts), [history behavior](../git-integration.md)                                                                                                                                       |
 | Template snapshots, review, license confirmation, and retention                    | [Template lifecycle](../templates.md), [template validation](../../apps/web/src/lib/template.schema.ts)                                                                                                                          |
 | AI context, immediate edits, Gateway payload flag, and run lifecycle               | [Assistant service](../../apps/web/src/lib/ai/chat.server.ts), [assistant tools](../../apps/web/src/lib/ai/tools.server.ts)                                                                                                      |
 | AI charging, caps, and retained payer records                                      | [AI billing setup](../ai-assistant.md), [AI schema](../../packages/db/src/schema.ts)                                                                                                                                             |

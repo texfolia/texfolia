@@ -166,7 +166,7 @@ try {
     const text = await publicPage.locator("main").innerText();
     assert.match(text, /10 MiB per source file; 50 MiB per project/);
     assert.match(text, /No AI assistant/);
-    assert.match(text, /30-day document history/);
+    assert.match(text, /GitHub and GitLab integration/);
     assert.doesNotMatch(
       text,
       /Contact Sales|100 GB|10 GB|1 GB|not available yet|100 projects|4 editors|10 editors/,

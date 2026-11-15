@@ -47,6 +47,12 @@ otherwise their personal Pro subscription, otherwise an eligible membership's
 subscription. The original customer and subscription are saved with each run,
 so later membership or subscription changes do not move existing charges.
 
+Git tools can inspect status and diffs, commit, push, pull, create branches, and
+switch branches. The assistant instructions require an explicit user request before
+git mutations. The **Generate message** button in the Git panel uses the same
+subscription, Gateway, spending cap, and usage meter. It suggests an editable
+message and creates no commit. See [Git integration](git-integration.md).
+
 ## Check metering
 
 Each model request first creates an `ai_request` row. Its reservation includes

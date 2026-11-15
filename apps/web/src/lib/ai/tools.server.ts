@@ -1,9 +1,12 @@
 import { toolDefinition } from "@tanstack/ai";
 import type { Db } from "@texfolia/db";
+import { user as userTable } from "@texfolia/db/schema";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { createAuth } from "../auth";
 import { handleCompileGet, handleCompilePost } from "../compile-route.server";
+import { gitBranchSchema } from "../git";
 import { parseCompileLog } from "../latex/compile-log";
 import { hashSource } from "../latex/source-sync";
 import { lockProject } from "../project-access.server";
@@ -66,7 +69,64 @@ export function projectTools({
       return { node, content };
     });
   }
+  async function gitAction(action: import("../git").GitAction) {
+    signal.throwIfAborted();
+    await aiEntitlement(db, userId);
+    const [user] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, userId));
+    if (!user) throw new Error("Sign in again.");
+    const result = await env.COLLABORATION.getByName(projectId).gitAction({
+      projectId,
+      user: { id: userId, name: user.name, email: user.email },
+      action,
+    });
+    return { status: result.status, diff: result.diff };
+  }
   return [
+    toolDefinition({
+      name: "git_status",
+      description:
+        "Read the current git branch, changed files, branches, and recent commits.",
+      inputSchema: z.object({}),
+    }).server(() => gitAction({ kind: "status" })),
+    toolDefinition({
+      name: "git_diff",
+      description:
+        "Read the saved working tree diff before suggesting or making a commit.",
+      inputSchema: z.object({}),
+    }).server(() => gitAction({ kind: "diff" })),
+    toolDefinition({
+      name: "git_commit",
+      description:
+        "Commit all non-ignored working tree changes with a message. Only when the user explicitly asks to commit.",
+      inputSchema: z.object({ message: z.string().trim().min(1).max(5000) }),
+    }).server(({ message }) => gitAction({ kind: "commit", message })),
+    toolDefinition({
+      name: "git_push",
+      description:
+        "Push the current branch to the linked remote. Only when the user explicitly asks to push.",
+      inputSchema: z.object({}),
+    }).server(() => gitAction({ kind: "push" })),
+    toolDefinition({
+      name: "git_pull",
+      description:
+        "Pull the current branch. Requires a clean working tree. Only when the user explicitly asks to pull.",
+      inputSchema: z.object({}),
+    }).server(() => gitAction({ kind: "pull" })),
+    toolDefinition({
+      name: "git_create_branch",
+      description:
+        "Create a branch from the current commit. Only when the user explicitly asks.",
+      inputSchema: z.object({ name: gitBranchSchema }),
+    }).server(({ name }) => gitAction({ kind: "branch", name })),
+    toolDefinition({
+      name: "git_checkout",
+      description:
+        "Switch to a local or remote branch. Requires a clean working tree. Only when the user explicitly asks.",
+      inputSchema: z.object({ name: gitBranchSchema }),
+    }).server(({ name }) => gitAction({ kind: "checkout", name })),
     toolDefinition({
       name: "list_files",
       description: "List the project's saved source files.",

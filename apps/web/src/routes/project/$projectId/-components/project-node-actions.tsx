@@ -82,7 +82,7 @@ export function ProjectNodeActions({
           </DialogTitle>
           <DialogDescription>
             {deleting
-              ? `This removes ${node.kind === "folder" ? "the folder and every file inside it" : "the file"}, including its document history. Download any content you need before continuing.`
+              ? `This removes ${node.kind === "folder" ? "the folder and every file inside it" : "the file"}. Committed versions remain in git history. Download any content you need before continuing.`
               : "Rename this item or move it to another folder."}
           </DialogDescription>
         </DialogHeader>
