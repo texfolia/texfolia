@@ -10,89 +10,89 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BillingRouteImport } from './routes/billing'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as PricingRouteImport } from './routes/pricing'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as TemplatesRouteImport } from './routes/templates'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
-import { Route as ProjectProjectIdRouteImport } from './routes/project.$projectId'
-import { Route as TemplateTemplateIdRouteImport } from './routes/template.$templateId'
-import { Route as TemplatesPublishRouteImport } from './routes/templates_.publish'
-import { Route as TemplatesReviewRouteImport } from './routes/templates_.review'
-import { Route as ApiAiProjectIdRouteImport } from './routes/api.ai.$projectId'
-import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
-import { Route as ApiCompileProjectIdRouteImport } from './routes/api.compile.$projectId'
-import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api.collaboration.$projectId.$nodeId'
-import { Route as ApiProjectsProjectIdMetadataRouteImport } from './routes/api.projects.$projectId.metadata'
-import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api.sources.$projectId.$nodeId'
-import { Route as ApiTemplatesTemplateIdPreviewRouteImport } from './routes/api.templates.$templateId.preview'
-import { Route as ApiTemplatesTemplateIdSourceRouteImport } from './routes/api.templates.$templateId.source'
+import { Route as BillingRouteRouteImport } from './routes/billing/route'
+import { Route as LoginRouteRouteImport } from './routes/login/route'
+import { Route as PricingRouteRouteImport } from './routes/pricing/route'
+import { Route as PrivacyRouteRouteImport } from './routes/privacy/route'
+import { Route as ProjectsRouteRouteImport } from './routes/projects/route'
+import { Route as TemplatesRouteRouteImport } from './routes/templates/route'
+import { Route as TermsRouteRouteImport } from './routes/terms/route'
+import { Route as AcceptInvitationInvitationIdRouteRouteImport } from './routes/accept-invitation/$invitationId/route'
+import { Route as ProjectProjectIdRouteRouteImport } from './routes/project/$projectId/route'
+import { Route as TemplateTemplateIdRouteRouteImport } from './routes/template/$templateId/route'
+import { Route as TemplatesPublishRouteRouteImport } from './routes/templates_/publish/route'
+import { Route as TemplatesReviewRouteRouteImport } from './routes/templates_/review/route'
+import { Route as ApiAiProjectIdRouteImport } from './routes/api/ai/$projectId'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiCompileProjectIdRouteImport } from './routes/api/compile/$projectId'
+import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api/collaboration/$projectId/$nodeId'
+import { Route as ApiProjectsProjectIdMetadataRouteImport } from './routes/api/projects/$projectId/metadata'
+import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api/sources/$projectId/$nodeId'
+import { Route as ApiTemplatesTemplateIdPreviewRouteImport } from './routes/api/templates/$templateId/preview'
+import { Route as ApiTemplatesTemplateIdSourceRouteImport } from './routes/api/templates/$templateId/source'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BillingRoute = BillingRouteImport.update({
+const BillingRouteRoute = BillingRouteRouteImport.update({
   id: '/billing',
   path: '/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginRoute = LoginRouteImport.update({
+const LoginRouteRoute = LoginRouteRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PricingRoute = PricingRouteImport.update({
+const PricingRouteRoute = PricingRouteRouteImport.update({
   id: '/pricing',
   path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PrivacyRoute = PrivacyRouteImport.update({
+const PrivacyRouteRoute = PrivacyRouteRouteImport.update({
   id: '/privacy',
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProjectsRoute = ProjectsRouteImport.update({
+const ProjectsRouteRoute = ProjectsRouteRouteImport.update({
   id: '/projects',
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TemplatesRoute = TemplatesRouteImport.update({
+const TemplatesRouteRoute = TemplatesRouteRouteImport.update({
   id: '/templates',
   path: '/templates',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TermsRoute = TermsRouteImport.update({
+const TermsRouteRoute = TermsRouteRouteImport.update({
   id: '/terms',
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AcceptInvitationInvitationIdRoute =
-  AcceptInvitationInvitationIdRouteImport.update({
+const AcceptInvitationInvitationIdRouteRoute =
+  AcceptInvitationInvitationIdRouteRouteImport.update({
     id: '/accept-invitation/$invitationId',
     path: '/accept-invitation/$invitationId',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ProjectProjectIdRoute = ProjectProjectIdRouteImport.update({
+const ProjectProjectIdRouteRoute = ProjectProjectIdRouteRouteImport.update({
   id: '/project/$projectId',
   path: '/project/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TemplateTemplateIdRoute = TemplateTemplateIdRouteImport.update({
+const TemplateTemplateIdRouteRoute = TemplateTemplateIdRouteRouteImport.update({
   id: '/template/$templateId',
   path: '/template/$templateId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TemplatesPublishRoute = TemplatesPublishRouteImport.update({
+const TemplatesPublishRouteRoute = TemplatesPublishRouteRouteImport.update({
   id: '/templates_/publish',
   path: '/templates/publish',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TemplatesReviewRoute = TemplatesReviewRouteImport.update({
+const TemplatesReviewRouteRoute = TemplatesReviewRouteRouteImport.update({
   id: '/templates_/review',
   path: '/templates/review',
   getParentRoute: () => rootRouteImport,
@@ -145,18 +145,18 @@ const ApiTemplatesTemplateIdSourceRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/billing': typeof BillingRoute
-  '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRoute
-  '/templates': typeof TemplatesRoute
-  '/terms': typeof TermsRoute
-  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
-  '/project/$projectId': typeof ProjectProjectIdRoute
-  '/template/$templateId': typeof TemplateTemplateIdRoute
-  '/templates/publish': typeof TemplatesPublishRoute
-  '/templates/review': typeof TemplatesReviewRoute
+  '/billing': typeof BillingRouteRoute
+  '/login': typeof LoginRouteRoute
+  '/pricing': typeof PricingRouteRoute
+  '/privacy': typeof PrivacyRouteRoute
+  '/projects': typeof ProjectsRouteRoute
+  '/templates': typeof TemplatesRouteRoute
+  '/terms': typeof TermsRouteRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
+  '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/template/$templateId': typeof TemplateTemplateIdRouteRoute
+  '/templates/publish': typeof TemplatesPublishRouteRoute
+  '/templates/review': typeof TemplatesReviewRouteRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -168,18 +168,18 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/billing': typeof BillingRoute
-  '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRoute
-  '/templates': typeof TemplatesRoute
-  '/terms': typeof TermsRoute
-  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
-  '/project/$projectId': typeof ProjectProjectIdRoute
-  '/template/$templateId': typeof TemplateTemplateIdRoute
-  '/templates/publish': typeof TemplatesPublishRoute
-  '/templates/review': typeof TemplatesReviewRoute
+  '/billing': typeof BillingRouteRoute
+  '/login': typeof LoginRouteRoute
+  '/pricing': typeof PricingRouteRoute
+  '/privacy': typeof PrivacyRouteRoute
+  '/projects': typeof ProjectsRouteRoute
+  '/templates': typeof TemplatesRouteRoute
+  '/terms': typeof TermsRouteRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
+  '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/template/$templateId': typeof TemplateTemplateIdRouteRoute
+  '/templates/publish': typeof TemplatesPublishRouteRoute
+  '/templates/review': typeof TemplatesReviewRouteRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -192,18 +192,18 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/billing': typeof BillingRoute
-  '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
-  '/projects': typeof ProjectsRoute
-  '/templates': typeof TemplatesRoute
-  '/terms': typeof TermsRoute
-  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
-  '/project/$projectId': typeof ProjectProjectIdRoute
-  '/template/$templateId': typeof TemplateTemplateIdRoute
-  '/templates_/publish': typeof TemplatesPublishRoute
-  '/templates_/review': typeof TemplatesReviewRoute
+  '/billing': typeof BillingRouteRoute
+  '/login': typeof LoginRouteRoute
+  '/pricing': typeof PricingRouteRoute
+  '/privacy': typeof PrivacyRouteRoute
+  '/projects': typeof ProjectsRouteRoute
+  '/templates': typeof TemplatesRouteRoute
+  '/terms': typeof TermsRouteRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
+  '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/template/$templateId': typeof TemplateTemplateIdRouteRoute
+  '/templates_/publish': typeof TemplatesPublishRouteRoute
+  '/templates_/review': typeof TemplatesReviewRouteRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -287,18 +287,18 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  BillingRoute: typeof BillingRoute
-  LoginRoute: typeof LoginRoute
-  PricingRoute: typeof PricingRoute
-  PrivacyRoute: typeof PrivacyRoute
-  ProjectsRoute: typeof ProjectsRoute
-  TemplatesRoute: typeof TemplatesRoute
-  TermsRoute: typeof TermsRoute
-  AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
-  ProjectProjectIdRoute: typeof ProjectProjectIdRoute
-  TemplateTemplateIdRoute: typeof TemplateTemplateIdRoute
-  TemplatesPublishRoute: typeof TemplatesPublishRoute
-  TemplatesReviewRoute: typeof TemplatesReviewRoute
+  BillingRouteRoute: typeof BillingRouteRoute
+  LoginRouteRoute: typeof LoginRouteRoute
+  PricingRouteRoute: typeof PricingRouteRoute
+  PrivacyRouteRoute: typeof PrivacyRouteRoute
+  ProjectsRouteRoute: typeof ProjectsRouteRoute
+  TemplatesRouteRoute: typeof TemplatesRouteRoute
+  TermsRouteRoute: typeof TermsRouteRoute
+  AcceptInvitationInvitationIdRouteRoute: typeof AcceptInvitationInvitationIdRouteRoute
+  ProjectProjectIdRouteRoute: typeof ProjectProjectIdRouteRoute
+  TemplateTemplateIdRouteRoute: typeof TemplateTemplateIdRouteRoute
+  TemplatesPublishRouteRoute: typeof TemplatesPublishRouteRoute
+  TemplatesReviewRouteRoute: typeof TemplatesReviewRouteRoute
   ApiAiProjectIdRoute: typeof ApiAiProjectIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
@@ -322,84 +322,84 @@ declare module '@tanstack/react-router' {
       id: '/billing'
       path: '/billing'
       fullPath: '/billing'
-      preLoaderRoute: typeof BillingRouteImport
+      preLoaderRoute: typeof BillingRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+      preLoaderRoute: typeof LoginRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
       id: '/pricing'
       path: '/pricing'
       fullPath: '/pricing'
-      preLoaderRoute: typeof PricingRouteImport
+      preLoaderRoute: typeof PricingRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
       fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
+      preLoaderRoute: typeof PrivacyRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects': {
       id: '/projects'
       path: '/projects'
       fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
+      preLoaderRoute: typeof ProjectsRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/templates': {
       id: '/templates'
       path: '/templates'
       fullPath: '/templates'
-      preLoaderRoute: typeof TemplatesRouteImport
+      preLoaderRoute: typeof TemplatesRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
       id: '/terms'
       path: '/terms'
       fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
+      preLoaderRoute: typeof TermsRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accept-invitation/$invitationId': {
       id: '/accept-invitation/$invitationId'
       path: '/accept-invitation/$invitationId'
       fullPath: '/accept-invitation/$invitationId'
-      preLoaderRoute: typeof AcceptInvitationInvitationIdRouteImport
+      preLoaderRoute: typeof AcceptInvitationInvitationIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/project/$projectId': {
       id: '/project/$projectId'
       path: '/project/$projectId'
       fullPath: '/project/$projectId'
-      preLoaderRoute: typeof ProjectProjectIdRouteImport
+      preLoaderRoute: typeof ProjectProjectIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/template/$templateId': {
       id: '/template/$templateId'
       path: '/template/$templateId'
       fullPath: '/template/$templateId'
-      preLoaderRoute: typeof TemplateTemplateIdRouteImport
+      preLoaderRoute: typeof TemplateTemplateIdRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/templates_/publish': {
       id: '/templates_/publish'
       path: '/templates/publish'
       fullPath: '/templates/publish'
-      preLoaderRoute: typeof TemplatesPublishRouteImport
+      preLoaderRoute: typeof TemplatesPublishRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/templates_/review': {
       id: '/templates_/review'
       path: '/templates/review'
       fullPath: '/templates/review'
-      preLoaderRoute: typeof TemplatesReviewRouteImport
+      preLoaderRoute: typeof TemplatesReviewRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ai/$projectId': {
@@ -463,18 +463,19 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BillingRoute: BillingRoute,
-  LoginRoute: LoginRoute,
-  PricingRoute: PricingRoute,
-  PrivacyRoute: PrivacyRoute,
-  ProjectsRoute: ProjectsRoute,
-  TemplatesRoute: TemplatesRoute,
-  TermsRoute: TermsRoute,
-  AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
-  ProjectProjectIdRoute: ProjectProjectIdRoute,
-  TemplateTemplateIdRoute: TemplateTemplateIdRoute,
-  TemplatesPublishRoute: TemplatesPublishRoute,
-  TemplatesReviewRoute: TemplatesReviewRoute,
+  BillingRouteRoute: BillingRouteRoute,
+  LoginRouteRoute: LoginRouteRoute,
+  PricingRouteRoute: PricingRouteRoute,
+  PrivacyRouteRoute: PrivacyRouteRoute,
+  ProjectsRouteRoute: ProjectsRouteRoute,
+  TemplatesRouteRoute: TemplatesRouteRoute,
+  TermsRouteRoute: TermsRouteRoute,
+  AcceptInvitationInvitationIdRouteRoute:
+    AcceptInvitationInvitationIdRouteRoute,
+  ProjectProjectIdRouteRoute: ProjectProjectIdRouteRoute,
+  TemplateTemplateIdRouteRoute: TemplateTemplateIdRouteRoute,
+  TemplatesPublishRouteRoute: TemplatesPublishRouteRoute,
+  TemplatesReviewRouteRoute: TemplatesReviewRouteRoute,
   ApiAiProjectIdRoute: ApiAiProjectIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,

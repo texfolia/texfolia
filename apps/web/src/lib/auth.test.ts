@@ -5,7 +5,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import Stripe from "stripe";
 
-import { loginSearchSchema } from "../routes/login";
+import { loginSearchSchema } from "../routes/login/route";
 import { createBillingPlugin, createOrganizationPlugin } from "./auth";
 import { enforceBillingScope } from "./billing.server";
 import type { sendEmail } from "./email";

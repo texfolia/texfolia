@@ -22,7 +22,6 @@ import {
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 
-import { ProjectNodeActions } from "#/components/project-node-actions";
 import {
   Collapsible,
   CollapsibleContent,
@@ -34,6 +33,8 @@ import {
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
 import type { ProjectNode } from "#/lib/project.functions";
+
+import { ProjectNodeActions } from "./project-node-actions";
 
 const fileIcons = new Map<string, Icon>(
   [

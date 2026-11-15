@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { ProjectWorkspace } from "#/components/project-workspace";
 import { getProject } from "#/lib/project.functions";
 import {
   createProjectFilesStore,
@@ -8,6 +7,8 @@ import {
 } from "#/providers/project-files-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
+
+import { ProjectWorkspace } from "./-components/project-workspace";
 
 export const Route = createFileRoute("/project/$projectId")({
   ssr: false,

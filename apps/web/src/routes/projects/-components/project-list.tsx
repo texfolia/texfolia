@@ -12,8 +12,6 @@ import { ClientOnly, Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
 import { useRef, useState } from "react";
 
-import { columns } from "#/components/project-columns";
-import { ProjectForm } from "#/components/project-form";
 import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
@@ -64,6 +62,9 @@ import {
 import { authClient } from "#/lib/auth-client";
 import { features } from "#/lib/features";
 import { useProjects } from "#/providers/projects-provider";
+
+import { columns } from "./project-columns";
+import { ProjectForm } from "./project-form";
 
 function SearchShortcut() {
   const formatShortcut = useFormatForDisplay();

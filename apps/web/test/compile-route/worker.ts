@@ -1,7 +1,7 @@
 import { createDb } from "@texfolia/db";
 
 import { createAuth } from "../../src/lib/auth";
-import { Route } from "../../src/routes/api.compile.$projectId";
+import { Route } from "../../src/routes/api/compile/$projectId";
 
 export default {
   async fetch(request: Request, env: Env) {

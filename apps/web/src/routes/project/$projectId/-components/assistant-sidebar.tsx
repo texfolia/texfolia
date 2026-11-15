@@ -5,10 +5,9 @@ import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
+import { Button } from "#/components/ui/button";
+import { Textarea } from "#/components/ui/textarea";
 import { aiConfigurationSchema, type AiConfiguration } from "#/lib/ai/schema";
-
-import { Button } from "./ui/button";
-import { Textarea } from "./ui/textarea";
 
 const dollars = new Intl.NumberFormat("en-US", {
   style: "currency",

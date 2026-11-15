@@ -2,11 +2,12 @@ import { IconArrowUpRight, IconFileText } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 
-import { DeleteProjectButton } from "#/components/delete-project-button";
 import { buttonVariants } from "#/components/ui/button";
 import type { Features } from "#/lib/features";
 import type { Project } from "#/lib/project.functions";
 import { useProjects } from "#/providers/projects-provider";
+
+import { DeleteProjectButton } from "./delete-project-button";
 
 const columnHelper = createColumnHelper<Features, Project>();
 

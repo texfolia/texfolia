@@ -9,7 +9,7 @@ import { downloadFile } from "#/lib/download-file";
 import { useTheme } from "#/providers/theme-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 
-const PdfViewer = lazy(() => import("#/components/pdf"));
+const PdfViewer = lazy(() => import("./pdf"));
 export function GeneratedFile({
   params,
 }: IDockviewPanelProps<{ path: string }>) {

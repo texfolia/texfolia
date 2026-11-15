@@ -9,8 +9,8 @@ import {
   deleteProjectNode,
 } from "../../src/lib/project-source.server";
 import { deleteProject } from "../../src/lib/project.server";
-import { Route as collaborationRoute } from "../../src/routes/api.collaboration.$projectId.$nodeId";
-import { Route as compileRoute } from "../../src/routes/api.compile.$projectId";
+import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
+import { Route as compileRoute } from "../../src/routes/api/compile/$projectId";
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration";
 
 // Exercise production route authorization with real signed sessions and Postgres.

@@ -30,16 +30,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { AssistantSidebar } from "#/components/assistant-sidebar";
-import { DocumentHistoryPanel } from "#/components/document-history";
-import { Editor } from "#/components/editor";
 import { editorChrome } from "#/components/editor-chrome";
-import { GeneratedFile } from "#/components/generated-file";
-import {
-  MarkdownPreview,
-  type MarkdownPreviewParams,
-} from "#/components/markdown-preview";
-import { ProjectSidebar } from "#/components/project-sidebar";
 import { Button } from "#/components/ui/button";
 import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
@@ -73,6 +64,16 @@ import {
   WorkspaceProvider,
 } from "#/providers/workspace-provider";
 
+import { AssistantSidebar } from "./assistant-sidebar";
+import { DocumentHistoryPanel } from "./document-history";
+import { Editor } from "./editor";
+import { GeneratedFile } from "./generated-file";
+import {
+  MarkdownPreview,
+  type MarkdownPreviewParams,
+} from "./markdown-preview";
+import { ProjectSidebar } from "./project-sidebar";
+
 type FilePanelParams = {
   node: ProjectNode;
   preview: boolean;
@@ -81,7 +82,7 @@ const noProblems: LatexProblem[] = [];
 const emptySubscribe = () => () => {};
 const noCollaborationStatus = () => undefined;
 
-const PdfViewer = lazy(() => import("#/components/pdf"));
+const PdfViewer = lazy(() => import("./pdf"));
 
 function FileEditor({
   params,

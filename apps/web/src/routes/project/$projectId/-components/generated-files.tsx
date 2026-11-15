@@ -1,7 +1,6 @@
 import { IconChevronRight, IconLock } from "@tabler/icons-react";
 import { useMemo } from "react";
 
-import { ProjectFileTree } from "#/components/project-file-tree";
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,6 +9,8 @@ import {
 import { SidebarMenuButton } from "#/components/ui/sidebar";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useWorkspace } from "#/providers/workspace-provider";
+
+import { ProjectFileTree } from "./project-file-tree";
 
 export function GeneratedFiles({
   onOpen,
