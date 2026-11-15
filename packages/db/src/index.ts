@@ -2,8 +2,8 @@ import { defineRelationsPart } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-import { authRelations, subscription, verification } from "./db/auth-schema";
-import { relations } from "./db/schema";
+import { authRelations, subscription, verification } from "./auth-schema";
+import { relations } from "./schema";
 
 // The generator omits tables without foreign keys from the relations callback.
 const standaloneAuthRelations = defineRelationsPart(

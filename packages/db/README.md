@@ -39,7 +39,9 @@ production must use committed migrations. Follow the
 
 ## Change the schema
 
-Template metadata, manifests, and reports are defined in `src/db/template-schema.ts`.
+Application tables, including project, template, and AI billing records, are defined in `src/schema.ts`.
+Generated Better Auth tables and relations are defined in `src/auth-schema.ts`.
+Both are exported through `@texfolia/db/schema`.
 NAT-287 adds independent preview state and account-free curated templates.
 Apply these schema changes with `bun run db:push`. See
 [Template lifecycle](../../docs/templates.md#schema-setup) for setup instructions
@@ -70,7 +72,7 @@ run again. It takes an exclusive table lock while rebuilding the index, so apply
 it during a maintenance window. After names have been reused, restoring the old
 index can fail because deleted rows can share names with active rows.
 
-1. Edit `src/db/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root.
+1. Edit `src/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`.
 2. Run `bun run db:push` against your local database.
 3. Run the integration check.
 
