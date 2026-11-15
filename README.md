@@ -42,27 +42,48 @@ The listener forwards events to `localhost:3000/api/auth/stripe/webhook`. Copy i
 
 ### Start the app
 
+Before the first run, start Postgres and apply the local schema:
+
+```sh
+bun run db:start
+bun run db:push
+```
+
+Run `bun run db:push` again after changing the schema. To add the original
+templates to Postgres and local R2, run `bun run db:seed` after applying the schema.
+Schema changes and seeds are explicit operations. `bun run dev` runs neither.
+
+Start both apps:
+
 ```sh
 bun run dev
 ```
 
-Turbo builds the compiler images, starts Postgres and the compiler, waits for
-service health, applies the database schema, and starts the web app at
-[localhost:3000](http://localhost:3000). The compiler reloads when its source
-changes. The first run downloads container images and caches the compiler's
-base LaTeX packages. Additional packages may need a network connection when
-first used.
+Turbo starts Postgres, waits for its health check, and starts the web app at
+[localhost:3000](http://localhost:3000). It also builds the LaTeX engine image
+and runs the Hono compiler locally with Bun's file watcher. The compiler starts
+a dedicated Docker engine container when a project first compiles. The first
+image build downloads and caches the base LaTeX packages. Additional packages
+may need a network connection when first used.
 
-Press Ctrl+C to stop the development processes. To stop any remaining Compose
-services, run `docker compose stop`. Database and compiler volumes persist
-between runs.
+Press Ctrl+C to stop the development processes. Postgres and project engine
+containers keep running. Run `docker compose stop` to stop Postgres. Database
+data persists in the Compose volume, and compiler data persists in
+`apps/compiler/.cache/compiler.sqlite`.
 
-Development and build commands delegate to Turbo. Filtering the
-web task also starts its compiler companion and setup dependencies:
+Development and build commands delegate to Turbo. To run one app independently:
 
 ```sh
-bunx turbo run dev --filter=web
+bun run dev:web
+bun run dev:compiler
 ```
+
+Run these in separate terminals when you need both apps. `dev:web` starts
+Postgres and the web app. `dev:compiler` builds the engine image and starts only
+the compiler API at `http://localhost:8080`. The equivalent Turbo filters are
+`bunx turbo run dev --filter=web` and `bunx turbo run dev --filter=compiler`.
+For template previews and other legacy snapshot jobs, follow the
+[compiler's local engine setup](apps/compiler/README.md#run-locally).
 
 Cloudflare simulates the email binding locally and logs the file containing
 each sign-in code or invitation. You can also inspect sent messages in
@@ -74,7 +95,7 @@ The web app reads `env.HYPERDRIVE.connectionString` in both environments. Local
 development uses `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` from
 `apps/web/.env`. Compiler requests use loopback HTTP locally and a service
 binding on Cloudflare. The local compiler stores jobs and PDFs in its SQLite
-volume.
+database.
 
 See the [database guide](packages/db/README.md) for standalone schema operations
 and integration checks. For deployed environments, follow
@@ -184,7 +205,7 @@ bun run test
 These commands include the Bun tests, Go race tests, Go vet, TypeScript
 checks, Oxlint, and formatting checks. Run `bun run format` to apply Oxfmt and
 Gofmt. Oxlint and Oxfmt use the root `.oxlintrc.json` and `.oxfmtrc.json`
-configurations. `bun run build` builds the web app and compiler images.
+configurations. `bun run build` builds the web app and LaTeX engine image.
 
 `bun run lint` also checks local Markdown links, Tailwind-only styles, unused files,
 and dependencies. Run `bun run check:repo` or `bun run check:unused` separately

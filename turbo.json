@@ -23,22 +23,16 @@
     },
     "compiler#build": {
       "cache": false,
-      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
-    },
-    "compiler#dev:setup": {
-      "dependsOn": ["compiler#build"],
-      "cache": false,
-      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
+      "passThroughEnv": ["DOCKER_*"]
     },
     "compiler#dev": {
-      "dependsOn": ["compiler#dev:setup"],
+      "dependsOn": ["compiler#build"],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
     },
     "web#dev": {
-      "dependsOn": ["compiler#dev:setup", "@texfolia/db#dev:setup"],
-      "with": ["compiler#dev"],
+      "dependsOn": ["@texfolia/db#db:start"],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
@@ -103,10 +97,6 @@
     "latex:assets": {
       "cache": false
     },
-    "@texfolia/db#dev:setup": {
-      "cache": false,
-      "passThroughEnv": ["DATABASE_URL", "DOCKER_*", "COMPOSE_*"]
-    },
     "db:generate": {
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]
@@ -114,6 +104,14 @@
     "db:migrate": {
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]
+    },
+    "db:start": {
+      "cache": false,
+      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
+    },
+    "db:seed": {
+      "cache": false,
+      "passThroughEnv": ["*"]
     }
   }
 }

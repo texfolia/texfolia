@@ -5,10 +5,19 @@ The app uses Drizzle and `pg` against PostgreSQL. Workers receive their connecti
 ## Run locally
 
 Configure `packages/db/.env` and `apps/web/.env` as described in the root README.
-The default database is `db` on `localhost:5432`. Run `bun run dev`
-from the repository root. Turbo starts local Postgres,
-waits for its health check, applies the schema, and then starts the web app.
-Run commands in this guide from the repository root.
+The default database is `db` on `localhost:5432`. Run commands in this guide
+from the repository root. Start Postgres and apply the schema before the first
+app run:
+
+```sh
+bun run db:start
+bun run db:push
+bun run dev
+```
+
+`bun run dev` starts Postgres and waits for its health check before starting
+the web app. It does not push the schema or seed data. Run `bun run db:push`
+explicitly after schema changes. Compose manages only Postgres.
 
 For standalone schema commands, copy `.env.example` to `.env` in this directory and set `DATABASE_URL`. Use a direct Postgres connection string for schema commands, including on Neon. `DATABASE_URL` must be configured; there is no fallback connection string.
 
@@ -17,8 +26,12 @@ bun run db:push
 ```
 
 Standalone schema tasks use the configured database without starting Docker.
-Local development starts Postgres and applies the schema in its internal setup
-task. Local development and CI use `db:push`. No generated migrations or
+`bun run db:seed` seeds the original templates in the local database and the
+web app's local R2 bucket. Run it after `db:push`; it does not apply the schema.
+See [Template lifecycle](../../docs/templates.md#seed-original-templates) for
+seed behavior and remote seeding.
+
+Local development and CI use `db:push`. No generated migrations or
 snapshots are tracked yet. Generate and review the baseline only after the v1
 schema settles, immediately before the first production deploy. Staging and
 production must use committed migrations. Follow the

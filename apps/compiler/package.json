@@ -4,11 +4,10 @@
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
-    "build": "docker compose -f ../../compose.yaml build compiler latex-engine",
+    "build": "docker build --platform linux/amd64 -t texfolia-latex-engine:local -f Dockerfile ../..",
     "cf:typegen": "wrangler types --include-runtime=false --strict-vars=false && oxfmt worker-configuration.d.ts",
     "deploy": "wrangler deploy",
-    "dev": "docker compose -f ../../compose.yaml up --no-build --no-recreate --attach-dependencies compiler db",
-    "dev:setup": "docker compose -f ../../compose.yaml up --no-build --wait compiler",
+    "dev": "bun --watch src/index.ts",
     "format": "gofmt -w engine",
     "format:check": "bun run scripts/check-go-format.ts",
     "lint": "cd engine && go vet ./...",
