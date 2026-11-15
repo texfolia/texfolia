@@ -267,7 +267,7 @@ Organization setup follows the [Better Auth organization plugin](https://better-
 and [Stripe organization billing](https://better-auth.com/docs/plugins/stripe#using-with-organizations) documentation.
 `src/lib/auth.ts` contains the organization configuration and billing authorization.
 Auth tables and relations, including organizations, are generated into
-`packages/db/src/db/auth-schema.ts` from the shared auth configuration.
+`packages/db/src/auth-schema.ts` from the shared auth configuration.
 
 Personal accounts work without an organization. Existing projects remain owned by users,
 and selecting an organization does not transfer personal projects or subscriptions.

@@ -6,7 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "auth:schema": "bunx auth generate --output ../../packages/db/src/db/auth-schema.ts --config ./auth.config.ts --yes",
+    "auth:schema": "bunx auth generate --output ../../packages/db/src/auth-schema.ts --config ./auth.config.ts --yes",
     "billing:setup": "bun run scripts/setup-billing.ts",
     "build": "bun run latex:assets && vite build",
     "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --strict-vars=false",
