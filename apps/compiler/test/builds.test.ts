@@ -29,7 +29,7 @@ const output = (text: string) => ({
   },
 });
 
-test("shared build and archive survive failure/restart; clean retries bypass cache and old generations are removed", async () => {
+async function createBuildFixture() {
   const root = await mkdtemp(join(tmpdir(), "builds-"));
   const path = join(root, "store.sqlite");
   const projectId = crypto.randomUUID();
@@ -88,6 +88,32 @@ test("shared build and archive survive failure/restart; clean retries bypass cac
   }
   const file = (path: string) =>
     request(`/build/files?path=${encodeURIComponent(path)}`);
+  return {
+    path,
+    projectId,
+    calls,
+    request,
+    snapshot,
+    compile,
+    file,
+    async restart() {
+      await runtime.close();
+      runtime = createLocalRuntime({
+        path,
+        engine,
+        projectEngine: () => engine,
+      });
+    },
+    async close() {
+      await runtime.close();
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
+
+test("shared build and archive survive a failed compile and restart", async () => {
+  const fixture = await createBuildFixture();
+  const { compile, snapshot, file, calls, request } = fixture;
   try {
     let good = await compile("first");
     expect(good.artifacts).toMatchObject({
@@ -129,11 +155,20 @@ test("shared build and archive survive failure/restart; clean retries bypass cac
       (await request("/build/files?path=main.aux", { method: "DELETE" }))
         .status,
     ).toBe(404);
-    await runtime.close();
-    runtime = createLocalRuntime({ path, engine, projectEngine: () => engine });
+    await fixture.restart();
     expect(await (await file("main.pdf")).text()).toBe("%PDF-first");
     await compile("recovered");
     expect(calls.at(-1)?.clean).toBe(true);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("cache failures retry cleanly and explicit clean builds bypass a populated cache", async () => {
+  const fixture = await createBuildFixture();
+  const { compile, calls } = fixture;
+  try {
+    await compile("first");
     const second = await compile("cache fails");
     expect(second.current?.status).toBe("succeeded");
     expect(second.stale).toBe(false);
@@ -142,12 +177,23 @@ test("shared build and archive survive failure/restart; clean retries bypass cac
         .filter((call) => call.text === "cache fails")
         .map((call) => call.clean),
     ).toEqual([false, true]);
-    expect((await request(`/compilations/${firstId}.pdf`)).status).toBe(404);
     await compile("clean", true);
     expect(calls.at(-1)).toEqual({ text: "clean", clean: true });
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("engine changes invalidate the cache and cleanup removes old build generations", async () => {
+  const fixture = await createBuildFixture();
+  const { compile, calls, path, projectId, request, snapshot, file } = fixture;
+  try {
+    const first = await compile("first");
+    const firstId = first.artifacts!.id;
     await compile("foreign engine");
     await compile("after engine change");
     expect(calls.at(-1)?.clean).toBe(true);
+    expect((await request(`/compilations/${firstId}.pdf`)).status).toBe(404);
     const db = new Database(path, { readonly: true });
     const cleanupDeadline = Date.now() + 3000;
     while (
@@ -174,14 +220,12 @@ test("shared build and archive survive failure/restart; clean retries bypass cac
       "archive-after engine change",
     );
     db.close();
-    await runtime.close();
-    runtime = createLocalRuntime({ path, engine, projectEngine: () => engine });
+    await fixture.restart();
     expect((await request("/build", { method: "DELETE" })).status).toBe(204);
     expect((await snapshot()).artifacts).toBeNull();
     expect((await file("main.pdf")).status).toBe(404);
   } finally {
-    await runtime.close();
-    await rm(root, { recursive: true, force: true });
+    await fixture.close();
   }
 });
 
