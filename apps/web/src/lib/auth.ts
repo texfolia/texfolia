@@ -133,9 +133,15 @@ export function createAuth(db: Db) {
       enabled: true,
       disableSignUp: true,
     },
-    disabledPaths: ["/request-password-reset", "/send-verification-email"],
+    disabledPaths: [
+      "/request-password-reset",
+      "/send-verification-email",
+      "/get-access-token",
+      "/refresh-token",
+    ],
     rateLimit: { enabled: true },
     hooks: { before: enforceBillingScope },
+    account: { encryptOAuthTokens: true, accountLinking: { enabled: true } },
     socialProviders: {
       github: {
         clientId: process.env.GITHUB_CLIENT_ID!,

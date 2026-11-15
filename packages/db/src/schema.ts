@@ -71,6 +71,15 @@ export const project = pgTable(
   ],
 );
 
+export const projectGit = pgTable("project_git", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => project.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  url: text("url").notNull(),
+  objectKey: text("object_key").notNull(),
+});
+
 export const projectCollaborator = pgTable(
   "project_collaborator",
   {

@@ -47,8 +47,7 @@ $20 per user per UTC month. Each run retains its original payer. See the
 
 The pricing page advertises the enforced 10 MiB per source file and 50 MiB per
 project on every plan. It adds no project-count or editor-count caps. Document
-history remains 30 days for automatic versions, with named versions kept on every
-plan. Compile admission and fair-use behavior are unchanged.
+history uses GitHub or GitLab repositories on every plan. AI commit messages use the Pro assistant and are metered. Compile admission and fair-use behavior are unchanged.
 
 ## Verify billing
 

@@ -82,6 +82,10 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             env,
             ...access,
             body: await readAiBody(request),
+            purpose:
+              new URL(request.url).searchParams.get("git-message") === "1"
+                ? "commit-message"
+                : undefined,
           });
         } catch (error) {
           return aiErrorResponse(error);

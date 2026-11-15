@@ -63,6 +63,7 @@ import { authClient } from "#/lib/auth-client";
 import { features } from "#/lib/features";
 import { useProjects } from "#/providers/projects-provider";
 
+import { GitImport } from "./git-import";
 import { columns } from "./project-columns";
 import { ProjectForm } from "./project-form";
 
@@ -185,6 +186,7 @@ export function ProjectList() {
               New project
             </DialogTrigger>
           </div>
+          <GitImport />
           <InputGroup className="max-w-sm">
             <InputGroupInput
               ref={search}

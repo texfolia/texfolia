@@ -10,6 +10,7 @@ import {
   aiRun,
   project,
   projectNode,
+  projectGit,
   session,
   subscription,
   user,
@@ -19,6 +20,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import { z } from "zod";
 
+import { GitRepository } from "../src/lib/git-repository.server";
 import { hashSource } from "../src/lib/latex/source-sync";
 import { createProject } from "../src/lib/project.server";
 
@@ -446,6 +448,12 @@ try {
   assert.equal((await send(path, freeId, "POST", chatBody())).status, 404);
   assert.equal((await mf.dispatchFetch(`${origin}${path}`)).status, 401);
   assert.equal(inference.length, 0, "denied requests never reach the model");
+  for (const endpoint of ["get-access-token", "refresh-token"]) {
+    assert.equal(
+      (await send(`/api/auth/${endpoint}`, userId, "POST", {})).status,
+      404,
+    );
+  }
   assert.equal((await send(path, userId)).status, 200);
   assert.equal(
     (
@@ -509,7 +517,52 @@ try {
     409,
     "a duplicate run never repeats inference",
   );
+  const git = new GitRepository();
+  await git.init("https://github.com/fixture/project.git");
+  git.overlay({ "main.tex": new TextEncoder().encode(source) });
+  const initialCommit = await git.commit("Initial version", {
+    name: "Test",
+    email: "test@example.com",
+  });
+  const gitKey = `git/${paidProject}/fixture.json`;
+  await bucket.put(gitKey, git.serialize());
+  await db.insert(projectGit).values({
+    projectId: paidProject,
+    provider: "github",
+    url: "https://github.com/fixture/project.git",
+    objectKey: gitKey,
+  });
+  mode = "simple";
+  const generated = await send(`${path}?git-message=1`, userId, "POST", {});
+  assert.equal(generated.status, 200, await generated.clone().text());
+  assert(
+    z.object({ message: z.string().min(1) }).parse(await generated.json())
+      .message,
+  );
+  const generationCall = inference.at(-1);
+  assert(
+    generationCall &&
+      !JSON.stringify(generationCall.body).includes('"name":"git_commit"'),
+    "message generation has no mutation tools",
+  );
+  const [linkedGit] = await db
+    .select()
+    .from(projectGit)
+    .where(eq(projectGit.projectId, paidProject));
+  assert.equal(linkedGit?.objectKey, gitKey, "generation does not commit");
+  assert.equal((await git.status()).commits[0]?.oid, initialCommit);
+  assert.equal(
+    (await send(`/api/ai/${freeProject}?git-message=1`, freeId, "POST", {}))
+      .status,
+    403,
+  );
   mode = "error";
+  const failedMessage = await send(`${path}?git-message=1`, userId, "POST", {});
+  assert.equal(
+    failedMessage.status,
+    503,
+    "failed generation reports an error instead of suggesting a partial message",
+  );
   const failure = chatBody();
   const failed = await send(path, userId, "POST", failure);
   const failureStream = await failed.text();
@@ -544,6 +597,87 @@ try {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(`${origin}/project/${paidProject}`);
+  const gitPanel = page.locator('[data-testid="git-panel"]');
+  await gitPanel.getByLabel("Current branch").waitFor();
+  await gitPanel
+    .getByRole("button", { name: "Review diff", exact: true })
+    .click();
+  await gitPanel.getByLabel("Working tree diff").waitFor();
+  await gitPanel
+    .getByRole("button", { name: "Generate message · Pro", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="git-panel"] textarea',
+      )?.value.length,
+  );
+  assert(await gitPanel.getByLabel("Commit message").inputValue());
+  assert.equal(
+    (
+      await db
+        .select()
+        .from(projectGit)
+        .where(eq(projectGit.projectId, paidProject))
+    )[0]?.objectKey,
+    gitKey,
+    "UI generation leaves history unchanged",
+  );
+  const gitScreenshots = new URL("../../../.audit/nat-267/", import.meta.url)
+    .pathname;
+  await mkdir(gitScreenshots, { recursive: true });
+  await page.screenshot({
+    path: join(gitScreenshots, "git-connected-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page
+    .getByRole("button", { name: "Toggle project sidebar", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      !!document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="git-panel"] textarea',
+      )?.value.length,
+  );
+  await gitPanel.getByLabel("Commit message").scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: join(gitScreenshots, "git-connected-mobile.png"),
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Close project sidebar", exact: true })
+    .click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gitPanel.getByLabel("Commit message").fill("Save revised document");
+  await gitPanel
+    .getByRole("button", { name: "Commit changes", exact: true })
+    .click();
+  await gitPanel.getByText("Working tree is clean.", { exact: true }).waitFor();
+  await gitPanel.getByLabel("New branch name").fill("ui-draft");
+  await gitPanel.getByRole("button", { name: "Create", exact: true }).click();
+  await gitPanel.getByLabel("Current branch").selectOption("ui-draft");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="git-panel"] option:checked')
+        ?.textContent === "ui-draft",
+  );
+  await gitPanel
+    .getByRole("button", { name: "Unlink repository", exact: true })
+    .click();
+  await gitPanel
+    .getByRole("button", { name: "Unlink remote", exact: true })
+    .click();
+  await gitPanel.getByLabel("Repository URL").waitFor();
+  assert.equal(
+    (
+      await db
+        .select()
+        .from(projectGit)
+        .where(eq(projectGit.projectId, paidProject))
+    ).length,
+    0,
+  );
   await page.getByRole("button", { name: "Toggle assistant" }).click();
   await page.getByRole("combobox", { name: "Model for this chat" }).waitFor();
   await page
@@ -647,7 +781,7 @@ try {
   assert.deepEqual(pageErrors, []);
   await context.close();
   console.info(
-    `AI assistant passed: authenticated Worker SSE, server file tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
+    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
   );
 } finally {
   await browser.close();

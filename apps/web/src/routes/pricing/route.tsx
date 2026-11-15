@@ -22,7 +22,6 @@ import {
   TableRow,
 } from "#/components/ui/table";
 import { paidPlans } from "#/lib/billing";
-import { historyPolicy } from "#/lib/document-history";
 import {
   maxSourceFileBytes,
   maxSourceProjectBytes,
@@ -47,7 +46,7 @@ const PLANS = [
     features: [
       "No project or editor count limit",
       storagePolicy,
-      historyPolicy,
+      "GitHub and GitLab integration",
       "15-second compile timeout",
       "No AI assistant",
     ],
@@ -63,7 +62,7 @@ const PLANS = [
     features: [
       "No project or editor count limit",
       storagePolicy,
-      historyPolicy,
+      "GitHub and GitLab integration",
       "5-minute compile timeout",
       "AI assistant, billed separately at model cost + 20%",
       "Monthly metered AI billing with a per-user spend cap",
@@ -81,7 +80,7 @@ const PLANS = [
       "Pro benefits for every organization member",
       "No project or editor count limit",
       storagePolicy,
-      historyPolicy,
+      "GitHub and GitLab integration",
       "5-minute compile timeout",
       "AI assistant, billed separately at model cost + 20%",
       "Monthly metered AI billing with a per-user spend cap",
@@ -103,7 +102,12 @@ const COMPARISON = [
   ["Projects", "No count limit", "No count limit", "No count limit"],
   ["Editors per project", "No count limit", "No count limit", "No count limit"],
   ["Source storage", storagePolicy, storagePolicy, storagePolicy],
-  ["Document history", historyPolicy, historyPolicy, historyPolicy],
+  [
+    "Git version history",
+    "GitHub and GitLab integration",
+    "GitHub and GitLab integration",
+    "GitHub and GitLab integration",
+  ],
   ["Compile timeout", "15 seconds", "5 minutes", "5 minutes"],
   [
     "AI assistant",

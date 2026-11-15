@@ -1,7 +1,6 @@
 import {
   IconAlertCircle,
   IconFiles,
-  IconHistory,
   IconFileTypePdf,
   IconX,
 } from "@tabler/icons-react";
@@ -30,6 +29,7 @@ import { useWorkspace } from "#/providers/workspace-provider";
 
 import { CreateNodeForm } from "./create-node-form";
 import { GeneratedFiles } from "./generated-files";
+import { GitPanel } from "./git-panel";
 import { ProjectCollaboration } from "./project-collaboration";
 import { ProjectExport } from "./project-export";
 import { ProjectFileTree } from "./project-file-tree";
@@ -46,11 +46,9 @@ export function ProjectSidebar({
   onToggleProblems,
   onOpenGenerated,
   sources,
-  onOpenHistory,
   onOpenPreview,
 }: {
   name: string;
-  onOpenHistory: () => void;
   onOpenPreview: () => void;
   nodes: ProjectNode[];
   activeId: string | undefined;
@@ -111,18 +109,6 @@ export function ProjectSidebar({
                   >
                     <IconFileTypePdf />
                     <span className="sr-only">PDF preview</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    tooltip="Document history"
-                    aria-label="Document history"
-                    disabled={!ready}
-                    onClick={onOpenHistory}
-                  >
-                    <IconHistory />
-                    <span className="sr-only">Document history</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
@@ -203,7 +189,8 @@ export function ProjectSidebar({
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
-          <div className="max-h-[40%] shrink-0 overflow-auto">
+          <div className="max-h-[55%] shrink-0 overflow-auto">
+            {ready && <GitPanel />}
             <ProjectCollaboration />
           </div>
           <ProjectExport name={name} sources={sources} />

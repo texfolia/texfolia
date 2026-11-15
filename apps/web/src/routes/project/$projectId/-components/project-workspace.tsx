@@ -65,7 +65,6 @@ import {
 } from "#/providers/workspace-provider";
 
 import { AssistantSidebar } from "./assistant-sidebar";
-import { DocumentHistoryPanel } from "./document-history";
 import { Editor } from "./editor";
 import { GeneratedFile } from "./generated-file";
 import {
@@ -237,7 +236,6 @@ function CompiledPdf() {
 }
 
 const components = {
-  history: DocumentHistoryPanel,
   editor: FileEditor,
   generated: GeneratedFile,
   pdf: CompiledPdf,
@@ -1407,25 +1405,6 @@ export function ProjectWorkspace({
           <ProjectSidebar
             name={name}
             onOpenPreview={openPdfPreview}
-            onOpenHistory={() => {
-              const existing = api.current?.getPanel("document-history");
-              if (existing) {
-                existing.api.setActive();
-                return;
-              }
-              const source = api.current?.panels.find(
-                (panel) => panel.api.component === "editor",
-              );
-              api.current?.addPanel({
-                id: "document-history",
-                component: "history",
-                title: "Document history",
-                params: { nodeId: activeId },
-                position: source
-                  ? { referencePanel: source.id, direction: "within" }
-                  : undefined,
-              });
-            }}
             nodes={nodes}
             activeId={activeId}
             ready={ready}
