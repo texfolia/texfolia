@@ -76,8 +76,10 @@ The original CC0 article, generic two-column article, and thesis sources live in
 `packages/db/src/template-starters.ts`. They contain no third-party templates or
 university or publisher assets. Each snapshot includes `LICENSE.txt`.
 
-The seed uses `drizzle-seed` with explicit values and deterministic IDs. Each
-starter is inserted only after its R2 uploads succeed. Reruns and concurrent runs
+The CLI lives in `packages/db/scripts/seed-templates.ts` and calls
+[`drizzle-seed`](https://orm.drizzle.team/docs/seed-overview) with explicit values
+and deterministic IDs. Each starter is inserted only after its R2 uploads succeed.
+Reruns and concurrent runs
 skip committed snapshots. Failed transactions can be retried. Seeds create no
 user accounts or projects and bypass the user publish API and its limits.
 
@@ -87,8 +89,12 @@ After applying the schema, run from the repository root:
 bun run db:seed
 ```
 
-Local seeding reads the web app's database environment and uses its default
-Wrangler R2 persistence. It does not start Postgres or apply the schema.
+Local seeding reads `DATABASE_URL` from `packages/db/.env` or the shell and uses
+the web app's default Wrangler R2 persistence in `apps/web/.wrangler/state/v3`.
+It also accepts `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` when
+`DATABASE_URL` is unset. It does not start Postgres or apply the schema.
+To use an isolated R2 directory, run
+`bun run --cwd packages/db templates:seed --local --persist-to /absolute/path`.
 Start the [snapshot engine](../apps/compiler/README.md#run-locally), then visit
 the gallery to generate previews. No local scheduled event is required.
 
@@ -96,7 +102,7 @@ For a deployed database, set `DATABASE_URL` and `TEMPLATE_SEED_BUCKET` to matchi
 targets. Configure Wrangler authentication with access to that bucket. Then run:
 
 ```sh
-bun run --cwd apps/web templates:seed --remote
+bun run --cwd packages/db templates:seed --remote
 ```
 
 Remote mode uses Wrangler's explicit `--remote` object uploads. The command prints
@@ -116,6 +122,7 @@ with `DATABASE_URL` pointed at that database, then run from the repository root:
 
 ```sh
 DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:push
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run packages/db/test/template-seed-cli.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/templates.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:template-lifecycle
 bun test apps/compiler/test/jobs.test.ts

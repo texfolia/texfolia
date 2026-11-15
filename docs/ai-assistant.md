@@ -7,8 +7,8 @@ the page; it is not a saved chat history.
 
 ## Set up Cloudflare and Stripe
 
-1. Apply `packages/db/sql/20261114_ai_assistant.sql` before deploying. For a new
-   local database, `bun run db:push` includes the same tables.
+1. Apply the schema locally with `bun run db:push`. For production, follow the
+   [baseline migration setup](database-deployment.md#prepare-the-baseline-at-launch).
 2. Create a Cloudflare AI Gateway, enable persistent logs, enable Unified Billing,
    and fund its credits. Create an account token with **Workers AI Read**,
    **AI Gateway Read**, and **AI Gateway Run** permissions. Models are fetched

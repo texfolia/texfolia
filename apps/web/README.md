@@ -99,8 +99,9 @@ including after an uncertain compiler response. Reusing an ID with different
 inputs, another user, or an older job without a digest returns a generic 409.
 Each retry rechecks session and project write access.
 
-Apply `packages/db/sql/20261114_compile_request_digest.sql` before deploying this
-route, or use `bun run db:push` locally. Run its Postgres regression check with:
+Apply the schema with `bun run db:push` locally. For production, follow the
+[baseline migration setup](../../docs/database-deployment.md#prepare-the-baseline-at-launch).
+Run the route's Postgres regression check with:
 
 ```sh
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:compile-route
@@ -141,8 +142,7 @@ Clean disconnected rooms retain an hourly alarm that checks deletion too.
 The hourly source sweep also reconciles rooms in `project_collaboration`, even
 when a room has never saved an R2 source. Registrations survive account and
 organization cascades. Failed cleanup or SQL acknowledgement leaves the
-registration for the next sweep. Apply
-`packages/db/sql/20261113_collaboration_cleanup.sql` before deploying this Worker.
+registration for the next sweep. The registry is part of the Drizzle schema.
 
 WebSockets use the hibernation API. Attachments retain file identity and presence
 across eviction. Automatic ping/pong responses do not wake the object. On wake,

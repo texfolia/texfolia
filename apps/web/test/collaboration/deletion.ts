@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
 import type { Db } from "@texfolia/db";
 import {
@@ -172,21 +171,9 @@ export async function checkDeletion({
     .update(project)
     .set({ deletedAt: new Date() })
     .where(eq(project.id, idle.projectId));
-  await db
-    .delete(projectCollaboration)
-    .where(eq(projectCollaboration.projectId, idle.projectId));
-  const migration = await readFile(
-    new URL(
-      "../../../../packages/db/sql/20261113_collaboration_cleanup.sql",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  await db.$client.query(migration);
-  await db.$client.query(migration);
   assert(
     await registered(idle.projectId),
-    "Migration must recover legacy clean rooms",
+    "A clean room's registration survives project deletion",
   );
   await mf.unsafeEvictDurableObject(
     "collaboration-test",

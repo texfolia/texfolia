@@ -14,7 +14,7 @@
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:push": "turbo run db:push",
-    "db:seed": "turbo run db:seed",
+    "db:seed": "turbo run db:seed --",
     "db:start": "turbo run db:start",
     "deploy": "turbo run deploy",
     "dev": "turbo run dev",
