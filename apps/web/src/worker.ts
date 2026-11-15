@@ -1,6 +1,8 @@
 import handler from "@tanstack/react-start/server-entry";
 import { createDb } from "@texfolia/db";
 
+import { reconcileAiUsage } from "./lib/ai/billing.server";
+import { aiConfig } from "./lib/ai/gateway.server";
 import { collectProjectSources } from "./lib/project-source.server";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
 import { refreshTemplatePreviews } from "./lib/template-preview.server";
@@ -21,7 +23,21 @@ export default {
           collaboration: env.COLLABORATION,
         });
         await collectTemplateObjects({ db, bucket: env.SOURCES });
-      } else await refreshTemplatePreviews({ db, bucket: env.SOURCES });
+      } else {
+        const results = await Promise.allSettled([
+          refreshTemplatePreviews({ db, bucket: env.SOURCES }),
+          Promise.resolve().then(() =>
+            process.env.CLOUDFLARE_AI_API_TOKEN
+              ? reconcileAiUsage({ db, config: aiConfig() })
+              : undefined,
+          ),
+        ]);
+        const failures = results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
+        );
+        if (failures.length)
+          throw new AggregateError(failures, "Scheduled maintenance failed");
+      }
     } finally {
       await db.$client.end();
     }
