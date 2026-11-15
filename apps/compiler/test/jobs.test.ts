@@ -273,3 +273,145 @@ test("redelivery after an interrupted result write recovers the matching PDF and
   expect(retried?.timing?.backendMs).toBeGreaterThan(firstWait);
   expect(retried?.timing?.attempt).toBe(2);
 });
+
+test("legacy retention removes terminal, abandoned, and pre-record artifacts in the real local store", async () => {
+  const { Database } = await import("bun:sqlite");
+  const { legacyRetentionMs } = await import("../src/jobs");
+  const root = await mkdtemp(join(tmpdir(), "texfolia-legacy-retention-"));
+  const path = join(root, "jobs.sqlite");
+  let runs = 0;
+  const engine = async () => {
+    runs++;
+    return output;
+  };
+  const open = () =>
+    createLocalRuntime({ path, engine, projectEngine: () => engine });
+  await open().close();
+  const db = new Database(path);
+  const put = db.query(
+    "INSERT INTO objects (key, body, metadata, uploaded) VALUES (?, ?, ?, ?)",
+  );
+  const expired = Date.now() - legacyRetentionMs - 60_000;
+  const pendingId = crypto.randomUUID();
+  const freshId = crypto.randomUUID();
+  const status = (id: string, at: number) => ({
+    id,
+    digest: "digest",
+    createdAt: new Date(at).toISOString(),
+    plan: "pro",
+    status: "succeeded",
+    log: "log",
+    sizeBytes: 3,
+    artifactUrl: `/compilations/${id}.pdf`,
+  });
+  const oldKeys = [];
+  for (const state of ["succeeded", "failed"]) {
+    const id = crypto.randomUUID();
+    const result =
+      state === "succeeded"
+        ? status(id, expired)
+        : {
+            ...status(id, expired),
+            status: "failed",
+            error: "invalid",
+            errorStatus: 422,
+          };
+    const key = `results/${id}.json`;
+    oldKeys.push(key);
+    put.run(
+      key,
+      new TextEncoder().encode(JSON.stringify(result)),
+      null,
+      expired,
+    );
+    for (const key of [
+      `compilations/${id}.pdf`,
+      `compilations/${id}.png`,
+      `transcripts/${id}`,
+      `running/${id}`,
+      `sent/${id}`,
+      `attempts/${id}/1`,
+      `attempts/${id}/2`,
+    ]) {
+      oldKeys.push(key);
+      put.run(key, new Uint8Array([1, 2, 3]), null, expired);
+    }
+  }
+  const sourceKey = `sources/${pendingId}.json`;
+  oldKeys.push(
+    sourceKey,
+    "compilations/pre-job-record.pdf",
+    "compilations/interrupted.png",
+  );
+  put.run(
+    sourceKey,
+    new TextEncoder().encode(JSON.stringify(project)),
+    JSON.stringify({ ...status(pendingId, expired), status: "queued" }),
+    expired,
+  );
+  put.run(
+    "compilations/pre-job-record.pdf",
+    new Uint8Array([1]),
+    null,
+    expired,
+  );
+  put.run("compilations/interrupted.png", new Uint8Array([1]), null, expired);
+  put.run(
+    `results/${freshId}.json`,
+    new TextEncoder().encode(JSON.stringify(status(freshId, Date.now()))),
+    null,
+    Date.now(),
+  );
+  put.run(
+    `compilations/${freshId}.pdf`,
+    new Uint8Array([1, 2, 3]),
+    null,
+    Date.now(),
+  );
+  put.run("projects/retained/1/output.pdf", new Uint8Array([1]), null, expired);
+  db.query(
+    "INSERT INTO deliveries (id, lane, body, due, attempts) VALUES (?, 'compile-pro', ?, 0, 0)",
+  ).run(
+    crypto.randomUUID(),
+    JSON.stringify({ projectId: pendingId, revision: 0 }),
+  );
+  const runtime = open();
+  try {
+    const deadline = Date.now() + 5000;
+    while (
+      oldKeys.some((key) =>
+        db.query("SELECT key FROM objects WHERE key = ?").get(key),
+      )
+    ) {
+      if (Date.now() > deadline)
+        throw new Error("Legacy recovery did not sweep expired objects");
+      await Bun.sleep(25);
+    }
+    expect(runs).toBe(0);
+    expect(
+      (await runtime.fetch(new Request(`http://local/jobs/${pendingId}`)))
+        .status,
+    ).toBe(404);
+    expect(
+      (await runtime.fetch(new Request(`http://local/jobs/${freshId}`))).status,
+    ).toBe(200);
+    expect(
+      (
+        await runtime.fetch(
+          new Request(`http://local/compilations/${freshId}.pdf`),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      db
+        .query(
+          "SELECT key FROM objects WHERE key = 'projects/retained/1/output.pdf'",
+        )
+        .get(),
+    ).not.toBeNull();
+  } finally {
+    await runtime.close();
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -13,7 +13,6 @@ import {
   getTemplateReviewQueue,
   getTemplateAccount,
   reviewTemplate,
-  seedTemplateStarters,
 } from "#/lib/template.functions";
 
 export const Route = createFileRoute("/templates_/review")({
@@ -41,7 +40,6 @@ function TemplateReviewPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [seeded, setSeeded] = useState(false);
   async function decide(templateId: string, decision: "approved" | "rejected") {
     setBusy(true);
     setError("");
@@ -74,47 +72,15 @@ function TemplateReviewPage() {
       <main className="mx-auto max-w-4xl px-6 py-12">
         <h1 className="font-serif text-4xl">Template review</h1>
         <p className="text-muted-foreground mt-4">
-          Check licensing, attribution, and content before approving a new
-          publisher. You cannot review your own templates.
+          Check licensing, attribution, and content before approving a snapshot.
+          You cannot review your own templates.
         </p>
         {error && (
           <p role="alert" className="text-destructive mt-6">
             {error}
           </p>
         )}
-        <section className="mt-8 rounded-lg border p-5">
-          <h2 className="font-medium">Curated starters</h2>
-          <p className="text-muted-foreground my-3 text-sm">
-            Publish the original CC0 article, two-column journal, and thesis
-            starters. No third-party university or publisher templates are
-            redistributed. New publishers need a second reviewer to approve
-            them.
-          </p>
-          <Button
-            variant="outline"
-            disabled={busy || seeded}
-            onClick={async () => {
-              setBusy(true);
-              setError("");
-              try {
-                await seedTemplateStarters();
-                setSeeded(true);
-                await router.invalidate();
-              } catch (failure) {
-                setError(
-                  failure instanceof Error ? failure.message : "Seeding failed",
-                );
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {seeded
-              ? "Starters saved — previews are processing"
-              : "Publish curated starter set"}
-          </Button>
-        </section>
-        <h2 className="mt-10 text-2xl">New publishers</h2>
+        <h2 className="mt-10 text-2xl">Pending snapshots</h2>
         {!pending.length && (
           <p className="text-muted-foreground mt-4">
             Nothing waiting for review.

@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./template-starters": "./src/template-starters.ts",
+    "./seed-templates": "./src/seed-templates.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -25,6 +27,7 @@
     "@types/bun": "^1.4.4",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^1.0.0-rc.5",
+    "drizzle-seed": "1.0.0-rc.5",
     "typescript": "^6.0.2"
   }
 }

@@ -18,16 +18,16 @@ bun run db:push
 
 Standalone schema tasks use the configured database without starting Docker.
 Local development starts Postgres and applies the schema in its internal setup
-task. There are currently no generated migration files or snapshots in the
-repository.
+task. The app is entirely in development, so schema changes use `db:push`.
+No generated migrations or snapshots are tracked.
 
 ## Change the schema
 
-The public-template feature adds `project.organization_id`, template enums,
-immutable JSONB snapshots, and reports. Existing deployments must apply
-`sql/20261112_templates.sql` once before deploying the templates Worker. The
-script runs in a transaction and preserves existing personal projects. Local
-development and CI can apply the equivalent Drizzle schema with `db:push`.
+Template metadata, manifests, and reports are defined in `src/db/template-schema.ts`.
+NAT-287 adds independent preview state and account-free curated templates.
+Apply these schema changes with `bun run db:push`. See
+[Template lifecycle](../../docs/templates.md#schema-setup) for setup instructions
+and the Drizzle seed command.
 
 Before deploying the collaboration cleanup Worker, apply
 `sql/20261113_collaboration_cleanup.sql`. It creates a room registry and backfills
@@ -47,9 +47,7 @@ Personal project names are case-sensitive and unique per owner among rows with
 and its nodes. Organization project names keep their existing policy, which
 allows duplicates.
 
-For NAT-198's first deployment, generate the reviewed Drizzle baseline from the
-final schema, including the partial `project_owner_id_name_idx` index. For an
-existing database with the unconditional index, apply
+For an existing database with the unconditional index, apply
 `sql/20261114_active_project_names.sql` before deploying name reuse. The script
 replaces the index in one transaction, preserves all project data, and is safe to
 run again. It takes an exclusive table lock while rebuilding the index, so apply

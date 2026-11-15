@@ -186,9 +186,9 @@ the compiler before the web Worker.
 ## Templates
 
 Browse `/templates`, publish a saved project at `/templates/publish`, and open an
-independent personal or organization copy from `/template/{templateId}`. New
-publishers are reviewed, and unlisted templates stay out of the public gallery.
-See [the templates setup and verification guide](apps/web/README.md#public-templates)
+independent personal or organization copy from `/template/{templateId}`. Published
+snapshots are reviewed, and unlisted templates stay out of the public gallery.
+See [the templates setup and verification guide](docs/templates.md)
 for database rollout, compiler previews, reviewer configuration, and starter seeds.
 
 ## License

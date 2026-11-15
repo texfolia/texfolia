@@ -3,12 +3,19 @@
 ## Template previews
 
 Legacy snapshot jobs accept an opt-in `preview: true` in `POST /compile` alongside
-`mainFile` and `files`. The request uses the existing compilation ID, account
-admission limits, queue, and status lifecycle. Normal project compilations do not
+`mainFile` and `files`. The request uses a preview-attempt compilation ID, separate preview usage
+identity, queue, and status lifecycle. Normal project compilations do not
 render previews. After `GET /jobs/{id}` reports success,
 `GET /compilations/{id}.png` returns the persisted first-page image; the existing
 PDF endpoint remains available. Retrying the same compilation ID reuses the PNG
 and PDF rather than running TeX again.
+
+The web service uses Pro policy for template previews and a separate usage
+identity per snapshot. Compiler recovery sweeps all legacy source, result,
+artifact, transcript, dispatch, and attempt objects after 24 hours. This includes
+terminal jobs and artifacts without job records. Project coordinator objects
+under `projects/` have separate retention. See [Template lifecycle](../../docs/templates.md)
+for publication, retry, permanent image storage, and deletion behavior.
 
 The compile image installs `poppler-utils`. After an opted-in compile, the engine
 runs `pdftoppm` with a 15-second cancellation-aware timeout, first-page-only,

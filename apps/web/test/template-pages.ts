@@ -94,6 +94,7 @@ try {
       mainFile: "main.tex",
       snapshot,
       previewKey: `templates/${entry.id}/preview.png`,
+      previewStatus: "ready",
     });
   }
   const gallery = await fetch(new URL("/templates", baseUrl));

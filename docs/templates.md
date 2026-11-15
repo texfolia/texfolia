@@ -1,0 +1,127 @@
+# Template lifecycle
+
+NAT-287 keeps the public gallery, stable snapshot URLs, unlisted sharing, source
+ZIPs, licenses, and reviewer reports. Each published snapshot now requires
+review. Previous approval of a publisher does not approve their future uploads.
+The UI overhaul remains in NAT-286.
+
+## Storage and ownership
+
+Postgres owns metadata and an immutable source manifest. R2 stores source objects
+at `templates/{id}/sources/{sha256}`. Publication copies saved project files under
+the existing project lock. Browser drafts are excluded. Opening a template copies
+its tree and files into independent project objects with new IDs.
+
+Curated starters have a null owner and no organization. User publications have an
+authenticated publisher. Account and organization cascades delete their template
+rows and reports. Starters survive account deletion. Copied projects follow their
+own ownership and retention rules.
+
+Keeping content-addressed R2 sources preserves the existing snapshots and binary
+support. Moving all sources into Postgres would make seeds easier, but would also
+require a cross-storage backfill and put large binary files in the database.
+Curated-only templates would remove moderation, but would also remove user
+publishing. This implementation retains user publishing with simpler review.
+
+## Review and previews
+
+Moderation is `pending`, `approved`, or `rejected`. Every new user snapshot starts
+pending. Reviewers cannot review their own snapshots. Approval controls public
+access, gallery membership, source downloads, and project copies. Unlisted
+approved snapshots are accessible by URL and carry `noindex, nofollow`.
+
+Preview state is independently `queued`, `ready`, or `failed`. Review and copying
+can proceed without an image. An approved template with a failed preview remains
+usable. A reviewer checks the source archive when an image is unavailable.
+
+Each preview attempt has its own compiler job ID. The gallery and detail page
+advance queued previews automatically. The minute cron is a fallback for pages
+nobody has open. Processing claims a one-minute database lease before compiler
+I/O. Updates compare the job ID and lease so stale attempts cannot replace newer
+work. Failed attempts can be retried by the owner or a reviewer after one minute,
+without changing the snapshot, URL, moderation, or publishing allowance. Attempts
+expire after one hour. Fixing the source still requires a new snapshot.
+
+Preview compiles use the Pro timeout and a separate compiler usage identity per
+snapshot, `template-preview:{templateId}`.
+This gives previews a five-minute timeout and a ten-minute rolling hourly budget
+without charging the publisher's interactive compile allowance. Separate identities
+prevent concurrent starter previews from exhausting a shared reservation budget.
+Publication retains the three-per-hour and ten-per-day limits. Retrying an attempt consumes
+the same snapshot's preview budget.
+
+The compiler stores a temporary PDF and PNG. After success, the web service
+copies the PNG into `templates/{id}/previews/{jobId}.png` and atomically records its
+key and ready state. The sources and metadata remain immutable.
+
+## Retention
+
+The hourly web sweep removes objects unreferenced by live template manifests or
+preview keys once those objects are at least one hour old. It shares an advisory
+lock with publication, seeding, and preview promotion. Account cascades,
+organization cascades, removed templates, partial uploads, and superseded preview
+objects all use this path.
+
+Compiler recovery runs every five minutes in both runtimes. It removes legacy
+objects older than 24 hours from `sources/`, `results/`, `compilations/`,
+`transcripts/`, `sent/`, `running/`, and `attempts/`. This includes results for
+removed publishers and templates, interrupted writes, and PDFs from before job
+records existed. Expired pending sources cannot start another compile.
+Project coordinator objects under `projects/` retain their separate lifecycle.
+The permanent template PNG remains available after the compiler's copy expires.
+
+## Seed original templates
+
+The original CC0 article, generic two-column article, and thesis sources live in
+`packages/db/src/template-starters.ts`. They contain no third-party templates or
+university or publisher assets. Each snapshot includes `LICENSE.txt`.
+
+The seed uses `drizzle-seed` with explicit values and deterministic IDs. Each
+starter is inserted only after its R2 uploads succeed. Reruns and concurrent runs
+skip committed snapshots. Failed transactions can be retried. Seeds create no
+user accounts or projects and bypass the user publish API and its limits.
+
+After applying the schema, run from the repository root:
+
+```sh
+DATABASE_URL=postgres://user:password@127.0.0.1:5432/db bun run --cwd apps/web templates:seed --local
+```
+
+Local seeding uses the web app's default Wrangler R2 persistence. Visit the gallery
+to generate previews. No local scheduled event is required.
+
+For a deployed database, set `DATABASE_URL` and `TEMPLATE_SEED_BUCKET` to matching
+targets. Configure Wrangler authentication with access to that bucket. Then run:
+
+```sh
+bun run --cwd apps/web templates:seed --remote
+```
+
+Remote mode uses Wrangler's explicit `--remote` object uploads. The command prints
+the stable template routes. It does not deploy Workers or change reviewer access.
+
+## Schema setup
+
+The app is entirely in development. Apply the current Drizzle schema with
+`bun run db:push`, then seed the matching database and R2 bucket. No generated
+migrations or legacy data backfills are required. Set `TEMPLATE_REVIEWER_IDS`
+for the target environment.
+
+## Verification
+
+Use an isolated Postgres database whose name includes `test`. Apply the schema
+with `DATABASE_URL` pointed at that database, then run from the repository root:
+
+```sh
+DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:push
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/templates.ts
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:template-lifecycle
+bun test apps/compiler/test/jobs.test.ts
+ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts
+```
+
+The storage suite runs real Postgres and local R2 with a compiler fixture. The
+browser suite runs the production build and the real local compiler queue with a
+fixture engine. It verifies automatic previews without cron, failure, source
+access, permissions, and reviewer retries. The final command compiles all three
+original starters through a real LaTeX container and checks the PDF and PNG.

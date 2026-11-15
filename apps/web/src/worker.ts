@@ -2,10 +2,8 @@ import handler from "@tanstack/react-start/server-entry";
 import { createDb } from "@texfolia/db";
 
 import { collectProjectSources } from "./lib/project-source.server";
-import {
-  collectTemplateObjects,
-  refreshTemplatePreviews,
-} from "./lib/template.server";
+import { collectTemplateObjects } from "./lib/template-cleanup.server";
+import { refreshTemplatePreviews } from "./lib/template-preview.server";
 
 export { ProjectCollaboration } from "./lib/collaboration/project-collaboration";
 

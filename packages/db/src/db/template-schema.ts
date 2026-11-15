@@ -18,10 +18,13 @@ export const templateVisibility = pgEnum("template_visibility", [
   "unlisted",
 ]);
 export const templateStatus = pgEnum("template_status", [
-  "building",
   "pending",
   "approved",
   "rejected",
+]);
+export const templatePreviewStatus = pgEnum("template_preview_status", [
+  "queued",
+  "ready",
   "failed",
 ]);
 export const templateLicense = pgEnum("template_license", [
@@ -35,9 +38,9 @@ export const template = pgTable(
   "template",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    ownerId: text("owner_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
     organizationId: text("organization_id").references(() => organization.id, {
       onDelete: "cascade",
     }),
@@ -47,11 +50,22 @@ export const template = pgTable(
     tags: text("tags").array().notNull(),
     license: templateLicense("license").notNull(),
     visibility: templateVisibility("visibility").notNull(),
-    status: templateStatus("status").notNull().default("building"),
+    status: templateStatus("status").notNull().default("pending"),
     mainFile: text("main_file").notNull(),
     snapshot: jsonb("snapshot").notNull(),
     previewKey: text("preview_key"),
-    previewCheckedAt: timestamp("preview_checked_at", { withTimezone: true }),
+    previewStatus: templatePreviewStatus("preview_status")
+      .notNull()
+      .default("queued"),
+    previewJobId: uuid("preview_job_id").notNull().defaultRandom(),
+    previewStartedAt: timestamp("preview_started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    previewNextAttemptAt: timestamp("preview_next_attempt_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -65,13 +79,16 @@ export const template = pgTable(
     ),
     index("template_publisher_idx").on(table.ownerId, table.createdAt),
     index("template_preview_queue_idx").on(
-      table.status,
-      table.previewCheckedAt,
-      table.createdAt,
+      table.previewStatus,
+      table.previewNextAttemptAt,
     ),
     check(
       "template_ready_preview_check",
-      sql`${table.status} NOT IN ('approved', 'pending') OR ${table.previewKey} IS NOT NULL`,
+      sql`(${table.previewStatus} = 'ready') = (${table.previewKey} IS NOT NULL)`,
+    ),
+    check(
+      "template_curated_owner_check",
+      sql`${table.ownerId} IS NOT NULL OR ${table.organizationId} IS NULL`,
     ),
   ],
 );
