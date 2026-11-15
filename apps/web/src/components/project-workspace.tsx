@@ -560,6 +560,7 @@ export function ProjectWorkspace({
     const metadataVersion = await projectMetadataVersion({
       nodes,
       sourceVersions: snapshotVersions,
+      textSource: mode === "compile" ? "saved" : "live",
     });
     await synchronizeTextFiles(nodes);
     const saved = mode === "compile";
@@ -592,7 +593,10 @@ export function ProjectWorkspace({
     }
     if (mode === "compile") return { sources, metadataVersion };
     const current = await files.refresh();
-    if ((await projectMetadataVersion(current)) !== metadataVersion)
+    if (
+      (await projectMetadataVersion({ ...current, textSource: "live" })) !==
+      metadataVersion
+    )
       throw new Error(
         "Project files changed during export. Try downloading again.",
       );
