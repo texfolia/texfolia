@@ -38,7 +38,7 @@ export function GeneratedFiles({
     return [...result.values()];
   }, [manifest]);
   return (
-    <Collapsible defaultOpen className="mt-2 border-t pt-2">
+    <Collapsible defaultOpen className="border-t">
       <CollapsibleTrigger
         render={<SidebarMenuButton />}
         title="Generated build files (read-only)"
@@ -56,7 +56,7 @@ export function GeneratedFiles({
         {manifest ? (
           <>
             <p
-              className="text-muted-foreground px-3 py-2 text-xs"
+              className="text-muted-foreground px-2 py-1 text-xs"
               title={new Date(manifest.builtAt).toLocaleString()}
             >
               Built by {manifest.builtBy},{" "}
@@ -76,7 +76,7 @@ export function GeneratedFiles({
             />
           </>
         ) : (
-          <p className="text-muted-foreground px-3 py-2 text-xs">
+          <p className="text-muted-foreground px-2 py-1 text-xs">
             Compile to generate build files.
           </p>
         )}

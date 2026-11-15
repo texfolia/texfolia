@@ -10,6 +10,11 @@ import { z } from "zod";
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
 import { Button, buttonVariants } from "#/components/ui/button";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
+import { Textarea } from "#/components/ui/textarea";
 import { useTemplatePreviews } from "#/lib/template-preview";
 import {
   getTemplate,
@@ -61,9 +66,9 @@ export const Route = createFileRoute("/template/$templateId")({
     };
   },
   notFoundComponent: () => (
-    <>
+    <div className="flex min-h-svh flex-col">
       <Header />
-      <main className="mx-auto max-w-4xl px-6 py-20">
+      <main id="main-content" className="mx-auto max-w-4xl px-6 py-20">
         <h1 className="text-3xl">Template not found</h1>
         <p className="mt-4">
           This template is unavailable or still awaiting review.
@@ -76,7 +81,8 @@ export const Route = createFileRoute("/template/$templateId")({
           Browse templates
         </Link>
       </main>
-    </>
+      <Footer />
+    </div>
   ),
   component: TemplatePage,
 });
@@ -107,9 +113,9 @@ function TemplatePage() {
     }
   }
   return (
-    <>
+    <div className="flex min-h-svh flex-col">
       <Header />
-      <main className="mx-auto max-w-6xl px-6 py-12">
+      <main id="main-content" className="mx-auto max-w-6xl px-6 py-12 sm:py-16">
         <Link
           to="/templates"
           search={{ page: 0 }}
@@ -136,7 +142,7 @@ function TemplatePage() {
             )}
           </div>
           <section>
-            <h1 className="font-serif text-4xl tracking-tight">
+            <h1 className="font-serif text-4xl tracking-tight sm:text-5xl">
               {template.title}
             </h1>
             <p className="text-muted-foreground mt-3">
@@ -192,19 +198,21 @@ function TemplatePage() {
                     >
                       Create your copy in
                     </label>
-                    <select
+                    <NativeSelect
                       id="destination"
                       value={destination}
                       onChange={(event) => setDestination(event.target.value)}
-                      className="bg-background w-full rounded-md border p-3"
+                      className="w-full"
                     >
-                      <option value="">Personal projects</option>
+                      <NativeSelectOption value="">
+                        Personal projects
+                      </NativeSelectOption>
                       {account.destinations.map((org) => (
-                        <option key={org.id} value={org.id}>
+                        <NativeSelectOption key={org.id} value={org.id}>
                           {org.name}
-                        </option>
+                        </NativeSelectOption>
                       ))}
-                    </select>
+                    </NativeSelect>
                     <Button
                       disabled={busy}
                       onClick={() =>
@@ -313,14 +321,14 @@ function TemplatePage() {
                     <label htmlFor="report-reason" className="block text-sm">
                       Describe the licensing, safety, or content concern.
                     </label>
-                    <textarea
+                    <Textarea
                       id="report-reason"
                       required
                       minLength={10}
                       maxLength={2000}
                       value={reason}
                       onChange={(event) => setReason(event.target.value)}
-                      className="bg-background min-h-28 w-full rounded-md border p-3"
+                      className="min-h-32"
                     />
                     <Button variant="outline" disabled={busy}>
                       Send report
@@ -341,6 +349,6 @@ function TemplatePage() {
         </div>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

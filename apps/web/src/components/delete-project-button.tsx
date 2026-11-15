@@ -58,7 +58,7 @@ export function DeleteProjectButton({
       }}
     >
       <AlertDialogTrigger
-        render={<Button size="icon-lg" variant="outline" />}
+        render={<Button size="icon" variant="ghost" />}
         aria-label={`Delete ${project.name}`}
       >
         <IconTrash />

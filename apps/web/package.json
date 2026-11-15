@@ -26,6 +26,7 @@
     "test:login": "bun run test/login.ts",
     "test:production-assets": "bun run test/production-assets.ts",
     "test:template-lifecycle": "bun run build && bun run test/template-lifecycle.ts",
+    "test:ui": "bun run build && bun run test/ui-overhaul.ts",
     "test:workspace-metadata": "bun run build && bun run test/workspace-metadata.ts",
     "test:workspace-upload": "bun run test/workspace-upload.ts",
     "typecheck": "tsc --noEmit"

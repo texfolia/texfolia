@@ -13,6 +13,10 @@ import {
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
+import {
   historyRetentionDays,
   type DocumentVersion,
 } from "#/lib/document-history";
@@ -83,23 +87,25 @@ export function DocumentHistoryPanel({
       aria-label="Document history"
       className="flex size-full min-h-0 flex-col text-sm"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b p-3">
+      <div className="flex flex-wrap items-center gap-2 border-b p-2">
         <label htmlFor="history-document" className="font-medium">
           Document
         </label>
-        <select
+        <NativeSelect
           id="history-document"
           value={nodeId ?? ""}
           onChange={(event) => setChosenId(event.target.value)}
-          className="bg-background min-w-0 flex-1 rounded-md border px-2 py-1.5"
+          className="min-w-0 flex-1"
         >
-          {!textNodes.length && <option value="">No text documents</option>}
+          {!textNodes.length && (
+            <NativeSelectOption value="">No text documents</NativeSelectOption>
+          )}
           {textNodes.map((node) => (
-            <option key={node.id} value={node.id}>
+            <NativeSelectOption key={node.id} value={node.id}>
               {workspace.paths.get(node.id) ?? node.name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
       </div>
       {nodeId ? (
         <DocumentVersions key={nodeId} nodeId={nodeId} />
@@ -435,7 +441,7 @@ function VersionComparison({
           {changes ? (
             <pre
               aria-label="Version diff"
-              className="bg-muted/30 max-h-96 overflow-auto rounded-md border p-2 font-mono text-xs leading-5 [tab-size:2]"
+              className="bg-muted/30 max-h-96 overflow-auto border p-2 font-mono text-xs leading-5 [tab-size:2]"
             >
               {changes.map((change, index) => (
                 <span

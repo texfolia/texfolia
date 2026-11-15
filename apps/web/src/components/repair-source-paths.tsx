@@ -4,6 +4,10 @@ import { Button } from "#/components/ui/button";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
+import {
   invalidProjectPaths,
   projectNodePaths,
   renamedProjectNodes,
@@ -72,12 +76,12 @@ export function RepairSourcePaths({
         >
           <Field>
             <FieldLabel htmlFor={`${id}-node`}>File or folder</FieldLabel>
-            <select
+            <NativeSelect
               id={`${id}-node`}
               value={nodeId}
               disabled={pending}
               required
-              className="border-input bg-background w-full min-w-0 rounded-md border px-2 py-1 text-sm"
+              className="w-full"
               onChange={(event) => {
                 setNodeId(event.target.value);
                 setParentId(
@@ -91,34 +95,36 @@ export function RepairSourcePaths({
                 setError("");
               }}
             >
-              <option value="">Choose a file or folder</option>
+              <NativeSelectOption value="">
+                Choose a file or folder
+              </NativeSelectOption>
               {nodes
                 .filter((node) => node.parentId !== null)
                 .map((node) => (
-                  <option key={node.id} value={node.id}>
+                  <NativeSelectOption key={node.id} value={node.id}>
                     {paths.get(node.id)}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-            </select>
+            </NativeSelect>
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-parent`}>In folder</FieldLabel>
-            <select
+            <NativeSelect
               id={`${id}-parent`}
               value={parentId}
               disabled={pending || !nodeId}
               required
-              className="border-input bg-background w-full min-w-0 rounded-md border px-2 py-1 text-sm"
+              className="w-full"
               onChange={(event) => setParentId(event.target.value)}
             >
               {nodes
                 .filter((node) => node.kind === "folder" && node.id !== nodeId)
                 .map((node) => (
-                  <option key={node.id} value={node.id}>
+                  <NativeSelectOption key={node.id} value={node.id}>
                     {paths.get(node.id)}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-            </select>
+            </NativeSelect>
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-name`}>New name</FieldLabel>

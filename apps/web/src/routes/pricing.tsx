@@ -1,5 +1,5 @@
 import { IconCheck } from "@tabler/icons-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
@@ -24,6 +24,7 @@ import {
 import { historyPolicy } from "#/lib/document-history";
 
 export const Route = createFileRoute("/pricing")({
+  head: () => ({ meta: [{ title: "Pricing | Texfolia" }] }),
   component: RouteComponent,
 });
 
@@ -85,36 +86,62 @@ const PLANS = [
 
 function RouteComponent() {
   return (
-    <div>
+    <div className="flex min-h-svh flex-col">
       <Header />
-      <main>
-        <h1>Pricing</h1>
-        <p>Choose the plan that's right for you and your team.</p>
-        <div className="grid grid-cols-3">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-7xl px-6 py-16 sm:px-8 sm:py-24"
+      >
+        <h1 className="font-serif text-6xl tracking-tight sm:text-7xl">
+          Space to do your best work.
+        </h1>
+        <p className="text-muted-foreground mt-6 max-w-xl text-lg leading-relaxed">
+          Choose the plan that's right for you and your team.
+        </p>
+        <div className="mt-14 grid gap-5 md:grid-cols-3">
           {PLANS.map((plan) => (
-            <Card key={plan.name}>
-              <CardHeader>
-                <CardTitle>{plan.name}</CardTitle>
-                <CardDescription>{plan.description}</CardDescription>
-                <p className="text-3xl font-semibold">
+            <Card key={plan.name} className="flex h-full flex-col py-8">
+              <CardHeader className="gap-4 px-6">
+                <CardTitle className="text-xl">{plan.name}</CardTitle>
+                <CardDescription className="min-h-12 leading-6">
+                  {plan.description}
+                </CardDescription>
+                <p className="text-5xl font-medium tracking-tight tabular-nums">
                   ${plan.price}
                   {"priceUnit" in plan && (
-                    <span className="text-base font-normal">
+                    <span className="text-muted-foreground ml-1 text-sm font-normal tracking-normal">
                       {plan.priceUnit}
                     </span>
                   )}
                 </p>
               </CardHeader>
               <CardContent>
-                <Button size="lg" variant={plan.buttonVariant}>
-                  {plan.buttonText}
-                </Button>
+                {plan.name === "Free" ? (
+                  <Button
+                    size="lg"
+                    variant={plan.buttonVariant}
+                    className="w-full"
+                    render={<Link to="/login" />}
+                  >
+                    {plan.buttonText}
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    variant={plan.buttonVariant}
+                    className="w-full"
+                    disabled
+                    title="Paid plan checkout is not available yet"
+                  >
+                    {plan.buttonText}
+                  </Button>
+                )}
               </CardContent>
-              <CardFooter>
-                <ul>
+              <CardFooter className="mt-auto px-6 pt-4">
+                <ul className="space-y-4 text-sm">
                   {plan.features.map((feature) => (
-                    <li key={feature}>
-                      <IconCheck />
+                    <li key={feature} className="flex items-start gap-3">
+                      <IconCheck className="text-muted-foreground mt-0.5 size-4 shrink-0" />
                       {feature}
                     </li>
                   ))}
@@ -123,7 +150,10 @@ function RouteComponent() {
             </Card>
           ))}
         </div>
-        <Card>
+        <p className="text-muted-foreground mt-5 text-sm">
+          Paid plan checkout is not available yet.
+        </p>
+        <Card className="mt-12">
           <CardContent>
             <Table>
               <TableCaption>
@@ -148,6 +178,13 @@ function RouteComponent() {
             </Table>
           </CardContent>
         </Card>
+        <p className="text-muted-foreground mt-8 text-sm">
+          Compilation on every plan is subject to{" "}
+          <Link to="/terms" className="underline underline-offset-4">
+            fair use
+          </Link>
+          .
+        </p>
       </main>
       <Footer />
     </div>

@@ -22,6 +22,7 @@ import {
 } from "@tabler/icons-react";
 import { useMemo } from "react";
 
+import { ProjectNodeActions } from "#/components/project-node-actions";
 import {
   Collapsible,
   CollapsibleContent,
@@ -125,7 +126,9 @@ export function ProjectFileTree({
   activeId,
   isPending,
   onOpen,
+  canManage = false,
 }: {
+  canManage?: boolean;
   nodes: ProjectNode[];
   activeId: string | undefined;
   isPending: (id: string) => boolean;
@@ -150,14 +153,17 @@ export function ProjectFileTree({
 
   function branch(parentId: string | null, depth = 0) {
     return (
-      <SidebarMenu aria-label={parentId === null ? "Project files" : undefined}>
+      <SidebarMenu
+        className="gap-0"
+        aria-label={parentId === null ? "Project files" : undefined}
+      >
         {children.get(parentId)?.map((node) => (
-          <SidebarMenuItem key={node.id}>
+          <SidebarMenuItem key={node.id} className="group/node relative">
             {node.kind === "folder" ? (
               <Collapsible defaultOpen className="group/folder">
                 <CollapsibleTrigger
                   disabled={isPending(node.id)}
-                  render={<SidebarMenuButton />}
+                  render={<SidebarMenuButton size="sm" className="pr-7" />}
                   style={{ paddingLeft: 8 + depth * 14 }}
                 >
                   <IconChevronRight className="transition-transform in-aria-expanded:rotate-90" />
@@ -171,6 +177,8 @@ export function ProjectFileTree({
               </Collapsible>
             ) : (
               <SidebarMenuButton
+                size="sm"
+                className="pr-7"
                 disabled={isPending(node.id)}
                 style={{ paddingLeft: 22 + depth * 14 }}
                 isActive={activeId === node.id}
@@ -188,6 +196,9 @@ export function ProjectFileTree({
                 <ProjectFileIcon name={node.name} kind={node.kind} />
                 <span>{node.name}</span>
               </SidebarMenuButton>
+            )}
+            {canManage && node.parentId && !isPending(node.id) && (
+              <ProjectNodeActions node={node} nodes={nodes} />
             )}
           </SidebarMenuItem>
         ))}

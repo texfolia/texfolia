@@ -1,10 +1,12 @@
-import GitLabIcon from "@iconify-react/thesvg-color/gitlab";
-import GoogleIcon from "@iconify-react/thesvg-color/google";
-import MicrosoftIcon from "@iconify-react/thesvg-color/microsoft";
-import GithubIcon from "@iconify-react/thesvg/github";
-import { IconArrowLeft } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconBrandGithub,
+  IconBrandGitlab,
+  IconBrandGoogle,
+  IconBrandWindows,
+} from "@tabler/icons-react";
 import { revalidateLogic, useForm } from "@tanstack/react-form-start";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { useEffect, useRef, useState } from "react";
 import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
@@ -40,18 +42,19 @@ export const loginSearchSchema = z.object({
 
 export const Route = createFileRoute("/login")({
   validateSearch: loginSearchSchema,
+  head: () => ({ meta: [{ title: "Sign in | Texfolia" }] }),
   component: RouteComponent,
 });
 
 const socialProviders = [
-  { id: "github", label: "GitHub", Icon: GithubIcon },
-  { id: "gitlab", label: "GitLab", Icon: GitLabIcon },
-  { id: "google", label: "Google", Icon: GoogleIcon },
-  { id: "microsoft", label: "Microsoft", Icon: MicrosoftIcon },
+  { id: "github", label: "GitHub", Icon: IconBrandGithub },
+  { id: "gitlab", label: "GitLab", Icon: IconBrandGitlab },
+  { id: "google", label: "Google", Icon: IconBrandGoogle },
+  { id: "microsoft", label: "Microsoft", Icon: IconBrandWindows },
 ] satisfies {
   id: "github" | "gitlab" | "google" | "microsoft";
   label: string;
-  Icon: typeof GithubIcon;
+  Icon: typeof IconBrandGithub;
 }[];
 
 type SocialProvider = (typeof socialProviders)[number]["id"];
@@ -256,215 +259,127 @@ function RouteComponent() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-8">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          form.handleSubmit();
-        }}
-        className="w-full max-w-sm space-y-6"
-        aria-label="Sign in"
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <aside className="bg-muted/50 hidden flex-col justify-between border-r p-12 lg:flex">
+        <Link to="/" className="font-serif text-3xl tracking-tight">
+          Texfolia.
+        </Link>
+        <div className="py-16">
+          <p className="max-w-lg font-serif text-6xl leading-tight tracking-tight">
+            Your next chapter
+            <br />
+            starts <span className="italic">here.</span>
+          </p>
+          <p className="text-muted-foreground mt-8 max-w-sm text-lg leading-relaxed">
+            A quiet place to write, a shared space to think. Pick up where you
+            left off.
+          </p>
+        </div>
+        <p className="text-muted-foreground text-sm">
+          LaTeX, with room for your ideas.
+        </p>
+      </aside>
+      <main
+        id="main-content"
+        className="flex min-h-svh flex-col items-center justify-center px-6 py-10 sm:px-12"
       >
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">
-            {step === "email" ? "Sign in to Texfolia" : "Check your email"}
-          </h1>
-          {step === "otp" && (
-            <p
-              id="otp-help"
-              className="text-muted-foreground text-sm break-words"
-            >
-              Enter the six-digit code sent to{" "}
-              {form.state.values.emailStep.email}. Codes expire after 5 minutes.
+        <Link to="/" className="mb-10 font-serif text-3xl lg:hidden">
+          Texfolia.
+        </Link>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            form.handleSubmit();
+          }}
+          className="w-full max-w-sm space-y-5"
+          aria-label="Sign in"
+        >
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {step === "email" ? "Sign in to Texfolia" : "Check your email"}
+            </h1>
+            {step === "otp" && (
+              <p
+                id="otp-help"
+                className="text-muted-foreground text-sm break-words"
+              >
+                Enter the six-digit code sent to{" "}
+                {form.state.values.emailStep.email}. Codes expire after 5
+                minutes.
+              </p>
+            )}
+          </div>
+          <div
+            id="login-error"
+            role="alert"
+            aria-atomic="true"
+            className="text-destructive text-sm empty:sr-only"
+          >
+            {error}
+          </div>
+          <p
+            role="status"
+            aria-atomic="true"
+            className="text-muted-foreground text-sm empty:sr-only"
+          >
+            {status}
+          </p>
+          {retryWait > 0 && (
+            <p className="text-muted-foreground text-sm">
+              Try again in {retryWait}s.
             </p>
           )}
-        </div>
-        <div
-          id="login-error"
-          role="alert"
-          aria-atomic="true"
-          className="text-destructive text-sm empty:sr-only"
-        >
-          {error}
-        </div>
-        <p
-          role="status"
-          aria-atomic="true"
-          className="text-muted-foreground text-sm empty:sr-only"
-        >
-          {status}
-        </p>
-        {retryWait > 0 && (
-          <p className="text-muted-foreground text-sm">
-            Try again in {retryWait}s.
-          </p>
-        )}
-        {step === "email" ? (
-          <form.FormGroup name="emailStep">
-            {() => (
-              <FieldGroup>
-                {socialProviders.map(({ id, label, Icon }) => (
-                  <Field key={id}>
-                    <Button
-                      onClick={() => signInWith(id)}
-                      disabled={pending !== null || retryWait > 0}
-                      size="lg"
-                      type="button"
-                      variant={id === "github" ? "default" : "outline"}
-                      aria-busy={pending === id}
-                    >
-                      <Icon />
-                      {pending === id
-                        ? `Connecting to ${label}…`
-                        : `Continue with ${label}`}
-                    </Button>
-                  </Field>
-                ))}
-                <FieldSeparator>or</FieldSeparator>
-                <form.Field
-                  name="emailStep.email"
-                  validators={{
-                    onDynamic: z.email("Enter a valid email address."),
-                  }}
-                >
-                  {(field) => {
-                    const isInvalid = field.state.meta.errors.length > 0;
-                    return (
-                      <Field data-invalid={isInvalid}>
-                        <FieldLabel htmlFor={field.name}>Email</FieldLabel>
-                        <Input
-                          aria-invalid={isInvalid}
-                          aria-describedby={
-                            isInvalid ? "email-error" : undefined
-                          }
-                          disabled={pending !== null}
-                          autoCapitalize="off"
-                          autoComplete="email"
-                          id={field.name}
-                          name={field.name}
-                          onBlur={field.handleBlur}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                          placeholder="you@example.com"
-                          value={field.state.value}
-                        />
-                        {isInvalid && (
-                          <FieldError
-                            id="email-error"
-                            errors={field.state.meta.errors}
-                          />
-                        )}
-                      </Field>
-                    );
-                  }}
-                </form.Field>
-                <form.Subscribe
-                  selector={(state) => ({
-                    canSubmit: state.canSubmit,
-                    isSubmitting: state.isSubmitting,
-                    hasToken: !!state.values.emailStep.token,
-                  })}
-                >
-                  {({ canSubmit, isSubmitting, hasToken }) => (
-                    <Field>
+          {step === "email" ? (
+            <form.FormGroup name="emailStep">
+              {() => (
+                <FieldGroup className="gap-3">
+                  {socialProviders.map(({ id, label, Icon }) => (
+                    <Field key={id}>
                       <Button
-                        disabled={
-                          !canSubmit ||
-                          isSubmitting ||
-                          !hasToken ||
-                          pending !== null ||
-                          sendWait > 0
-                        }
-                        aria-busy={pending === "send"}
+                        onClick={() => signInWith(id)}
+                        disabled={pending !== null || retryWait > 0}
                         size="lg"
-                        type="submit"
+                        type="button"
+                        variant="outline"
+                        aria-busy={pending === id}
                       >
-                        {pending === "send"
-                          ? "Sending code…"
-                          : sendWait > 0
-                            ? `Send another code in ${sendWait}s`
-                            : "Continue with email"}
+                        <Icon />
+                        {pending === id
+                          ? `Connecting to ${label}…`
+                          : `Continue with ${label}`}
                       </Button>
                     </Field>
-                  )}
-                </form.Subscribe>
-              </FieldGroup>
-            )}
-          </form.FormGroup>
-        ) : (
-          <FieldGroup>
-            <Button
-              type="button"
-              disabled={pending !== null}
-              onClick={() => {
-                setStep("email");
-                setError(null);
-                setStatus("");
-                form.resetField("otpStep.otp");
-                requestAnimationFrame(() =>
-                  document.getElementById("emailStep.email")?.focus(),
-                );
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              <IconArrowLeft />
-              Change email
-            </Button>
-            <form.FormGroup name="otpStep">
-              {() => (
-                <FieldGroup>
+                  ))}
+                  <FieldSeparator>or</FieldSeparator>
                   <form.Field
-                    name="otpStep.otp"
+                    name="emailStep.email"
                     validators={{
-                      onDynamic: z
-                        .string()
-                        .regex(
-                          /^\d{6}$/,
-                          "Enter the six-digit code from your email.",
-                        ),
+                      onDynamic: z.email("Enter a valid email address."),
                     }}
                   >
                     {(field) => {
                       const isInvalid = field.state.meta.errors.length > 0;
                       return (
                         <Field data-invalid={isInvalid}>
-                          <FieldLabel htmlFor={field.name}>
-                            One-time password
-                          </FieldLabel>
-                          <InputOTP
+                          <FieldLabel htmlFor={field.name}>Email</FieldLabel>
+                          <Input
                             aria-invalid={isInvalid}
                             aria-describedby={
-                              isInvalid
-                                ? "otp-help otp-error login-error"
-                                : "otp-help login-error"
+                              isInvalid ? "email-error" : undefined
                             }
                             disabled={pending !== null}
-                            autoComplete="one-time-code"
-                            inputMode="numeric"
-                            pushPasswordManagerStrategy="none"
+                            autoCapitalize="off"
+                            autoComplete="email"
                             id={field.name}
-                            maxLength={6}
                             name={field.name}
                             onBlur={field.handleBlur}
-                            onChange={(value) => field.handleChange(value)}
-                            pattern={REGEXP_ONLY_DIGITS}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder="you@example.com"
                             value={field.state.value}
-                          >
-                            <InputOTPGroup>
-                              <InputOTPSlot index={0} />
-                              <InputOTPSlot index={1} />
-                              <InputOTPSlot index={2} />
-                            </InputOTPGroup>
-                            <InputOTPSeparator />
-                            <InputOTPGroup>
-                              <InputOTPSlot index={3} />
-                              <InputOTPSlot index={4} />
-                              <InputOTPSlot index={5} />
-                            </InputOTPGroup>
-                          </InputOTP>
+                          />
                           {isInvalid && (
                             <FieldError
-                              id="otp-error"
+                              id="email-error"
                               errors={field.state.meta.errors}
                             />
                           )}
@@ -472,105 +387,232 @@ function RouteComponent() {
                       );
                     }}
                   </form.Field>
-                  <Button
-                    size="lg"
-                    type="submit"
-                    disabled={pending !== null || retryWait > 0}
-                    aria-busy={pending === "verify"}
+                  <form.Subscribe
+                    selector={(state) => ({
+                      canSubmit: state.canSubmit,
+                      isSubmitting: state.isSubmitting,
+                      hasToken: !!state.values.emailStep.token,
+                    })}
                   >
-                    {pending === "verify" ? "Verifying…" : "Verify and sign in"}
-                  </Button>
+                    {({ canSubmit, isSubmitting, hasToken }) => (
+                      <Field>
+                        <Button
+                          disabled={
+                            !canSubmit ||
+                            isSubmitting ||
+                            !hasToken ||
+                            pending !== null ||
+                            sendWait > 0
+                          }
+                          aria-busy={pending === "send"}
+                          size="lg"
+                          type="submit"
+                        >
+                          {pending === "send"
+                            ? "Sending code…"
+                            : sendWait > 0
+                              ? `Send another code in ${sendWait}s`
+                              : "Continue with email"}
+                        </Button>
+                      </Field>
+                    )}
+                  </form.Subscribe>
                 </FieldGroup>
               )}
             </form.FormGroup>
-          </FieldGroup>
-        )}
-        <div className="space-y-3">
-          {step === "otp" && (
-            <form.Subscribe
-              selector={(state) => !!state.values.emailStep.token}
-            >
-              {(hasToken) => (
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  size="lg"
-                  type="button"
-                  onClick={sendCode}
-                  disabled={pending !== null || sendWait > 0 || !hasToken}
-                  aria-busy={pending === "send"}
-                >
-                  {pending === "send"
-                    ? "Sending code…"
-                    : sendWait > 0
-                      ? `Resend code in ${sendWait}s`
-                      : "Resend code"}
-                </Button>
-              )}
-            </form.Subscribe>
+          ) : (
+            <FieldGroup>
+              <Button
+                type="button"
+                disabled={pending !== null}
+                onClick={() => {
+                  setStep("email");
+                  setError(null);
+                  setStatus("");
+                  form.resetField("otpStep.otp");
+                  requestAnimationFrame(() =>
+                    document.getElementById("emailStep.email")?.focus(),
+                  );
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <IconArrowLeft />
+                Change email
+              </Button>
+              <form.FormGroup name="otpStep">
+                {() => (
+                  <FieldGroup>
+                    <form.Field
+                      name="otpStep.otp"
+                      validators={{
+                        onDynamic: z
+                          .string()
+                          .regex(
+                            /^\d{6}$/,
+                            "Enter the six-digit code from your email.",
+                          ),
+                      }}
+                    >
+                      {(field) => {
+                        const isInvalid = field.state.meta.errors.length > 0;
+                        return (
+                          <Field data-invalid={isInvalid}>
+                            <FieldLabel htmlFor={field.name}>
+                              One-time password
+                            </FieldLabel>
+                            <InputOTP
+                              aria-invalid={isInvalid}
+                              aria-describedby={
+                                isInvalid
+                                  ? "otp-help otp-error login-error"
+                                  : "otp-help login-error"
+                              }
+                              disabled={pending !== null}
+                              autoComplete="one-time-code"
+                              inputMode="numeric"
+                              pushPasswordManagerStrategy="none"
+                              id={field.name}
+                              maxLength={6}
+                              name={field.name}
+                              onBlur={field.handleBlur}
+                              onChange={(value) => field.handleChange(value)}
+                              pattern={REGEXP_ONLY_DIGITS}
+                              value={field.state.value}
+                            >
+                              <InputOTPGroup>
+                                <InputOTPSlot index={0} />
+                                <InputOTPSlot index={1} />
+                                <InputOTPSlot index={2} />
+                              </InputOTPGroup>
+                              <InputOTPSeparator />
+                              <InputOTPGroup>
+                                <InputOTPSlot index={3} />
+                                <InputOTPSlot index={4} />
+                                <InputOTPSlot index={5} />
+                              </InputOTPGroup>
+                            </InputOTP>
+                            {isInvalid && (
+                              <FieldError
+                                id="otp-error"
+                                errors={field.state.meta.errors}
+                              />
+                            )}
+                          </Field>
+                        );
+                      }}
+                    </form.Field>
+                    <Button
+                      size="lg"
+                      type="submit"
+                      disabled={pending !== null || retryWait > 0}
+                      aria-busy={pending === "verify"}
+                    >
+                      {pending === "verify"
+                        ? "Verifying…"
+                        : "Verify and sign in"}
+                    </Button>
+                  </FieldGroup>
+                )}
+              </form.FormGroup>
+            </FieldGroup>
           )}
-          <p id="captcha-help" className="text-muted-foreground text-sm">
-            Complete the security check to{" "}
-            {step === "email" ? "receive" : "resend"} a code.
-          </p>
-          <Turnstile
-            action={AUTH_EMAIL_CAPTCHA_ACTION}
-            onLoad={(_id, widget) => {
-              turnstile.current = widget;
-            }}
-            onError={() => {
-              form.setFieldValue("emailStep.token", "");
-              setCaptchaError(
-                "The security check is unavailable. Retry it or use another sign-in method.",
-              );
-            }}
-            onExpire={() => {
-              form.setFieldValue("emailStep.token", "");
-              setCaptchaError(
-                "The security check expired. Complete it again before requesting a code.",
-              );
-            }}
-            onTimeout={() => {
-              form.setFieldValue("emailStep.token", "");
-              setCaptchaError("The security check timed out. Please retry it.");
-            }}
-            onUnsupported={() => {
-              form.setFieldValue("emailStep.token", "");
-              setCaptchaError(
-                "The security check does not support this browser. Try another browser or sign-in method.",
-              );
-            }}
-            onVerify={(token) => {
-              form.setFieldValue("emailStep.token", token);
-              setCaptchaError(null);
-            }}
-            sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY ?? ""}
-            theme="auto"
-            size="flexible"
-            className="w-full"
-          />
-          <div
-            role="alert"
-            aria-atomic="true"
-            className="text-destructive text-sm empty:sr-only"
-          >
-            {captchaError}
-          </div>
-          {captchaError && (
-            <Button
-              variant="outline"
-              type="button"
-              disabled={pending !== null}
-              onClick={() => {
-                if (turnstile.current) turnstile.current.reset();
-                else window.location.reload();
+          <div className="space-y-3">
+            {step === "otp" && (
+              <form.Subscribe
+                selector={(state) => !!state.values.emailStep.token}
+              >
+                {(hasToken) => (
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    size="lg"
+                    type="button"
+                    onClick={sendCode}
+                    disabled={pending !== null || sendWait > 0 || !hasToken}
+                    aria-busy={pending === "send"}
+                  >
+                    {pending === "send"
+                      ? "Sending code…"
+                      : sendWait > 0
+                        ? `Resend code in ${sendWait}s`
+                        : "Resend code"}
+                  </Button>
+                )}
+              </form.Subscribe>
+            )}
+            <p id="captcha-help" className="text-muted-foreground text-sm">
+              Complete the security check to{" "}
+              {step === "email" ? "receive" : "resend"} a code.
+            </p>
+            <Turnstile
+              action={AUTH_EMAIL_CAPTCHA_ACTION}
+              onLoad={(_id, widget) => {
+                turnstile.current = widget;
               }}
+              onError={() => {
+                form.setFieldValue("emailStep.token", "");
+                setCaptchaError(
+                  "The security check is unavailable. Retry it or use another sign-in method.",
+                );
+              }}
+              onExpire={() => {
+                form.setFieldValue("emailStep.token", "");
+                setCaptchaError(
+                  "The security check expired. Complete it again before requesting a code.",
+                );
+              }}
+              onTimeout={() => {
+                form.setFieldValue("emailStep.token", "");
+                setCaptchaError(
+                  "The security check timed out. Please retry it.",
+                );
+              }}
+              onUnsupported={() => {
+                form.setFieldValue("emailStep.token", "");
+                setCaptchaError(
+                  "The security check does not support this browser. Try another browser or sign-in method.",
+                );
+              }}
+              onVerify={(token) => {
+                form.setFieldValue("emailStep.token", token);
+                setCaptchaError(null);
+              }}
+              sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY ?? ""}
+              theme="auto"
+              size="flexible"
+              className="w-full"
+            />
+            <div
+              role="alert"
+              aria-atomic="true"
+              className="text-destructive text-sm empty:sr-only"
             >
-              Retry security check
-            </Button>
-          )}
-        </div>
-      </form>
-    </main>
+              {captchaError}
+            </div>
+            {captchaError && (
+              <Button
+                variant="outline"
+                type="button"
+                disabled={pending !== null}
+                onClick={() => {
+                  if (turnstile.current) turnstile.current.reset();
+                  else window.location.reload();
+                }}
+              >
+                Retry security check
+              </Button>
+            )}
+          </div>
+        </form>
+        <nav
+          aria-label="Legal information"
+          className="text-muted-foreground mt-10 flex gap-6 text-xs [&_a]:underline [&_a]:underline-offset-4"
+        >
+          <Link to="/privacy">Privacy</Link>
+          <Link to="/terms">Terms</Link>
+        </nav>
+      </main>
+    </div>
   );
 }

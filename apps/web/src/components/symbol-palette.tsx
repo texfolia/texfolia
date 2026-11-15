@@ -45,7 +45,7 @@ export function SymbolPalette({
         }
       }}
     >
-      <div className="flex items-center gap-2 px-3 pt-2">
+      <div className="flex items-center gap-2 px-2 pt-1">
         <label htmlFor={id} className="text-xs font-medium">
           Symbols
         </label>
@@ -80,21 +80,21 @@ export function SymbolPalette({
           <IconX />
         </Button>
       </div>
-      <p className="text-muted-foreground px-3 py-2 text-xs">
+      <p className="text-muted-foreground px-2 py-1 text-xs">
         Math commands insert at your cursor. Packages are added only when you
         click Add.
       </p>
-      <div className="min-h-0 overflow-y-auto overscroll-contain px-3">
+      <div className="min-h-0 overflow-y-auto overscroll-contain">
         {symbols.length ? (
           <ul className="divide-y">
             {symbols.map((symbol) => (
               <li
                 key={symbol.command}
-                className="flex flex-wrap items-center gap-x-2 py-1"
+                className="flex flex-wrap items-center gap-x-2"
               >
                 <Button
                   variant="ghost"
-                  className="h-auto min-h-11 min-w-0 flex-1 justify-start gap-3 rounded-lg px-2 py-1.5 text-left"
+                  className="h-auto min-h-8 min-w-0 flex-1 justify-start gap-2 px-2 py-1.5 text-left"
                   aria-label={`Insert ${symbol.command} (${symbol.name})`}
                   onClick={() => onInsert(symbol)}
                 >
@@ -153,7 +153,7 @@ export function SymbolPalette({
       </div>
       <p
         role="status"
-        className="text-muted-foreground shrink-0 px-3 py-2 text-xs"
+        className="text-muted-foreground shrink-0 px-2 py-1 text-xs"
       >
         {announcement ||
           `${symbols.length} ${symbols.length === 1 ? "symbol" : "symbols"}`}

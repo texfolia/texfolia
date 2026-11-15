@@ -1,0 +1,187 @@
+import { IconRefresh, IconUsers } from "@tabler/icons-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
+import {
+  getProjectAccess,
+  grantProjectAccess,
+  revokeProjectAccess,
+} from "#/lib/project-sharing.functions";
+import { grantProjectAccessSchema } from "#/lib/project-sharing.schema";
+import { useWorkspace } from "#/providers/workspace-provider";
+
+export function ProjectCollaboration() {
+  const { projectId } = useWorkspace();
+  const [access, setAccess] =
+    useState<Awaited<ReturnType<typeof getProjectAccess>>>();
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const refresh = useCallback(async () => {
+    setError("");
+    try {
+      setAccess(await getProjectAccess({ data: { projectId } }));
+    } catch {
+      setError("Could not load project access. Refresh to try again.");
+    }
+  }, [projectId]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+  async function run(action: () => Promise<void>, notice: string) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await action();
+      await refresh();
+      setNotice(notice);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Access could not be updated. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section aria-label="Collaboration" className="border-t text-xs">
+      <div className="flex h-8 items-center justify-between border-b px-2">
+        <h2 className="flex items-center gap-1.5 font-medium">
+          <IconUsers className="size-3.5" />
+          Collaboration
+        </h2>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Refresh project access"
+          disabled={busy}
+          onClick={() => void refresh()}
+        >
+          <IconRefresh />
+        </Button>
+      </div>
+      {!access && !error && (
+        <p role="status" className="text-muted-foreground p-2">
+          Loading collaborators…
+        </p>
+      )}
+      <ul className="divide-y">
+        {access?.people.map((person) => (
+          <li key={person.id} className="flex items-center gap-2 px-2 py-1.5">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate" title={person.email}>
+                {person.name}
+              </span>
+              <span className="text-muted-foreground">
+                {person.role === "viewer"
+                  ? "Can view"
+                  : person.role === "editor"
+                    ? "Can edit"
+                    : person.role}
+              </span>
+            </span>
+            {access.canManage && person.role !== "owner" && (
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={busy}
+                aria-label={`Remove ${person.name}`}
+                onClick={() =>
+                  void run(
+                    () =>
+                      revokeProjectAccess({
+                        data: { projectId, userId: person.id },
+                      }),
+                    `Access removed for ${person.name}.`,
+                  )
+                }
+              >
+                Remove
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {access?.canManage && (
+        <form
+          ref={form}
+          aria-label="Share project"
+          className="space-y-2 border-t p-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const fields = new FormData(event.currentTarget);
+            const parsed = grantProjectAccessSchema.safeParse({
+              projectId,
+              email: fields.get("email"),
+              role: fields.get("role"),
+            });
+            if (!parsed.success) {
+              setError("Enter a valid email and choose an access level.");
+              return;
+            }
+            void run(async () => {
+              await grantProjectAccess({ data: parsed.data });
+              form.current?.reset();
+            }, "Project access updated.");
+          }}
+        >
+          <label className="block space-y-1">
+            <span>Share with an existing account</span>
+            <Input
+              name="email"
+              type="email"
+              required
+              placeholder="colleague@example.com"
+              autoComplete="email"
+              disabled={busy}
+            />
+          </label>
+          <div className="flex gap-1">
+            <NativeSelect
+              name="role"
+              aria-label="Project access level"
+              disabled={busy}
+              className="min-w-0 flex-1"
+            >
+              <NativeSelectOption value="viewer">Can view</NativeSelectOption>
+              <NativeSelectOption value="editor">Can edit</NativeSelectOption>
+            </NativeSelect>
+            <Button type="submit" size="sm" disabled={busy}>
+              {busy ? "Updating…" : "Share"}
+            </Button>
+          </div>
+          <p className="text-muted-foreground">
+            Use the same email again to change a person’s role.
+          </p>
+        </form>
+      )}
+      {access?.organization && (
+        <p className="text-muted-foreground p-2">
+          Access is inherited from organization membership.
+        </p>
+      )}
+      {access && !access.organization && access.people.length === 1 && (
+        <p className="text-muted-foreground px-2 py-1.5">
+          Only the owner has access.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-destructive p-2 wrap-anywhere">
+          {error}
+        </p>
+      )}
+      <p role="status" className="text-muted-foreground px-2 empty:hidden">
+        {notice}
+      </p>
+    </section>
+  );
+}

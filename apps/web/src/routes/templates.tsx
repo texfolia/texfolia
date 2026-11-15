@@ -31,12 +31,12 @@ function TemplatesPage() {
   useTemplatePreviews(templates);
   const { page } = Route.useSearch();
   return (
-    <>
+    <div className="flex min-h-svh flex-col">
       <Header />
-      <main className="mx-auto max-w-6xl px-6 py-16">
+      <main id="main-content" className="mx-auto max-w-6xl px-6 py-16">
         <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <h1 className="font-serif text-5xl tracking-tight">
+            <h1 className="max-w-2xl font-serif text-5xl leading-tight tracking-tight sm:text-6xl">
               A starting point for your next paper.
             </h1>
             <p className="text-muted-foreground mt-4 max-w-xl text-lg">
@@ -133,6 +133,6 @@ function TemplatesPage() {
         </nav>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

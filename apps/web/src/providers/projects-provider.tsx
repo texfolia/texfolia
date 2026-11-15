@@ -22,6 +22,7 @@ export function createProjectsStore({
   });
 
   return {
+    ownerId,
     projects,
     async create(name: string) {
       const id = crypto.randomUUID();
