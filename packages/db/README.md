@@ -18,8 +18,11 @@ bun run db:push
 
 Standalone schema tasks use the configured database without starting Docker.
 Local development starts Postgres and applies the schema in its internal setup
-task. The app is entirely in development, so schema changes use `db:push`.
-No generated migrations or snapshots are tracked.
+task. Local development and CI use `db:push`. No generated migrations or
+snapshots are tracked yet. Generate and review the baseline only after the v1
+schema settles, immediately before the first production deploy. Staging and
+production must use committed migrations. Follow the
+[Neon and Hyperdrive deployment guide](../../docs/database-deployment.md).
 
 ## Change the schema
 
@@ -70,8 +73,10 @@ Source storage deliberately uploads immutable R2 objects while holding the
 project row lock. This serializes byte quotas, source versions, deletion, and
 garbage collection. Metadata commits only after the upload succeeds; the source
 sweep removes objects left by rolled-back SQL transactions. See
-`apps/web/README.md` for storage behavior and verification. Existing deployments
-must apply `sql/20261111_project_sources.sql` before the source-storage Worker.
+`apps/web/README.md` for storage behavior and verification. The previously
+referenced `sql/20261111_project_sources.sql` is absent. For an existing database,
+prepare and review an upgrade against its actual schema before deploying.
+For a new database at launch, use the baseline described in the deployment guide.
 
 ## Verify plain Postgres
 

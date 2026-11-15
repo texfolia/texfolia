@@ -194,9 +194,11 @@ stored under `.wrangler/state`. Production uses `texfolia-sources`; staging uses
 their independent bindings, and enable the configured hourly cron.
 
 Apply the schema change before deploying the Worker. Local `bun run db:push`
-updates the constraint. For an existing deployment, the reviewed SQL is
-`../../packages/db/sql/20261111_project_sources.sql`; it allows text nodes to
-reference R2 objects without changing existing drafts or Yjs state.
+updates the constraint that allows text nodes to reference R2 objects.
+The previously referenced `packages/db/sql/20261111_project_sources.sql` is absent.
+For a new database at launch, use the reviewed baseline. For an existing database,
+prepare and review an upgrade against its actual schema. Follow the
+[Neon and Hyperdrive deployment guide](../../docs/database-deployment.md).
 
 Run from the repository root against an isolated, schema-initialized database:
 
@@ -319,13 +321,10 @@ If you prefer not to use Tailwind CSS:
 
 ## Deploy to Cloudflare Workers
 
-This project uses the Cloudflare Vite plugin (configured in `vite.config.ts`) and `wrangler.jsonc`:
-
-1. Install Wrangler: `npm install -g wrangler`
-2. Authenticate: `wrangler login`
-3. Deploy: `npx wrangler deploy`
-
-For production env vars, run `wrangler secret put MY_VAR` for each secret listed in `.env.example`. Public (non-secret) vars go in `wrangler.jsonc` under `vars`.
+Deployment remains deferred until the first production launch. Follow
+[Set up Neon and Hyperdrive](../../docs/database-deployment.md) to provision
+resources, review and apply migrations, configure secrets, and build for the
+intended environment. Use the repository's installed Wrangler version.
 
 Deploy `texfolia-compiler` before deploying the web app. Production compiler
 requests use the `COMPILER` service binding in `wrangler.jsonc` and need no
@@ -333,7 +332,8 @@ internal token. `COMPILER_URL` is only a development setting and defaults to
 `http://localhost:8080`. See the [compiler deployment guide](../compiler/README.md).
 After changing bindings, run `bun run cf:typegen` to refresh their TypeScript types.
 
-KV, D1, R2, and Durable Object bindings are configured in `wrangler.jsonc` — see https://developers.cloudflare.com/workers/wrangler/configuration/.
+Bindings are configured in `wrangler.jsonc`. See
+[Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/).
 
 ## Routing
 

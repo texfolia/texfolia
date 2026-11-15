@@ -181,7 +181,9 @@ Run `bun run lint:fix` to apply automatic Oxlint fixes.
 
 `bun run db:push`, `bun run auth:schema`, `bun run cf:typegen`, and
 `bun run deploy` also run through Turbo. Deploy builds the web app and deploys
-the compiler before the web Worker.
+the compiler before the web Worker. Before the first deploy, complete the
+[database deployment setup](docs/database-deployment.md), including committed
+migrations and explicit environment targeting.
 
 ## Templates
 
