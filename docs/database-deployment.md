@@ -29,13 +29,10 @@ change at launch. After the baseline is committed, generate a new reviewed
 migration for each schema change. Preserve migrations already applied to staging
 or production. See [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
 
-For a new database, apply the baseline once. Do not replay the historical SQL in
-`packages/db/sql` afterward. Those files describe upgrades from older schemas and
-can conflict with the baseline. In particular, `20261112_templates.sql` predates
-the NAT-287 template schema and cannot create the current schema by itself.
-The previously referenced `20261111_project_sources.sql` is absent. For any
-existing deployment, inspect its actual schema and migration history, then
-prepare and review the required upgrade separately.
+The repository has no SQL scripts or generated migrations before production
+setup. For a new production database, apply the baseline once. For any existing
+deployment, inspect its actual schema and migration history, then prepare and
+review the required upgrade separately.
 
 ## Provision the databases and Hyperdrive
 

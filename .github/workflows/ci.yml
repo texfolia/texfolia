@@ -32,8 +32,6 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Apply database schema
         run: bun run db:push
-      - name: Verify active project name migration from the legacy index
-        run: bun run packages/db/test/project-names-migration.ts
       - name: Exercise app database operations
         run: bun run apps/web/test/postgres.ts
       - name: Exercise authenticated compile retries with Postgres
@@ -58,6 +56,8 @@ jobs:
         run: bun run apps/web/test/source-storage.ts
       - name: Exercise templates with Postgres and local R2
         run: bun run apps/web/test/templates.ts
+      - name: Exercise template seed commands with Postgres and local R2
+        run: bun run packages/db/test/template-seed-cli.ts
       - name: Exercise template previews and retries in a browser without cron
         run: bun run --cwd apps/web test:template-lifecycle
   checks:

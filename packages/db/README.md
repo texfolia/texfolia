@@ -26,7 +26,8 @@ bun run db:push
 ```
 
 Standalone schema tasks use the configured database without starting Docker.
-`bun run db:seed` seeds the original templates in the local database and the
+`bun run db:seed` runs this package's template CLI. It seeds the original templates
+in the local database configured in `packages/db/.env` or the shell and the
 web app's local R2 bucket. Run it after `db:push`; it does not apply the schema.
 See [Template lifecycle](../../docs/templates.md#seed-original-templates) for
 seed behavior and remote seeding.
@@ -47,30 +48,20 @@ Apply these schema changes with `bun run db:push`. See
 [Template lifecycle](../../docs/templates.md#schema-setup) for setup instructions
 and the Drizzle seed command.
 
-Before deploying the collaboration cleanup Worker, apply
-`sql/20261113_collaboration_cleanup.sql`. It creates a room registry and backfills
-existing projects, including soft-deleted projects with idle collaboration state.
+The schema includes a collaboration room registry.
 The registry has no foreign key to `project`, so account and organization cascades
 cannot erase pending cleanup. The hourly source sweep removes a registration
 only after the collaboration object confirms project deletion and purges its state.
-The script is safe to run again. New rooms register before writing SQLite state.
+New rooms register before writing SQLite state.
 
-Before deploying compilation-ID retry handling, apply
-`sql/20261114_compile_request_digest.sql`. It adds a nullable request digest to
-`project_job` and is safe to run again. Jobs created before this change keep a
-null digest and remain readable, but their IDs cannot be reused for submissions.
+The `project_job` table includes a nullable request digest for compilation-ID
+retry handling. Jobs created before this change keep a null digest and remain
+readable, but their IDs cannot be reused for submissions.
 
 Personal project names are case-sensitive and unique per owner among rows with
 `deleted_at IS NULL`. Deleting a project releases its name and retains the row
 and its nodes. Organization project names keep their existing policy, which
 allows duplicates.
-
-For an existing database with the unconditional index, apply
-`sql/20261114_active_project_names.sql` before deploying name reuse. The script
-replaces the index in one transaction, preserves all project data, and is safe to
-run again. It takes an exclusive table lock while rebuilding the index, so apply
-it during a maintenance window. After names have been reused, restoring the old
-index can fail because deleted rows can share names with active rows.
 
 1. Edit `src/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`.
 2. Run `bun run db:push` against your local database.
@@ -103,21 +94,11 @@ INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test b
 
 This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, constraint rollback, ownership checks, create/delete/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
 
-Verify the name-index upgrade separately after applying the schema:
-
-```sh
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run packages/db/test/project-names-migration.ts
-```
-
-This check creates an isolated schema with the legacy index, applies the rollout
-SQL, and verifies retained rows, name reuse, active uniqueness, and reapplication.
-CI runs it before the application integration check.
-
 ## Assistant billing records
 
-Apply `sql/20261114_ai_assistant.sql` before deploying the assistant. It creates
-per-user settings, run records, and the durable request ledger. Billing records
-retain their original payer after account or project deletion. See
+The Drizzle schema includes per-user settings, run records, and the durable
+request ledger. Billing records retain their original payer after account or
+project deletion. See
 [Configure the managed assistant](../../docs/ai-assistant.md) for reconciliation
 and verification.
 

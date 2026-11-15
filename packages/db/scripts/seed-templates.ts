@@ -1,13 +1,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { createDb } from "@texfolia/db";
-import { seedTemplates } from "@texfolia/db/seed-templates";
 import { getPlatformProxy } from "wrangler";
 
-import type { SourceBucket } from "../src/lib/project-source.server";
+import { createDb } from "../src/index";
+import { seedTemplates } from "../src/seed-templates";
 
 const { values } = parseArgs({
   args: process.argv.slice(2),
@@ -48,11 +48,21 @@ const db = createDb(connectionString);
 const directory = await mkdtemp(join(tmpdir(), "texfolia-template-seeds-"));
 const platform = remote
   ? null
-  : await getPlatformProxy<{ SOURCES: SourceBucket }>({
-      configPath: new URL("../wrangler.jsonc", import.meta.url).pathname,
+  : await getPlatformProxy<{
+      SOURCES: { put: Parameters<typeof seedTemplates>[0]["putSource"] };
+    }>({
+      configPath: fileURLToPath(
+        new URL("../../../apps/web/wrangler.jsonc", import.meta.url),
+      ),
       envFiles: [],
       remoteBindings: false,
-      persist: values["persist-to"] ? { path: values["persist-to"] } : true,
+      persist: {
+        path:
+          values["persist-to"] ??
+          fileURLToPath(
+            new URL("../../../apps/web/.wrangler/state/v3", import.meta.url),
+          ),
+      },
     });
 try {
   const templates = await seedTemplates({
@@ -77,7 +87,7 @@ try {
           "application/octet-stream",
         ],
         {
-          cwd: new URL("..", import.meta.url).pathname,
+          cwd: fileURLToPath(new URL("..", import.meta.url)),
           stdout: "inherit",
           stderr: "inherit",
         },
