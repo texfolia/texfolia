@@ -78,6 +78,7 @@ export function restoreWorkspaceDock(
             "generated",
             "markdown",
             "problems",
+            "settings",
           ]),
           params: z.record(z.string(), z.unknown()).optional(),
         }),
@@ -120,7 +121,8 @@ export function restoreWorkspaceDock(
       panel.params = { source: "" };
     }
     if (
-      panel.contentComponent === "problems" &&
+      (panel.contentComponent === "problems" ||
+        panel.contentComponent === "settings") &&
       panel.id !== panel.contentComponent
     )
       return false;

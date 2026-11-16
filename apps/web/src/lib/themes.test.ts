@@ -1,125 +1,127 @@
 import { expect, test } from "bun:test";
 
-import { ensureSyntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, highlightingFor } from "@codemirror/language";
 import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
-import { EditorState, type Extension } from "@uiw/react-codemirror";
+import * as uiw from "@uiw/codemirror-themes-all";
+import { EditorState, EditorView, type Extension } from "@uiw/react-codemirror";
 
 import { bibtexLanguage, themedLatex } from "./latex/highlight";
+import { latexTags } from "./latex/tags";
+import {
+  appearanceSnapshot,
+  themeBootstrap,
+  isAppPath,
+} from "./theme-bootstrap";
 import { editorTheme } from "./theme-editor";
-import { latexTags, tokenStyle } from "./theme-syntax";
 import {
   appearanceSchema,
   appearanceStorageKey,
-  bundledThemes,
-  parseTheme,
+  legacyAppearanceStorageKey,
+  themeCatalog,
+  catalogTheme,
+  migrateAppearance,
+  defaultAppearance,
   resolveTheme,
   selectedTheme,
 } from "./themes";
 
-test("VS Code JSONC colors drive both app tokens and an editor extension", () => {
-  const parsed = parseTheme(`{
-    // a standalone color theme
-    "name": "Example", "type": "dark",
-    "colors": { "editor.background": "#121212", "editor.foreground": "#eee", "sideBar.background": "#222", "button.background": "#07c", "statusBar.background": "#03a", },
-    "tokenColors": [{ "scope": "support.function", "settings": { "foreground": "#c0f" } },],
-  }`);
-  const theme = resolveTheme(parsed);
-  expect(theme.mode).toBe("dark");
-  expect(theme.variables["--background"]).toBe("#121212");
-  expect(theme.variables["--sidebar"]).toBe("#222");
-  expect(theme.variables["--primary"]).toBe("#07c");
-  expect(theme.variables["--status-background"]).toBe("#03a");
-  expect(editorTheme(theme).length).toBeGreaterThan(0);
-  expect(theme.variables["--popover"]).toBe("#222");
-});
-
-test("imports reject CSS injection, invalid structure, oversized and external files", () => {
-  for (const color of [
-    "red; background:url(https://evil.test)",
-    "var(--secret)",
-    "url(x)",
-    "#abc;",
-    "#12345",
-  ])
-    expect(() =>
-      parseTheme(JSON.stringify({ colors: { "editor.background": color } })),
-    ).toThrow("unsupported");
-  expect(() =>
-    parseTheme('{"tokenColors":[{"settings":{"foreground":"url(x)"}}]}'),
-  ).toThrow();
-  expect(() =>
-    parseTheme(
-      '{"colors":{"editor.background":"#fff"},"tokenColors":[{"settings":{"fontStyle":"italic; background:red"}}]}',
-    ),
-  ).toThrow();
-  expect(() => parseTheme('{"include":"base.json"}')).toThrow("includes");
-  expect(() => parseTheme('{"tokenColors":"base.tmTheme"}')).toThrow();
-  expect(() => parseTheme("{}")).toThrow("No theme colors");
-  expect(() => parseTheme(" ".repeat(1024 * 1024 + 1))).toThrow("1 MB");
-  expect(() => parseTheme("{oops")).toThrow("valid theme JSON");
-});
-
-test("comment and trailing comma handling never rewrites quoted strings", () => {
-  const parsed = parseTheme(
-    '{"name":"https://example.test/*,}*/", "colors":{"editor.background":"#fff",},}',
-  );
-  expect(parsed.name).toBe("https://example.test/*,}*/");
-});
-
-test("longest dot-prefix selectors resolve each style property, ties choose later rules", () => {
-  const result = tokenStyle(
-    ["support.function.general.tex"],
-    [
-      { scope: "support", settings: { foreground: "#111", fontStyle: "bold" } },
-      {
-        scope: ["support.function", "keyword"],
-        settings: { foreground: "#222" },
-      },
-      {
-        scope: "support.function.general",
-        settings: { fontStyle: "italic underline" },
-      },
-      { scope: "support.function", settings: { foreground: "#333" } },
-      { scope: "support.fun", settings: { foreground: "#444" } },
-    ],
-  );
-  expect(result).toEqual({
-    color: "#333",
-    fontStyle: "italic",
-    fontWeight: "normal",
-    textDecoration: "underline",
-  });
-  expect(
-    tokenStyle(
-      ["comment.line.tex"],
-      [
-        { settings: { foreground: "#aaa", fontStyle: "bold" } },
-        { scope: "comment", settings: { fontStyle: "" } },
-      ],
-    ),
-  ).toEqual({
-    color: "#aaa",
-    fontStyle: "normal",
-    fontWeight: "normal",
-    textDecoration: "none",
-  });
-});
-
-test("bundled themes and user-scoped preferences stay valid across system changes", () => {
-  for (const definition of Object.values(bundledThemes)) {
-    expect(resolveTheme(parseTheme(JSON.stringify(definition))).name).toBe(
-      definition.name,
+test("catalog includes exactly every exported UIW theme with its native settings and mode", () => {
+  const ids = Object.keys(uiw)
+    .filter((key) => key.endsWith("Init"))
+    .map((key) => key.slice(0, -4))
+    .sort();
+  expect(ids).toEqual(themeCatalog.map((theme) => theme.id).sort());
+  expect(new Set(themeCatalog.map((theme) => theme.id)).size).toBe(ids.length);
+  for (const definition of themeCatalog) {
+    const resolved = resolveTheme(definition);
+    const extension = editorTheme(resolved);
+    expect(resolved.variables["--background"]).toBe(
+      definition.settings.background,
     );
+    expect(resolved.variables["--foreground"]).toBe(
+      definition.settings.foreground,
+    );
+    expect(definition.extension).toBe(uiw[definition.id]);
+    expect(
+      EditorState.create({ extensions: extension }).facet(EditorView.darkTheme),
+    ).toBe(definition.mode === "dark");
   }
-  const appearance = appearanceSchema.parse({ selection: { kind: "system" } });
-  expect(selectedTheme(appearance, false)).toBe(bundledThemes.texfolia);
-  expect(selectedTheme(appearance, true)).toBe(bundledThemes.vscodeDark);
-  expect(appearanceStorageKey("alice")).not.toBe(appearanceStorageKey("bob"));
+  const dracula = resolveTheme(catalogTheme("dracula"));
+  expect(uiw.defaultSettingsDracula).toEqual(dracula.settings);
+  expect(uiw.defaultSettingsDracula.selection).toBe(
+    dracula.variables["--selection"],
+  );
+  expect(uiw.defaultSettingsDracula.caret).toBe(dracula.variables["--ring"]);
+  expect(dracula.variables["--sidebar"]).toContain(
+    uiw.defaultSettingsDracula.background!,
+  );
+  expect(resolveTheme(catalogTheme("basicDark")).variables["--border"]).toBe(
+    "#ffffff10",
+  );
   expect(
-    appearanceSchema.safeParse({
-      selection: { kind: "bundled", id: "missing" },
-    }).success,
+    resolveTheme(catalogTheme("basicLight")).variables["--border"],
+  ).not.toBe("none");
+});
+
+test("native UIW highlighting handles the inherited LaTeX tags", () => {
+  const state = EditorState.create({
+    extensions: editorTheme(resolveTheme(catalogTheme("dracula"))),
+  });
+  expect(highlightingFor(state, [latexTags.command])).toBe(
+    highlightingFor(state, [tags.keyword]),
+  );
+  expect(highlightingFor(state, [latexTags.argument])).toBe(
+    highlightingFor(state, [tags.string]),
+  );
+  expect(highlightingFor(state, [latexTags.command])).not.toBeNull();
+});
+
+test("appearance v2 is account-scoped, follows GitHub system modes, and has no import variant", () => {
+  expect(selectedTheme(defaultAppearance, false).id).toBe("githubLight");
+  expect(selectedTheme(defaultAppearance, true).id).toBe("githubDark");
+  expect(appearanceStorageKey("alice")).not.toBe(appearanceStorageKey("bob"));
+  expect(appearanceStorageKey("alice")).not.toBe(
+    legacyAppearanceStorageKey("alice"),
+  );
+  const saved = {
+    selection: { kind: "theme", id: "dracula" },
+    pdfMode: "match",
+  } satisfies import("./themes").Appearance;
+  expect(appearanceSchema.parse(JSON.parse(JSON.stringify(saved)))).toEqual(
+    saved,
+  );
+  expect(
+    appearanceSchema.safeParse({ selection: { kind: "imported", theme: {} } })
+      .success,
   ).toBe(false);
+  expect(
+    appearanceSchema.safeParse({ selection: { kind: "theme", id: "missing" } })
+      .success,
+  ).toBe(false);
+});
+
+test("migration keeps surviving ids and PDF mode, and defaults imported or removed themes", () => {
+  for (const selection of [
+    { kind: "imported", theme: { name: "Old" } },
+    { kind: "bundled", id: "texfolia" },
+    { kind: "bundled", id: "oneDark" },
+    { kind: "theme", id: "removed" },
+  ]) {
+    expect(migrateAppearance({ selection, pdfMode: "match" })).toEqual({
+      selection: { kind: "system" },
+      pdfMode: "match",
+    });
+  }
+  expect(
+    migrateAppearance({
+      selection: { kind: "bundled", id: "dracula" },
+      pdfMode: "match",
+    }),
+  ).toEqual({ selection: { kind: "theme", id: "dracula" }, pdfMode: "match" });
+  expect(migrateAppearance(null)).toEqual(defaultAppearance);
+  expect(migrateAppearance({ selection: { kind: "system" } })).toEqual(
+    defaultAppearance,
+  );
 });
 
 function highlighted(doc: string, extension: Extension) {
@@ -185,104 +187,139 @@ test("BibTeX field names and nested values are independently themeable", () => {
   ).toBe(true);
 });
 
-// Run the exact head-script source with a minimal document port. This verifies
-// both its escaping and its persisted-color allowlist without a browser.
-test("head bootstrap restores the right account and rejects cached CSS injection", async () => {
-  const { appearanceSnapshot, themeBootstrap } =
-    await import("./theme-bootstrap");
-  const custom = resolveTheme(
-    parseTheme(
-      '{"name":"Imported","type":"dark","colors":{"editor.background":"#123456"}}',
-    ),
-  );
-  const stored = new Map<string, string>([
-    [
-      appearanceStorageKey("alice"),
-      JSON.stringify({
-        selection: { kind: "imported" },
-        preview: appearanceSnapshot(custom),
-      }),
-    ],
-    [
-      appearanceStorageKey("bob"),
-      JSON.stringify({ selection: { kind: "system" } }),
-    ],
-  ]);
-  function boot(userId: string, dark: boolean) {
-    const values = new Map<string, string>();
-    const classes = new Set<string>();
-    const document = {
-      documentElement: {
-        style: {
-          colorScheme: "",
-          setProperty: (key: string, value: string) => values.set(key, value),
-        },
-        classList: {
-          toggle: (key: string, add: boolean) =>
-            add ? classes.add(key) : classes.delete(key),
-        },
+function boot({
+  raw,
+  dark = false,
+  userId = "alice",
+  unavailable = false,
+}: {
+  raw: unknown;
+  dark?: boolean;
+  userId?: string;
+  unavailable?: boolean;
+}) {
+  const values = new Map<string, string>();
+  const classes = new Set<string>();
+  const document = {
+    documentElement: {
+      style: {
+        colorScheme: "",
+        setProperty: (key: string, value: string) => values.set(key, value),
       },
-    };
-    new Function(
-      "localStorage",
-      "matchMedia",
-      "document",
-      themeBootstrap(userId),
-    )(
-      { getItem: (key: string) => stored.get(key) ?? null },
-      () => ({ matches: dark }),
-      document,
-    );
-    return { values, classes };
+      classList: {
+        toggle: (key: string, add: boolean) =>
+          add ? classes.add(key) : classes.delete(key),
+      },
+    },
+  };
+  new Function(
+    "localStorage",
+    "matchMedia",
+    "document",
+    themeBootstrap(userId),
+  )(
+    {
+      getItem: (key: string) => {
+        if (unavailable) throw new Error("Unavailable");
+        return key === appearanceStorageKey("alice")
+          ? JSON.stringify(raw)
+          : null;
+      },
+    },
+    () => ({ matches: dark }),
+    document,
+  );
+  return { values, classes };
+}
+
+test("bootstrap accepts every catalog snapshot including rgba and transparent", () => {
+  for (const definition of themeCatalog) {
+    const theme = resolveTheme(definition);
+    const result = boot({
+      raw: {
+        selection: { kind: "theme", id: definition.id },
+        preview: appearanceSnapshot(theme),
+      },
+      dark: definition.mode !== "dark",
+    });
+    expect(Object.fromEntries(result.values)).toEqual(theme.variables);
+    expect(result.classes.has("dark")).toBe(theme.mode === "dark");
   }
-  expect(boot("alice", false).values.get("--background")).toBe("#123456");
-  expect(boot("alice", false).classes.has("dark")).toBe(true);
-  expect(boot("bob", false).values.get("--background")).toBe("#ffffff");
-  expect(boot("bob", true).values.get("--background")).toBe("#1e1e1e");
-  stored.set(
-    appearanceStorageKey("alice"),
-    JSON.stringify({
-      selection: { kind: "imported" },
+  const theme = resolveTheme(catalogTheme("dracula"));
+  const result = boot({
+    raw: {
+      selection: { kind: "theme", id: "dracula" },
       preview: {
-        ...appearanceSnapshot(custom),
-        variables: {
-          ...custom.variables,
-          "--background": "url(https://evil.test)",
-          "--arbitrary": "#abc",
+        ...appearanceSnapshot(theme),
+        variables: { ...theme.variables, "--selection": "transparent" },
+      },
+    },
+  });
+  expect(result.values.get("--selection")).toBe("transparent");
+});
+
+test("bootstrap rejects unsafe CSS, unknown selections, and invalid snapshots", () => {
+  const theme = resolveTheme(catalogTheme("dracula"));
+  for (const color of [
+    "url(https://evil.test)",
+    "#fff; background:red",
+    "var(--secret)",
+    "rgba(0,0,0,1); color:red",
+    "color-mix(in srgb, #fff 10%, url(x))",
+    "#12345",
+    "expression(alert(1))",
+  ]) {
+    const result = boot({
+      raw: {
+        selection: { kind: "theme", id: "dracula" },
+        preview: {
+          ...appearanceSnapshot(theme),
+          variables: {
+            ...theme.variables,
+            "--background": color,
+            "--arbitrary": "#abc",
+          },
         },
       },
-    }),
+    });
+    expect(result.values.get("--background")).toBe(
+      uiw.defaultSettingsGithubLight.background,
+    );
+    expect(result.values.has("--arbitrary")).toBe(false);
+  }
+  for (const selection of [
+    { kind: "theme", id: "missing" },
+    { kind: "imported" },
+    { kind: "system" },
+  ]) {
+    expect(
+      boot({
+        raw: { selection, preview: appearanceSnapshot(theme) },
+      }).values.get("--background"),
+    ).toBe(uiw.defaultSettingsGithubLight.background);
+  }
+  expect(boot({ raw: null, dark: true }).values.get("--background")).toBe(
+    uiw.defaultSettingsGithubDark.background,
   );
-  const safe = boot("alice", false);
-  expect(safe.values.get("--background")).toBe("#ffffff");
-  expect(safe.values.has("--arbitrary")).toBe(false);
+  expect(
+    boot({ raw: null, unavailable: true }).values.get("--background"),
+  ).toBe(uiw.defaultSettingsGithubLight.background);
+  expect(
+    boot({
+      raw: {
+        selection: { kind: "theme", id: "dracula" },
+        preview: appearanceSnapshot(theme),
+      },
+      userId: "bob",
+    }).values.get("--background"),
+  ).toBe(uiw.defaultSettingsGithubLight.background);
   expect(themeBootstrap(null)).toBe("");
   expect(themeBootstrap("</script><script>alert(1)</script>")).not.toContain(
     "</script>",
   );
 });
 
-test("long comma-separated selectors used by popular themes remain importable", () => {
-  const scope = [
-    "support.function.general.tex",
-    ...Array.from(
-      { length: 60 },
-      (_, i) => `entity.name.function.language${i}`,
-    ),
-  ].join(", ");
-  expect(scope.length).toBeGreaterThan(1000);
-  const theme = parseTheme(
-    JSON.stringify({
-      tokenColors: [{ scope, settings: { foreground: "#c678dd" } }],
-    }),
-  );
-  expect(
-    tokenStyle(["support.function.general.tex"], theme.tokenColors).color,
-  ).toBe("#c678dd");
-});
-
-test("only authenticated app paths receive account themes", async () => {
-  const { isAppPath } = await import("./theme-bootstrap");
+test("only authenticated app paths receive account themes", () => {
   for (const path of [
     "/projects",
     "/projects/",

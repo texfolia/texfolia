@@ -12,11 +12,10 @@ import { appearanceSnapshot } from "#/lib/theme-bootstrap";
 import { editorTheme } from "#/lib/theme-editor";
 import {
   type Appearance,
-  appearanceSchema,
   appearanceStorageKey,
-  bundledThemeIdSchema,
   defaultAppearance,
-  parseTheme,
+  legacyAppearanceStorageKey,
+  migrateAppearance,
   resolveTheme,
   selectedTheme,
 } from "#/lib/themes";
@@ -26,23 +25,12 @@ function readAppearance(userId: string): {
   error: string | null;
 } {
   try {
-    const saved = localStorage.getItem(appearanceStorageKey(userId));
-    if (saved)
-      return {
-        appearance: appearanceSchema.parse(JSON.parse(saved)),
-        error: null,
-      };
-    // Migrate the old, independent editor theme only when no account preference exists.
-    const legacy: unknown = JSON.parse(
-      localStorage.getItem("texfolia.settings.v1") ?? "null",
-    );
-    const old = appearanceSchema.shape.selection.safeParse({
-      kind: "bundled",
-      id: findLegacyTheme(legacy),
-    });
+    const saved =
+      localStorage.getItem(appearanceStorageKey(userId)) ??
+      localStorage.getItem(legacyAppearanceStorageKey(userId));
     return {
-      appearance: old.success
-        ? { ...defaultAppearance, selection: old.data }
+      appearance: saved
+        ? migrateAppearance(JSON.parse(saved))
         : defaultAppearance,
       error: null,
     };
@@ -55,32 +43,20 @@ function readAppearance(userId: string): {
   }
 }
 
-function findLegacyTheme(value: unknown) {
-  if (typeof value !== "object" || value === null) return undefined;
-  for (const row of Object.values(value)) {
-    if (typeof row !== "object" || row === null || !("data" in row)) continue;
-    const data = row.data;
-    if (typeof data !== "object" || data === null || !("editor" in data))
-      continue;
-    const editor = data.editor;
-    if (typeof editor !== "object" || editor === null || !("theme" in editor))
-      continue;
-    const parsed = bundledThemeIdSchema.safeParse(editor.theme);
-    if (parsed.success) return parsed.data;
-  }
-  return undefined;
-}
-
 function useAppearance(userId: string) {
   const [initial] = useState(() => readAppearance(userId));
   const [appearance, setAppearance] = useState(initial.appearance);
+  const [draft, setDraft] = useState<Appearance | null>(null);
+  const [preview, setPreview] = useState<Appearance["selection"] | null>(null);
+  const displayed = draft ?? appearance;
+  const effective = preview ? { ...displayed, selection: preview } : displayed;
   const [error, setError] = useState(initial.error);
   const [dark, setDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
   );
   const theme = useMemo(
-    () => resolveTheme(selectedTheme(appearance, dark)),
-    [appearance.selection, dark],
+    () => resolveTheme(selectedTheme(effective, dark)),
+    [effective.selection, dark],
   );
 
   const extension = useMemo(() => editorTheme(theme), [theme]);
@@ -95,10 +71,12 @@ function useAppearance(userId: string) {
         JSON.stringify({ ...next, preview: appearanceSnapshot(resolved) }),
       );
       setError(null);
+      return true;
     } catch {
       setError(
-        "Your theme is applied, but could not be saved. Free browser storage and choose it again.",
+        "Appearance could not be saved. Free browser storage and try Apply again.",
       );
+      return false;
     }
   }
 
@@ -144,23 +122,43 @@ function useAppearance(userId: string) {
     return () => window.removeEventListener("storage", changed);
   }, [userId]);
 
-  function update(next: Appearance) {
+  function commitDraft() {
+    const next = draft ?? appearance;
+    if (!persist(next)) return false;
     setAppearance(next);
-    persist(next);
+    setDraft(next);
+    setPreview(null);
+    return true;
   }
 
   return {
     theme: { ...theme, extension },
-    appearance,
+    appearance: displayed,
     error,
-    choose: (selection: Appearance["selection"]) =>
-      update({ ...appearance, selection }),
-    importTheme: (source: string) => {
-      const theme = parseTheme(source);
-      update({ ...appearance, selection: { kind: "imported", theme } });
+    dirty:
+      draft !== null && JSON.stringify(draft) !== JSON.stringify(appearance),
+    beginDraft: () => {
+      setDraft(appearance);
+      setPreview(null);
     },
-    setPdfMode: (pdfMode: Appearance["pdfMode"]) =>
-      update({ ...appearance, pdfMode }),
+    discardDraft: () => {
+      setDraft(null);
+      setPreview(null);
+    },
+    commitDraft,
+    preview: setPreview,
+    choose: (selection: Appearance["selection"]) => {
+      setDraft({ ...displayed, selection });
+    },
+    setDraftPdfMode: (pdfMode: Appearance["pdfMode"]) =>
+      setDraft({ ...displayed, pdfMode }),
+    setPdfMode: (pdfMode: Appearance["pdfMode"]) => {
+      const next = { ...appearance, pdfMode };
+      if (persist(next)) {
+        setAppearance(next);
+        setDraft((current) => (current ? { ...current, pdfMode } : null));
+      }
+    },
   };
 }
 

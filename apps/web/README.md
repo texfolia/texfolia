@@ -254,10 +254,11 @@ Editor-owned linting uses the package's public `EditorView` API. Keeping syntax 
 
 [wasm-latex-tools](https://github.com/TeXlyre/wasm-latex-tools) supplies `TexFmt` in the formatting worker. Formatting retains minimal edits, isolated undo, and rejection of results after the source changes. `bun run dev` and `bun run build` copy package assets into the ignored `public/core` directory. Use `bun run latex:assets` to refresh those assets separately. Keep `core/texfmt/tex_fmt.js` and `core/texfmt/tex_fmt_bg.wasm` in deployed static assets; `TexFmt` loads them at runtime.
 
-**Settings > Appearance** selects the app and editor theme, including imported
-VS Code themes. Appearance is saved per account in the current browser. The
-editor theme is built with `@uiw/codemirror-themes`; the app does not use the UIW
-theme bundle. See [Themes](../../docs/themes.md) for storage and import limits.
+**Settings > Appearance** previews UIW themes across the app and editor on hover
+or keyboard focus. In the editor, Settings opens as a dock panel. Theme selection
+edits a draft; Apply saves it, Save saves and closes, and Cancel discards it.
+Appearance is saved per account in this browser. Follow system uses GitHub Light
+and GitHub Dark. See [Themes](../../docs/themes.md) for storage and migration.
 
 Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the integration. Completion tests exercise the installed language extension together with project suggestions.
 

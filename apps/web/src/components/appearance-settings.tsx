@@ -1,52 +1,40 @@
-import { useId, useState } from "react";
+import { IconCheck } from "@tabler/icons-react";
+import { useEffect, useId, useState } from "react";
 
-import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Field, FieldLabel } from "#/components/ui/field";
-import { Input } from "#/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "#/components/ui/native-select";
-import { Textarea } from "#/components/ui/textarea";
-import {
-  bundledThemeIdSchema,
-  bundledThemes,
-  maxThemeBytes,
-} from "#/lib/themes";
+import { themeCatalog, type Appearance } from "#/lib/themes";
 import { useTheme } from "#/providers/theme-provider";
 
 export function AppearanceSettings() {
-  const { theme, appearance, choose, importTheme, setPdfMode, error } =
+  const { theme, appearance, choose, preview, setDraftPdfMode, error } =
     useTheme();
   const id = useId();
-  const [source, setSource] = useState("");
-  const [importError, setImportError] = useState<string | null>(null);
-  const [imported, setImported] = useState<string | null>(null);
-  const selection = appearance.selection;
-
-  function apply(source: string) {
-    try {
-      importTheme(source);
-      setImportError(null);
-      setImported("Theme imported and applied.");
-    } catch (error) {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : "Could not import this theme. Try another JSON file.",
-      );
-      setImported(null);
-    }
-  }
-
+  const [hovered, setHovered] = useState<Appearance["selection"] | null>(null);
+  const [focused, setFocused] = useState<Appearance["selection"] | null>(null);
+  useEffect(() => {
+    preview(hovered ?? focused);
+    return () => preview(null);
+  }, [hovered, focused, preview]);
+  const options = [
+    {
+      name: "Follow system appearance",
+      mode: "GitHub Light / Dark",
+      selection: { kind: "system" } satisfies Appearance["selection"],
+    },
+    ...themeCatalog.map(({ id, name, mode }) => ({
+      name,
+      mode,
+      selection: { kind: "theme", id } satisfies Appearance["selection"],
+    })),
+  ];
   return (
-    <div className="space-y-6">
+    <div className="@container/appearance space-y-6">
       <div>
-        <h3 className="font-medium">Your workspace, your colors</h3>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Themes apply instantly to every app page and editor. Saved for your
-          account in this browser. Marketing pages keep Texfolia’s styling.
+        <h3 className="font-medium">Workspace theme</h3>
+        <p id={`${id}-hint`} className="text-muted-foreground mt-1 text-sm">
+          Hover or focus to preview. Select a theme, then Apply or Save to keep
+          it.
         </p>
       </div>
       {error && (
@@ -54,120 +42,60 @@ export function AppearanceSettings() {
           {error}
         </p>
       )}
-      <Field>
-        <FieldLabel htmlFor={`${id}-theme`}>Theme</FieldLabel>
-        <NativeSelect
-          id={`${id}-theme`}
-          value={
-            selection.kind === "system"
-              ? "system"
-              : selection.kind === "imported"
-                ? "imported"
-                : selection.id
-          }
-          className="w-full"
-          onChange={(event) => {
-            if (event.target.value === "system") choose({ kind: "system" });
-            else {
-              const parsed = bundledThemeIdSchema.safeParse(event.target.value);
-              if (parsed.success) choose({ kind: "bundled", id: parsed.data });
-            }
-          }}
-        >
-          <NativeSelectOption value="system">
-            Follow system appearance
-          </NativeSelectOption>
-          {Object.entries(bundledThemes).map(([id, theme]) => (
-            <NativeSelectOption key={id} value={id}>
-              {theme.name}
-            </NativeSelectOption>
-          ))}
-          {selection.kind === "imported" && (
-            <NativeSelectOption value="imported">
-              {selection.theme.name} (imported)
-            </NativeSelectOption>
-          )}
-        </NativeSelect>
-        <p className="text-muted-foreground text-xs" role="status">
-          {theme.name} · {theme.mode}
-        </p>
-      </Field>
+      <div
+        role="group"
+        aria-label="Theme"
+        aria-describedby={`${id}-hint`}
+        className="grid gap-1 @min-[28rem]/appearance:grid-cols-2"
+      >
+        {options.map(({ name, mode, selection }) => {
+          const selected =
+            appearance.selection.kind === selection.kind &&
+            (appearance.selection.kind === "system" ||
+              (selection.kind === "theme" &&
+                appearance.selection.id === selection.id));
+          return (
+            <button
+              key={selection.kind === "system" ? "system" : selection.id}
+              type="button"
+              aria-label={name}
+              aria-pressed={selected}
+              className="hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring aria-pressed:border-border aria-pressed:bg-accent aria-pressed:text-accent-foreground flex min-h-11 items-center gap-2 rounded-md border border-transparent px-3 py-2 text-left text-sm outline-none focus-visible:ring-2"
+              onPointerEnter={(event) => {
+                if (event.pointerType !== "touch") setHovered(selection);
+              }}
+              onPointerLeave={() => setHovered(null)}
+              onPointerCancel={() => setHovered(null)}
+              onFocus={() => setFocused(selection)}
+              onBlur={() => setFocused(null)}
+              onClick={() => choose(selection)}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block">{name}</span>
+                <span className="text-muted-foreground block text-xs capitalize">
+                  {mode}
+                </span>
+              </span>
+              {selected && <IconCheck className="size-4 shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-muted-foreground text-xs" role="status">
+        Preview: {theme.name} · {theme.mode}
+      </p>
       <Field orientation="horizontal">
         <Checkbox
           id={`${id}-pdf`}
           checked={appearance.pdfMode === "match"}
           onCheckedChange={(checked) =>
-            setPdfMode(checked ? "match" : "original")
+            setDraftPdfMode(checked ? "match" : "original")
           }
         />
         <FieldLabel htmlFor={`${id}-pdf`}>
           Match PDF preview to theme
         </FieldLabel>
       </Field>
-      <div className="space-y-3 border-t pt-5">
-        <h3 className="font-medium">Import a VS Code theme</h3>
-        <p className="text-muted-foreground text-sm">
-          Upload or paste a standalone color theme JSON (up to 1 MB). Comments
-          and trailing commas are supported.
-        </p>
-        <Field>
-          <FieldLabel htmlFor={`${id}-file`}>Upload theme JSON</FieldLabel>
-          <Input
-            id={`${id}-file`}
-            type="file"
-            accept=".json,.jsonc,application/json"
-            className="h-auto py-2"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              if (file.size > maxThemeBytes) {
-                setImportError("Choose a theme smaller than 1 MB.");
-                return;
-              }
-              try {
-                apply(await file.text());
-              } catch {
-                setImportError("Could not read this file. Choose it again.");
-              }
-            }}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor={`${id}-json`}>Paste theme JSON</FieldLabel>
-          <Textarea
-            id={`${id}-json`}
-            value={source}
-            onChange={(event) => setSource(event.target.value)}
-            className="max-h-56 min-h-28 font-mono text-xs"
-            placeholder={
-              '{ "name": "My theme", "colors": { … }, "tokenColors": [ … ] }'
-            }
-            spellCheck={false}
-          />
-        </Field>
-        {importError && (
-          <p role="alert" className="text-destructive text-sm">
-            {importError}
-          </p>
-        )}
-        {imported && (
-          <p role="status" className="text-muted-foreground text-sm">
-            {imported}
-          </p>
-        )}
-        <Button
-          type="button"
-          disabled={!source.trim()}
-          onClick={() => apply(source)}
-        >
-          Import and apply
-        </Button>
-        <p className="text-muted-foreground text-xs">
-          TextMate scopes use the nearest syntax category. Semantic tokens, icon
-          themes, extension packages and external includes are not imported.
-        </p>
-      </div>
     </div>
   );
 }
