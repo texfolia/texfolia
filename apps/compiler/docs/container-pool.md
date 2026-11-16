@@ -1,17 +1,98 @@
-# Compiler spare pool
+# Compiler shared pool
 
-`POOL.getByName("global")` owns the global spare inventory. The existing five-minute cron bootstraps its alarm without traffic; claims also schedule replenishment. Alarms check health and renew unassigned spares every minute. A spare is available only after startup and `/health` succeed. Health checks do not send `X-Project-Id`, so the first compile binds the engine.
+`POOL.getByName("global")` owns the Cloudflare container inventory and exclusive
+job leases. A project keeps its coordinator and durable cache archive, and leases
+a container only while an engine attempt runs. The same process can serve many
+projects over its lifetime.
 
-The target starts at one. A one-minute observation window with at least two misses and a miss fraction of at least 25% raises it to two. Five minutes without a new claim lowers it to one. Shrinking stops only unassigned containers. Claimed containers retain the existing ten-minute idle shutdown.
+## Claim and release
 
-Pro claims run immediately. Free and unknown-plan claims wait 25 ms, allowing concurrent Pro requests to claim scarce spares first. Priority applies to overlapping requests in this window; completed assignments are never preempted. Free can use the last spare when no Pro claim arrives.
+Each attempt creates a new claim ID. The pool atomically saves the claim result,
+lease, and inventory removal in SQLite. Repeating an active claim returns the
+same container without incrementing counters. Claims whose leases have ended
+fail instead of returning a container that another job may now use.
 
-Each coordinator persists a claim ID before RPC and the returned container name before compiling. The pool persists each claim result and inventory removal atomically. Retrying the same claim returns the same result without incrementing counters. A stopped project container causes a new claim ID and a new allocation. Assigned names never return to the spare inventory. On a pool RPC failure the coordinator cold-starts a unique project container; a spare allocated by an ambiguous RPC failure expires unused.
+A claim selects a healthy spare or allocates a uniquely named cold container.
+The client calls `PUT /lease` with its project ID and `X-Container-Lease` token.
+The token contains the container's increasing generation and the unique claim
+ID. Compile, cache restore, and cancellation requests carry that token. Retired
+generations and mismatched tokens cannot access a subsequent project's lease.
 
-`compile_pool_claim` telemetry records `jobId`, `projectId`, `plan`, `container`, and `outcome` (`hit`, `miss`, `reused`, or `error`). Compute the claim hit rate as hits / (hits + misses), excluding reused containers and RPC errors. `compile_pool` alarm events include durable hit/miss counters, target, observation-window counters, and spare state. Compile engine temperature is separate: a prewarmed process can still have a cold project cache.
+The engine client restores `projects/<id>/cache.tar.zst` from R2 onto the leased
+container. Missing, corrupt, or unavailable archives fall back to an uncached
+compile. Clean builds skip the saved archive. Each lease also receives a full
+source resync from the durable mirror. The coordinator saves the next archive
+after a successful build. Cache ownership is independent of container identity.
 
-## Deployment and verification
+The client consumes the complete multipart result before releasing the lease,
+including after a TeX error or cancellation. `DELETE /lease` cancels remaining
+work and waits for it to exit. The engine removes the lease workdir, which holds
+sources, build output, and the Tectonic temporary directory. It also clears the
+source manifest, cancellation records, and in-memory project cache.
+The process and baked LaTeX format cache remain warm. Tectonic still runs as
+uid 10001 with `--untrusted` and `TECTONIC_UNTRUSTED_MODE=1`.
 
-Migration `v3` adds the SQLite PoolManager DO. The existing container application remains capped at 20 instances, including spares; capacity failures leave spares unavailable and retryable. This change retains the existing container scheduling policy: Wrangler 4.156.0 rejects `durable_object` together with this application's `image`, `image_build_context`, `instance_type`, and `max_instances` settings. Switching requires a separate migration to the named-image provisioning/start API rather than changing the policy alone.
+A resetting container stays unavailable until cleanup succeeds. Reset state
+survives pool eviction, and alarms retry failed cleanup. Leases have a
+15-minute crash-recovery deadline covering startup, archive restoration,
+compilation, and response transfer. The client requests cancellation 90 seconds
+before that deadline. An expired lease is reset before reuse. This deadline
+bounds abandoned work and does not reserve a container between builds.
 
-`test/pool.test.ts` exercises the production pool logic against SQLite persistence, with controlled container lifecycle calls and time. The compiler suite also checks engine project isolation. Deployment validation should confirm health/start/stop behavior and claim events in Cloudflare, then compare first-project compile latency on hits versus misses. Local tests and deployment dry runs do not establish production warm-hit rates or latency.
+The pool prefers a returned process over a replacement spare started during the
+job and stops surplus idle containers. A failed pool RPC uses an ephemeral cold
+container, which the client destroys after the attempt. An allocation hidden by
+an ambiguous RPC failure is recovered through lease expiry.
+
+## Existing capacity and scheduling policies
+
+The idle target starts at one. A one-minute window with at least two misses and
+a miss fraction of at least 25% raises it to two. Five minutes without a new
+claim lowers it to one. Shrinking stops only idle containers. The container
+application remains capped at 20 instances, including idle spares.
+
+The five-minute cron bootstraps pool alarms without traffic. Claims, releases,
+and editor attachment schedule maintenance. Alarms check spare health and
+recover leases every minute. A spare is available only after startup and
+`/health` succeed. Editor attachment requests shared capacity without claiming
+a container or restoring a project's cache.
+
+Pro and Team claims run immediately. Free and unknown-plan claims wait 25 ms,
+allowing overlapping Pro or Team requests to claim scarce spares first.
+Running compiles are never preempted. The normal compile path remains direct.
+`compile-pro` and `compile-free` remain infrastructure-failure recovery queues.
+Revised pool sizing, scale-to-zero, and priority policies remain follow-up work.
+
+Local Docker uses the same pool and engine client. Inventory, generations, and
+leases persist in `<COMPILER_DB_PATH>.pool.sqlite`. A one-minute timer performs
+maintenance while the API runs. Idle containers keep their identities across
+API restarts. The isolated `localProjectEngine` helper remains only for historical
+cold-start measurements, outside the application compile path.
+
+## Telemetry and rollout
+
+`compile_pool_claim` records `jobId`, `projectId`, `plan`, `container`, and
+`outcome`, which is `hit`, `miss`, or `error`. A hit means the attempt claimed an
+available spare, including a container returned by a previous job. Historical
+`reused` events belong to the dedicated-container model. The claim hit rate is
+hits / (hits + misses), excluding RPC errors. `compile_pool` alarm events include
+counters, target, observation-window counters, spare state, and active leases.
+A warm process can still need a project archive restore.
+
+The existing `v3` PoolManager namespace and container scheduling policy remain.
+Pool state upgrades to version 2 with an empty lease list. Old unassigned spares
+are marked for shutdown before reuse because their images may lack lease endpoints.
+Before claiming or preparing shared capacity, each coordinator destroys its old
+assigned container and drops the assignment table. This frees capacity under the
+existing instance cap. Old dedicated containers for projects that remain unopened
+expire under the previous idle timeouts. The pool does not adopt them. Rebuild and deploy the engine image together with
+the Worker so the lease endpoints are available. Local upgrades also require
+removing old `texfolia-project-<projectId>` containers.
+
+`test/pool.test.ts` exercises SQLite persistence with controlled lifecycle calls
+and time. `test/pooled-engine.test.ts` checks client handoff and response lifetime.
+Go lease tests exercise real HTTP handlers, process cancellation, workdir cleanup,
+cache restore, and stale-token rejection. `scripts/verify-pooled-engine.ts` checks
+real Tectonic PDFs across project handoffs and a local adapter restart.
+Production rollout still requires checking Cloudflare start, destroy, and alarm
+behavior. Local results do not establish production hit rates or latency.

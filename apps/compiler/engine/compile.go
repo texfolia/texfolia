@@ -65,14 +65,14 @@ func transcript(path string) (string, error) {
 	return string(head) + "\n…\n" + string(tail), err
 }
 
-func compile(ctx context.Context, p project, timeout time.Duration, timing *engineTiming) (_ *result, err error) {
+func compile(ctx context.Context, p project, timeout time.Duration, timing *engineTiming, tempDir string) (_ *result, err error) {
 	prepStart := time.Now()
 	defer func() {
 		if timing.InputPrepMs == nil {
 			timing.InputPrepMs = elapsedMs(prepStart)
 		}
 	}()
-	root, err := os.MkdirTemp("", "texfolia-")
+	root, err := os.MkdirTemp(tempDir, "texfolia-")
 	if err != nil {
 		return nil, err
 	}
@@ -146,9 +146,13 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	temporary := filepath.Join(root, "tmp")
+	if err = os.Mkdir(temporary, 0700); err != nil {
+		return nil, err
+	}
 	cmd := exec.CommandContext(ctx, "tectonic", "--untrusted", "--keep-logs", "--outdir", output, "./"+p.mainFile, "--keep-intermediates", "--synctex")
 	cmd.Dir = source
-	cmd.Env = []string{"TECTONIC_UNTRUSTED_MODE=1"}
+	cmd.Env = []string{"TECTONIC_UNTRUSTED_MODE=1", "TMPDIR=" + temporary}
 	for _, key := range []string{"PATH", "HOME", "XDG_CACHE_HOME"} {
 		if value, ok := os.LookupEnv(key); ok {
 			cmd.Env = append(cmd.Env, key+"="+value)

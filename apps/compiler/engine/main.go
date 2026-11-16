@@ -53,9 +53,13 @@ type engineRun struct {
 type engineHandler struct {
 	http.Handler
 	sources *workingCopy
+	scratch *string
 }
 
 func (handler *engineHandler) Close() error {
+	if *handler.scratch != "" {
+		return os.RemoveAll(*handler.scratch)
+	}
 	if handler.sources.project.sourceDir == "" {
 		return nil
 	}
@@ -82,6 +86,14 @@ func newHandler(timeout time.Duration) *engineHandler {
 	var mu sync.Mutex
 	var active *engineRun
 	var owner string
+	var lease string
+	var generation int64
+	var releasing bool
+	var scratch string
+	validLease := func(r *http.Request) bool {
+		token := r.Header.Get("X-Container-Lease")
+		return !releasing && ((lease != "" && token == lease) || (generation == 0 && token == ""))
+	}
 	var cache map[string][]byte
 	var cacheReady bool
 	bootID := fmt.Sprintf("%x", makeBootID())
@@ -100,6 +112,11 @@ func newHandler(timeout time.Duration) *engineHandler {
 	mux.HandleFunc("DELETE /compilations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		mu.Lock()
+		if !validLease(r) {
+			mu.Unlock()
+			writeError(w, &httpError{status: 409, message: "Container lease has ended"})
+			return
+		}
 		// Remember an early cancellation that overtakes the POST on another connection.
 		if len(cancelled) >= 1024 {
 			clear(cancelled)
@@ -116,6 +133,82 @@ func newHandler(timeout time.Duration) *engineHandler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	var warmed atomic.Bool
+	mux.HandleFunc("PUT /lease", func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("X-Container-Lease")
+		next, err := leaseGeneration(token)
+		projectID := r.Header.Get("X-Project-Id")
+		if err != nil || projectID == "" {
+			writeError(w, &httpError{status: 400, message: "Invalid container lease"})
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if !releasing && lease == token && owner == projectID {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if releasing || lease != "" || active != nil || owner != "" || sources.project.sourceDir != "" || next <= generation {
+			writeError(w, &httpError{status: 409, message: "Container unavailable for lease"})
+			return
+		}
+		directory, err := os.MkdirTemp("", "texfolia-lease-")
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		generation, lease, owner, scratch = next, token, projectID, directory
+		sources.tempDir = directory
+		clear(cancelled)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("DELETE /lease", func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("X-Container-Lease")
+		next, err := leaseGeneration(token)
+		if err != nil {
+			writeError(w, &httpError{status: 400, message: "Invalid container lease"})
+			return
+		}
+		mu.Lock()
+		if lease == "" && owner == "" && active == nil {
+			// Fence a delayed PUT even when release overtakes acquisition.
+			generation = max(generation, next)
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if lease != token {
+			mu.Unlock()
+			writeError(w, &httpError{status: 409, message: "Container belongs to another lease"})
+			return
+		}
+		releasing = true
+		run := active
+		if run != nil {
+			run.cancel()
+		}
+		mu.Unlock()
+		if run != nil {
+			<-run.done
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		// A concurrent duplicate release may have already completed the handoff.
+		if lease != token {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if scratch != "" {
+			if err := os.RemoveAll(scratch); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
+		sources = workingCopy{}
+		scratch = ""
+		cache, cacheReady, owner, lease, releasing = nil, false, "", "", false
+		clear(cancelled)
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -132,7 +225,7 @@ func newHandler(timeout time.Duration) *engineHandler {
 		mu.Lock()
 		defer mu.Unlock()
 		projectID := r.Header.Get("X-Project-Id")
-		if projectID == "" || (owner != "" && owner != projectID) {
+		if !validLease(r) || projectID == "" || (owner != "" && owner != projectID) {
 			writeError(w, &httpError{status: 409, message: "Engine belongs to another project"})
 			return
 		}
@@ -163,7 +256,7 @@ func newHandler(timeout time.Duration) *engineHandler {
 	mux.HandleFunc("POST /compile", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		projectID := r.Header.Get("X-Project-Id")
-		if owner != "" && owner != projectID {
+		if !validLease(r) || (owner != "" && owner != projectID) {
 			mu.Unlock()
 			writeError(w, &httpError{status: 409, message: "Engine belongs to another project"})
 			return
@@ -257,7 +350,7 @@ func newHandler(timeout time.Duration) *engineHandler {
 			writeError(w, err)
 			return
 		}
-		result, err := compile(ctx, p, compileTimeout, &timing)
+		result, err := compile(ctx, p, compileTimeout, &timing, scratch)
 		if err != nil {
 			if encoded, encodeErr := json.Marshal(timing); encodeErr == nil {
 				w.Header().Set("X-Compile-Timing", string(encoded))
@@ -355,7 +448,19 @@ func newHandler(timeout time.Duration) *engineHandler {
 			log.Printf("Sending compilation result failed: %v", err)
 		}
 	})
-	return &engineHandler{Handler: mux, sources: &sources}
+	return &engineHandler{Handler: mux, sources: &sources, scratch: &scratch}
+}
+
+func leaseGeneration(token string) (int64, error) {
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 || parts[1] == "" || len(token) > 128 {
+		return 0, errors.New("invalid lease token")
+	}
+	generation, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || generation <= 0 {
+		return 0, errors.New("invalid lease generation")
+	}
+	return generation, nil
 }
 
 func makeBootID() []byte {

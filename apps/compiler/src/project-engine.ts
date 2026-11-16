@@ -49,7 +49,7 @@ export function createProjectEngineClient(options: {
     | undefined;
   let pendingTiming: Partial<EngineTiming> | undefined;
 
-  const prepare = () => {
+  const prepare = (clean = false) => {
     if (preparing) return preparing;
     const started = performance.now();
     const ready = options
@@ -79,9 +79,11 @@ export function createProjectEngineClient(options: {
         const fetchStarted = performance.now();
         let archive: Blob | undefined;
         try {
-          const body = await options.store.read(
-            `projects/${options.projectId}/cache.tar.zst`,
-          );
+          const body = clean
+            ? null
+            : await options.store.read(
+                `projects/${options.projectId}/cache.tar.zst`,
+              );
           if (body) archive = await archiveBlob(body);
           timing.archiveStatus = archive ? "restored" : "missing";
         } catch (error) {
@@ -128,8 +130,8 @@ export function createProjectEngineClient(options: {
     return preparing;
   };
 
-  const engine = createEngineClient(options.fetch, baseUrl, () => {
-    const preparation = prepare();
+  const engine = createEngineClient(options.fetch, baseUrl, (context) => {
+    const preparation = prepare(context.clean);
     return {
       ready: preparation.ready,
       timing: preparation.timing.then((timing) => {

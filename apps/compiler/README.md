@@ -31,7 +31,8 @@ starters with a real container and check both persisted artifacts. Go's
 
 ## Project builds
 
-Each project has one coordinator and one dedicated Tectonic container. The
+Each project has one coordinator. Builds lease Tectonic containers from a shared
+pool for one engine attempt. The
 coordinator serializes builds, waits 300 ms after the latest source update, cancels
 superseded work, and publishes revision metadata over server-sent events.
 
@@ -40,13 +41,13 @@ SQLite-backed `ProjectCoordinator` Durable Object named by project ID, with R2
 for artifacts and alarms for debounce and crash recovery. Bun uses SQLite and
 persisted alarm deadlines. Both adapters call the same Go engine image.
 
-The normal path calls the project's warm container directly. Workers enqueue
-infrastructure failures for recovery. A container never serves another project.
-Workers persist each container assignment from PoolManager. A stopped container
-gets a new assignment, from a healthy spare when available or a cold allocation.
-Assigned containers never return to the spare pool. Idle timeouts are 10 minutes
-for Free and 30 minutes for Pro and Team. Local Docker containers keep their
-project names across API restarts. See [Container pool](docs/container-pool.md).
+The normal path calls a leased container directly. Workers enqueue infrastructure
+failures for recovery. After consuming the complete result, the pool cancels any
+remaining work, wipes project sources, build files, cache, and temporary files,
+and returns the process for another project. Projects hold no container between
+builds. A healthy spare serves the next job when available. Otherwise the pool
+allocates a cold container. Each attempt restores its project's archive onto its
+leased container. See [Container pool](docs/container-pool.md).
 
 ## Run locally
 
@@ -63,13 +64,14 @@ source changes. This command does not start Postgres or change the database.
 `bun run dev` starts both apps and Postgres. Apply the schema explicitly with
 `bun run db:push` before the first web app run and after schema changes.
 
-The API uses `/var/run/docker.sock` to create containers named
-`texfolia-project-<projectId>`. Each container publishes its engine port on a
-random loopback port. Set `DOCKER_SOCKET` if your Docker host uses a different
-socket path. The socket requires a trusted Docker host. Project containers keep
-their names across API restarts and retain their image until removed.
+The API uses `/var/run/docker.sock` to create shared containers named
+`texfolia-spare-<uuid>` or `texfolia-pooled-<uuid>`. Each container publishes its
+engine port on a random loopback port. Set `DOCKER_SOCKET` if your Docker host
+uses a different socket path. The socket requires a trusted Docker host.
 Compiler source objects, pending manifests, revisions, and PDFs persist in
 `apps/compiler/.cache/compiler.sqlite`. `COMPILER_DB_PATH` overrides this path.
+Pool inventory and leases persist in `<COMPILER_DB_PATH>.pool.sqlite` and survive
+API restarts. Local maintenance checks the pool every minute.
 
 `bun run build` builds the engine image and web app through Turbo.
 `bunx turbo run build --filter=compiler` builds only the engine image.
@@ -84,14 +86,15 @@ for these jobs in a separate terminal:
 docker run --rm --name texfolia-snapshot-engine --platform linux/amd64 -p 127.0.0.1:8081:8080 texfolia-latex-engine:local
 ```
 
-Ctrl+C stops the local compiler process. Project containers remain assigned
-until removed with `docker rm -f texfolia-project-<projectId>`. Compose manages
-only Postgres, so `docker compose stop` does not stop project containers.
+Ctrl+C stops the local compiler process. Shared containers remain available for
+the next API process. Compose manages only Postgres, so `docker compose stop`
+does not stop compiler containers. Remove a compiler container with
+`docker rm -f <container-name>` when you need to replace its image.
 
 If you used the previous Compose setup, run `docker compose down --remove-orphans`
-to stop its compiler and engine services. Remove existing project containers with
-`docker rm -f texfolia-project-<projectId>` so the API recreates them with loopback
-ports. The local process uses its own SQLite file instead of the old
+to stop its compiler and engine services. When upgrading from dedicated project
+containers, remove them with `docker rm -f texfolia-project-<projectId>`.
+The shared pool creates new names and does not adopt those containers. The local process uses its own SQLite file instead of the old
 `compiler-data` volume. To retain that compiler state, copy `compiler.sqlite`
 from the stopped volume into `apps/compiler/.cache/` before starting the API.
 
@@ -195,10 +198,11 @@ build files use the compiler object store and never enter that table.
 Each successful project build also replaces `projects/<projectId>/cache.tar.zst`
 with one zstd-compressed tar archive of generated files other than the main PDF.
 This disposable cache is separate from the immutable download generations.
-The engine retains its cache in memory between builds; warm compiles do not
-download output files. On a new engine process, the coordinator fetches one
-archive and uploads it to the private `PUT /cache` endpoint. Source downloads
-run concurrently with archive fetch/unpack after container readiness.
+For each lease, the engine client fetches that project's archive and uploads it
+to the private `PUT /cache` endpoint. Source downloads run concurrently with
+archive fetch and unpack after container readiness. The engine clears the
+in-memory project cache when the lease ends. Its process and baked LaTeX formats
+remain warm for the next project.
 Missing, corrupt, or unavailable archives fall back to an uncached compile.
 Older projects without an archive acquire one after their next successful build.
 
@@ -234,17 +238,12 @@ the same durable message policy with independent queue lanes.
 `GET /projects/<projectId>/events` streams the same snapshot on attach and after
 every transition. It sends heartbeat comments every 15 seconds. EventSource
 reconnects with the current snapshot, so no replay cursor is needed. The editor
-attaches when the project opens. Attachment starts that project's own container
-and restores its archive in the background without delaying the first SSE
-snapshot. Simultaneous attachments and compiles share an in-flight preparation.
-If the container has slept, its new boot identity triggers another restore;
-a ready process keeps its in-memory cache even if the coordinator restarted.
-Prewarm failures do not break SSE and can be retried by the next compile.
-On Cloudflare, preparation selects the persisted PoolManager assignment before
-requesting readiness. A spare may already have a running process, but project
-cache restoration remains separate. No container snapshots are used. See
-[Container pool](docs/container-pool.md) and the historical local
-[cold-start measurements](cold-start-measurements.md).
+attaches when the project opens. Attachment requests shared pool preparation
+without delaying the first SSE snapshot or reserving a container. Cache restore
+starts after a compile claims a lease. Prewarm failures do not break SSE.
+No container snapshots are used. See [Container pool](docs/container-pool.md).
+The local [cold-start measurements](cold-start-measurements.md) describe the
+previous dedicated-container model.
 
 **Save & compile** saves sources to the web
 Worker's R2 bucket, then POSTs a revisioned delta. Save and
@@ -273,13 +272,13 @@ project under its source-storage lock and retries once with a full resync; it
 does not ask the browser to upload a snapshot. Concurrent conflicts return an
 explicit failure rather than leaving a queued job waiting indefinitely.
 
-The engine retains a verified working copy. Warm compiles receive only the
-delta from the last applied engine revision; debounced edits are combined.
-Unchanged files are hard-linked into each isolated build directory rather than
-rewritten. Binary renames and duplicate hashes reuse existing content. A missing
-working copy or disk hash mismatch returns `X-Source-Resync: 1`; the coordinator's
-engine client reloads the full source set from its durable mirror and retries
-once, using the same job ID. Full source JSON is only a cold/resync fallback.
+Each pooled lease starts with a full source resync from the coordinator's durable
+mirror. The engine verifies source hashes and hard-links its working copy into
+the isolated build directory. It removes that working copy at release.
+Delta requests between the browser, web Worker, and coordinator remain unchanged.
+The engine also supports deltas within a lease. A missing working copy or disk
+hash mismatch returns `X-Source-Resync: 1`, and the engine client retries once
+with a full resync using the same job ID.
 
 New revisions terminate superseded jobs with `status: "failed"` and an explicit
 superseded error. Cancellation waits for the Go engine to stop the old TeX
@@ -336,8 +335,9 @@ that still contains pending jobs. Turbo builds the web app and deploys the compi
 The Worker calls the container through its private Durable Object binding.
 
 The configuration allows up to 20 active containers, including spares. Each
-project coordinator persists a PoolManager assignment and routes only to that
-assigned container. Pool RPC failures fall back to a unique cold allocation. An
+engine attempt claims an exclusive PoolManager lease and releases it after the
+result is read. Pool RPC failures fall back to a unique cold allocation, which
+the client destroys after the attempt. An
 alarm retains the newest pending
 snapshot during capacity shortages. The interactive hot path never enters a
 queue. After a direct infrastructure failure, the coordinator hands its revision
@@ -370,18 +370,24 @@ container identities.
 
 The engine's private HTTP interface provides `GET /health` for readiness,
 boot identity, process boot duration, cache readiness, and baked image filesystem
-size. `PUT /cache` restores one archive and binds the process to a project;
-repeated restores on a ready process are no-ops. `POST /compile` accepts the
+size. `PUT /lease` binds the process to a project for one attempt. Pooled
+requests carry `X-Container-Lease` with an increasing generation and a unique
+claim ID. `PUT /cache` restores that project's archive within the lease.
+Repeated restores on a ready lease are no-ops. `POST /compile` accepts the
 same project JSON as Hono. A successful
 engine response is multipart form data with an `application/pdf` file named
 `pdf`, a text field named `log`, a zstd file named `cache`, and binary fields named `artifact:<path>` for
 all other generated files. Failures return JSON with `error`, `log`, and the
 full generated log in `logFile` when available.
 `DELETE /compilations/<id>` cancels that run and responds after it exits.
-The first `X-Project-Id` binds the engine process to that project; subsequent
-requests for another project return `409`. Overlapping requests return `503` with `Retry-After: 1`. The engine has no job
-API or persistent job data. Its image warms the base LaTeX format during build
-and runs as an unprivileged user.
+`DELETE /lease` cancels active work, waits for it to exit, removes the lease
+workdir, and clears project state. Stale lease tokens and requests for another
+project return `409`. Overlapping compiles return `503` with `Retry-After: 1`.
+Standalone engines used by legacy jobs retain their first-project binding until
+restart. The engine has no job API or persistent job data. Its image warms the
+base LaTeX format during build and runs as uid 10001. Tectonic keeps both
+`--untrusted` and `TECTONIC_UNTRUSTED_MODE=1`. Each invocation gets a temporary
+directory inside its build workdir.
 
 ## Verify the compiler
 
@@ -422,18 +428,33 @@ both cases to recover through a full resync. `ENGINE_IMAGE` overrides the image.
 
 `builds.test.ts` checks full artifact retention, cache restoration, clean retry,
 source invalidation, atomic publication through a storage failure, and expiry.
-`project-engine.test.ts` checks SSE prewarm, shared preparation, concurrent source
-download, single-archive restore after restart, missing/corrupt archives, startup
-failure recovery, and atomic publication when an archive write fails. Go cache
-tests check real zstd/tar round trips, rejection of unsafe entries, project
-ownership, clean bypass, and anonymous-job isolation.
+`project-engine.test.ts` checks archive preparation, concurrent source download,
+missing or corrupt archives, startup failure recovery, and atomic publication.
+`pool.test.ts` checks SQLite recovery, exclusive leases, cleanup before reuse,
+expiry, inventory bounds, and the existing arbitration policy.
+`pooled-engine.test.ts` checks alternating projects, archive selection, clean
+bypass, and retaining the lease through the response tail. Go lease tests check
+project state removal, stale tokens, cancellation, and warm process reuse.
+Go process tests require both untrusted-mode settings on every compile.
+
+To verify shared containers with real Tectonic and automatic cleanup:
+
+```sh
+docker build --platform linux/amd64 -t texfolia-latex-engine:local -f apps/compiler/Dockerfile .
+bun apps/compiler/scripts/verify-pooled-engine.ts
+```
+
+The check alternates projects on one process, restores each project's cache,
+checks for leftover workdirs, restarts the pool adapter, and verifies clean builds.
+`ENGINE_IMAGE` overrides the image.
 
 `compile_engine_request` and `compile_backend` include `containerStartMs`,
 `containerBootId`, `bootMs`, `imageSizeBytes`, `archiveFetchMs`, `archiveUnpackMs`,
 `archiveBytes`, `archiveStatus`, and `prewarmed`. Optional fields keep old timing
-records readable. Prewarm measurements are attached to the first compile on the
-same boot; they are not time spent waiting in that compile request. Detailed
-field definitions and local measurements are in
+records readable. Pooled attempts measure preparation during the job and report
+`prewarmed: false`. Use `compile_pool_claim` outcomes to identify shared spare
+hits. Historical dedicated-engine measurements attach prewarm timing to the
+first compile on the same boot. Detailed field definitions and local measurements are in
 [cold-start measurements](cold-start-measurements.md).
 
 `streaming.test.ts` holds back the engine response tail and verifies that the

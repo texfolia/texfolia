@@ -28,7 +28,7 @@ const failure = z.object({
 export function createEngineClient(
   fetchEngine: (request: Request) => Promise<Response>,
   baseUrl = "http://container",
-  prepare?: () => {
+  prepare?: (context: Parameters<Engine>[1]) => {
     ready: Promise<unknown>;
     timing: Promise<Partial<EngineTiming>>;
   },
@@ -132,7 +132,7 @@ export function createEngineClient(
             }),
           );
         };
-        const preparation = prepare?.();
+        const preparation = prepare?.(context);
         if (preparation) void preparation.timing.catch(() => {});
         await preparation?.ready;
         const [prepared, sources] = await Promise.all([
