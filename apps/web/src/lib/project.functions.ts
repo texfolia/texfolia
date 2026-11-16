@@ -3,7 +3,10 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { ensureSession } from "./auth.functions";
-import { createProjectSchema } from "./project.schema";
+import {
+  createProjectSchema,
+  updateProjectFormattingSchema,
+} from "./project.schema";
 
 export const createProject = createServerFn({ method: "POST" })
   .validator(createProjectSchema)
@@ -54,3 +57,15 @@ export const getProject = createServerFn({ method: "GET" })
 export type Project = Awaited<ReturnType<typeof getProjects>>[number];
 export type ProjectDetails = Awaited<ReturnType<typeof getProject>>;
 export type ProjectNode = ProjectDetails["nodes"][number];
+
+export const updateProjectFormatting = createServerFn({ method: "POST" })
+  .validator(updateProjectFormattingSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.updateProjectFormatting({
+      db: context.db,
+      ownerId: session.user.id,
+      data,
+    });
+  });

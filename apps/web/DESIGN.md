@@ -202,7 +202,7 @@ File, Edit, and View use the existing menubar. Sidebar switches live in the bott
 
 ### Dock tabs and PDF
 
-Settings opens as an ordinary dock panel alongside files. Its theme list previews on hover and keyboard focus. Apply commits appearance while keeping the panel open; Save commits and closes; Cancel discards. Closing a dirty appearance draft opens a confirmation prompt.
+Settings opens as a standard dialog with a dimmed backdrop, User and Project tabs, and outlined settings items. The User tab and the Preferences page share their section controls. The theme list previews on hover and keyboard focus. Apply commits the draft while keeping Settings open; Save commits and closes; Cancel discards. Closing a dirty draft opens a confirmation prompt. Project formatting is shared on the server. User preferences and programmable shortcuts remain local to each account in this browser.
 
 Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems remains a dock panel.
 

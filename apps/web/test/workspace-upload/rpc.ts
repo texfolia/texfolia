@@ -69,3 +69,19 @@ export async function grantProjectAccess() {
 export async function revokeProjectAccess() {
   throw new Error("Sharing is outside the upload fixture");
 }
+
+export async function updateProjectFormatting({
+  data,
+}: {
+  data: {
+    projectId: string;
+    formatting: { indent: number; wrap: boolean; width: number };
+  };
+}) {
+  const response = await fetch("/fixture/formatting", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}

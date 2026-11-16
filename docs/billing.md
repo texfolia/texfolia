@@ -77,3 +77,5 @@ webhook delivery to the deployed endpoint. The scripted billing check exercises
 webhook processing with signed fixtures, rather than Stripe's network delivery
 or the hosted payment form. Verify the customer portal configuration in the same
 Stripe account before enabling checkout.
+
+The legacy `/billing` route redirects to `/settings/billing`, preserving plan and organization search parameters.

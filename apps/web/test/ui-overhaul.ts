@@ -388,6 +388,143 @@ try {
   await owner.goto(`${origin}/projects`);
   await owner.getByRole("heading", { name: "Projects", exact: true }).waitFor();
   await capture(owner, "projects-desktop");
+
+  await owner.getByRole("link", { name: "Settings", exact: true }).click();
+  await owner.waitForURL("**/settings/preferences");
+  await owner
+    .getByRole("heading", { name: "Preferences", exact: true })
+    .waitFor();
+  await owner
+    .getByRole("button", { name: "Follow system appearance", exact: true })
+    .waitFor();
+  await capture(owner, "settings-preferences-desktop");
+  await owner.setViewportSize({ width: 390, height: 844 });
+  await capture(owner, "settings-preferences-mobile");
+  await owner.setViewportSize({ width: 1440, height: 1000 });
+  assert.equal(
+    await owner.getByRole("dialog").count(),
+    0,
+    "Outside editor settings is a route",
+  );
+  await owner.getByRole("button", { name: "Editor", exact: true }).click();
+  const pageFont = owner.getByRole("spinbutton", { name: "Editor font size" });
+  await pageFont.fill("17");
+  const settingsNav = owner.getByRole("navigation", {
+    name: "Settings",
+    exact: true,
+  });
+  await settingsNav.getByRole("link", { name: "Account", exact: true }).click();
+  const settingsGuard = owner.getByRole("alertdialog");
+  await settingsGuard
+    .getByRole("button", { name: "Apply", exact: true })
+    .click();
+  await settingsGuard.waitFor({ state: "detached" });
+  assert(
+    owner.url().endsWith("/settings/preferences"),
+    "Leave-guard Apply stays on Preferences",
+  );
+  assert.equal(
+    await owner
+      .getByRole("button", { name: "Apply", exact: true })
+      .isDisabled(),
+    true,
+  );
+  await pageFont.fill("18");
+  await settingsNav.getByRole("link", { name: "Account", exact: true }).click();
+  await settingsGuard
+    .getByRole("button", { name: "Discard", exact: true })
+    .click();
+  await owner.getByRole("heading", { name: "Account", exact: true }).waitFor();
+  await owner
+    .getByRole("button", { name: "Save profile", exact: true })
+    .click();
+  await owner
+    .getByRole("status")
+    .filter({ hasText: "Profile saved." })
+    .waitFor();
+
+  await owner.route("**/api/auth/delete-user", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        message: "Deletion email unavailable. Try again.",
+        code: "MAIL_UNAVAILABLE",
+      }),
+    }),
+  );
+  await owner
+    .getByRole("button", { name: "Delete account", exact: true })
+    .click();
+  const deleteGuard = owner.getByRole("alertdialog");
+  await deleteGuard
+    .getByRole("button", { name: "Send deletion link", exact: true })
+    .click();
+  await deleteGuard
+    .getByRole("alert")
+    .filter({ hasText: "Deletion email unavailable" })
+    .waitFor();
+  await capture(owner, "settings-account-deletion-error");
+  await deleteGuard
+    .getByRole("button", { name: "Keep account", exact: true })
+    .click();
+  await owner.unroute("**/api/auth/delete-user");
+  for (const label of ["Connections", "AI", "Usage"]) {
+    await settingsNav.getByRole("link", { name: label, exact: true }).click();
+    await owner.getByRole("heading", { name: label, exact: true }).waitFor();
+  }
+  await owner
+    .getByRole("spinbutton", {
+      name: "Monthly AI spend cap (USD)",
+      exact: true,
+    })
+    .fill("15.00");
+  await owner.getByRole("button", { name: "Save cap", exact: true }).click();
+  await owner
+    .getByRole("status")
+    .filter({ hasText: "Monthly cap saved." })
+    .waitFor();
+  await owner.goto(`${origin}/billing?plan=team`);
+  await owner.waitForURL("**/settings/billing?plan=team");
+  await owner
+    .getByRole("heading", { name: "Start a Team plan", exact: true })
+    .waitFor();
+  await owner.keyboard.press("ControlOrMeta+/");
+  await owner.waitForURL("**/settings/preferences?section=shortcuts");
+  await owner
+    .getByRole("heading", { name: "Keyboard shortcuts", exact: true })
+    .waitFor();
+  const recordProject = owner.getByRole("button", {
+    name: "Record New project",
+    exact: true,
+  });
+  await recordProject.click();
+  await owner.keyboard.press("g");
+  await owner.keyboard.press("p");
+  await owner.keyboard.press("Enter");
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await owner.waitForURL("**/projects");
+  const projectSearch = owner.getByRole("textbox", {
+    name: "Search projects",
+    exact: true,
+  });
+  await projectSearch.fill("");
+  await projectSearch.pressSequentially("gp");
+  assert.equal(
+    await owner.getByRole("dialog").count(),
+    0,
+    "Sequences are ignored while typing",
+  );
+  await projectSearch.fill("");
+  await owner.getByRole("heading", { name: "Projects", exact: true }).click();
+  await owner.keyboard.press("g");
+  await owner.keyboard.press("p");
+  await owner.getByRole("dialog").waitFor();
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("dialog").waitFor({ state: "detached" });
+  console.info(
+    "Settings routes, AI cap, billing redirect, preferences draft/leave guard, recorded sequences and typing exclusions passed",
+  );
   assert.equal(
     await owner.getByRole("checkbox").count(),
     0,
@@ -791,15 +928,15 @@ try {
   );
   console.info("Rendered file rename, move, and deletion passed");
   await workspaceMenu(owner, "File", "Settings");
-  const settings = owner.getByRole("tabpanel", {
+  const settings = owner.getByRole("dialog", {
     name: "Settings",
     exact: true,
   });
   await settings.getByRole("button", { name: "Dracula", exact: true }).click();
   assert.equal(
     await owner.getByRole("dialog").count(),
-    0,
-    "Editor Settings opens as a dock panel",
+    1,
+    "Editor Settings opens as a dialog",
   );
   await capture(owner, "settings-dark");
   await settings.getByRole("button", { name: "Save", exact: true }).click();

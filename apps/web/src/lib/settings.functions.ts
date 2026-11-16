@@ -9,11 +9,11 @@ import { z } from "zod";
 import {
   defaultSettings,
   editorSettingsSchema,
-  formatSettingsSchema,
   settingsSchema,
 } from "./settings.schema";
 
-const storageKey = "texfolia.settings.v1";
+export const userSettingsStorageKey = (userId: string) =>
+  `texfolia.settings.v2:${userId}`;
 const storedSettingsSchema = z.record(
   z.string(),
   z.object({
@@ -36,16 +36,39 @@ function readLegacy<T>(
   }
 }
 
+function readLegacyEditor(storage: StorageApi) {
+  const legacy = readLegacy(
+    storage,
+    "texfolia.settings.v1",
+    z.record(
+      z.string(),
+      z.object({ data: z.object({ editor: editorSettingsSchema }) }),
+    ),
+    {},
+  );
+  return (
+    (legacy["s:preferences"] ?? legacy.preferences)?.data.editor ??
+    readLegacy(
+      storage,
+      "texfolia.editor",
+      editorSettingsSchema,
+      defaultSettings.editor,
+    )
+  );
+}
+
 export function createSettingsStore({
   storage,
   storageEventApi,
+  userId,
 }: {
   storage: StorageApi;
+  userId: string;
   storageEventApi: StorageEventApi;
 }) {
   const preferences = createCollection(
     localStorageCollectionOptions({
-      storageKey,
+      storageKey: userSettingsStorageKey(userId),
       storage,
       storageEventApi,
       schema: settingsSchema,
@@ -64,18 +87,7 @@ export function createSettingsStore({
       await preferences
         .insert({
           ...defaultSettings,
-          editor: readLegacy(
-            storage,
-            "texfolia.editor",
-            editorSettingsSchema,
-            defaultSettings.editor,
-          ),
-          formatting: readLegacy(
-            storage,
-            "texfolia.format",
-            formatSettingsSchema,
-            defaultSettings.formatting,
-          ),
+          editor: readLegacyEditor(storage),
         })
         .when("settled");
     }
@@ -91,10 +103,12 @@ export function createSettingsStore({
         })
         .when("settled");
     },
-    async updateFormatting(formatting: typeof defaultSettings.formatting) {
+    async save(settings: typeof defaultSettings) {
+      const next = settingsSchema.parse(settings);
       await preferences
         .update("preferences", (draft) => {
-          draft.formatting = formatting;
+          draft.editor = next.editor;
+          draft.shortcuts = next.shortcuts;
         })
         .when("settled");
     },
@@ -103,6 +117,7 @@ export function createSettingsStore({
 
 export function createBrowserSettingsStore(
   browser: StorageEventApi & { readonly localStorage: StorageApi },
+  userId: string,
 ) {
   let storage: StorageApi;
   let warning: string | null = null;
@@ -123,7 +138,7 @@ export function createBrowserSettingsStore(
       "Browser storage is unavailable. Preferences apply until you leave this page.";
   }
   return {
-    ...createSettingsStore({ storage, storageEventApi: browser }),
+    ...createSettingsStore({ storage, storageEventApi: browser, userId }),
     warning,
   };
 }

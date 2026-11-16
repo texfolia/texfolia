@@ -50,7 +50,7 @@ function ProjectsPage() {
   return (
     <ThemeProvider userId={user.id}>
       <ProjectsProvider store={store}>
-        <SettingsProvider>
+        <SettingsProvider userId={user.id}>
           <SidebarProvider>
             <ProjectList />
           </SidebarProvider>

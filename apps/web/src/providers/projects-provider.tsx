@@ -36,6 +36,9 @@ export function createProjectsStore({
           createdAt: now,
           updatedAt: now,
           deletedAt: null,
+          formatIndent: 2,
+          formatWrap: true,
+          formatWidth: 80,
           collaborators: [],
         })
         .when("settled");

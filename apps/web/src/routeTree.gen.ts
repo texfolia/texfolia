@@ -15,10 +15,18 @@ import { Route as LoginRouteRouteImport } from './routes/login/route'
 import { Route as PricingRouteRouteImport } from './routes/pricing/route'
 import { Route as PrivacyRouteRouteImport } from './routes/privacy/route'
 import { Route as ProjectsRouteRouteImport } from './routes/projects/route'
+import { Route as SettingsRouteRouteImport } from './routes/settings/route'
 import { Route as TemplatesRouteRouteImport } from './routes/templates/route'
 import { Route as TermsRouteRouteImport } from './routes/terms/route'
 import { Route as AcceptInvitationInvitationIdRouteRouteImport } from './routes/accept-invitation/$invitationId/route'
 import { Route as ProjectProjectIdRouteRouteImport } from './routes/project/$projectId/route'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as SettingsAccountRouteRouteImport } from './routes/settings/account/route'
+import { Route as SettingsAiRouteRouteImport } from './routes/settings/ai/route'
+import { Route as SettingsBillingRouteRouteImport } from './routes/settings/billing/route'
+import { Route as SettingsConnectionsRouteRouteImport } from './routes/settings/connections/route'
+import { Route as SettingsPreferencesRouteRouteImport } from './routes/settings/preferences/route'
+import { Route as SettingsUsageRouteRouteImport } from './routes/settings/usage/route'
 import { Route as TemplateTemplateIdRouteRouteImport } from './routes/template/$templateId/route'
 import { Route as TemplatesPublishRouteRouteImport } from './routes/templates_/publish/route'
 import { Route as TemplatesReviewRouteRouteImport } from './routes/templates_/review/route'
@@ -61,6 +69,11 @@ const ProjectsRouteRoute = ProjectsRouteRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRouteRoute = SettingsRouteRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TemplatesRouteRoute = TemplatesRouteRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -81,6 +94,43 @@ const ProjectProjectIdRouteRoute = ProjectProjectIdRouteRouteImport.update({
   id: '/project/$projectId',
   path: '/project/$projectId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsAccountRouteRoute = SettingsAccountRouteRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsAiRouteRoute = SettingsAiRouteRouteImport.update({
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsBillingRouteRoute = SettingsBillingRouteRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsConnectionsRouteRoute =
+  SettingsConnectionsRouteRouteImport.update({
+    id: '/connections',
+    path: '/connections',
+    getParentRoute: () => SettingsRouteRoute,
+  } as any)
+const SettingsPreferencesRouteRoute =
+  SettingsPreferencesRouteRouteImport.update({
+    id: '/preferences',
+    path: '/preferences',
+    getParentRoute: () => SettingsRouteRoute,
+  } as any)
+const SettingsUsageRouteRoute = SettingsUsageRouteRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => SettingsRouteRoute,
 } as any)
 const TemplateTemplateIdRouteRoute = TemplateTemplateIdRouteRouteImport.update({
   id: '/template/$templateId',
@@ -150,13 +200,21 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRouteRoute
   '/privacy': typeof PrivacyRouteRoute
   '/projects': typeof ProjectsRouteRoute
+  '/settings': typeof SettingsRouteRouteWithChildren
   '/templates': typeof TemplatesRouteRoute
   '/terms': typeof TermsRouteRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
   '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/settings/account': typeof SettingsAccountRouteRoute
+  '/settings/ai': typeof SettingsAiRouteRoute
+  '/settings/billing': typeof SettingsBillingRouteRoute
+  '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/preferences': typeof SettingsPreferencesRouteRoute
+  '/settings/usage': typeof SettingsUsageRouteRoute
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
   '/templates/publish': typeof TemplatesPublishRouteRoute
   '/templates/review': typeof TemplatesReviewRouteRoute
+  '/settings/': typeof SettingsIndexRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -177,9 +235,16 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRouteRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
   '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/settings/account': typeof SettingsAccountRouteRoute
+  '/settings/ai': typeof SettingsAiRouteRoute
+  '/settings/billing': typeof SettingsBillingRouteRoute
+  '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/preferences': typeof SettingsPreferencesRouteRoute
+  '/settings/usage': typeof SettingsUsageRouteRoute
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
   '/templates/publish': typeof TemplatesPublishRouteRoute
   '/templates/review': typeof TemplatesReviewRouteRoute
+  '/settings': typeof SettingsIndexRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -197,13 +262,21 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRouteRoute
   '/privacy': typeof PrivacyRouteRoute
   '/projects': typeof ProjectsRouteRoute
+  '/settings': typeof SettingsRouteRouteWithChildren
   '/templates': typeof TemplatesRouteRoute
   '/terms': typeof TermsRouteRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
   '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/settings/account': typeof SettingsAccountRouteRoute
+  '/settings/ai': typeof SettingsAiRouteRoute
+  '/settings/billing': typeof SettingsBillingRouteRoute
+  '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/preferences': typeof SettingsPreferencesRouteRoute
+  '/settings/usage': typeof SettingsUsageRouteRoute
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
   '/templates_/publish': typeof TemplatesPublishRouteRoute
   '/templates_/review': typeof TemplatesReviewRouteRoute
+  '/settings/': typeof SettingsIndexRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -222,13 +295,21 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/projects'
+    | '/settings'
     | '/templates'
     | '/terms'
     | '/accept-invitation/$invitationId'
     | '/project/$projectId'
+    | '/settings/account'
+    | '/settings/ai'
+    | '/settings/billing'
+    | '/settings/connections'
+    | '/settings/preferences'
+    | '/settings/usage'
     | '/template/$templateId'
     | '/templates/publish'
     | '/templates/review'
+    | '/settings/'
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
@@ -249,9 +330,16 @@ export interface FileRouteTypes {
     | '/terms'
     | '/accept-invitation/$invitationId'
     | '/project/$projectId'
+    | '/settings/account'
+    | '/settings/ai'
+    | '/settings/billing'
+    | '/settings/connections'
+    | '/settings/preferences'
+    | '/settings/usage'
     | '/template/$templateId'
     | '/templates/publish'
     | '/templates/review'
+    | '/settings'
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
@@ -268,13 +356,21 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/projects'
+    | '/settings'
     | '/templates'
     | '/terms'
     | '/accept-invitation/$invitationId'
     | '/project/$projectId'
+    | '/settings/account'
+    | '/settings/ai'
+    | '/settings/billing'
+    | '/settings/connections'
+    | '/settings/preferences'
+    | '/settings/usage'
     | '/template/$templateId'
     | '/templates_/publish'
     | '/templates_/review'
+    | '/settings/'
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
@@ -292,6 +388,7 @@ export interface RootRouteChildren {
   PricingRouteRoute: typeof PricingRouteRoute
   PrivacyRouteRoute: typeof PrivacyRouteRoute
   ProjectsRouteRoute: typeof ProjectsRouteRoute
+  SettingsRouteRoute: typeof SettingsRouteRouteWithChildren
   TemplatesRouteRoute: typeof TemplatesRouteRoute
   TermsRouteRoute: typeof TermsRouteRoute
   AcceptInvitationInvitationIdRouteRoute: typeof AcceptInvitationInvitationIdRouteRoute
@@ -353,6 +450,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/templates': {
       id: '/templates'
       path: '/templates'
@@ -380,6 +484,55 @@ declare module '@tanstack/react-router' {
       fullPath: '/project/$projectId'
       preLoaderRoute: typeof ProjectProjectIdRouteRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/account': {
+      id: '/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof SettingsAccountRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/ai': {
+      id: '/settings/ai'
+      path: '/ai'
+      fullPath: '/settings/ai'
+      preLoaderRoute: typeof SettingsAiRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/billing': {
+      id: '/settings/billing'
+      path: '/billing'
+      fullPath: '/settings/billing'
+      preLoaderRoute: typeof SettingsBillingRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/connections': {
+      id: '/settings/connections'
+      path: '/connections'
+      fullPath: '/settings/connections'
+      preLoaderRoute: typeof SettingsConnectionsRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/preferences': {
+      id: '/settings/preferences'
+      path: '/preferences'
+      fullPath: '/settings/preferences'
+      preLoaderRoute: typeof SettingsPreferencesRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/usage': {
+      id: '/settings/usage'
+      path: '/usage'
+      fullPath: '/settings/usage'
+      preLoaderRoute: typeof SettingsUsageRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
     }
     '/template/$templateId': {
       id: '/template/$templateId'
@@ -461,6 +614,30 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface SettingsRouteRouteChildren {
+  SettingsAccountRouteRoute: typeof SettingsAccountRouteRoute
+  SettingsAiRouteRoute: typeof SettingsAiRouteRoute
+  SettingsBillingRouteRoute: typeof SettingsBillingRouteRoute
+  SettingsConnectionsRouteRoute: typeof SettingsConnectionsRouteRoute
+  SettingsPreferencesRouteRoute: typeof SettingsPreferencesRouteRoute
+  SettingsUsageRouteRoute: typeof SettingsUsageRouteRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+}
+
+const SettingsRouteRouteChildren: SettingsRouteRouteChildren = {
+  SettingsAccountRouteRoute: SettingsAccountRouteRoute,
+  SettingsAiRouteRoute: SettingsAiRouteRoute,
+  SettingsBillingRouteRoute: SettingsBillingRouteRoute,
+  SettingsConnectionsRouteRoute: SettingsConnectionsRouteRoute,
+  SettingsPreferencesRouteRoute: SettingsPreferencesRouteRoute,
+  SettingsUsageRouteRoute: SettingsUsageRouteRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+}
+
+const SettingsRouteRouteWithChildren = SettingsRouteRoute._addFileChildren(
+  SettingsRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BillingRouteRoute: BillingRouteRoute,
@@ -468,6 +645,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRouteRoute: PricingRouteRoute,
   PrivacyRouteRoute: PrivacyRouteRoute,
   ProjectsRouteRoute: ProjectsRouteRoute,
+  SettingsRouteRoute: SettingsRouteRouteWithChildren,
   TemplatesRouteRoute: TemplatesRouteRoute,
   TermsRouteRoute: TermsRouteRoute,
   AcceptInvitationInvitationIdRouteRoute:

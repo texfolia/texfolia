@@ -5,14 +5,13 @@ import {
   IconTemplate,
   IconLogout,
   IconPlus,
+  IconSettings,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
-import { useFormatForDisplay, useHotkey } from "@tanstack/react-hotkeys";
 import { ClientOnly, Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
 import { useRef, useState } from "react";
 
-import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import { Card } from "#/components/ui/card";
 import {
@@ -62,14 +61,16 @@ import {
 import { authClient } from "#/lib/auth-client";
 import { features } from "#/lib/features";
 import { useProjects } from "#/providers/projects-provider";
+import { useSettings } from "#/providers/settings-provider";
+import { useAppShortcut } from "#/providers/shortcuts-provider";
 
 import { GitImport } from "./git-import";
 import { columns } from "./project-columns";
 import { ProjectForm } from "./project-form";
 
 function SearchShortcut() {
-  const formatShortcut = useFormatForDisplay();
-  return <Kbd>{formatShortcut("Mod+K")}</Kbd>;
+  const { shortcuts } = useSettings();
+  return <Kbd>{shortcuts.search}</Kbd>;
 }
 
 export function ProjectList() {
@@ -79,14 +80,11 @@ export function ProjectList() {
   const store = useProjects();
   const { data: projects } = useLiveQuery(store.projects);
   const search = useRef<HTMLInputElement>(null);
-  useHotkey(
-    "Mod+K",
-    () => {
-      search.current?.focus();
-      search.current?.select();
-    },
-    { ignoreInputs: false },
-  );
+  useAppShortcut("search", () => {
+    search.current?.focus();
+    search.current?.select();
+  });
+  useAppShortcut("newProject", () => setCreating(true));
 
   const table = useTable({
     key: "projects",
@@ -132,10 +130,13 @@ export function ProjectList() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton render={<Link to="/billing" />}>
+              <SidebarMenuButton render={<Link to="/settings/billing" />}>
                 Billing
               </SidebarMenuButton>
-              <SettingsDialog />
+              <SidebarMenuButton render={<Link to="/settings" />}>
+                <IconSettings />
+                Settings
+              </SidebarMenuButton>
               <SidebarMenuButton
                 onClick={async () => {
                   try {

@@ -323,6 +323,9 @@ test("only authenticated app paths receive account themes", () => {
   for (const path of [
     "/projects",
     "/projects/",
+    "/settings",
+    "/settings/preferences",
+    "/settings/ai",
     "/project/123",
     "/accept-invitation/123",
   ])

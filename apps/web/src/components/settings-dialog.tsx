@@ -1,12 +1,5 @@
-import {
-  IconCode,
-  IconKeyboard,
-  IconPalette,
-  IconSettings,
-  IconWand,
-} from "@tabler/icons-react";
-import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { useId } from "react";
+import { IconCode, IconKeyboard, IconPalette } from "@tabler/icons-react";
+import { useId, useState } from "react";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
@@ -23,22 +16,28 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "#/components/ui/dialog";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { Kbd } from "#/components/ui/kbd";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-} from "#/components/ui/sidebar";
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+} from "#/components/ui/item";
+import { Kbd } from "#/components/ui/kbd";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import {
+  defaultShortcuts,
+  eventChord,
+  normalizeBinding,
+  shortcutActions,
+  shortcutConflicts,
+  shortcutIds,
+  type ShortcutAction,
+} from "#/lib/shortcuts";
 import {
   type SettingsSection,
   useSettings,
@@ -47,283 +46,429 @@ import {
 const sections = [
   { title: "Appearance", icon: IconPalette },
   { title: "Editor", icon: IconCode },
-  { title: "Formatting", icon: IconWand },
   { title: "Keyboard shortcuts", icon: IconKeyboard },
 ] satisfies { title: SettingsSection; icon: typeof IconCode }[];
 
-const shortcuts = [
-  ["Save sources", "Mod + S"],
-  ["Bold", "Mod + B"],
-  ["Italic", "Mod + I"],
-  ["Underline", "Mod + U"],
-  ["Heading 1–6", "Mod + Alt + 1–6"],
-  ["Normal text", "Mod + Alt + 0"],
-  ["Copy / cut / paste", "Mod + C / X / V"],
-  ["Open Markdown preview", "Mod + Shift + V"],
-  ["Select all", "Mod + A"],
-  ["Undo / redo", "Mod + Z / Mod + Shift + Z"],
-  ["Find", "Mod + F"],
-  ["Find next / previous", "Mod + G / Mod + Shift + G"],
-  ["Find and replace", "Ctrl + H / ⌘ + Shift + H"],
-  ["Indent / outdent", "Tab / Shift + Tab"],
-  ["Format document", "Mod + Shift + F"],
-  ["Next / previous editor tab", "Ctrl + Page Down / Page Up"],
-  ["Toggle sidebar (outside editor)", "Mod + B"],
-  ["Search projects", "Mod + K"],
-  ["Settings", "Mod + ,"],
-  ["Keyboard shortcuts", "Mod + /"],
-];
-
-export function SettingsDialog({
-  iconOnly = false,
-  hideTrigger = false,
-}: {
-  iconOnly?: boolean;
-  hideTrigger?: boolean;
-}) {
-  const { open, setOpen } = useSettings();
-
+export function SettingsDialog() {
+  const settings = useSettings();
   return (
     <>
-      <SettingsCloseGuard />
-      <Dialog open={open} onOpenChange={setOpen}>
-        {!hideTrigger && (
-          <DialogTrigger
-            render={<SidebarMenuButton tooltip="Settings" />}
-            aria-label="Settings"
+      <Dialog open={settings.open} onOpenChange={settings.setOpen}>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Settings</DialogTitle>
+            <DialogDescription>
+              User preferences apply in this browser. Project settings are
+              shared with collaborators.
+            </DialogDescription>
+          </DialogHeader>
+          <fieldset
+            disabled={!settings.ready || settings.saving}
+            className="flex min-h-0 flex-1 flex-col"
           >
-            <IconSettings />
-            <span className={iconOnly ? "sr-only" : undefined}>Settings</span>
-          </DialogTrigger>
-        )}
-        <DialogContent className="h-[min(640px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl">
-          <DialogTitle className="sr-only">Settings</DialogTitle>
-          <DialogDescription className="sr-only">
-            Customize the app, editor, and keyboard shortcuts. Appearance is
-            saved in this browser. Editor and formatting preferences sync with
-            your account.
-          </DialogDescription>
-          <SettingsContent modal />
+            <Tabs defaultValue="user" className="min-h-0 gap-4">
+              <TabsList aria-label="Settings scope" className="shrink-0">
+                <TabsTrigger value="user" className="px-5">
+                  User
+                </TabsTrigger>
+                <TabsTrigger value="project" className="px-5">
+                  Project
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="user" className="min-h-0">
+                <UserSettingsSections />
+              </TabsContent>
+              <TabsContent value="project" className="min-h-0 overflow-y-auto">
+                <div className="min-h-64 py-1">
+                  <Item variant="outline" className="items-start">
+                    <ItemContent>
+                      <ItemTitle>LaTeX formatting</ItemTitle>
+                      <ItemDescription>
+                        Applied when you run Format document. These settings are
+                        shared by everyone in this project.
+                      </ItemDescription>
+                      {!settings.project?.canWrite && (
+                        <p className="text-muted-foreground text-sm">
+                          You have view access. A project editor can change
+                          these settings.
+                        </p>
+                      )}
+                      <fieldset
+                        disabled={!settings.project?.canWrite}
+                        className="mt-5"
+                      >
+                        {settings.draftFormatting && (
+                          <LatexFormatSettingsFields
+                            settings={settings.draftFormatting}
+                            onChange={settings.setDraftFormatting}
+                          />
+                        )}
+                      </fieldset>
+                    </ItemContent>
+                  </Item>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </fieldset>
+          <SettingsFooter />
         </DialogContent>
       </Dialog>
+      <SettingsCloseGuard />
     </>
   );
 }
 
-export function SettingsContent({ modal = false }: { modal?: boolean }) {
-  const {
-    editor,
-    updateEditor,
-    formatting,
-    appearanceDirty,
-    discard,
-    apply,
-    section,
-    setSection,
-    error,
-    ready,
-  } = useSettings();
-  const id = useId();
-
+export function UserSettingsSections() {
+  const { section, setSection, userReady } = useSettings();
   return (
-    <div className="@container/settings h-full min-h-0">
-      <HotkeysProvider scope={`settings-${id}`} exclusive={modal}>
-        <SidebarProvider
-          keyboardShortcut={false}
-          className="h-full min-h-0 flex-col overflow-hidden @min-[40rem]/settings:flex-row"
-        >
-          <Sidebar
-            collapsible="none"
-            className="h-auto w-full shrink-0 border-b @min-[40rem]/settings:h-full @min-[40rem]/settings:w-48 @min-[40rem]/settings:border-r @min-[40rem]/settings:border-b-0"
+    <div className="flex h-[min(34rem,calc(100dvh-19rem))] min-h-32 flex-col gap-5 sm:flex-row">
+      <nav
+        aria-label="User settings sections"
+        className="flex shrink-0 flex-wrap gap-1 sm:w-44 sm:flex-col"
+      >
+        {sections.map(({ title, icon: Icon }) => (
+          <Button
+            key={title}
+            variant={section === title ? "secondary" : "ghost"}
+            className="justify-start"
+            aria-current={section === title ? "page" : undefined}
+            onClick={() => setSection(title)}
           >
-            <SidebarHeader className="px-4 pt-5 pb-2 font-medium">
-              Settings
-            </SidebarHeader>
-            <SidebarContent>
-              <SidebarGroup>
-                <nav aria-label="Settings sections">
-                  <SidebarMenu className="grid grid-cols-4 @min-[40rem]/settings:flex @min-[40rem]/settings:flex-col">
-                    {sections.map(({ title, icon: Icon }) => (
-                      <SidebarMenuItem key={title}>
-                        <SidebarMenuButton
-                          className="h-auto min-h-12 flex-col justify-center gap-1 px-1 text-xs @min-[40rem]/settings:h-8 @min-[40rem]/settings:min-h-0 @min-[40rem]/settings:flex-row @min-[40rem]/settings:justify-start @min-[40rem]/settings:gap-2 @min-[40rem]/settings:px-2 @min-[40rem]/settings:text-sm"
-                          aria-label={title}
-                          isActive={section === title}
-                          aria-current={section === title ? "page" : undefined}
-                          onClick={() => setSection(title)}
-                        >
-                          <Icon />
-                          <span className="text-center whitespace-normal @min-[40rem]/settings:text-left">
-                            {title === "Keyboard shortcuts"
-                              ? "Shortcuts"
-                              : title}
-                          </span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </nav>
-              </SidebarGroup>
-            </SidebarContent>
-          </Sidebar>
-          <section
-            aria-label={section}
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
-          >
-            <header className="flex h-16 shrink-0 items-center gap-2 border-b px-6 pr-14">
-              <span className="text-muted-foreground hidden @min-[40rem]/settings:inline">
-                Settings /
-              </span>
-              <h2 className="font-medium">{section}</h2>
-            </header>
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
-              {error && (
-                <p role="alert" className="text-destructive text-sm">
-                  {error}
-                </p>
-              )}
-              <fieldset
-                disabled={section !== "Appearance" && !ready}
-                className="space-y-6"
-              >
-                {section === "Appearance" && <AppearanceSettings />}
-                {section === "Editor" && (
-                  <>
-                    <div>
-                      <h3 className="font-medium">Make room for your ideas</h3>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        Editor preferences apply to every project on your
-                        account.
-                      </p>
-                    </div>
-                    <Field>
-                      <FieldLabel htmlFor={`${id}-font-size`}>
-                        Font size
-                      </FieldLabel>
-                      <Input
-                        id={`${id}-font-size`}
-                        type="number"
-                        min={10}
-                        max={24}
-                        value={editor.fontSize}
-                        onChange={(event) => {
-                          const fontSize = event.target.valueAsNumber;
-                          if (
-                            Number.isInteger(fontSize) &&
-                            fontSize >= 10 &&
-                            fontSize <= 24
-                          )
-                            updateEditor({ ...editor, fontSize });
-                        }}
-                      />
-                    </Field>
-                    <Field orientation="horizontal">
-                      <Checkbox
-                        id={`${id}-wrap-lines`}
-                        checked={editor.wrapLines}
-                        onCheckedChange={(wrapLines) =>
-                          updateEditor({ ...editor, wrapLines })
-                        }
-                      />
-                      <FieldLabel htmlFor={`${id}-wrap-lines`}>
-                        Wrap lines in the editor
-                      </FieldLabel>
-                    </Field>
-                    <p className="text-muted-foreground text-xs">
-                      Save with Mod+S to sync your project sources. Use Save
-                      &amp; compile to update the PDF.
-                    </p>
-                  </>
-                )}
-                {section === "Formatting" && (
-                  <>
-                    <div>
-                      <h3 className="font-medium">LaTeX formatting</h3>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        Applied when you run Format document. Formatting does
-                        not change your editor’s visual line wrapping.
-                      </p>
-                    </div>
-                    <LatexFormatSettingsFields
-                      settings={formatting.settings}
-                      onChange={formatting.update}
-                    />
-                  </>
-                )}
-                {section === "Keyboard shortcuts" && (
-                  <>
-                    <p className="text-muted-foreground text-sm">
-                      Mod means ⌘ on Mac and Ctrl on Windows or Linux. Alt means
-                      Option on Mac. Formatting shortcuts apply to the focused
-                      LaTeX editor. Press Escape, then Tab to move focus out of
-                      the editor.
-                    </p>
-                    <dl className="divide-y">
-                      {shortcuts.map(([label, keys]) => (
-                        <div
-                          key={label}
-                          className="flex flex-wrap items-center justify-between gap-2 py-3 first:pt-0"
-                        >
-                          <dt>{label}</dt>
-                          <dd>
-                            <Kbd className="h-auto text-right whitespace-normal">
-                              {keys}
-                            </Kbd>
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p className="text-muted-foreground text-xs">
-                      Heading levels map to section, subsection, subsubsection,
-                      paragraph, subparagraph, and an unnumbered subparagraph.
-                    </p>
-                  </>
-                )}
-              </fieldset>
-            </div>
-            <footer className="flex shrink-0 items-center justify-end gap-2 border-t p-4">
-              <span
-                className="text-muted-foreground mr-auto text-xs"
-                role="status"
-              >
-                {appearanceDirty ? "Unsaved appearance" : "Appearance saved"}
-              </span>
-              <Button variant="outline" onClick={discard}>
-                Cancel
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!appearanceDirty}
-                onClick={() => apply()}
-              >
-                Apply
-              </Button>
-              <Button onClick={() => apply(true)}>Save</Button>
-            </footer>
-          </section>
-        </SidebarProvider>
-      </HotkeysProvider>
+            <Icon />
+            {title}
+          </Button>
+        ))}
+      </nav>
+      <section
+        aria-label={section}
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-1 pb-1"
+      >
+        {section === "Appearance" && (
+          <Item variant="outline">
+            <ItemContent>
+              <AppearanceSettings />
+            </ItemContent>
+          </Item>
+        )}
+        {section === "Editor" && (
+          <fieldset disabled={!userReady}>
+            <EditorSettingsFields />
+          </fieldset>
+        )}
+        {section === "Keyboard shortcuts" && (
+          <fieldset disabled={!userReady}>
+            <ShortcutSettingsFields />
+          </fieldset>
+        )}
+      </section>
     </div>
   );
 }
 
-export function SettingsCloseGuard() {
-  const { closeGuard, setCloseGuard, apply, discard } = useSettings();
+function EditorSettingsFields() {
+  const { draft, setDraft } = useSettings();
+  const id = useId();
   return (
-    <AlertDialog open={closeGuard} onOpenChange={setCloseGuard}>
+    <Item variant="outline">
+      <ItemContent className="gap-5">
+        <div>
+          <ItemTitle>Editor</ItemTitle>
+          <ItemDescription>
+            Font and line wrapping are your preferences in this browser.
+          </ItemDescription>
+        </div>
+        <Field>
+          <FieldLabel htmlFor={`${id}-font`}>Editor font size</FieldLabel>
+          <Input
+            id={`${id}-font`}
+            type="number"
+            min={10}
+            max={24}
+            defaultValue={draft.editor.fontSize}
+            onBlur={(event) => {
+              const size = event.target.valueAsNumber;
+              if (!Number.isInteger(size) || size < 10 || size > 24)
+                event.target.value = String(draft.editor.fontSize);
+            }}
+            onChange={(event) => {
+              const fontSize = event.target.valueAsNumber;
+              if (
+                Number.isInteger(fontSize) &&
+                fontSize >= 10 &&
+                fontSize <= 24
+              )
+                setDraft({ ...draft, editor: { ...draft.editor, fontSize } });
+            }}
+          />
+        </Field>
+        <Field orientation="horizontal">
+          <Checkbox
+            id={`${id}-wrap`}
+            checked={draft.editor.wrapLines}
+            onCheckedChange={(wrapLines) =>
+              setDraft({ ...draft, editor: { ...draft.editor, wrapLines } })
+            }
+          />
+          <FieldLabel htmlFor={`${id}-wrap`}>
+            Wrap lines in the editor
+          </FieldLabel>
+        </Field>
+        <p className="text-muted-foreground text-xs">
+          The editor toolbar’s Wrap lines control saves immediately.
+        </p>
+      </ItemContent>
+    </Item>
+  );
+}
+
+function ShortcutSettingsFields() {
+  const { draft, setDraft } = useSettings();
+  const [recording, setRecording] = useState<ShortcutAction | null>(null);
+  const [chords, setChords] = useState<string[]>([]);
+  const conflicts = shortcutConflicts(draft.shortcuts);
+  const change = (action: ShortcutAction, binding: string) =>
+    setDraft({
+      ...draft,
+      shortcuts: { ...draft.shortcuts, [action]: binding },
+    });
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-medium">Keyboard shortcuts</h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Mod is ⌘ on Mac and Ctrl on Windows or Linux.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setRecording(null);
+            setDraft({ ...draft, shortcuts: defaultShortcuts });
+          }}
+        >
+          Reset all
+        </Button>
+      </div>
+      <p className="text-muted-foreground text-sm">
+        Choose Record, press a chord or a sequence of up to four keys, then
+        Enter. Escape cancels recording. Sequences never run while typing.
+      </p>
+      {conflicts.length > 0 && (
+        <p role="alert" className="text-destructive text-sm">
+          Resolve conflicting bindings before applying:{" "}
+          {conflicts
+            .map(
+              ({ first, second }) =>
+                `${shortcutActions[first].label} and ${shortcutActions[second].label}`,
+            )
+            .join("; ")}
+          .
+        </p>
+      )}
+      {shortcutIds.map((action) => (
+        <Item
+          variant="outline"
+          key={action}
+          aria-invalid={conflicts.some(
+            ({ first, second }) => first === action || second === action,
+          )}
+        >
+          <ItemContent>
+            <ItemTitle>{shortcutActions[action].label}</ItemTitle>
+            <Kbd className="h-auto w-fit whitespace-normal">
+              {recording === action
+                ? chords.join(" → ") || "Press keys…"
+                : draft.shortcuts[action].replaceAll(" ", " → ")}
+            </Kbd>
+          </ItemContent>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              data-shortcut-recorder
+              aria-label={`Record ${shortcutActions[action].label}`}
+              aria-pressed={recording === action}
+              onClick={() => {
+                setRecording(action);
+                setChords([]);
+              }}
+              onBlur={() => {
+                setRecording(null);
+                setChords([]);
+              }}
+              onKeyDown={(event) => {
+                if (recording !== action) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === "Escape") {
+                  setRecording(null);
+                  return;
+                }
+                if (event.key === "Enter") {
+                  if (chords.length) change(action, chords.join(" "));
+                  setRecording(null);
+                  return;
+                }
+                if (event.key === "Backspace") {
+                  setChords((current) => current.slice(0, -1));
+                  return;
+                }
+                if (event.repeat || event.nativeEvent.isComposing) return;
+                const chord = eventChord(
+                  event.nativeEvent,
+                  /Mac|iPhone|iPad/.test(navigator.platform),
+                );
+                if (chord && normalizeBinding(chord) && chords.length < 4)
+                  setChords((current) => [...current, chord]);
+              }}
+            >
+              {recording === action ? "Recording…" : "Record"}
+            </Button>
+            <Button
+              variant="ghost"
+              aria-label={`Reset ${shortcutActions[action].label}`}
+              onClick={() => change(action, defaultShortcuts[action])}
+            >
+              Reset
+            </Button>
+          </div>
+        </Item>
+      ))}
+      <Item variant="outline">
+        <ItemContent>
+          <ItemTitle>Browser and editor defaults</ItemTitle>
+          <ItemDescription>
+            Copy, cut, paste, select all, undo, redo, find, find next/previous,
+            find and replace, and Tab / Shift+Tab indentation use your browser
+            and editor’s built-in bindings.
+          </ItemDescription>
+        </ItemContent>
+      </Item>
+    </div>
+  );
+}
+
+export function SettingsFooter({
+  onSave,
+  onCancel,
+}: {
+  onSave?: () => void;
+  onCancel?: () => void;
+}) {
+  const settings = useSettings();
+  return (
+    <footer className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t pt-4">
+      <div className="mr-auto min-w-0 basis-full text-sm sm:basis-auto">
+        <p role="status" className="text-muted-foreground">
+          {!settings.ready
+            ? "Loading preferences…"
+            : settings.saving
+              ? "Saving settings…"
+              : settings.dirty
+                ? "Unsaved changes"
+                : "All changes saved"}
+        </p>
+        {settings.error && (
+          <p role="alert" className="text-destructive mt-1">
+            {settings.error}
+          </p>
+        )}
+      </div>
+      <Button
+        variant="outline"
+        disabled={settings.saving}
+        onClick={() => {
+          settings.discard();
+          onCancel?.();
+        }}
+      >
+        Cancel
+      </Button>
+      <Button
+        variant="outline"
+        disabled={!settings.ready || settings.saving || !settings.dirty}
+        onClick={() => void settings.apply()}
+      >
+        Apply
+      </Button>
+      <Button
+        disabled={!settings.ready || settings.saving}
+        onClick={() =>
+          void settings.apply(true).then((saved) => {
+            if (saved) onSave?.();
+          })
+        }
+      >
+        Save
+      </Button>
+    </footer>
+  );
+}
+
+export function SettingsCloseGuard({
+  open,
+  onKeepEditing,
+  onDiscard,
+  onApply,
+}: {
+  open?: boolean;
+  onKeepEditing?: () => void;
+  onDiscard?: () => void;
+  onApply?: () => void;
+}) {
+  const settings = useSettings();
+  return (
+    <AlertDialog
+      open={open ?? settings.closeGuard}
+      onOpenChange={(next) => {
+        if (!next) {
+          settings.setCloseGuard(false);
+          onKeepEditing?.();
+        }
+      }}
+    >
       <AlertDialogContent>
-        <AlertDialogTitle>Unsaved appearance changes</AlertDialogTitle>
+        <AlertDialogTitle>Unsaved settings changes</AlertDialogTitle>
         <AlertDialogDescription>
-          Apply your appearance changes or discard them before closing Settings.
+          Apply your changes and keep Settings open, or discard them before
+          leaving.
         </AlertDialogDescription>
+        {settings.error && (
+          <p role="alert" className="text-destructive text-sm">
+            {settings.error}
+          </p>
+        )}
         <AlertDialogFooter>
-          <Button variant="outline" onClick={() => setCloseGuard(false)}>
+          <Button
+            variant="outline"
+            disabled={settings.saving}
+            onClick={() => {
+              settings.setCloseGuard(false);
+              onKeepEditing?.();
+            }}
+          >
             Keep editing
           </Button>
-          <Button variant="outline" onClick={discard}>
+          <Button
+            variant="outline"
+            disabled={settings.saving}
+            onClick={() => {
+              settings.discard();
+              onDiscard?.();
+            }}
+          >
             Discard
           </Button>
-          <Button onClick={() => apply()}>Apply</Button>
+          <Button
+            disabled={settings.saving}
+            onClick={() =>
+              void settings.apply().then((saved) => {
+                if (saved) onApply?.();
+              })
+            }
+          >
+            {settings.saving ? "Applying…" : "Apply"}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
