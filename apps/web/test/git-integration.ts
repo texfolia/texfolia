@@ -138,6 +138,39 @@ try {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+  const localProject = await createProject({
+    db,
+    ownerId,
+    data: { id: crypto.randomUUID(), name: `Local git ${crypto.randomUUID()}` },
+  });
+  assert.equal(
+    (await action(localProject.id, { kind: "status" })).status.branch,
+    null,
+  );
+  const initialized = await action(localProject.id, { kind: "initialize" });
+  assert.equal(initialized.status.remote, null);
+  assert.equal(initialized.status.branch, "main");
+  const localCommit = await action(localProject.id, {
+    kind: "commit",
+    message: "Local history before linking",
+  });
+  const localOid = localCommit.status.commits[0]?.oid;
+  assert(localOid);
+  assert.equal(
+    (await action(localProject.id, { kind: "initialize" })).status.commits[0]
+      ?.oid,
+    localOid,
+  );
+  await assert.rejects(
+    action(localProject.id, { kind: "push" }),
+    /Link a remote/,
+  );
+  const [localRow] = await db
+    .select()
+    .from(projectGit)
+    .where(eq(projectGit.projectId, localProject.id));
+  assert.equal(localRow?.provider, null);
+  assert.equal(localRow?.url, null);
   for (const provider of ["github", "gitlab"] satisfies GitProvider[]) {
     const local = await host.create(`owner/${provider}.git`);
     const seed = new GitRepository();
@@ -374,6 +407,25 @@ try {
   }
   console.log(
     "Git Worker integration passed for GitHub and GitLab: private import, author credentials, viewer denial, live edit commit/push, pull, branch checkout, stable IDs, restart, unlink, and storage cleanup.",
+  );
+  await host.create("owner/local-history.git");
+  const attached = await action(localProject.id, {
+    kind: "link",
+    remote: "https://github.com/owner/local-history.git",
+  });
+  assert.equal(attached.status.commits[0]?.oid, localOid);
+  await action(localProject.id, { kind: "push" });
+  assert.equal(
+    await gitCommand(
+      "--git-dir",
+      join(host.directory, "owner/local-history.git"),
+      "rev-parse",
+      "main",
+    ),
+    localOid,
+  );
+  console.info(
+    "No-repository status, remote-free init/commit/history, and later empty-remote link/push passed",
   );
 } finally {
   await mf.dispose();

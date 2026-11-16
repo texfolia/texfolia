@@ -1,9 +1,30 @@
 # Configure the managed assistant
 
-The editor's **Assistant** button opens chat on the left. Pro users and members
-of an active Pro or Team organization can use it. AI usage is separate from
-compile limits and the plan price. A conversation lasts until the user leaves
-the page; it is not a saved chat history.
+The editor’s left **Agents** sidebar contains saved project chats. Open it from
+**View → Agents sidebar** or the status bar. Pro users and members of an active
+Pro or Team organization can use it. AI usage is separate from compile limits and
+the plan price. Chats are stored on the server, privately for each user and project.
+The history button in the bottom-left status bar opens a separate sidebar to
+the left of Agents, hidden by default. Its list creates, renames, deletes, and
+switches conversations. The active chat keeps its own panel beside history.
+
+## Chat history and display
+
+`ai_thread` owns a conversation’s title and optional model override.
+`ai_message` stores ordered TanStack UI messages, including tool calls, results and
+reasoning. These tables cascade with the user and project; billing records keep
+their existing independent lifetime. The server loads the transcript and accepts
+only the new user text from the browser. It checkpoints streamed replies and
+saves partial replies when stopped. Only one reply can run in a thread at a time.
+Retry replaces the last answer while preserving the original user message.
+
+The interface follows the current shadcn/ui AI Elements patterns: Message Scroller,
+Message, Input Group for Prompt Input, a Model Selector dropdown, Trace for Tool
+and Reasoning, Code Block, Sources and Suggestion. Tool inputs and results render
+as named fields rather than raw JSON. Copy and retry actions appear on messages;
+in-progress states use shadcn’s `shimmer` utility. No reasoning-effort control is
+added. A chat’s model override survives reloads. **Save AI preferences** sets the
+user’s default model for new chats and the existing monthly spending cap.
 
 ## Set up Cloudflare and Stripe
 
@@ -38,7 +59,7 @@ the page; it is not a saved chat history.
    test prices together. The gateway is remote even when the app runs locally.
 
 6. Run the normal local app and compiler. Sign in as a user with an active Pro
-   subscription, open a project, and open **Assistant**. Choose a model and send
+   subscription, open a project, and open **Agents** and start a chat. Choose a model and send
    a message. Open the usage row to change the monthly cap or save a default
    model. Changing the chat picker alone does not change the saved default.
 

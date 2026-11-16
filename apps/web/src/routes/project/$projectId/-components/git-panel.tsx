@@ -1,11 +1,16 @@
-import { IconGitBranch, IconRefresh } from "@tabler/icons-react";
+import { IconRefresh } from "@tabler/icons-react";
 import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 
 import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
 import { Button } from "#/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "#/components/ui/context-menu";
 import { Input } from "#/components/ui/input";
-import { useSidebar } from "#/components/ui/sidebar";
 import { Textarea } from "#/components/ui/textarea";
 import type { GitAction, GitResult } from "#/lib/git";
 import { gitAction } from "#/lib/git.functions";
@@ -13,7 +18,8 @@ import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export function GitPanel() {
-  const { projectId, canWrite, collaboration } = useWorkspace();
+  const { projectId, canWrite, collaboration, reveal, reportGitBranch } =
+    useWorkspace();
   const files = useProjectFiles();
   const [result, setResult] = useState<GitResult | null>(null);
   const [busy, setBusy] = useState("");
@@ -30,11 +36,12 @@ export function GitPanel() {
   }
   const [branch, setBranch] = useState("");
   const [unlinking, setUnlinking] = useState(false);
-  const [expanded, setExpanded] = useState(true);
-  const { open, openMobile, isMobile } = useSidebar();
-  const visible = expanded && (isMobile ? openMobile : open);
+  const visible = true;
   useEffect(() => {
-    if (busy || !visible || !result?.status.remote || result.diff) return;
+    if (result) reportGitBranch(result.status.branch);
+  }, [result, reportGitBranch]);
+  useEffect(() => {
+    if (busy || !visible || !result?.status.branch || result.diff) return;
     let active = true;
     const timer = setInterval(() => {
       void gitAction({ data: { projectId, action: { kind: "status" } } })
@@ -47,7 +54,7 @@ export function GitPanel() {
       active = false;
       clearInterval(timer);
     };
-  }, [projectId, busy, visible, result?.status.remote?.url, result?.diff]);
+  }, [projectId, busy, visible, result?.status.branch, result?.diff]);
   const load = useCallback(
     async () =>
       setResult(
@@ -129,17 +136,8 @@ export function GitPanel() {
   }
   const status = result?.status;
   return (
-    <details
-      open={expanded}
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
-      className="border-t"
-      data-testid="git-panel"
-    >
-      <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-xs font-medium">
-        <IconGitBranch className="size-4" />
-        Git
-      </summary>
-      <div className="space-y-3 px-3 pb-3 text-xs" aria-busy={!!busy}>
+    <section aria-label="Git" data-testid="git-panel">
+      <div className="space-y-3 p-2 text-xs" aria-busy={!!busy}>
         {error && (
           <p
             role="alert"
@@ -153,7 +151,7 @@ export function GitPanel() {
         {!status && error && (
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
             onClick={() => {
               setError("");
               void load().catch((error: unknown) =>
@@ -171,42 +169,74 @@ export function GitPanel() {
         {status &&
           !status.remote &&
           (canWrite ? (
-            <GitRemoteForm
-              mode="link"
-              disabled={!!busy}
-              onConnect={async (url) => {
-                setBusy("link");
-                try {
-                  await save();
-                  setResult(
-                    await gitAction({
-                      data: {
-                        projectId,
-                        action: { kind: "link", remote: url },
-                      },
-                    }),
-                  );
-                } finally {
-                  setBusy("");
-                }
-              }}
-            />
+            <div className="space-y-3">
+              {!status.branch && (
+                <>
+                  <p className="font-medium">Initialize or link repository</p>
+                  <p className="text-muted-foreground">
+                    Git is optional. Initialize to keep commits and history in
+                    Texfolia, or link an empty remote.
+                  </p>
+                  <Button
+                    size="sm"
+                    disabled={!!busy}
+                    onClick={() => void act({ kind: "initialize" })}
+                  >
+                    {busy === "initialize"
+                      ? "Initializing…"
+                      : "Initialize repository"}
+                  </Button>
+                </>
+              )}
+              {status.branch && (
+                <p className="text-muted-foreground">
+                  Repository hosted by Texfolia. Link an empty remote when you
+                  want to push your history.
+                </p>
+              )}
+              <GitRemoteForm
+                mode="link"
+                disabled={!!busy}
+                onConnect={async (url) => {
+                  setBusy("link");
+                  try {
+                    await save();
+                    setResult(
+                      await gitAction({
+                        data: {
+                          projectId,
+                          action: { kind: "link", remote: url },
+                        },
+                      }),
+                    );
+                  } finally {
+                    setBusy("");
+                  }
+                }}
+              />
+            </div>
           ) : (
-            <p className="text-muted-foreground">No repository linked.</p>
+            <p className="text-muted-foreground">
+              {status.branch
+                ? "Repository hosted by Texfolia."
+                : "Initialize or link repository"}
+            </p>
           ))}
-        {status?.remote && (
+        {status?.branch && (
           <>
             <div className="flex min-w-0 items-center gap-2">
-              <a
-                className="min-w-0 flex-1 truncate underline underline-offset-4"
-                href={status.remote.url.replace(/\.git$/, "")}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {status.remote.url
-                  .replace(/^https:\/\//, "")
-                  .replace(/\.git$/, "")}
-              </a>
+              {status.remote && (
+                <a
+                  className="min-w-0 flex-1 truncate underline underline-offset-4"
+                  href={status.remote.url.replace(/\.git$/, "")}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {status.remote.url
+                    .replace(/^https:\/\//, "")
+                    .replace(/\.git$/, "")}
+                </a>
+              )}
               <Button
                 size="icon-xs"
                 variant="ghost"
@@ -217,7 +247,7 @@ export function GitPanel() {
                 <IconRefresh />
               </Button>
             </div>
-            {canWrite && (
+            {canWrite && status.remote && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -264,7 +294,7 @@ export function GitPanel() {
                 ))}
               </select>
             </label>
-            {canWrite && (
+            {canWrite && status.remote && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -277,16 +307,21 @@ export function GitPanel() {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant="outline"
-                disabled={!canWrite || !!busy}
+                variant="ghost"
+                disabled={!canWrite || !status.remote || !!busy}
                 onClick={() => void act({ kind: "pull" })}
               >
                 {busy === "pull" ? "Pulling…" : "Pull"}
               </Button>
               <Button
                 size="sm"
-                variant="outline"
-                disabled={!canWrite || !!busy || !status.commits.length}
+                variant="ghost"
+                disabled={
+                  !canWrite ||
+                  !status.remote ||
+                  !!busy ||
+                  !status.commits.length
+                }
                 onClick={() => void act({ kind: "push" })}
               >
                 {busy === "push" ? "Pushing…" : "Push"}
@@ -309,11 +344,38 @@ export function GitPanel() {
               {status.changes.length ? (
                 <ul className="max-h-36 overflow-auto">
                   {status.changes.map((change) => (
-                    <li key={change.path} className="flex gap-2 py-0.5">
-                      <span className="text-muted-foreground w-14 shrink-0">
-                        {change.status}
-                      </span>
-                      <span className="break-all">{change.path}</span>
+                    <li key={change.path}>
+                      <ContextMenu>
+                        <ContextMenuTrigger
+                          render={<div />}
+                          className="flex gap-2 py-0.5"
+                        >
+                          <span className="text-muted-foreground w-14 shrink-0">
+                            {change.status}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            className="h-auto min-w-0 justify-start text-left whitespace-normal"
+                            onClick={() => reveal(change.path)}
+                          >
+                            {change.path}
+                          </Button>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuItem
+                            disabled={change.status === "deleted"}
+                            onClick={() => reveal(change.path)}
+                          >
+                            Open file
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => void act({ kind: "diff" })}
+                          >
+                            Review diff
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     </li>
                   ))}
                 </ul>
@@ -392,7 +454,7 @@ export function GitPanel() {
                   />
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     type="submit"
                     disabled={!!busy || !branch.trim()}
                   >
@@ -424,6 +486,7 @@ export function GitPanel() {
               )}
             </details>
             {canWrite &&
+              status.remote &&
               (unlinking ? (
                 <div className="space-y-2">
                   <p>
@@ -460,6 +523,6 @@ export function GitPanel() {
           </>
         )}
       </div>
-    </details>
+    </section>
   );
 }

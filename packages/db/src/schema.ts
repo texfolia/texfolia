@@ -75,8 +75,8 @@ export const projectGit = pgTable("project_git", {
   projectId: uuid("project_id")
     .primaryKey()
     .references(() => project.id, { onDelete: "cascade" }),
-  provider: text("provider").notNull(),
-  url: text("url").notNull(),
+  provider: text("provider"),
+  url: text("url"),
   objectKey: text("object_key").notNull(),
 });
 
@@ -377,6 +377,45 @@ export const aiSettings = pgTable(
       "ai_cap_nonnegative",
       sql`${t.monthlyCapNanos} between 0 and 10000000000000`,
     ),
+  ],
+);
+
+export const aiThread = pgTable(
+  "ai_thread",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New chat"),
+    model: text("model"),
+    activeRunId: text("active_run_id"),
+    activeRunAt: time("active_run_at"),
+    createdAt: time("created_at").notNull().defaultNow(),
+    updatedAt: time("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("ai_thread_user_project_idx").on(t.userId, t.projectId, t.updatedAt),
+  ],
+);
+
+export const aiMessage = pgTable(
+  "ai_message",
+  {
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => aiThread.id, { onDelete: "cascade" }),
+    id: text("id").notNull(),
+    position: integer("position").notNull(),
+    message: jsonb("message").$type<unknown>().notNull(),
+    createdAt: time("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.threadId, t.id] }),
+    uniqueIndex("ai_message_thread_position_idx").on(t.threadId, t.position),
   ],
 );
 

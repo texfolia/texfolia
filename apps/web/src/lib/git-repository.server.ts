@@ -199,9 +199,9 @@ export class GitRepository {
       throw new Error("Repository exceeds 1,000 source files.");
     return files;
   }
-  async init(url: string) {
+  async init(url?: string) {
     await git.init({ ...this.args(), defaultBranch: "main" });
-    await git.addRemote({ ...this.args(), remote: "origin", url });
+    if (url) await git.addRemote({ ...this.args(), remote: "origin", url });
   }
   async clone(url: string, http: git.HttpClient) {
     const info = await git.listServerRefs({ http, url, prefix: "refs/heads/" });
@@ -235,7 +235,8 @@ export class GitRepository {
       throw new Error(
         "Link an empty repository, or import this repository as a new project to keep its history.",
       );
-    await this.init(url);
+    if (!this.volume.existsSync(`${this.dir}/.git/HEAD`)) await this.init();
+    await git.addRemote({ ...this.args(), remote: "origin", url });
   }
   private async matrix() {
     return git.statusMatrix(this.args());

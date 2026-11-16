@@ -189,32 +189,32 @@ async function eventually(
     await Bun.sleep(50);
   }
 }
+async function fileMenu(page: Page, item: string) {
+  await page
+    .locator('[data-slot="menubar-trigger"]')
+    .filter({ hasText: /^File$/ })
+    .click();
+  await page.getByRole("menuitem", { name: item, exact: true }).focus();
+  await page.keyboard.press("Enter");
+}
 async function createFile(
   page: Page,
   name: string,
   kind: "file" | "folder" = "file",
 ) {
-  await page
-    .getByRole("button", {
-      name: kind === "file" ? "New file" : "New folder",
-      exact: true,
-    })
-    .click();
-  await page
+  const title = kind === "file" ? "New file" : "New folder";
+  await fileMenu(page, title);
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  await dialog
     .getByLabel(kind === "file" ? "File name" : "Folder name", { exact: true })
     .fill(name);
-  await page
+  await dialog
     .getByRole("button", {
       name: kind === "file" ? "Create file" : "Create folder",
       exact: true,
     })
     .click();
-  await page
-    .getByRole("button", {
-      name: kind === "file" ? "New file" : "New folder",
-      exact: true,
-    })
-    .waitFor();
+  await dialog.waitFor({ state: "hidden" });
 }
 try {
   const origin = (await mf.ready).origin;
@@ -384,7 +384,7 @@ try {
     },
     { times: 1 },
   );
-  await owner.getByRole("button", { name: "New file", exact: true }).click();
+  await fileMenu(owner, "New file");
   await owner
     .getByLabel("File name", { exact: true })
     .fill("lost-response.tex");
@@ -437,7 +437,7 @@ try {
   submissionGate = accepted.promise;
   const before = submissions.length;
   await editor
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   await eventually(
     () => submissions.length > before,
@@ -547,9 +547,13 @@ try {
   );
   await createFile(owner, "export.tex");
   await editor.unroute(`**/api/projects/${projectId}/metadata`);
-  await editor.getByText("Export project", { exact: true }).click();
+  await fileMenu(editor, "Export project");
+  const exportDialog = editor.getByRole("dialog", {
+    name: "Export project",
+    exact: true,
+  });
   const downloading = editor.waitForEvent("download");
-  await editor.getByRole("button", { name: "Download zip" }).click();
+  await exportDialog.getByRole("button", { name: "Download zip" }).click();
   const download = await downloading;
   const downloadPath = await download.path();
   assert(downloadPath);
@@ -559,6 +563,8 @@ try {
   assert(!zip.includes(Buffer.from("chapter.tex")));
   assert(zip.includes(Buffer.from([0, 255, 17, 23, 42])));
   assert(zip.includes(Buffer.from("Unsaved draft")));
+  await editor.keyboard.press("Escape");
+  await exportDialog.waitFor({ state: "hidden" });
   console.info(
     "Checking offline recovery across metadata reconciliation and reload",
   );
@@ -591,7 +597,7 @@ try {
   );
   const activeCompile = submissions.length;
   await editor
-    .getByRole("button", { name: "Save & compile", exact: true })
+    .getByRole("button", { name: "Compile status", exact: true })
     .click();
   await eventually(
     () => submissions.length > activeCompile,

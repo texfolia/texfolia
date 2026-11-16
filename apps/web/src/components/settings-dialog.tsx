@@ -6,11 +6,9 @@ import {
   IconWand,
 } from "@tabler/icons-react";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { cn } from "cn";
 import { useId } from "react";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
-import { editorDialogChrome } from "#/components/editor-chrome";
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -70,10 +68,10 @@ const shortcuts = [
 
 export function SettingsDialog({
   iconOnly = false,
-  variant = "default",
+  hideTrigger = false,
 }: {
   iconOnly?: boolean;
-  variant?: "default" | "editor";
+  hideTrigger?: boolean;
 }) {
   const {
     editor,
@@ -90,19 +88,16 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={<SidebarMenuButton tooltip="Settings" />}
-        aria-label="Settings"
-      >
-        <IconSettings />
-        <span className={iconOnly ? "sr-only" : undefined}>Settings</span>
-      </DialogTrigger>
-      <DialogContent
-        className={cn(
-          "h-[min(640px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl",
-          variant === "editor" && editorDialogChrome,
-        )}
-      >
+      {!hideTrigger && (
+        <DialogTrigger
+          render={<SidebarMenuButton tooltip="Settings" />}
+          aria-label="Settings"
+        >
+          <IconSettings />
+          <span className={iconOnly ? "sr-only" : undefined}>Settings</span>
+        </DialogTrigger>
+      )}
+      <DialogContent className="h-[min(640px,calc(100dvh-2rem))] overflow-hidden p-0 sm:max-w-3xl">
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Customize the app, editor, and keyboard shortcuts. Appearance is saved

@@ -14,15 +14,11 @@ import { markdown } from "@codemirror/lang-markdown";
 import { indentUnit } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import {
-  IconArrowBackUp,
-  IconArrowForwardUp,
-  IconDownload,
   IconEye,
   IconFolderOpen,
   IconSearch,
+  IconDots,
   IconMathSymbols,
-  IconTextWrap,
-  IconWand,
 } from "@tabler/icons-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import CodeMirror, {
@@ -45,9 +41,25 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import { Button } from "#/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "#/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "#/components/ui/dropdown-menu";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
+import type { EditorCommand } from "#/lib/editor-command";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import {
   applyLatexHeading,
@@ -63,6 +75,8 @@ import { useTheme } from "#/providers/theme-provider";
 import { SymbolPalette, type SymbolPreamble } from "./symbol-palette";
 
 type EditorProps = {
+  onCursorPosition?: (position: { line: number; column: number }) => void;
+  onCommands?: (run: ((command: EditorCommand) => void) | null) => void;
   collaboration?: CollaborativeFile;
   readOnly?: boolean;
   defaultValue?: string;
@@ -81,6 +95,8 @@ type EditorProps = {
 };
 
 export function Editor({
+  onCursorPosition,
+  onCommands,
   collaboration,
   readOnly = false,
   defaultValue = "",
@@ -103,7 +119,7 @@ export function Editor({
   problemsRef.current = problems;
   const syntaxCallback = useRef(onSyntaxProblems);
   syntaxCallback.current = onSyntaxProblems;
-  const container = useRef<HTMLElement>(null);
+  const container = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const openRequest = useRef(0);
   const [value, setValue] = useState(defaultValue);
@@ -261,6 +277,78 @@ export function Editor({
     ],
   );
 
+  const commandRef = useRef<(command: EditorCommand) => void>(() => {});
+  commandRef.current = (command) => {
+    const view = editor.current?.view;
+    if (!view) return;
+    const selection = view.state.selection.main;
+    const copy = async () =>
+      navigator.clipboard.writeText(
+        view.state.sliceDoc(selection.from, selection.to),
+      );
+    if (
+      readOnly &&
+      ["undo", "redo", "format", "cut", "paste", "symbols"].includes(command)
+    )
+      return;
+    switch (command) {
+      case "undo":
+        runUndo(view);
+        break;
+      case "redo":
+        runRedo(view);
+        break;
+      case "find":
+        openSearchPanel(view);
+        break;
+      case "format":
+        if (canFormat && !formatting) format(view);
+        break;
+      case "wrap":
+        updateEditor({ ...preferences, wrapLines: !preferences.wrapLines });
+        break;
+      case "symbols":
+        if (isLatex) setShowSymbols((open) => !open);
+        break;
+      case "selectAll":
+        view.dispatch({
+          selection: { anchor: 0, head: view.state.doc.length },
+        });
+        break;
+      case "copy":
+        void copy().catch(() =>
+          setError("Clipboard access failed. Use the copy keyboard shortcut."),
+        );
+        break;
+      case "cut":
+        void copy()
+          .then(() =>
+            view.dispatch({
+              changes: { from: selection.from, to: selection.to, insert: "" },
+            }),
+          )
+          .catch(() =>
+            setError("Clipboard access failed. Use the cut keyboard shortcut."),
+          );
+        break;
+      case "paste":
+        void navigator.clipboard
+          .readText()
+          .then((text) => view.dispatch(view.state.replaceSelection(text)))
+          .catch(() =>
+            setError(
+              "Clipboard access failed. Use the paste keyboard shortcut.",
+            ),
+          );
+        break;
+    }
+    view.focus();
+  };
+  useEffect(() => {
+    onCommands?.((command) => commandRef.current(command));
+    return () => onCommands?.(null);
+  }, [onCommands]);
+
   async function openFile(file: File) {
     const request = ++openRequest.current;
     try {
@@ -294,192 +382,238 @@ export function Editor({
   }
 
   return (
-    <section
-      ref={container}
-      aria-label="Source editor"
-      className="bg-background flex h-full min-h-0 min-w-0 flex-col"
-    >
-      <PanelHeader title={name}>
-        <PanelActions label="Editor actions">
-          {isMarkdown && onOpenPreview && (
+    <ContextMenu>
+      <ContextMenuTrigger
+        render={<div />}
+        role="region"
+        ref={container}
+        aria-label="Source editor"
+        className="bg-background flex h-full min-h-0 min-w-0 flex-col"
+      >
+        <PanelHeader title={name}>
+          <PanelActions label="Editor actions">
+            {isMarkdown && onOpenPreview && (
+              <PanelAction
+                label="Open Markdown preview (⌘/Ctrl+Shift+V)"
+                onClick={onOpenPreview}
+              >
+                <IconEye />
+              </PanelAction>
+            )}
+            {allowOpenFile && (
+              <PanelAction
+                label="Open source file"
+                onClick={() => fileInput.current?.click()}
+              >
+                <IconFolderOpen />
+              </PanelAction>
+            )}
             <PanelAction
-              label="Open Markdown preview (⌘/Ctrl+Shift+V)"
-              onClick={onOpenPreview}
-            >
-              <IconEye />
-            </PanelAction>
-          )}
-          {allowOpenFile && (
-            <PanelAction
-              label="Open source file"
-              onClick={() => fileInput.current?.click()}
-            >
-              <IconFolderOpen />
-            </PanelAction>
-          )}
-          <PanelAction
-            label="Download source"
-            onClick={() => {
-              downloadFile(
-                new Blob([value], { type: "text/plain;charset=utf-8" }),
-                name,
-              );
-              setDownloadedValue(value);
-            }}
-          >
-            <IconDownload />
-          </PanelAction>
-          <PanelAction
-            label="Undo"
-            disabled={readOnly || !status.undo}
-            onClick={() => {
-              const view = editor.current?.view;
-              if (view) {
-                runUndo(view);
-                view.focus();
-              }
-            }}
-          >
-            <IconArrowBackUp />
-          </PanelAction>
-          <PanelAction
-            label="Redo"
-            disabled={readOnly || !status.redo}
-            onClick={() => {
-              const view = editor.current?.view;
-              if (view) {
-                runRedo(view);
-                view.focus();
-              }
-            }}
-          >
-            <IconArrowForwardUp />
-          </PanelAction>
-          <PanelAction
-            label="Find and replace"
-            onClick={() => {
-              const view = editor.current?.view;
-              if (view) openSearchPanel(view);
-            }}
-          >
-            <IconSearch />
-          </PanelAction>
-          {isLatex && (
-            <PanelAction
-              label="LaTeX symbols"
-              disabled={readOnly}
-              aria-expanded={showSymbols}
-              onClick={() => setShowSymbols((open) => !open)}
-            >
-              <IconMathSymbols />
-            </PanelAction>
-          )}
-          {canFormat && (
-            <PanelAction
-              label="Format document (⌘/Ctrl+Shift+F)"
-              disabled={readOnly || formatting}
+              label="Find and replace"
               onClick={() => {
                 const view = editor.current?.view;
-                if (view) {
-                  format(view);
-                  view.focus();
-                }
+                if (view) openSearchPanel(view);
               }}
             >
-              <IconWand />
+              <IconSearch />
             </PanelAction>
-          )}
-          <PanelAction
-            label="Wrap lines"
-            aria-pressed={preferences.wrapLines}
-            onClick={() =>
-              updateEditor({
-                ...preferences,
-                wrapLines: !preferences.wrapLines,
-              })
+            {isLatex && (
+              <PanelAction
+                label="LaTeX symbols"
+                disabled={readOnly}
+                aria-expanded={showSymbols}
+                onClick={() => setShowSymbols((open) => !open)}
+              >
+                <IconMathSymbols />
+              </PanelAction>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button variant="ghost" size="icon-xs" />}
+                aria-label="More editor actions"
+                title="More editor actions"
+              >
+                <IconDots />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  disabled={readOnly || !status.undo}
+                  onClick={() => commandRef.current("undo")}
+                >
+                  Undo
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={readOnly || !status.redo}
+                  onClick={() => commandRef.current("redo")}
+                >
+                  Redo
+                </DropdownMenuItem>
+                {canFormat && (
+                  <DropdownMenuItem
+                    disabled={readOnly || formatting}
+                    onClick={() => commandRef.current("format")}
+                  >
+                    Format document
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuCheckboxItem
+                  checked={preferences.wrapLines}
+                  onCheckedChange={() => commandRef.current("wrap")}
+                >
+                  Wrap lines
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    downloadFile(
+                      new Blob([value], { type: "text/plain;charset=utf-8" }),
+                      name,
+                    );
+                    setDownloadedValue(value);
+                  }}
+                >
+                  Download source
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </PanelActions>
+        </PanelHeader>
+        {isLatex && !readOnly && showSymbols && (
+          <SymbolPalette
+            preamble={
+              preamble ?? {
+                source: value,
+                filename: name,
+                addPackage: (packageName) => {
+                  const view = editor.current?.view;
+                  if (view) addLatexPackage(packageName)(view);
+                },
+              }
             }
-          >
-            <IconTextWrap />
-          </PanelAction>
-        </PanelActions>
-      </PanelHeader>
-      {isLatex && !readOnly && showSymbols && (
-        <SymbolPalette
-          preamble={
-            preamble ?? {
-              source: value,
-              filename: name,
-              addPackage: (packageName) => {
-                const view = editor.current?.view;
-                if (view) addLatexPackage(packageName)(view);
-              },
-            }
-          }
-          onInsert={(symbol) => {
-            const view = editor.current?.view;
-            if (view) {
-              insertLatexSymbol(symbol)(view);
-              view.focus();
-            }
-          }}
-          onClose={() => {
-            setShowSymbols(false);
-            editor.current?.view?.focus();
+            onInsert={(symbol) => {
+              const view = editor.current?.view;
+              if (view) {
+                insertLatexSymbol(symbol)(view);
+                view.focus();
+              }
+            }}
+            onClose={() => {
+              setShowSymbols(false);
+              editor.current?.view?.focus();
+            }}
+          />
+        )}
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".tex,.ltx,.bib,.sty,.cls,.md,.markdown,.txt,text/plain,text/markdown"
+          className="hidden"
+          aria-label="Choose source file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void openFile(file);
           }}
         />
-      )}
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".tex,.ltx,.bib,.sty,.cls,.md,.markdown,.txt,text/plain,text/markdown"
-        className="hidden"
-        aria-label="Choose source file"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (file) void openFile(file);
-        }}
-      />
-      {(error || formatError) && (
-        <p role="alert" className="text-destructive border-b px-3 py-2 text-xs">
-          {error || formatError}
-        </p>
-      )}
-      <CodeMirror
-        basicSetup={{ history: !collaboration }}
-        readOnly={readOnly}
-        editable={!readOnly}
-        ref={editor}
-        onCreateEditor={onCreateEditor}
-        value={value}
-        onChange={(text) => {
-          setValue(text);
-          onChange?.(text);
-        }}
-        onUpdate={({ state }) => {
-          const next = {
-            undo: undoManager
-              ? undoManager.undoStack.length > 0
-              : undoDepth(state) > 0,
-            redo: undoManager
-              ? undoManager.redoStack.length > 0
-              : redoDepth(state) > 0,
-          };
-          setStatus((previous) =>
-            previous.undo === next.undo && previous.redo === next.redo
-              ? previous
-              : next,
-          );
-        }}
-        extensions={extensions}
-        height="100%"
-        theme={theme.extension}
-        placeholder={
-          isMarkdown ? "Write your Markdown here…" : "Write your LaTeX here…"
-        }
-        aria-label={isMarkdown ? "Markdown source" : "LaTeX source"}
-        className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
-      />
-    </section>
+        {(error || formatError) && (
+          <p
+            role="alert"
+            className="text-destructive border-b px-3 py-2 text-xs"
+          >
+            {error || formatError}
+          </p>
+        )}
+        <CodeMirror
+          basicSetup={{ history: !collaboration }}
+          readOnly={readOnly}
+          editable={!readOnly}
+          ref={editor}
+          onCreateEditor={(view) => {
+            onCreateEditor?.(view);
+            const line = view.state.doc.lineAt(view.state.selection.main.head);
+            onCursorPosition?.({
+              line: line.number,
+              column: view.state.selection.main.head - line.from + 1,
+            });
+          }}
+          value={value}
+          onChange={(text) => {
+            setValue(text);
+            onChange?.(text);
+          }}
+          onUpdate={({ state, selectionSet, docChanged }) => {
+            if (selectionSet || docChanged) {
+              const line = state.doc.lineAt(state.selection.main.head);
+              onCursorPosition?.({
+                line: line.number,
+                column: state.selection.main.head - line.from + 1,
+              });
+            }
+            const next = {
+              undo: undoManager
+                ? undoManager.undoStack.length > 0
+                : undoDepth(state) > 0,
+              redo: undoManager
+                ? undoManager.redoStack.length > 0
+                : redoDepth(state) > 0,
+            };
+            setStatus((previous) =>
+              previous.undo === next.undo && previous.redo === next.redo
+                ? previous
+                : next,
+            );
+          }}
+          extensions={extensions}
+          height="100%"
+          theme={theme.extension}
+          placeholder={
+            isMarkdown ? "Write your Markdown here…" : "Write your LaTeX here…"
+          }
+          aria-label={isMarkdown ? "Markdown source" : "LaTeX source"}
+          className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
+        />
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {(
+          [
+            ["cut", "Cut"],
+            ["copy", "Copy"],
+            ["paste", "Paste"],
+            ["selectAll", "Select all"],
+            ["undo", "Undo"],
+            ["redo", "Redo"],
+            ["find", "Find"],
+            ["format", "Format document"],
+            ["symbols", "Symbol palette"],
+          ] satisfies [EditorCommand, string][]
+        )
+          .filter(
+            ([command]) =>
+              (command !== "format" || canFormat) &&
+              (command !== "symbols" || isLatex),
+          )
+          .map(([command, title]) => (
+            <ContextMenuItem
+              key={command}
+              disabled={
+                (readOnly &&
+                  [
+                    "undo",
+                    "redo",
+                    "format",
+                    "cut",
+                    "paste",
+                    "symbols",
+                  ].includes(command)) ||
+                (command === "undo" && !status.undo) ||
+                (command === "redo" && !status.redo)
+              }
+              onClick={() => commandRef.current(command)}
+            >
+              {title}
+            </ContextMenuItem>
+          ))}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

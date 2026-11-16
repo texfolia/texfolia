@@ -247,15 +247,17 @@ export async function runGit({
       if (!linked && (action.kind === "status" || action.kind === "diff"))
         return { status: empty };
       const connecting = action.kind === "link" || action.kind === "import";
-      if (connecting && linked)
+      if (connecting && linked?.url)
         throw new Error(
           "Unlink the current repository before connecting another.",
         );
-      if (!connecting && !linked)
-        throw new Error("Connect a repository first.");
+      if (!connecting && action.kind !== "initialize" && !linked)
+        throw new Error("Initialize or link a repository first.");
       const remote = connecting
         ? action.remote
-        : gitRemoteSchema.parse(linked?.url);
+        : linked?.url
+          ? gitRemoteSchema.parse(linked.url)
+          : null;
       const object = linked ? await bucket.get(linked.objectKey) : null;
       if (linked && !object)
         throw new Error("Saved git repository is missing.");
@@ -265,26 +267,30 @@ export async function runGit({
       const { files, nodes } = await readFiles(tx, bucket, projectId);
       let http: git.HttpClient | undefined;
       if (
-        connecting ||
-        action.kind === "push" ||
-        action.kind === "pull" ||
-        (action.kind === "checkout" &&
-          !(await repo.hasLocalBranch(action.name))) ||
-        action.kind === "fetch"
+        remote &&
+        (connecting ||
+          action.kind === "push" ||
+          action.kind === "pull" ||
+          (action.kind === "checkout" &&
+            !(await repo.hasLocalBranch(action.name))) ||
+          action.kind === "fetch")
       )
         http = gitHttp(
           remote.url,
           await gitAccount({ db, userId: user.id, provider: remote.provider }),
         );
-      if (connecting && http) {
+      if (connecting && http && remote) {
         if (action.kind === "import") await repo.clone(remote.url, http);
         else await repo.requireEmptyRemote(remote.url, http);
       }
+      if (action.kind === "initialize" && !linked) await repo.init();
+      if (!remote && ["push", "pull", "fetch"].includes(action.kind))
+        throw new Error("Link a remote before syncing this repository.");
       if (action.kind !== "import") repo.overlay(files);
       const author = { name: user.name || "Texfolia user", email: user.email };
       switch (action.kind) {
         case "fetch":
-          if (http) await repo.remoteBranches(http, remote.url);
+          if (http && remote) await repo.remoteBranches(http, remote.url);
           break;
         case "commit":
           await repo.commit(action.message, author);
@@ -315,13 +321,17 @@ export async function runGit({
           .insert(projectGit)
           .values({
             projectId,
-            provider: remote.provider,
-            url: remote.url,
+            provider: remote?.provider ?? null,
+            url: remote?.url ?? null,
             objectKey,
           })
           .onConflictDoUpdate({
             target: projectGit.projectId,
-            set: { provider: remote.provider, url: remote.url, objectKey },
+            set: {
+              provider: remote?.provider ?? null,
+              url: remote?.url ?? null,
+              objectKey,
+            },
           });
         await tx
           .insert(projectCollaboration)

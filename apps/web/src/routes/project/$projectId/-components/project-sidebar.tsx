@@ -1,40 +1,35 @@
-import {
-  IconAlertCircle,
-  IconFiles,
-  IconFileTypePdf,
-  IconX,
-} from "@tabler/icons-react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
-import { cn } from "cn";
+import { IconX } from "@tabler/icons-react";
+import { useMemo, useState, type RefObject } from "react";
 
-import { editorChrome } from "#/components/editor-chrome";
-import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "#/components/ui/sidebar";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "#/components/ui/dialog";
+import { buildFileUrl } from "#/lib/build";
+import { downloadFile } from "#/lib/download-file";
+import type { OutlineEntry } from "#/lib/latex/outline";
 import type { SourceFiles } from "#/lib/project-source";
 import type { ProjectNode } from "#/lib/project.functions";
+import { type SidebarView } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 
-import { CreateNodeForm } from "./create-node-form";
-import { GeneratedFiles } from "./generated-files";
+import { CreateNodeForm, type CreateNodeHandle } from "./create-node-form";
+import { generatedTreeNodes } from "./generated-files";
 import { GitPanel } from "./git-panel";
 import { ProjectCollaboration } from "./project-collaboration";
-import { ProjectExport } from "./project-export";
+import { ProjectExport, type ProjectExportHandle } from "./project-export";
 import { ProjectFileTree } from "./project-file-tree";
-import { RepairSourcePaths } from "./repair-source-paths";
-import { UploadSource } from "./upload-source";
+import { ProjectOutline } from "./project-outline";
+import {
+  RepairSourcePaths,
+  type RepairSourcePathsHandle,
+} from "./repair-source-paths";
+import { UploadSource, type UploadSourceHandle } from "./upload-source";
 
 export function ProjectSidebar({
   name,
@@ -42,160 +37,166 @@ export function ProjectSidebar({
   activeId,
   ready,
   onOpen,
-  showProblems,
-  onToggleProblems,
   onOpenGenerated,
   sources,
-  onOpenPreview,
+  view,
+  onClose,
+  outline,
+  createRef,
+  uploadRef,
+  exportRef,
+  repairRef,
 }: {
   name: string;
-  onOpenPreview: () => void;
   nodes: ProjectNode[];
   activeId: string | undefined;
   ready: boolean;
   onOpen: (node: ProjectNode, permanent: boolean) => void;
-  showProblems: boolean;
-  onToggleProblems: () => void;
-  onOpenGenerated: (path: string) => void;
+  onOpenGenerated: (path: string, permanent: boolean) => void;
   sources: () => Promise<SourceFiles>;
+  view: SidebarView;
+  onClose: () => void;
+  outline: OutlineEntry[];
+  createRef: RefObject<CreateNodeHandle | null>;
+  uploadRef: RefObject<UploadSourceHandle | null>;
+  exportRef: RefObject<ProjectExportHandle | null>;
+  repairRef: RefObject<RepairSourcePathsHandle | null>;
 }) {
   const files = useProjectFiles();
-  const { canWrite } = useWorkspace();
-  const { setOpen, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
-
-  useHotkeys([{ hotkey: "Mod+B", callback: toggleSidebar }], {
-    ignoreInputs: false,
-    ignoreDefaultPrevented: true,
-  });
-
+  const { canWrite, build, projectId, drafts } = useWorkspace();
+  const root = nodes.find((node) => node.kind === "folder" && !node.parentId);
+  const tree = useMemo(
+    () => [...nodes, ...generatedTreeNodes(build, root?.id)],
+    [nodes, build, root?.id],
+  );
+  const [error, setError] = useState("");
+  async function download(node: ProjectNode) {
+    setError("");
+    try {
+      const draft = drafts.get(node.id);
+      if (node.kind === "text" && draft) {
+        downloadFile(
+          new Blob([draft.value], { type: "text/plain;charset=utf-8" }),
+          node.name,
+        );
+        return;
+      }
+      const artifact = node.id.startsWith("out:")
+        ? build?.artifacts?.files.find((file) => `out:${file.path}` === node.id)
+        : undefined;
+      const url = artifact
+        ? buildFileUrl(projectId, artifact)
+        : `/api/sources/${projectId}/${node.id}`;
+      const response = await fetch(url);
+      if (!response.ok)
+        throw new Error("Could not download this file. Try again.");
+      downloadFile(await response.blob(), node.name);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Download failed.");
+    }
+  }
   return (
-    <Sidebar
-      side="right"
-      collapsible="icon"
-      className="top-(--workspace-header-height) bottom-(--workspace-footer-height) h-auto overflow-hidden"
+    <aside
+      id="project-sidebar"
+      aria-label="Project sidebar"
+      className="bg-sidebar text-sidebar-foreground flex h-full min-w-0 flex-col"
     >
-      <div
-        className={cn(
-          "flex size-full flex-row-reverse [&_[data-slot=sidebar-footer]]:p-0",
-          editorChrome,
-        )}
+      <header
+        hidden={view === "files"}
+        className="flex h-9 shrink-0 items-center gap-2 border-b px-2 [&[hidden]]:hidden"
       >
-        <Sidebar
-          collapsible="none"
-          className="w-(--sidebar-width-icon)! shrink-0 border-l [--sidebar-foreground:var(--activity-foreground)] [--sidebar:var(--activity-background)]"
+        <h2 className="min-w-0 flex-1 truncate text-xs font-medium">
+          {
+            {
+              files: "Files",
+              outline: "Outline",
+              git: "Git",
+              collaboration: "Collaboration",
+            }[view]
+          }
+        </h2>
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          aria-label="Close project sidebar"
+          onClick={onClose}
         >
-          <SidebarContent className="gap-0">
-            <SidebarGroup className="p-0">
-              <SidebarMenu aria-label="Workspace navigation" className="gap-0">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    tooltip="Project files"
-                    aria-label="Project files"
-                    isActive
-                    onClick={() => setOpen(true)}
-                  >
-                    <IconFiles />
-                    <span className="sr-only">Project files</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    tooltip="PDF preview"
-                    aria-label="PDF preview"
-                    disabled={!ready}
-                    onClick={onOpenPreview}
-                  >
-                    <IconFileTypePdf />
-                    <span className="sr-only">PDF preview</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    tooltip="Problems"
-                    aria-label="Problems"
-                    aria-expanded={showProblems}
-                    onClick={onToggleProblems}
-                  >
-                    <IconAlertCircle />
-                    <span className="sr-only">Problems</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SettingsDialog iconOnly variant="editor" />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
-        <Sidebar
-          collapsible="none"
-          className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden"
-        >
-          <SidebarHeader className="h-8 flex-row items-center justify-between border-b px-2">
-            <h2 className="text-xs font-medium">Files</h2>
-            {isMobile && (
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label="Close project sidebar"
-                onClick={() => setOpenMobile(false)}
-              >
-                <IconX />
-              </Button>
-            )}
-          </SidebarHeader>
-          <SidebarContent className="gap-0">
-            <SidebarGroup className="p-0">
-              <div className="flex flex-wrap items-center border-b">
-                {ready && canWrite && (
-                  <CreateNodeForm
-                    nodes={nodes}
-                    activeId={activeId}
-                    onCreated={onOpen}
-                  />
-                )}
-                {ready && canWrite && (
-                  <UploadSource
-                    nodes={nodes}
-                    activeId={activeId}
-                    onCreated={onOpen}
-                  />
-                )}
-              </div>
-              {ready && <RepairSourcePaths nodes={nodes} canWrite={canWrite} />}
-              <SidebarGroupContent aria-busy={!ready}>
-                <ProjectFileTree
-                  canManage={canWrite}
-                  nodes={nodes}
-                  activeId={activeId}
-                  isPending={(id) =>
-                    files.nodes.get(id)?.$hasPendingWrites ?? false
-                  }
-                  onOpen={onOpen}
-                />
-                <GeneratedFiles
-                  onOpen={onOpenGenerated}
-                  activePath={
-                    activeId?.startsWith("out:") ? activeId.slice(4) : undefined
-                  }
-                />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <div className="max-h-[55%] shrink-0 overflow-auto">
-            {ready && <GitPanel />}
-            <ProjectCollaboration />
-          </div>
-          <ProjectExport name={name} sources={sources} />
-        </Sidebar>
+          <IconX />
+        </Button>
+      </header>
+      <div
+        hidden={view !== "files"}
+        className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
+      >
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ProjectFileTree
+            nodes={tree}
+            canManage={canWrite}
+            activeId={activeId}
+            isPending={(id) => files.nodes.get(id)?.$hasPendingWrites ?? false}
+            onOpen={(node, permanent) =>
+              node.id.startsWith("out:")
+                ? onOpenGenerated(node.id.slice(4), permanent)
+                : onOpen(node, permanent)
+            }
+            onCreate={(kind, parentId) =>
+              createRef.current?.start(kind, parentId)
+            }
+            onUpload={(parentId) => uploadRef.current?.open(parentId)}
+            onDownload={(node) => void download(node)}
+          />
+        </div>
       </div>
-    </Sidebar>
+      {ready && canWrite && (
+        <>
+          <CreateNodeForm
+            hideTrigger
+            ref={createRef}
+            nodes={nodes}
+            activeId={activeId}
+            onCreated={onOpen}
+          />
+          <UploadSource
+            hideTrigger
+            ref={uploadRef}
+            nodes={nodes}
+            activeId={activeId}
+            onCreated={onOpen}
+          />
+        </>
+      )}
+      {ready && (
+        <RepairSourcePaths ref={repairRef} nodes={nodes} canWrite={canWrite} />
+      )}
+      <ProjectExport ref={exportRef} name={name} sources={sources} />
+      <Dialog
+        open={!!error}
+        onOpenChange={(open) => {
+          if (!open) setError("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Download failed</DialogTitle>
+            <DialogDescription role="alert">{error}</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+      {view === "outline" && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ProjectOutline entries={outline} />
+        </div>
+      )}
+      {view === "git" && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          {ready && <GitPanel />}
+        </div>
+      )}
+      {view === "collaboration" && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ProjectCollaboration />
+        </div>
+      )}
+    </aside>
   );
 }

@@ -1,13 +1,42 @@
-import { IconPlus, IconX } from "@tabler/icons-react";
+import { IconCopy, IconRefresh, IconX } from "@tabler/icons-react";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { Markdown } from "@tanstack/markdown/react";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentProps,
+} from "react";
 import { z } from "zod";
 
+import { ModelSelector } from "#/components/ai-elements/model-selector";
+import { PromptInput } from "#/components/ai-elements/prompt-input";
+import { Reasoning } from "#/components/ai-elements/reasoning";
+import { Sources } from "#/components/ai-elements/sources";
+import { Suggestion } from "#/components/ai-elements/suggestion";
+import { Tool } from "#/components/ai-elements/tool";
 import { Button } from "#/components/ui/button";
-import { Textarea } from "#/components/ui/textarea";
+import { CodeBlock, CodeBlockContent } from "#/components/ui/code-block";
+import {
+  Message,
+  MessageContent,
+  MessageHeader,
+  MessageFooter,
+} from "#/components/ui/message";
+import {
+  MessageScrollerProvider,
+  MessageScroller,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+} from "#/components/ui/message-scroller";
 import { aiConfigurationSchema, type AiConfiguration } from "#/lib/ai/schema";
+import { type AssistantThread, type StoredMessage } from "#/lib/ai/threads";
+
+import { AssistantHistory, assistantJson } from "./assistant-history";
 
 const dollars = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -23,7 +52,19 @@ export function AssistantSidebar({
   projectId,
   open,
   onClose,
+  historyOpen,
+  historyWidth,
+  agentsWidth,
+  onHistoryToggle,
+  onHistoryResize,
+  onShowAgents,
 }: {
+  historyOpen: boolean;
+  historyWidth: number;
+  agentsWidth: number;
+  onHistoryToggle: () => void;
+  onHistoryResize: (width: number) => void;
+  onShowAgents: () => void;
   projectId: string;
   open: boolean;
   onClose: () => void;
@@ -73,83 +114,135 @@ export function AssistantSidebar({
     return () => abort.abort();
   }, [load]);
   return (
-    <aside
-      aria-label="AI assistant"
-      hidden={!open}
-      className="bg-sidebar text-sidebar-foreground absolute inset-y-0 left-0 z-30 flex w-[min(22rem,100%)] min-w-0 flex-col border-r lg:relative lg:w-80 lg:shrink-0 [&[hidden]]:hidden"
-    >
-      <header className="flex min-h-9 items-center gap-2 border-b px-3">
-        <h2 className="flex-1 text-xs font-medium">Assistant</h2>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Close assistant"
-          onClick={onClose}
-        >
-          <IconX />
-        </Button>
-      </header>
-      {availability.kind === "loading" && (
-        <p role="status" className="p-4 text-sm">
-          Loading assistant…
-        </p>
-      )}
-      {availability.kind === "unavailable" && (
-        <div className="space-y-4 p-4 text-sm">
-          <p role="status">{availability.message}</p>
-          {availability.upgrade ? (
-            <Button render={<Link to="/pricing" />}>View Pro plans</Button>
-          ) : (
-            <Button variant="outline" onClick={() => void load()}>
-              Try again
-            </Button>
+    <div className="flex h-full min-w-0 max-md:w-full">
+      {availability.kind !== "ready" && (
+        <>
+          {historyOpen && (
+            <aside
+              aria-label="Agent history"
+              style={{ width: historyWidth }}
+              className="bg-sidebar flex shrink-0 flex-col border-r"
+            >
+              <header className="flex h-9 items-center border-b px-2 text-xs">
+                Chat history
+              </header>
+              <p className="text-muted-foreground p-3 text-xs">
+                {availability.kind === "loading"
+                  ? "Loading history…"
+                  : "Chat history requires assistant access."}
+              </p>
+            </aside>
           )}
-        </div>
+          <aside
+            aria-label="AI assistant"
+            hidden={!open}
+            style={{ width: agentsWidth }}
+            className="bg-sidebar text-sidebar-foreground flex h-full min-w-0 flex-col max-md:w-full! [&[hidden]]:hidden"
+          >
+            <header className="flex min-h-9 items-center gap-2 border-b px-3">
+              <h2 className="flex-1 text-xs font-medium">Agents</h2>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Close assistant"
+                onClick={onClose}
+              >
+                <IconX />
+              </Button>
+            </header>
+            {availability.kind === "loading" && (
+              <p role="status" className="p-4 text-sm">
+                Loading assistant…
+              </p>
+            )}
+            {availability.kind === "unavailable" && (
+              <div className="space-y-4 p-4 text-sm">
+                <p role="status">{availability.message}</p>
+                {availability.upgrade ? (
+                  <Button render={<Link to="/pricing" />}>
+                    View Pro plans
+                  </Button>
+                ) : (
+                  <Button variant="ghost" onClick={() => void load()}>
+                    Try again
+                  </Button>
+                )}
+              </div>
+            )}
+          </aside>
+        </>
       )}
       {availability.kind === "ready" && (
-        <AssistantChat
+        <AssistantHistory
           projectId={projectId}
-          config={availability.config}
-          onConfiguration={(config) =>
-            setAvailability({ kind: "ready", config })
-          }
-          refresh={refreshConfiguration}
-        />
+          historyOpen={historyOpen}
+          historyWidth={historyWidth}
+          agentsOpen={open}
+          agentsWidth={agentsWidth}
+          onHistoryToggle={onHistoryToggle}
+          onHistoryResize={onHistoryResize}
+          onShowAgents={onShowAgents}
+          onCloseAgents={onClose}
+        >
+          {(thread, initialMessages, onBusy, onRefresh) => (
+            <AssistantChat
+              key={thread.id}
+              thread={thread}
+              initialMessages={initialMessages}
+              onBusy={onBusy}
+              onRefresh={onRefresh}
+              projectId={projectId}
+              config={availability.config}
+              onConfiguration={(config) =>
+                setAvailability({ kind: "ready", config })
+              }
+              refresh={refreshConfiguration}
+            />
+          )}
+        </AssistantHistory>
       )}
-    </aside>
+    </div>
   );
 }
 
 function AssistantChat({
+  thread,
+  initialMessages,
+  onBusy,
+  onRefresh,
   projectId,
   config,
   onConfiguration,
   refresh,
 }: {
+  thread: AssistantThread;
+  initialMessages: StoredMessage[];
+  onBusy: (busy: boolean) => void;
+  onRefresh: () => void;
   projectId: string;
   config: AiConfiguration;
   onConfiguration: (config: AiConfiguration) => void;
   refresh: () => void;
 }) {
   const [input, setInput] = useState("");
-  const [threadId, setThreadId] = useState(() => crypto.randomUUID());
+  const threadId = thread.id;
   const defaultModel =
     config.models.find((m) => m.id === config.defaultModel)?.id ??
     config.models[0]?.id ??
     "";
-  const [model, setModel] = useState(defaultModel);
+  const [model, setModel] = useState(thread.model ?? "");
   const [cap, setCap] = useState(String(config.monthlyCapDollars));
   const [saving, setSaving] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
-  const bottom = useRef<HTMLDivElement>(null);
   const connection = useMemo(
     () => fetchServerSentEvents(`/api/ai/${projectId}`),
     [projectId],
   );
-  const { messages, sendMessage, isLoading, error, stop, clear } = useChat({
+  const { messages, sendMessage, isLoading, error, stop, reload } = useChat({
     connection,
     threadId,
+    initialMessages,
     onResponse: async (response) => {
       if (!response || response.ok) return;
       const parsed = z.object({ error: z.string() }).safeParse(
@@ -162,11 +255,12 @@ function AssistantChat({
     },
   });
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "nearest" });
-  }, [messages, isLoading]);
-  useEffect(() => {
-    if (!isLoading) refresh();
-  }, [isLoading, refresh]);
+    onBusy(isLoading);
+    if (!isLoading) {
+      refresh();
+      onRefresh();
+    }
+  }, [isLoading, onBusy, refresh, onRefresh]);
   useEffect(() => {
     if (!config.pendingRequests || isLoading) return;
     const abort = new AbortController();
@@ -187,7 +281,7 @@ function AssistantChat({
       abort.abort();
     };
   }, [config, isLoading, projectId, onConfiguration]);
-  const selected = config.models.find((m) => m.id === model);
+  const selected = config.models.find((m) => m.id === (model || defaultModel));
   const remaining =
     config.monthlyCapDollars - config.spentDollars - config.reservedDollars;
   async function savePreferences() {
@@ -199,7 +293,7 @@ function AssistantChat({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          defaultModel: model || null,
+          defaultModel: selected?.id ?? null,
           monthlyCapDollars: Number(cap),
         }),
       });
@@ -224,37 +318,32 @@ function AssistantChat({
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <label className="sr-only" htmlFor="assistant-model">
-          Model for this chat
-        </label>
-        <select
-          id="assistant-model"
-          className="bg-sidebar focus-visible:outline-ring min-w-0 flex-1 border px-2 py-1 text-xs focus-visible:outline-2"
+      <div className="flex items-center gap-2 border-b px-2 py-1">
+        <ModelSelector
+          models={config.models}
           value={model}
+          defaultModel={defaultModel}
           disabled={isLoading}
-          onChange={(event) => setModel(event.target.value)}
-        >
-          {config.models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New chat"
-          disabled={isLoading}
-          onClick={() => {
-            clear();
-            setThreadId(crypto.randomUUID());
-            setInput("");
-            setModel(defaultModel);
+          onChange={(value) => {
+            setSettingsError("");
+            void assistantJson(`/api/ai/${projectId}?threads=1`, {
+              kind: "model",
+              id: threadId,
+              model: value || null,
+            })
+              .then(() => {
+                setModel(value);
+                onRefresh();
+              })
+              .catch((failure) =>
+                setSettingsError(
+                  failure instanceof Error
+                    ? failure.message
+                    : "Could not change model.",
+                ),
+              );
           }}
-        >
-          <IconPlus />
-        </Button>
+        />
       </div>
       <details className="shrink-0 border-b px-3 py-2 text-xs">
         <summary className="focus-visible:outline-ring cursor-pointer focus-visible:outline-2">
@@ -290,7 +379,7 @@ function AssistantChat({
             Monthly cap (USD)
             <input
               aria-label="Monthly AI spend cap"
-              className="bg-background focus-visible:outline-ring w-24 border px-2 py-1 tabular-nums focus-visible:outline-2"
+              className="bg-background focus-visible:outline-ring w-24 rounded-md border px-2 py-1 tabular-nums focus-visible:outline-2"
               type="number"
               min="0"
               max="10000"
@@ -308,7 +397,7 @@ function AssistantChat({
           </p>
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
             disabled={saving}
             onClick={() => void savePreferences()}
           >
@@ -318,80 +407,157 @@ function AssistantChat({
           {settingsSaved && <p role="status">AI preferences saved.</p>}
         </div>
       </details>
-      <div
-        aria-label="Conversation"
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-        className="min-h-0 flex-1 space-y-6 overflow-auto p-3 text-sm"
-      >
-        {messages.length === 0 && (
-          <div className="space-y-3 py-4">
-            <p className="font-medium">Work on your LaTeX project</p>
-            <p className="text-muted-foreground leading-relaxed">
-              Ask for a revision, fix a LaTeX error, or check a build. The
-              assistant can read files, save edits, and compile your project.
-            </p>
-            <p className="text-muted-foreground text-xs">
-              Edits appear immediately for everyone in the project. This chat
-              lasts until you leave the page.
-            </p>
-          </div>
-        )}
-        {messages.map((message) => (
-          <article key={message.id} className="min-w-0 space-y-2 wrap-anywhere">
-            <h3 className="text-xs font-medium">
-              {message.role === "user" ? "You" : "Assistant"}
-            </h3>
-            {message.parts.map((part, index) => {
-              if (part.type === "text")
-                return (
-                  <div
-                    key={index}
-                    className="[&_pre]:bg-muted leading-relaxed [&_a]:underline [&_a]:underline-offset-4 [&_code]:font-mono [&_code]:text-xs [&_li]:ml-4 [&_ol]:list-decimal [&_p+p]:mt-3 [&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:p-2 [&_ul]:list-disc"
-                  >
-                    <Markdown>{part.content}</Markdown>
+      <MessageScrollerProvider>
+        <MessageScroller>
+          <MessageScrollerViewport
+            aria-label="Conversation"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+          >
+            <MessageScrollerContent className="gap-6 p-3 text-sm">
+              {messages.length === 0 && (
+                <div className="space-y-3 py-4">
+                  <p className="font-medium">Work on your LaTeX project</p>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Ask for a revision, fix a LaTeX error, or check a build. The
+                    assistant can read files, save edits, and compile your
+                    project.
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    Edits appear immediately for everyone. Chats are saved
+                    privately for you in this project.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      "Explain the structure of this project",
+                      "Help me fix the LaTeX errors",
+                    ].map((suggestion) => (
+                      <Suggestion
+                        key={suggestion}
+                        onClick={() => setInput(suggestion)}
+                      >
+                        {suggestion}
+                      </Suggestion>
+                    ))}
                   </div>
-                );
-              if (part.type === "tool-call")
-                return (
-                  <details key={part.id} className="border-y py-2 text-xs">
-                    <summary className="cursor-pointer">
-                      {part.name.replaceAll("_", " ")} ·{" "}
-                      {part.state.replaceAll("-", " ")}
-                    </summary>
-                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">
-                      {part.arguments}
-                    </pre>
-                  </details>
-                );
-              if (part.type === "tool-result")
-                return (
-                  <details
-                    key={part.toolCallId}
-                    className="text-muted-foreground text-xs"
-                  >
-                    <summary className="cursor-pointer">
-                      Tool result · {part.state}
-                    </summary>
-                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">
-                      {typeof part.content === "string"
-                        ? part.content
-                        : JSON.stringify(part.content)}
-                    </pre>
-                  </details>
-                );
-              return null;
-            })}
-          </article>
-        ))}
-        {isLoading && (
-          <p role="status" className="text-muted-foreground text-xs">
-            Assistant is working…
-          </p>
-        )}
-        <div ref={bottom} />
-      </div>
+                </div>
+              )}
+              {messages.map((message, messageIndex) => (
+                <MessageScrollerItem key={message.id}>
+                  <Message align={message.role === "user" ? "end" : "start"}>
+                    <MessageContent>
+                      <MessageHeader>
+                        {message.role === "user" ? "You" : "Assistant"}
+                      </MessageHeader>
+                      {message.parts.map((part, index) => {
+                        if (part.type === "text")
+                          return (
+                            <div
+                              key={index}
+                              className="leading-relaxed [&_a]:underline [&_a]:underline-offset-4 [&_li]:ml-4 [&_ol]:list-decimal [&_p+p]:mt-3 [&_ul]:list-disc"
+                            >
+                              <Markdown components={markdownComponents}>
+                                {part.content}
+                              </Markdown>
+                            </div>
+                          );
+                        if (
+                          part.type === "thinking" &&
+                          !("redacted" in part && part.redacted)
+                        )
+                          return (
+                            <Reasoning
+                              key={index}
+                              text={part.content}
+                              running={
+                                isLoading &&
+                                messageIndex === messages.length - 1
+                              }
+                            />
+                          );
+                        if (part.type === "tool-call")
+                          return (
+                            <Tool
+                              key={part.id}
+                              part={part}
+                              result={message.parts
+                                .filter(
+                                  (candidate) =>
+                                    candidate.type === "tool-result",
+                                )
+                                .find(
+                                  (candidate) =>
+                                    candidate.toolCallId === part.id,
+                                )}
+                              running={isLoading}
+                            />
+                          );
+                        return null;
+                      })}
+                      {message.role === "assistant" && (
+                        <Sources
+                          urls={message.parts
+                            .filter((part) => part.type === "text")
+                            .flatMap(
+                              (part) =>
+                                part.content.match(/https?:\/\/[^\s<>\])]+/g) ??
+                                [],
+                            )}
+                        />
+                      )}
+                      <MessageFooter className="gap-1">
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          aria-label="Copy message"
+                          onClick={() => {
+                            void navigator.clipboard
+                              .writeText(
+                                message.parts
+                                  .filter((part) => part.type === "text")
+                                  .map((part) => part.content)
+                                  .join("\n"),
+                              )
+                              .catch(() =>
+                                setSettingsError(
+                                  "Clipboard access failed. Select the message text to copy it.",
+                                ),
+                              );
+                          }}
+                        >
+                          <IconCopy />
+                        </Button>
+                        {message.role === "assistant" &&
+                          messageIndex === messages.length - 1 && (
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              aria-label="Retry message"
+                              disabled={isLoading || remaining <= 0}
+                              onClick={() => void reload()}
+                            >
+                              <IconRefresh />
+                            </Button>
+                          )}
+                      </MessageFooter>
+                    </MessageContent>
+                  </Message>
+                </MessageScrollerItem>
+              ))}
+              {isLoading && (
+                <p
+                  role="status"
+                  className="shimmer motion-reduce:shimmer-none text-muted-foreground text-xs"
+                >
+                  Assistant is working…
+                </p>
+              )}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          <MessageScrollerButton />
+        </MessageScroller>
+      </MessageScrollerProvider>
       <form
         className="shrink-0 space-y-2 border-t p-3"
         onSubmit={(event) => {
@@ -399,9 +565,14 @@ function AssistantChat({
           if (!input.trim() || isLoading) return;
           const content = input;
           setInput("");
-          void sendMessage(content, { body: { model } });
+          void sendMessage(content, { body: model ? { model } : {} });
         }}
       >
+        {settingsError && (
+          <p role="alert" className="text-destructive text-xs">
+            {settingsError}
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-destructive text-xs wrap-anywhere">
             {error.message}
@@ -421,9 +592,8 @@ function AssistantChat({
         <label className="sr-only" htmlFor="assistant-message">
           Message the assistant
         </label>
-        <Textarea
+        <PromptInput
           id="assistant-message"
-          className="max-h-40 rounded-none"
           placeholder="Ask about this project…"
           value={input}
           maxLength={32 * 1024}
@@ -435,7 +605,7 @@ function AssistantChat({
             Usage billed to your plan
           </span>
           {isLoading ? (
-            <Button type="button" size="sm" variant="outline" onClick={stop}>
+            <Button type="button" size="sm" variant="ghost" onClick={stop}>
               Stop
             </Button>
           ) : (
@@ -452,3 +622,11 @@ function AssistantChat({
     </div>
   );
 }
+
+const markdownComponents = {
+  pre: ({ children }: ComponentProps<"pre">) => (
+    <CodeBlock size="sm" className="my-3">
+      <CodeBlockContent wrap>{children}</CodeBlockContent>
+    </CodeBlock>
+  ),
+};

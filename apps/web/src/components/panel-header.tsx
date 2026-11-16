@@ -12,7 +12,7 @@ export function PanelHeader({
 }) {
   return (
     <header className="bg-background shrink-0 border-b">
-      <div className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-0.5">
+      <div className="flex h-7 items-center gap-2 px-2">
         <span
           className="min-w-0 flex-1 truncate text-xs font-medium"
           title={title}
@@ -35,7 +35,7 @@ export function PanelActions({
   return (
     <Toolbar.Root
       aria-label={label}
-      className="flex flex-wrap items-center gap-0.5"
+      className="flex shrink-0 items-center gap-0.5"
     >
       {children}
     </Toolbar.Root>
@@ -52,7 +52,7 @@ export function PanelAction({
       {...props}
       aria-label={label}
       title={label}
-      render={<Button variant="ghost" size="icon-sm" />}
+      render={<Button variant="ghost" size="icon-xs" />}
     >
       {children}
     </Toolbar.Button>

@@ -209,3 +209,35 @@ test("rejects unrepresentable imports and preserves nested ignore rules", async 
     "reserved",
   );
 });
+
+test("a repository can commit and restore without a remote, then attach and push its history", async () => {
+  const repo = new GitRepository();
+  await repo.init();
+  repo.overlay({ "main.tex": bytes("local history\n") });
+  repo.write("out/main.aux", bytes("ignored"));
+  expect((await repo.status()).branch).toBe("main");
+  const oid = await repo.commit("Before a remote", author);
+  const restored = GitRepository.restore(repo.serialize());
+  restored.overlay(repo.sources());
+  expect((await restored.status()).commits[0]?.oid).toBe(oid);
+  const url = await server.create("later.git");
+  await restored.requireEmptyRemote(url, gitHttp(url, "private-token"));
+  expect((await restored.status()).commits[0]?.oid).toBe(oid);
+  await restored.push(gitHttp(url, "private-token"));
+  expect(
+    await command(
+      "--git-dir",
+      join(directory, "later.git"),
+      "rev-parse",
+      "main",
+    ),
+  ).toBe(oid);
+  expect(
+    await command(
+      "--git-dir",
+      join(directory, "later.git"),
+      "show",
+      "main:main.tex",
+    ),
+  ).toBe("local history");
+}, 30_000);

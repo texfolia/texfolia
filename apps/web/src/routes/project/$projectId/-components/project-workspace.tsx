@@ -1,14 +1,20 @@
 import {
   IconAlertCircle,
-  IconArrowLeft,
-  IconRefresh,
-  IconMessageChatbot,
+  IconLayoutSidebarLeftExpand,
+  IconFiles,
+  IconListTree,
+  IconHistory,
+  IconUsers,
+  IconGitBranch,
+  IconPlayerPlay,
+  IconLoader2,
+  IconCircleCheck,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 
 import "dockview-react/dist/styles/dockview.css";
-import { ClientOnly, Link } from "@tanstack/react-router";
+import { ClientOnly } from "@tanstack/react-router";
 import type { EditorView } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import {
@@ -20,8 +26,6 @@ import {
   type IDockviewPanelProps,
 } from "dockview-react";
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -30,17 +34,26 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { editorChrome } from "#/components/editor-chrome";
+import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
-import { SidebarProvider, SidebarTrigger } from "#/components/ui/sidebar";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "#/components/ui/context-menu";
+import { SidebarProvider } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
 import { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
+import type { EditorCommand } from "#/lib/editor-command";
+import { gitAction } from "#/lib/git.functions";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
 import { latexCompletion } from "#/lib/latex/completion";
+import { projectOutline } from "#/lib/latex/outline";
 import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
 import type { CompileSources } from "#/lib/latex/source-sync";
 import { addLatexPackage, packageInsertion } from "#/lib/latex/symbols";
@@ -50,11 +63,23 @@ import {
   type SourceDraft,
 } from "#/lib/project-drafts";
 import { projectMetadataVersion } from "#/lib/project-metadata";
-import { assertProjectSourcePaths, projectPaths } from "#/lib/project-paths";
+import {
+  assertProjectSourcePaths,
+  projectPaths,
+  invalidProjectPaths,
+} from "#/lib/project-paths";
 import { encodeSource, type SourceFiles } from "#/lib/project-source";
 import { saveProjectSource } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import { InvalidSourcePathError } from "#/lib/source-path.schema";
+import {
+  defaultWorkspaceChrome,
+  readWorkspaceLayout,
+  restoreWorkspaceDock,
+  workspaceLayoutKey,
+  writeWorkspaceLayout,
+  type WorkspaceChrome,
+} from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
 import {
@@ -65,13 +90,22 @@ import {
 } from "#/providers/workspace-provider";
 
 import { AssistantSidebar } from "./assistant-sidebar";
+import type { CreateNodeHandle } from "./create-node-form";
 import { Editor } from "./editor";
 import { GeneratedFile } from "./generated-file";
 import {
   MarkdownPreview,
   type MarkdownPreviewParams,
 } from "./markdown-preview";
+import type { ProjectExportHandle } from "./project-export";
 import { ProjectSidebar } from "./project-sidebar";
+import type { RepairSourcePathsHandle } from "./repair-source-paths";
+import { SidebarResize } from "./sidebar-resize";
+import { SourcePdf } from "./source-pdf";
+import type { UploadSourceHandle } from "./upload-source";
+import { WorkspaceMenu } from "./workspace-menu";
+import { WorkspacePresence } from "./workspace-presence";
+import { WorkspaceProblems } from "./workspace-problems";
 
 type FilePanelParams = {
   node: ProjectNode;
@@ -80,8 +114,6 @@ type FilePanelParams = {
 const noProblems: LatexProblem[] = [];
 const emptySubscribe = () => () => {};
 const noCollaborationStatus = () => undefined;
-
-const PdfViewer = lazy(() => import("./pdf"));
 
 function FileEditor({
   params,
@@ -115,6 +147,8 @@ function FileEditor({
   );
   const draft = workspace.drafts.get(params.node.id);
   const path = workspace.paths.get(params.node.id) ?? params.node.name;
+  if (params.node.kind === "binary" && /\.pdf$/i.test(params.node.name))
+    return <SourcePdf node={params.node} />;
   if (params.node.kind === "binary")
     return (
       <div className="space-y-3 p-4 text-sm">
@@ -122,7 +156,7 @@ function FileEditor({
           Preview is not available for this file type.
         </p>
         <Button
-          variant="outline"
+          variant="ghost"
           disabled={downloading}
           onClick={async () => {
             setDownloadError("");
@@ -165,6 +199,10 @@ function FileEditor({
         </p>
       )}
       <Editor
+        onCommands={(run) => workspace.registerCommands(params.node.id, run)}
+        onCursorPosition={(position) =>
+          workspace.reportCursor(params.node.id, position)
+        }
         collaboration={collaboration}
         key={params.node.id}
         readOnly={!workspace.canWrite || !status.canWrite}
@@ -196,50 +234,55 @@ function FileEditor({
   );
 }
 
-function FileTab(props: IDockviewPanelHeaderProps<FilePanelParams>) {
+function FileTab(props: IDockviewPanelHeaderProps<{ preview?: boolean }>) {
   const workspace = useWorkspace();
   return (
-    <div
-      className={cn("h-full", props.params.preview ? "italic" : "not-italic")}
-    >
-      <DockviewDefaultTab
-        {...props}
-        onDoubleClick={() => workspace.keepOpen(props.api.id)}
-      />
-    </div>
-  );
-}
-
-function CompiledPdf() {
-  const { pdf, stale, pdfSaveState } = useWorkspace();
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      {pdf && (stale || pdfSaveState !== "saved") && (
-        <p
-          role="status"
-          className="text-muted-foreground border-b px-3 py-2 text-xs"
+    <ContextMenu>
+      <ContextMenuTrigger
+        render={<div />}
+        className={cn("h-full", props.params.preview ? "italic" : "not-italic")}
+      >
+        <DockviewDefaultTab
+          {...props}
+          onDoubleClick={() => workspace.keepOpen(props.api.id)}
+        />
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {props.params.preview && (
+          <ContextMenuItem onClick={() => workspace.keepOpen(props.api.id)}>
+            Keep open
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem
+          onClick={() => workspace.closeTabs(props.api.id, "one")}
         >
-          {pdfSaveState === "not-saved"
-            ? "PDF not saved. Recompile to try again."
-            : pdfSaveState === "saving"
-              ? "Saving build…"
-              : "Out of date, recompile"}
-        </p>
-      )}
-      <div className="min-h-0 flex-1">
-        <Suspense fallback={<p className="p-4">Loading PDF viewer…</p>}>
-          <PdfViewer file={pdf} />
-        </Suspense>
-      </div>
-    </div>
+          Close
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => workspace.closeTabs(props.api.id, "others")}
+        >
+          Close others
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => workspace.closeTabs(props.api.id, "all")}
+        >
+          Close all
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => workspace.closeTabs(props.api.id, "right")}
+        >
+          Close to the right
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
 const components = {
   editor: FileEditor,
   generated: GeneratedFile,
-  pdf: CompiledPdf,
   markdown: MarkdownPreview,
+  problems: WorkspaceProblems,
 };
 const tabComponents = { file: FileTab };
 
@@ -271,40 +314,108 @@ export function ProjectWorkspace({
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const [activeId, setActiveId] = useState<string>();
   const [ready, setReady] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
-  useEffect(() => {
-    if (!ready) return;
-    const narrow = window.matchMedia("(max-width: 767px)");
-    let merged = narrow.matches;
-    const layout = () => {
-      const dock = api.current;
-      const preview = dock?.getPanel("pdf");
-      const source = dock?.panels.find(
-        (panel) => panel.api.component === "editor",
-      );
-      if (!preview || !source) return;
-      if (narrow.matches && preview.group !== source.group) {
-        preview.api.moveTo({
-          group: source.group,
-          position: "center",
-          skipSetActive: true,
-        });
-        merged = true;
-      } else if (!narrow.matches && merged) {
-        preview.api.moveTo({
-          group: source.group,
-          position: "right",
-          skipSetActive: true,
-        });
-        merged = false;
+  const layoutKey = workspaceLayoutKey(userId, projectId);
+  const [initialLayout] = useState(() => {
+    try {
+      return readWorkspaceLayout(localStorage.getItem(layoutKey));
+    } catch {
+      return { chrome: defaultWorkspaceChrome, dock: undefined };
+    }
+  });
+  const [chrome, setChrome] = useState(initialLayout.chrome);
+  const chromeRef = useRef(chrome);
+  chromeRef.current = chrome;
+  const updateChrome = (patch: Partial<WorkspaceChrome>) =>
+    setChrome((previous) => {
+      const next = { ...previous, ...patch };
+      if (window.matchMedia("(max-width: 767px)").matches) {
+        if (patch.historyOpen === true) {
+          next.rightOpen = false;
+          next.agentsOpen = false;
+        } else if (patch.agentsOpen === true) {
+          next.rightOpen = false;
+          next.historyOpen = false;
+        } else if (patch.rightOpen === true) {
+          next.agentsOpen = false;
+          next.historyOpen = false;
+        }
       }
+      return next;
+    });
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 767px)");
+    const adapt = () => {
+      if (narrow.matches)
+        setChrome((previous) =>
+          (previous.agentsOpen || previous.historyOpen) && previous.rightOpen
+            ? { ...previous, agentsOpen: false, historyOpen: false }
+            : previous.agentsOpen && previous.historyOpen
+              ? { ...previous, historyOpen: false }
+              : previous,
+        );
     };
-    layout();
-    narrow.addEventListener("change", layout);
-    return () => narrow.removeEventListener("change", layout);
-  }, [ready]);
+    adapt();
+    narrow.addEventListener("change", adapt);
+    return () => narrow.removeEventListener("change", adapt);
+  }, []);
+  const createRef = useRef<CreateNodeHandle | null>(null);
+  const uploadRef = useRef<UploadSourceHandle | null>(null);
+  const exportRef = useRef<ProjectExportHandle | null>(null);
+  const repairRef = useRef<RepairSourcePathsHandle | null>(null);
+  const commands = useRef(new Map<string, (command: EditorCommand) => void>());
+  const positions = useRef(new Map<string, { line: number; column: number }>());
+  const [cursor, setCursor] = useState<{
+    id: string;
+    line: number;
+    column: number;
+  }>();
+  const [gitBranch, setGitBranch] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (ready)
+      void gitAction({ data: { projectId, action: { kind: "status" } } })
+        .then((result) => {
+          if (active) setGitBranch(result.status.branch);
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [ready, projectId]);
+  const registerCommands = useCallback(
+    (id: string, run: ((command: EditorCommand) => void) | null) => {
+      if (run) commands.current.set(id, run);
+      else commands.current.delete(id);
+    },
+    [],
+  );
+  const reportCursor = useCallback(
+    (id: string, position: { line: number; column: number }) => {
+      positions.current.set(id, position);
+      if (api.current?.activePanel?.id === id)
+        setCursor((previous) =>
+          previous?.id === id &&
+          previous.line === position.line &&
+          previous.column === position.column
+            ? previous
+            : { id, ...position },
+        );
+    },
+    [],
+  );
+  const persistLayout = useCallback(() => {
+    const dock = api.current;
+    if (dock) writeWorkspaceLayout(layoutKey, chromeRef.current, dock.toJSON());
+  }, [layoutKey]);
+  useEffect(() => {
+    if (ready) persistLayout();
+  }, [chrome, ready, persistLayout]);
   const collaboration = useRef(new Map<string, CollaborativeFile>());
-  const [, setCollaborationRevision] = useState(0);
+  const [collaborationRevision, setCollaborationRevision] = useState(0);
+  const collaborationSnapshot = useMemo(
+    () => new Map(collaboration.current),
+    [collaborationRevision],
+  );
   const observeChange = useRef<(id: string, value: string) => void>(() => {});
   const versions = files.sourceVersions;
   const localDrafts = useRef<Record<string, SourceDraft>>({});
@@ -342,10 +453,10 @@ export function ProjectWorkspace({
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
   const [jump, setJump] = useState<Workspace["jump"]>();
-  const [showProblems, setShowProblems] = useState(false);
   const {
     formatting: { settings: formatSettings },
     open: settingsOpen,
+    setOpen: setSettingsOpen,
   } = useSettings();
   const storageKey = `texfolia.project.${projectId}.sources`;
   const compilation = useRef<AbortController | null>(null);
@@ -837,7 +948,7 @@ export function ProjectWorkspace({
       const diagnostics = parseCompileLog(result.log, filenames, main);
       if (revision.current === snapshot) {
         setCompileProblems(diagnostics);
-        if (diagnostics.length) setShowProblems(true);
+        if (diagnostics.length) openProblems();
       }
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -879,6 +990,21 @@ export function ProjectWorkspace({
       target: container,
       capture: true,
       ignoreInputs: false,
+      enabled: !settingsOpen,
+    },
+  );
+
+  useHotkeys(
+    [
+      {
+        hotkey: "Mod+B",
+        callback: () => updateChrome({ rightOpen: !chrome.rightOpen }),
+      },
+    ],
+    {
+      target: container,
+      ignoreInputs: true,
+      ignoreDefaultPrevented: true,
       enabled: !settingsOpen,
     },
   );
@@ -1018,51 +1144,80 @@ export function ProjectWorkspace({
     }
   }
 
-  function openGenerated(path: string) {
+  function openGenerated(path: string, permanent = false) {
     const dock = api.current;
     if (!dock) return;
     const id = `out:${path}`;
     const existing = dock.getPanel(id);
     if (existing) {
+      if (permanent) keepOpen(id);
       existing.api.setActive();
       return;
     }
-    const reference = dock.panels.find(
-      (panel) => panel.api.component === "editor",
-    );
+    const preview = previewId.current
+      ? dock.getPanel(previewId.current)
+      : undefined;
+    const reference =
+      preview ??
+      dock.panels.find(
+        (panel) =>
+          panel.api.component === "editor" ||
+          panel.api.component === "generated",
+      );
     dock.addPanel({
       id,
       component: "generated",
-      title: `out/${path}`,
-      params: { path },
+      tabComponent: "file",
+      title: path.split("/").at(-1) ?? path,
+      params: { path, preview: !permanent },
       position: reference
         ? { referencePanel: reference.id, direction: "within" }
         : undefined,
     });
+    if (!permanent) {
+      previewId.current = id;
+      if (preview) dock.removePanel(preview);
+    }
   }
 
-  function openPdfPreview() {
+  function reveal(path: string, line = 1) {
+    const node = nodes.find((node) => paths.get(node.id) === path);
+    if (!node) return;
+    openFile(node, true);
+    setJump({ id: node.id, line });
+  }
+  function closeTabs(id: string, mode: "one" | "others" | "all" | "right") {
+    const dock = api.current;
+    const panel = dock?.getPanel(id);
+    if (!dock || !panel) return;
+    const group = [...panel.group.panels];
+    const index = group.findIndex((panel) => panel.id === id);
+    const targets =
+      mode === "all"
+        ? group
+        : mode === "others"
+          ? group.filter((panel) => panel.id !== id)
+          : mode === "right"
+            ? group.slice(index + 1)
+            : [panel];
+    for (const target of targets) dock.removePanel(target);
+  }
+  function openProblems() {
     const dock = api.current;
     if (!dock) return;
-    const existing = dock.getPanel("pdf");
+    const existing = dock.getPanel("problems");
     if (existing) {
       existing.api.setActive();
       return;
     }
-    const source = dock.panels.find(
-      (panel) => panel.api.component === "editor",
-    );
+    const reference = dock.activePanel ?? dock.panels[0];
     dock.addPanel({
-      id: "pdf",
-      component: "pdf",
-      title: "PDF Preview",
-      position: source
-        ? {
-            referencePanel: source.id,
-            direction: window.matchMedia("(max-width: 767px)").matches
-              ? "within"
-              : "right",
-          }
+      id: "problems",
+      component: "problems",
+      title: "Problems",
+      initialHeight: 180,
+      position: reference
+        ? { referencePanel: reference.id, direction: "below" }
         : undefined,
     });
   }
@@ -1128,24 +1283,58 @@ export function ProjectWorkspace({
             panel.api.component === "generated")
         )
           setActiveId(panel.id);
+        if (panel) {
+          const position = positions.current.get(panel.id);
+          setCursor(position ? { id: panel.id, ...position } : undefined);
+        }
       }),
+      dock.onDidLayoutChange(persistLayout),
       dock.onDidRemovePanel((panel) => {
         if (previewId.current === panel.id) previewId.current = null;
+        setActiveId((previous) =>
+          previous === panel.id ? undefined : previous,
+        );
       }),
     ];
     const first =
       nodes.find((node) => node.kind === "text" && node.name === "main.tex") ??
       nodes.find((node) => node.kind === "text");
-    if (first) openFile(first, true);
-    openPdfPreview();
-    if (first) dock.getPanel(first.id)?.api.setActive();
+    if (!restoreWorkspaceDock(dock, initialLayout.dock, nodes)) {
+      if (first) openFile(first, true);
+      if (first) dock.getPanel(first.id)?.api.setActive();
+    }
+    for (const panel of dock.panels) {
+      if (panel.api.component === "markdown")
+        panel.api.updateParameters({
+          source:
+            drafts.current.get(panel.id.slice("markdown:".length))?.value ?? "",
+        });
+      if (panel.params?.preview === true) {
+        if (previewId.current)
+          dock
+            .getPanel(previewId.current)
+            ?.api.updateParameters({ preview: false });
+        previewId.current = panel.id;
+      }
+    }
     setReady(true);
   }
 
+  const compileStatus =
+    compiling ||
+    ["queued", "running"].includes(buildMetadata?.current?.status ?? "")
+      ? "Compiling…"
+      : compileError || buildMetadata?.current?.status === "failed"
+        ? "Compile failed"
+        : stale
+          ? "Out of date"
+          : pdf
+            ? "Up to date"
+            : "Not compiled";
   return (
     <WorkspaceProvider
       value={{
-        collaboration: new Map(collaboration.current),
+        collaboration: collaborationSnapshot,
         projectId,
         canWrite: canWrite && Object.keys(recovery).length === 0,
         build: buildMetadata,
@@ -1163,6 +1352,12 @@ export function ProjectWorkspace({
         paths,
         completion,
         problems,
+        allProblems,
+        reveal,
+        closeTabs,
+        reportGitBranch: setGitBranch,
+        registerCommands,
+        reportCursor,
         reportSyntax,
         jump,
         pdf,
@@ -1171,102 +1366,86 @@ export function ProjectWorkspace({
       }}
     >
       <SidebarProvider
+        keyboardShortcut={false}
         ref={container}
         className={cn(
-          "h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:1.75rem] [--workspace-header-height:2.5rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none [&_[data-slot=sidebar-footer]]:p-0 [&_[data-slot=sidebar-group]]:p-0 [&_[data-slot=sidebar-menu]]:gap-0",
-          editorChrome,
+          "h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2rem] [--workspace-header-height:2.5rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none [&_[data-slot=sidebar-footer]]:p-0 [&_[data-slot=sidebar-group]]:p-0 [&_[data-slot=sidebar-menu]]:gap-0",
         )}
       >
-        <header className="z-20 flex h-(--workspace-header-height) shrink-0 items-center gap-2 border-b bg-(--activity-background) px-1 text-(--activity-foreground)">
-          <Button
-            render={<Link to="/projects" />}
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Back to Projects"
-            title="Back to Projects"
-          >
-            <IconArrowLeft />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Toggle assistant"
-            aria-pressed={assistantOpen}
-            onClick={() => setAssistantOpen(!assistantOpen)}
-          >
-            <IconMessageChatbot />
-          </Button>
-          <span className="bg-border mx-1 h-4 w-px shrink-0" />
-          <h1
-            className="min-w-0 flex-1 truncate text-sm font-medium"
-            title={name}
-          >
-            {name}
-          </h1>
-          {pdf && stale && (
-            <span
-              role="status"
-              className="text-muted-foreground hidden text-xs sm:inline"
-            >
-              Out of date, recompile
-            </span>
+        <SettingsDialog hideTrigger />
+        <WorkspaceMenu
+          name={name}
+          canWrite={canWrite && ready && Object.keys(recovery).length === 0}
+          saving={saving}
+          compiling={compiling}
+          compileAvailable={!!main}
+          editorAvailable={nodes.some(
+            (node) => node.id === activeId && node.kind === "text",
           )}
-          <Button
-            variant="outline"
-            disabled={
-              !main ||
-              compiling ||
-              saving ||
-              !ready ||
-              !canWrite ||
-              Object.keys(recovery).length > 0
-            }
-            aria-label="Clean build"
-            title="Clean build"
-            onClick={() => void compileProject(true)}
-          >
-            <IconRefresh />
-            <span className="hidden md:inline">Clean build</span>
-          </Button>
-          <Button
-            variant="outline"
-            disabled={
-              saving || !ready || !canWrite || Object.keys(recovery).length > 0
-            }
-            onClick={() => void saveSources()}
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <Button
-            disabled={
-              !main ||
-              saving ||
-              !ready ||
-              !canWrite ||
-              Object.keys(recovery).length > 0
-            }
-            onClick={() => void compileProject()}
-          >
-            {compiling ? (
-              "Compiling…"
-            ) : (
-              <>
-                <span className="sm:hidden">Compile</span>
-                <span className="hidden sm:inline">Save & compile</span>
-              </>
-            )}
-          </Button>
-          <SidebarTrigger
-            className="ml-1"
-            aria-label="Toggle project sidebar"
-          />
-        </header>
+          onSave={() => void saveSources()}
+          onCompile={(clean) => void compileProject(clean)}
+          onCreate={(kind) => createRef.current?.start(kind)}
+          onUpload={() => uploadRef.current?.open()}
+          onExport={() => exportRef.current?.open()}
+          onRepair={
+            invalidProjectPaths(nodes).length
+              ? () => repairRef.current?.open()
+              : undefined
+          }
+          onSettings={() => setSettingsOpen(true)}
+          onEditor={(command) => {
+            if (activeId) commands.current.get(activeId)?.(command);
+          }}
+          chrome={chrome}
+          onChrome={updateChrome}
+          onProblems={openProblems}
+        />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          <AssistantSidebar
-            projectId={projectId}
-            open={assistantOpen}
-            onClose={() => setAssistantOpen(false)}
-          />
+          <div
+            hidden={!chrome.agentsOpen && !chrome.historyOpen}
+            style={{
+              width:
+                (chrome.agentsOpen ? chrome.agentsWidth : 0) +
+                (chrome.historyOpen
+                  ? chrome.historyWidth + (chrome.agentsOpen ? 4 : 0)
+                  : 0),
+            }}
+            className="z-30 h-full min-w-0 shrink-0 max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:max-w-[85%] [&[hidden]]:hidden"
+          >
+            <AssistantSidebar
+              projectId={projectId}
+              open={chrome.agentsOpen}
+              onClose={() => updateChrome({ agentsOpen: false })}
+              historyOpen={chrome.historyOpen}
+              historyWidth={chrome.historyWidth}
+              agentsWidth={chrome.agentsWidth}
+              onHistoryToggle={() =>
+                updateChrome({ historyOpen: !chrome.historyOpen })
+              }
+              onHistoryResize={(historyWidth) => updateChrome({ historyWidth })}
+              onShowAgents={() => updateChrome({ agentsOpen: true })}
+            />
+          </div>
+          {(chrome.agentsOpen || chrome.historyOpen) && (
+            <SidebarResize
+              side="left"
+              width={
+                chrome.agentsOpen ? chrome.agentsWidth : chrome.historyWidth
+              }
+              label={
+                chrome.agentsOpen
+                  ? "Resize agents sidebar"
+                  : "Resize history sidebar"
+              }
+              onResize={(width) =>
+                updateChrome(
+                  chrome.agentsOpen
+                    ? { agentsWidth: width }
+                    : { historyWidth: width },
+                )
+              }
+            />
+          )}
           <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {!ready && (
               <p role="status" className="border-b px-3 py-2 text-sm">
@@ -1312,7 +1491,7 @@ export function ProjectWorkspace({
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => {
                     downloadFile(
                       new Blob([serializeSourceDrafts(recovery)], {
@@ -1356,79 +1535,186 @@ export function ProjectWorkspace({
                   }}
                   components={components}
                   tabComponents={tabComponents}
+                  defaultTabComponent={FileTab}
                   onReady={onReady}
                 />
               </ClientOnly>
             </div>
-            {showProblems && (
-              <section
-                aria-label="LaTeX problems"
-                className="max-h-44 shrink-0 overflow-auto border-t bg-(--panel-background) px-3 py-2 text-sm"
-              >
-                {allProblems.length ? (
-                  <ul className="space-y-1">
-                    {allProblems.map((problem, index) => (
-                      <li key={`${problem.path}:${problem.line}:${index}`}>
-                        <Button
-                          variant="ghost"
-                          className="h-auto justify-start text-left whitespace-normal"
-                          onClick={() => {
-                            const node = nodes.find(
-                              (candidate) =>
-                                paths.get(candidate.id) === problem.path,
-                            );
-                            if (!node) return;
-                            openFile(node, true);
-                            setJump({ id: node.id, line: problem.line });
-                          }}
-                        >
-                          <span
-                            className={
-                              problem.severity === "error"
-                                ? "text-destructive"
-                                : "text-muted-foreground"
-                            }
-                          >
-                            {problem.path}:{problem.line}
-                          </span>
-                          {problem.message}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">No problems.</p>
-                )}
-              </section>
-            )}
           </main>
-          <ProjectSidebar
-            name={name}
-            onOpenPreview={openPdfPreview}
-            nodes={nodes}
-            activeId={activeId}
-            ready={ready}
-            onOpen={openFile}
-            onOpenGenerated={openGenerated}
-            sources={sourceFiles}
-            showProblems={showProblems}
-            onToggleProblems={() => setShowProblems(!showProblems)}
-          />
+          {chrome.rightOpen && (
+            <SidebarResize
+              side="right"
+              width={chrome.rightWidth}
+              onResize={(rightWidth) => updateChrome({ rightWidth })}
+            />
+          )}
+          <div
+            hidden={!chrome.rightOpen}
+            style={{ width: chrome.rightWidth }}
+            className="z-30 h-full min-w-0 shrink-0 max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:max-w-[85%] [&[hidden]]:hidden"
+          >
+            <ProjectSidebar
+              name={name}
+              nodes={nodes}
+              activeId={activeId}
+              ready={ready}
+              onOpen={openFile}
+              onOpenGenerated={openGenerated}
+              sources={sourceFiles}
+              view={chrome.rightView}
+              onClose={() => updateChrome({ rightOpen: false })}
+              createRef={createRef}
+              uploadRef={uploadRef}
+              exportRef={exportRef}
+              repairRef={repairRef}
+              outline={projectOutline(
+                new Map(
+                  [...paths].flatMap(([id, path]) => {
+                    const draft = drafts.current.get(id);
+                    return draft ? [[path, draft.value]] : [];
+                  }),
+                ),
+                main,
+              )}
+            />
+          </div>
         </div>
-        <footer className="z-20 flex h-(--workspace-footer-height) shrink-0 items-center justify-between gap-3 border-t bg-(--status-background) px-3 text-xs text-(--status-foreground)">
+        <footer
+          aria-label="Workspace status"
+          className="z-20 flex h-8 shrink-0 items-center gap-1 border-t bg-(--status-background) px-1 text-xs text-(--status-foreground)"
+        >
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
-            aria-expanded={showProblems}
-            onClick={() => setShowProblems(!showProblems)}
+            size="icon-xs"
+            className="aria-pressed:bg-muted"
+            aria-label="Toggle chat history"
+            title="Chat history"
+            aria-pressed={chrome.historyOpen}
+            onClick={() => updateChrome({ historyOpen: !chrome.historyOpen })}
+          >
+            <IconHistory />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="aria-pressed:bg-muted"
+            aria-label="Toggle agents sidebar"
+            aria-pressed={chrome.agentsOpen}
+            onClick={() => updateChrome({ agentsOpen: !chrome.agentsOpen })}
+          >
+            <IconLayoutSidebarLeftExpand />
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label={`Problems (${allProblems.length})`}
+            onClick={openProblems}
           >
             <IconAlertCircle />
-            Problems ({allProblems.length})
+            <span className="max-sm:hidden">Problems</span> (
+            {allProblems.length})
           </Button>
-          <span className="min-w-0 truncate">
-            {activeId ? paths.get(activeId) : "LaTeX workspace"}
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={
+              !main ||
+              !canWrite ||
+              !ready ||
+              saving ||
+              Object.keys(recovery).length > 0
+            }
+            onClick={() => void compileProject()}
+            aria-label="Compile status"
+            title={compileStatus}
+          >
+            {compileStatus === "Compiling…" ? (
+              <IconLoader2 className="motion-safe:animate-spin" />
+            ) : compileStatus === "Up to date" ? (
+              <IconCircleCheck />
+            ) : compileStatus === "Compile failed" ? (
+              <IconAlertCircle />
+            ) : (
+              <IconPlayerPlay />
+            )}
+            <span className="max-sm:hidden">{compileStatus}</span>
+          </Button>
+          <WorkspacePresence
+            onClick={() =>
+              updateChrome({ rightOpen: true, rightView: "collaboration" })
+            }
+          />
+          {gitBranch && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="max-sm:hidden"
+              onClick={() =>
+                updateChrome({ rightOpen: true, rightView: "git" })
+              }
+            >
+              <IconGitBranch />
+              {gitBranch}
+            </Button>
+          )}
+          <span className="min-w-0 flex-1 truncate px-2 text-right max-sm:hidden">
+            {activeId?.startsWith("out:")
+              ? `out/${activeId.slice(4)}`
+              : activeId
+                ? paths.get(activeId)
+                : "LaTeX workspace"}
           </span>
+          {cursor && (
+            <span className="shrink-0 px-2 tabular-nums">
+              <span className="max-sm:hidden">
+                Ln {cursor.line}, Col {cursor.column}
+              </span>
+              <span className="sm:hidden">
+                {cursor.line}:{cursor.column}
+              </span>
+            </span>
+          )}
+          <div
+            role="toolbar"
+            aria-label="Right sidebar views"
+            className="ml-auto flex shrink-0 items-center gap-0.5"
+          >
+            {(
+              [
+                { view: "files", label: "Files", icon: IconFiles },
+                { view: "outline", label: "Outline", icon: IconListTree },
+                { view: "git", label: "Git", icon: IconGitBranch },
+                {
+                  view: "collaboration",
+                  label: "Collaboration",
+                  icon: IconUsers,
+                },
+              ] satisfies {
+                view: WorkspaceChrome["rightView"];
+                label: string;
+                icon: typeof IconFiles;
+              }[]
+            ).map(({ view, label, icon: Icon }) => (
+              <Button
+                key={view}
+                variant="ghost"
+                size="icon-xs"
+                className="aria-pressed:bg-muted"
+                aria-label={label}
+                title={label}
+                aria-controls="project-sidebar"
+                aria-pressed={chrome.rightOpen && chrome.rightView === view}
+                onClick={() =>
+                  updateChrome({
+                    rightView: view,
+                    rightOpen: !(chrome.rightOpen && chrome.rightView === view),
+                  })
+                }
+              >
+                <Icon />
+              </Button>
+            ))}
+          </div>
         </footer>
       </SidebarProvider>
     </WorkspaceProvider>

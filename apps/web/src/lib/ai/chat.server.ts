@@ -1,5 +1,6 @@
 import {
   chat,
+  StreamProcessor,
   chatParamsFromRequestBody,
   maxIterations,
   toServerSentEventsResponse,
@@ -10,11 +11,13 @@ import { createCloudflareText } from "@tanstack/ai-cloudflare";
 import { createDb, type Db } from "@texfolia/db";
 import {
   aiRequest,
+  aiThread,
+  aiMessage,
   aiRun,
   aiSettings,
   user as userTable,
 } from "@texfolia/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createAuth } from "../auth";
@@ -36,6 +39,8 @@ import {
   nanoDollars,
   type AiModel,
 } from "./schema";
+import { storedMessageSchema, type StoredMessage } from "./threads";
+import { threadOwner } from "./threads.server";
 import { projectTools } from "./tools.server";
 
 const noStore = { "Cache-Control": "no-store" };
@@ -335,10 +340,39 @@ export async function startAssistant({
   const override = parsedOverride.data;
   const db = createDb(env.HYPERDRIVE.connectionString);
   let closed = false;
+  let claimedThread: string | undefined;
+  let history: StoredMessage[] = [];
   try {
+    const threadIdentifier = z.uuid().safeParse(params.threadId);
+    if (!purpose && !threadIdentifier.success)
+      throw new AiError("Invalid chat identifier.", 400);
+    const savedThread =
+      !purpose && threadIdentifier.success
+        ? await db
+            .select()
+            .from(aiThread)
+            .where(threadOwner(projectId, userId, threadIdentifier.data))
+            .then((rows) => rows[0])
+        : undefined;
+    if (!purpose && !savedThread) throw new AiError("Chat not found.", 404);
+    const priorRun = await db
+      .select({ id: aiRun.id })
+      .from(aiRun)
+      .where(
+        and(eq(aiRun.userId, userId), eq(aiRun.clientRunId, params.runId)),
+      );
+    if (priorRun.length)
+      throw new AiError(
+        "This request already ran. Retry with a new request.",
+        409,
+      );
     const settings = await getAiSettings(db, userId);
     const models = await gatewayModels(config);
-    const modelId = override.model ?? settings.defaultModel ?? models[0]?.id;
+    const modelId =
+      override.model ??
+      savedThread?.model ??
+      settings.defaultModel ??
+      models[0]?.id;
     const model = models.find((m) => m.id === modelId);
     if (!model) throw new AiError("Choose an available model.", 400);
     if (settings.monthlyCapNanos === 0)
@@ -350,6 +384,91 @@ export async function startAssistant({
     const clientRunId = z.string().min(1).max(200).safeParse(params.runId);
     if (!clientRunId.success || params.threadId.length > 200)
       throw new AiError("Invalid chat identifier", 400);
+    if (!purpose) {
+      const threadId = z.uuid().safeParse(params.threadId);
+      const incoming = params.messages.at(-1);
+      if (!threadId.success || incoming?.role !== "user")
+        throw new AiError("Open a chat and send a text message.", 400);
+      const userMessage = storedMessageSchema.safeParse(
+        "parts" in incoming
+          ? incoming
+          : {
+              id: incoming.id ?? crypto.randomUUID(),
+              role: "user",
+              parts: [{ type: "text", content: incoming.content }],
+            },
+      );
+      if (
+        !userMessage.success ||
+        userMessage.data.parts.some((part) => part.type !== "text")
+      )
+        throw new AiError("Only text messages are supported.", 400);
+      await db.transaction(async (tx) => {
+        const [thread] = await tx
+          .select()
+          .from(aiThread)
+          .where(threadOwner(projectId, userId, threadId.data))
+          .for("update");
+        if (!thread) throw new AiError("Chat not found.", 404);
+        if (
+          thread.activeRunId &&
+          thread.activeRunAt &&
+          Date.now() - thread.activeRunAt.getTime() < 5 * 60_000
+        )
+          throw new AiError("This chat already has a reply in progress.", 409);
+        const rows = await tx
+          .select()
+          .from(aiMessage)
+          .where(eq(aiMessage.threadId, thread.id))
+          .orderBy(aiMessage.position);
+        history = rows.map((row) => storedMessageSchema.parse(row.message));
+        const retryAt = history.findIndex(
+          (message) =>
+            message.id === userMessage.data.id && message.role === "user",
+        );
+        if (retryAt >= 0) {
+          history = history.slice(0, retryAt + 1);
+          await tx
+            .delete(aiMessage)
+            .where(
+              and(
+                eq(aiMessage.threadId, thread.id),
+                gt(aiMessage.position, retryAt),
+              ),
+            );
+        } else {
+          history.push(userMessage.data);
+          await tx.insert(aiMessage).values({
+            threadId: thread.id,
+            id: userMessage.data.id,
+            position: history.length - 1,
+            message: userMessage.data,
+          });
+        }
+        if (history.length > 200)
+          throw new AiError("This chat is full. Start a new chat.", 413);
+        const title =
+          thread.title === "New chat"
+            ? userMessage.data.parts
+                .filter((part) => part.type === "text")
+                .map((part) => part.content)
+                .join(" ")
+                .slice(0, 80)
+            : thread.title;
+        await tx
+          .update(aiThread)
+          .set({
+            activeRunId: params.runId,
+            activeRunAt: new Date(),
+            updatedAt: new Date(),
+            title,
+            model: override.model ?? thread.model,
+          })
+          .where(eq(aiThread.id, thread.id));
+        claimedThread = thread.id;
+      });
+      params.messages = history;
+    }
     const [run] = await db
       .insert(aiRun)
       .values({
@@ -454,14 +573,60 @@ export async function startAssistant({
             }),
     });
     const runId = run.id;
+    const transcript = new StreamProcessor({ initialMessages: history });
+    let checkpointAt = Date.now();
+    const checkpoint = async (finished = false) => {
+      if (!claimedThread) return;
+      const threadId = claimedThread;
+      await db.transaction(async (tx) => {
+        const [thread] = await tx
+          .select()
+          .from(aiThread)
+          .where(threadOwner(projectId, userId, threadId))
+          .for("update");
+        if (!thread || thread.activeRunId !== params.runId) return;
+        const messages = transcript
+          .getMessages()
+          .slice(history.length)
+          .map((message) => storedMessageSchema.parse(message));
+        for (const [offset, message] of messages.entries())
+          await tx
+            .insert(aiMessage)
+            .values({
+              threadId,
+              id: message.id,
+              position: history.length + offset,
+              message,
+            })
+            .onConflictDoUpdate({
+              target: [aiMessage.threadId, aiMessage.id],
+              set: { message, position: history.length + offset },
+            });
+        await tx
+          .update(aiThread)
+          .set({
+            updatedAt: new Date(),
+            ...(finished ? { activeRunId: null, activeRunAt: null } : {}),
+          })
+          .where(eq(aiThread.id, threadId));
+      });
+    };
     async function* tracked(): AsyncGenerator<StreamChunk> {
       try {
-        for await (const chunk of stream) yield chunk;
+        for await (const chunk of stream) {
+          if (claimedThread) transcript.processChunk(chunk);
+          if (Date.now() - checkpointAt > 1000) {
+            await checkpoint();
+            checkpointAt = Date.now();
+          }
+          yield chunk;
+        }
       } finally {
         abort.abort();
         clearTimeout(timeout);
         request.signal.removeEventListener("abort", disconnect);
         try {
+          await checkpoint(true);
           await db
             .update(aiRun)
             .set({ status: outcome, finishedAt: new Date() })
@@ -495,7 +660,19 @@ export async function startAssistant({
       abortController: abort,
     });
   } catch (error) {
-    if (!closed) await db.$client.end();
+    if (!closed) {
+      if (claimedThread)
+        await db
+          .update(aiThread)
+          .set({ activeRunId: null, activeRunAt: null })
+          .where(
+            and(
+              threadOwner(projectId, userId, claimedThread),
+              eq(aiThread.activeRunId, params.runId),
+            ),
+          );
+      await db.$client.end();
+    }
     throw error;
   }
 }

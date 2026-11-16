@@ -1,11 +1,25 @@
 # Git integration
 
 Projects can import a public or private GitHub or gitlab.com repository. The Git
-section of the right sidebar links an existing project to an empty remote, shows
+view in the switchable right sidebar links an existing project to an empty remote, shows
 working changes and a diff, records manual commits, pushes and pulls, and lists,
 creates, and checks out branches. Refresh git to discover newly created remote
 branches. Empty repositories start on `main`. Existing repositories retain their
 default branch. Linking refuses nonempty remotes; import those from Projects.
+
+## Projects without a remote
+
+Git is optional. Editing, compilation, collaboration, export and the assistant
+work without a `project_git` row. The Git view offers **Initialize repository** or
+the existing empty-remote link flow. Initialize creates a repository on `main`
+without contacting a host or requiring an OAuth account. Manual commits and
+history work immediately. The first commit remains an explicit user action.
+
+A Texfolia-hosted repository uses the same immutable R2 snapshot as a linked
+repository; its `project_git.provider` and `url` are null. Linking an empty GitHub
+or GitLab remote later adds `origin` to the existing repository, preserving local
+commits and branches so they can be pushed. Push, pull and refresh of remote
+branches require a remote. Import continues to create a new project from a remote.
 
 ## Accounts and credentials
 

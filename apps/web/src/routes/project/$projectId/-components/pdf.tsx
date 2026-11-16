@@ -3,13 +3,12 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconDownload,
-  IconFileText,
-  IconFolderOpen,
   IconMaximize,
   IconPalette,
   IconRotateClockwise,
   IconZoomIn,
   IconZoomOut,
+  IconDots,
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
@@ -20,6 +19,14 @@ import {
   PanelHeader,
 } from "#/components/panel-header";
 import { Button } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
 import { downloadFile } from "#/lib/download-file";
 import { reportCompilePreview } from "#/lib/latex/compile-telemetry";
@@ -33,43 +40,26 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
-type PdfFile = string | File | null;
-type PdfViewerProps = { file?: PdfFile; filename?: string };
+type PdfFile = string | File;
+type PdfViewerProps = { file: PdfFile; filename?: string };
 type LoadState =
   | { kind: "loading" }
   | { kind: "ready"; pages: number }
   | { kind: "error"; message: string };
 type Zoom = { kind: "fit" } | { kind: "scale"; value: number };
 
-export default function PdfViewer({
-  file = null,
-  filename = "document.pdf",
-}: PdfViewerProps) {
-  const [openedFile, setOpenedFile] = useState<File | null>(null);
-  const source = openedFile ?? file;
-  const name = source instanceof File ? source.name : filename;
-  // A newly supplied compilation takes precedence over a manually opened PDF.
-  const [previousFile, setPreviousFile] = useState(file);
-  if (file !== previousFile) {
-    setPreviousFile(file);
-    setOpenedFile(null);
-  }
-
-  return <PdfPanel file={source} filename={name} onOpen={setOpenedFile} />;
+export default function PdfViewer({ file, filename }: PdfViewerProps) {
+  return (
+    <PdfPanel
+      file={file}
+      filename={filename ?? (file instanceof File ? file.name : "document.pdf")}
+    />
+  );
 }
 
-function PdfPanel({
-  file,
-  filename,
-  onOpen,
-}: {
-  file: PdfFile;
-  filename: string;
-  onOpen: (file: File) => void;
-}) {
+function PdfPanel({ file, filename }: { file: PdfFile; filename: string }) {
   const { appearance, setPdfMode, theme } = useTheme();
   const matchTheme = appearance.pdfMode === "match";
-  const fileInput = useRef<HTMLInputElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [page, setPage] = useState(1);
@@ -85,7 +75,7 @@ function PdfPanel({
   const [retry, setRetry] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
-  const loadedFile = useRef<PdfFile>(null);
+  const loadedFile = useRef<PdfFile | null>(null);
   const ready = file === loadedFile.current && load.kind === "ready";
   const pages = ready ? load.pages : 0;
   const rotated = (nativeSize.rotation + rotation) % 180 !== 0;
@@ -155,21 +145,6 @@ function PdfPanel({
     >
       <PanelHeader title={file ? filename : "PDF preview"}>
         <PanelActions label="PDF actions">
-          <PanelAction
-            label={
-              matchTheme ? "Show PDF in true colors" : "Match PDF to theme"
-            }
-            aria-pressed={matchTheme}
-            onClick={() => setPdfMode(matchTheme ? "original" : "match")}
-          >
-            <IconPalette />
-          </PanelAction>
-          <PanelAction
-            label="Open PDF"
-            onClick={() => fileInput.current?.click()}
-          >
-            <IconFolderOpen />
-          </PanelAction>
           <Toolbar.Group
             className="flex items-center gap-1"
             aria-label="Page navigation"
@@ -202,7 +177,7 @@ function PdfPanel({
                 }
                 if (event.key === "Escape") setPageInput(String(page));
               }}
-              className="h-7 w-12 px-1 text-center tabular-nums"
+              className="h-6 w-10 bg-transparent px-1 text-center text-xs tabular-nums"
             />
             <span
               className="text-muted-foreground text-xs tabular-nums"
@@ -218,67 +193,68 @@ function PdfPanel({
               <IconChevronRight />
             </PanelAction>
           </Toolbar.Group>
-          <Toolbar.Group
-            className="flex items-center gap-1"
-            aria-label="Zoom controls"
-          >
-            <PanelAction
-              label="Zoom out"
-              disabled={!ready || scale <= 0.25}
-              onClick={() => changeZoom(-0.25)}
-            >
-              <IconZoomOut />
-            </PanelAction>
-            <span
-              className="min-w-10 text-center text-xs tabular-nums"
-              aria-live="polite"
-            >
-              {Math.round(scale * 100)}%
-            </span>
-            <PanelAction
-              label="Zoom in"
-              disabled={!ready || scale >= 3}
-              onClick={() => changeZoom(0.25)}
-            >
-              <IconZoomIn />
-            </PanelAction>
-            <PanelAction
-              label="Fit to width"
-              disabled={!ready}
-              aria-pressed={zoom.kind === "fit"}
-              onClick={() => setZoom({ kind: "fit" })}
-            >
-              <IconMaximize />
-            </PanelAction>
-          </Toolbar.Group>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {Math.round(scale * 100)}%
+          </span>
           <PanelAction
-            label="Rotate clockwise"
+            label="Fit to width"
             disabled={!ready}
-            onClick={() => setRotation((value) => (value + 90) % 360)}
+            aria-pressed={zoom.kind === "fit"}
+            onClick={() => setZoom({ kind: "fit" })}
           >
-            <IconRotateClockwise />
+            <IconMaximize />
           </PanelAction>
-          <PanelAction
-            label="Download PDF"
-            disabled={!ready || downloading}
-            onClick={() => void download()}
-          >
-            <IconDownload />
-          </PanelAction>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon-xs" />}
+              aria-label="More PDF actions"
+              title="More PDF actions"
+            >
+              <IconDots />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem
+                disabled={!ready || scale >= 3}
+                onClick={() => changeZoom(0.25)}
+              >
+                <IconZoomIn />
+                Zoom in
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!ready || scale <= 0.25}
+                onClick={() => changeZoom(-0.25)}
+              >
+                <IconZoomOut />
+                Zoom out
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!ready}
+                onClick={() => setRotation((value) => (value + 90) % 360)}
+              >
+                <IconRotateClockwise />
+                Rotate clockwise
+              </DropdownMenuItem>
+              <DropdownMenuCheckboxItem
+                checked={matchTheme}
+                onCheckedChange={() =>
+                  setPdfMode(matchTheme ? "original" : "match")
+                }
+              >
+                <IconPalette />
+                Match PDF to theme
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!ready || downloading}
+                onClick={() => void download()}
+              >
+                <IconDownload />
+                Download PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </PanelActions>
       </PanelHeader>
-      <input
-        ref={fileInput}
-        type="file"
-        accept="application/pdf,.pdf"
-        className="hidden"
-        aria-label="Choose PDF file"
-        onChange={(event) => {
-          const selected = event.target.files?.[0];
-          event.target.value = "";
-          if (selected) onOpen(selected);
-        }}
-      />
       {downloadError && (
         <p role="alert" className="text-destructive px-3 py-2 text-xs">
           {downloadError}
@@ -290,128 +266,102 @@ function PdfPanel({
         data-pdf-dark={matchTheme && theme.mode === "dark" ? "true" : undefined}
         className="min-h-0 flex-1 overflow-auto data-[pdf-mode=match]:bg-(--pdf-surround) data-[pdf-mode=original]:bg-(--pdf-original-surround) data-[pdf-mode=original]:text-(--pdf-original-foreground) data-[pdf-mode=original]:[--foreground:var(--pdf-original-foreground)] data-[pdf-mode=original]:[--muted-foreground:var(--pdf-original-foreground)] data-[pdf-dark=true]:[&_.react-pdf__Page]:[filter:invert(0.9)_hue-rotate(180deg)]"
       >
-        {file ? (
-          <Document
-            key={retry}
-            file={file}
-            suspense={false}
-            className="flex min-h-full w-fit min-w-full flex-col items-center p-4"
-            onLoadSuccess={({ numPages }) => {
-              loadedFile.current = file;
-              setLoad({ kind: "ready", pages: numPages });
-            }}
-            onLoadError={() => {
-              reportCompilePreview(file, "preview_failed");
+        <Document
+          key={retry}
+          file={file}
+          suspense={false}
+          className="flex min-h-full w-fit min-w-full flex-col items-center p-4"
+          onLoadSuccess={({ numPages }) => {
+            loadedFile.current = file;
+            setLoad({ kind: "ready", pages: numPages });
+          }}
+          onLoadError={() => {
+            reportCompilePreview(file, "preview_failed");
+            setLoad({
+              kind: "error",
+              message:
+                "Could not load this PDF. It may be damaged or unavailable.",
+            });
+          }}
+          onSourceError={() => {
+            reportCompilePreview(file, "preview_failed");
+            setLoad({
+              kind: "error",
+              message: "Could not read this PDF. Try another file.",
+            });
+          }}
+          onPassword={(respond, reason) => {
+            const password = window.prompt(
+              reason === 2
+                ? "Incorrect password. Try again:"
+                : "Enter the PDF password:",
+            );
+            if (password !== null) respond(password);
+            else
               setLoad({
                 kind: "error",
-                message:
-                  "Could not load this PDF. It may be damaged or unavailable.",
+                message: "A password is required. Reopen the PDF to try again.",
               });
-            }}
-            onSourceError={() => {
-              reportCompilePreview(file, "preview_failed");
-              setLoad({
-                kind: "error",
-                message: "Could not read this PDF. Try another file.",
-              });
-            }}
-            onPassword={(respond, reason) => {
-              const password = window.prompt(
-                reason === 2
-                  ? "Incorrect password. Try again:"
-                  : "Enter the PDF password:",
-              );
-              if (password !== null) respond(password);
-              else
-                setLoad({
-                  kind: "error",
-                  message:
-                    "A password is required. Reopen the PDF to try again.",
-                });
-            }}
-            onItemClick={({ pageNumber }) => {
-              if (pageNumber) goToPage(pageNumber);
-            }}
-            loading={
-              <p
-                role={load.kind === "error" ? "alert" : "status"}
-                className="text-muted-foreground p-8 text-sm"
-              >
-                {load.kind === "error" ? load.message : "Loading PDF…"}
-              </p>
-            }
-            error={
-              <div role="alert" className="space-y-3 p-8 text-center text-sm">
-                <p>
-                  {load.kind === "error" ? load.message : "Could not load PDF."}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setLoad({ kind: "loading" });
-                    setRetry((value) => value + 1);
-                  }}
-                >
-                  Try again
-                </Button>
-              </div>
-            }
-          >
-            {ready && (
-              <Page
-                pageNumber={page}
-                scale={scale}
-                rotate={(nativeSize.rotation + rotation) % 360}
-                onRenderSuccess={() => reportCompilePreview(file, "rendered")}
-                onRenderError={() =>
-                  reportCompilePreview(file, "preview_failed")
-                }
-                onLoadSuccess={(pdfPage) => {
-                  const box = pdfPage.getViewport({ scale: 1, rotation: 0 });
-                  setNativeSize({
-                    width: box.width,
-                    height: box.height,
-                    rotation: pdfPage.rotate,
-                  });
-                }}
-                className="shadow-md"
-                loading={
-                  <p
-                    role="status"
-                    className="text-muted-foreground p-8 text-sm"
-                  >
-                    Loading page…
-                  </p>
-                }
-                error={
-                  <p role="alert" className="text-destructive p-8 text-sm">
-                    Could not render this page. Try another page or reopen the
-                    PDF.
-                  </p>
-                }
-              />
-            )}
-          </Document>
-        ) : (
-          <div className="flex h-full min-h-48 flex-col items-center justify-center gap-3 p-6 text-center">
-            <IconFileText className="text-muted-foreground size-8" />
-            <div>
-              <p className="text-sm font-medium">No PDF open</p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Open a PDF to preview it here.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInput.current?.click()}
+          }}
+          onItemClick={({ pageNumber }) => {
+            if (pageNumber) goToPage(pageNumber);
+          }}
+          loading={
+            <p
+              role={load.kind === "error" ? "alert" : "status"}
+              className="text-muted-foreground p-8 text-sm"
             >
-              <IconFolderOpen />
-              Open PDF
-            </Button>
-          </div>
-        )}
+              {load.kind === "error" ? load.message : "Loading PDF…"}
+            </p>
+          }
+          error={
+            <div role="alert" className="space-y-3 p-8 text-center text-sm">
+              <p>
+                {load.kind === "error" ? load.message : "Could not load PDF."}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setLoad({ kind: "loading" });
+                  setRetry((value) => value + 1);
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          }
+        >
+          {ready && (
+            <Page
+              pageNumber={page}
+              scale={scale}
+              rotate={(nativeSize.rotation + rotation) % 360}
+              onRenderSuccess={() => reportCompilePreview(file, "rendered")}
+              onRenderError={() => reportCompilePreview(file, "preview_failed")}
+              onLoadSuccess={(pdfPage) => {
+                const box = pdfPage.getViewport({ scale: 1, rotation: 0 });
+                setNativeSize({
+                  width: box.width,
+                  height: box.height,
+                  rotation: pdfPage.rotate,
+                });
+              }}
+              className="shadow-md"
+              loading={
+                <p role="status" className="text-muted-foreground p-8 text-sm">
+                  Loading page…
+                </p>
+              }
+              error={
+                <p role="alert" className="text-destructive p-8 text-sm">
+                  Could not render this page. Try another page or reopen the
+                  PDF.
+                </p>
+              }
+            />
+          )}
+        </Document>
       </div>
     </section>
   );
