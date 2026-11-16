@@ -1,10 +1,4 @@
-import {
-  IconArrowLeft,
-  IconBrandGithub,
-  IconBrandGitlab,
-  IconBrandGoogle,
-  IconBrandWindows,
-} from "@tabler/icons-react";
+import { IconArrowLeft } from "@tabler/icons-react";
 import { revalidateLogic, useForm } from "@tanstack/react-form-start";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
@@ -47,14 +41,13 @@ export const Route = createFileRoute("/login")({
 });
 
 const socialProviders = [
-  { id: "github", label: "GitHub", Icon: IconBrandGithub },
-  { id: "gitlab", label: "GitLab", Icon: IconBrandGitlab },
-  { id: "google", label: "Google", Icon: IconBrandGoogle },
-  { id: "microsoft", label: "Microsoft", Icon: IconBrandWindows },
+  { id: "github", label: "GitHub" },
+  { id: "gitlab", label: "GitLab" },
+  { id: "google", label: "Google" },
+  { id: "microsoft", label: "Microsoft" },
 ] satisfies {
   id: "github" | "gitlab" | "google" | "microsoft";
   label: string;
-  Icon: typeof IconBrandGithub;
 }[];
 
 type SocialProvider = (typeof socialProviders)[number]["id"];
@@ -259,43 +252,38 @@ function RouteComponent() {
   }
 
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <aside className="bg-muted/50 hidden flex-col justify-between border-r p-12 lg:flex">
-        <Link to="/" className="font-serif text-3xl tracking-tight">
-          Texfolia.
-        </Link>
-        <div className="py-16">
-          <p className="max-w-lg font-serif text-6xl leading-tight tracking-tight">
-            Your next chapter
-            <br />
-            starts <span className="italic">here.</span>
-          </p>
-          <p className="text-muted-foreground mt-8 max-w-sm text-lg leading-relaxed">
-            A quiet place to write, a shared space to think. Pick up where you
-            left off.
-          </p>
-        </div>
-        <p className="text-muted-foreground text-sm">
-          LaTeX, with room for your ideas.
-        </p>
-      </aside>
+    <div className="bg-background text-foreground min-h-svh">
+      <a
+        href="#sign-in-form"
+        className="bg-background sr-only z-50 p-3 focus:not-sr-only focus:absolute focus:top-0 focus:left-0"
+      >
+        Skip to sign-in form
+      </a>
       <main
         id="main-content"
-        className="flex min-h-svh flex-col items-center justify-center px-6 py-10 sm:px-12"
+        className="flex min-h-svh flex-col items-center justify-center px-2 py-12 sm:px-6"
       >
-        <Link to="/" className="mb-10 font-serif text-3xl lg:hidden">
-          Texfolia.
+        <Link
+          to="/"
+          className="font-heading mb-8 text-xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4"
+        >
+          Texfolia<span className="text-muted-foreground">.</span>
         </Link>
         <form
+          id="sign-in-form"
+          tabIndex={-1}
           onSubmit={(e) => {
             e.preventDefault();
             form.handleSubmit();
           }}
-          className="w-full max-w-sm space-y-5"
+          className="w-full max-w-xs space-y-5 text-center"
           aria-label="Sign in"
         >
-          <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">
+          <div
+            key={step}
+            className="motion-safe:animate-in motion-safe:fade-in space-y-3 text-center motion-safe:duration-200"
+          >
+            <h1 className="font-heading text-xl font-medium tracking-tight">
               {step === "email" ? "Sign in to Texfolia" : "Check your email"}
             </h1>
             {step === "otp" && (
@@ -332,8 +320,8 @@ function RouteComponent() {
           {step === "email" ? (
             <form.FormGroup name="emailStep">
               {() => (
-                <FieldGroup className="gap-3">
-                  {socialProviders.map(({ id, label, Icon }) => (
+                <FieldGroup className="gap-2">
+                  {socialProviders.map(({ id, label }) => (
                     <Field key={id}>
                       <Button
                         onClick={() => signInWith(id)}
@@ -341,16 +329,23 @@ function RouteComponent() {
                         size="lg"
                         type="button"
                         variant="outline"
+                        className="relative h-11 px-10 motion-reduce:transition-none"
                         aria-busy={pending === id}
                       >
-                        <Icon />
+                        <img
+                          src={`/auth/${id}.${id === "google" ? "png" : "svg"}`}
+                          width={20}
+                          height={20}
+                          alt=""
+                          className={`absolute left-3 size-5 object-contain ${id === "github" ? "dark:invert" : ""}`}
+                        />
                         {pending === id
                           ? `Connecting to ${label}…`
                           : `Continue with ${label}`}
                       </Button>
                     </Field>
                   ))}
-                  <FieldSeparator>or</FieldSeparator>
+                  <FieldSeparator className="my-4">or</FieldSeparator>
                   <form.Field
                     name="emailStep.email"
                     validators={{
@@ -361,8 +356,14 @@ function RouteComponent() {
                       const isInvalid = field.state.meta.errors.length > 0;
                       return (
                         <Field data-invalid={isInvalid}>
-                          <FieldLabel htmlFor={field.name}>Email</FieldLabel>
+                          <FieldLabel
+                            className="justify-center"
+                            htmlFor={field.name}
+                          >
+                            Email
+                          </FieldLabel>
                           <Input
+                            className="h-11 text-center"
                             aria-invalid={isInvalid}
                             aria-describedby={
                               isInvalid ? "email-error" : undefined
@@ -397,6 +398,7 @@ function RouteComponent() {
                     {({ canSubmit, isSubmitting, hasToken }) => (
                       <Field>
                         <Button
+                          className="h-11 motion-reduce:transition-none"
                           disabled={
                             !canSubmit ||
                             isSubmitting ||
@@ -421,7 +423,7 @@ function RouteComponent() {
               )}
             </form.FormGroup>
           ) : (
-            <FieldGroup>
+            <FieldGroup className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
               <Button
                 type="button"
                 disabled={pending !== null}
@@ -458,10 +460,14 @@ function RouteComponent() {
                         const isInvalid = field.state.meta.errors.length > 0;
                         return (
                           <Field data-invalid={isInvalid}>
-                            <FieldLabel htmlFor={field.name}>
+                            <FieldLabel
+                              className="justify-center"
+                              htmlFor={field.name}
+                            >
                               One-time password
                             </FieldLabel>
                             <InputOTP
+                              containerClassName="justify-center"
                               aria-invalid={isInvalid}
                               aria-describedby={
                                 isInvalid
@@ -503,6 +509,7 @@ function RouteComponent() {
                       }}
                     </form.Field>
                     <Button
+                      className="h-11 motion-reduce:transition-none"
                       size="lg"
                       type="submit"
                       disabled={pending !== null || retryWait > 0}
@@ -524,7 +531,7 @@ function RouteComponent() {
               >
                 {(hasToken) => (
                   <Button
-                    className="w-full"
+                    className="h-11 w-full motion-reduce:transition-none"
                     variant="outline"
                     size="lg"
                     type="button"
@@ -541,10 +548,6 @@ function RouteComponent() {
                 )}
               </form.Subscribe>
             )}
-            <p id="captcha-help" className="text-muted-foreground text-sm">
-              Complete the security check to{" "}
-              {step === "email" ? "receive" : "resend"} a code.
-            </p>
             <Turnstile
               action={AUTH_EMAIL_CAPTCHA_ACTION}
               onLoad={(_id, widget) => {
@@ -607,10 +610,12 @@ function RouteComponent() {
         </form>
         <nav
           aria-label="Legal information"
-          className="text-muted-foreground mt-10 flex gap-6 text-xs [&_a]:underline [&_a]:underline-offset-4"
+          className="text-muted-foreground [&_a]:hover:text-foreground mt-8 max-w-xs text-center text-xs leading-relaxed [&_a]:underline [&_a]:underline-offset-4 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-4"
         >
-          <Link to="/privacy">Privacy</Link>
-          <Link to="/terms">Terms</Link>
+          <p>
+            Read our <Link to="/privacy">Privacy Policy</Link> and{" "}
+            <Link to="/terms">Terms of Service</Link>.
+          </p>
         </nav>
       </main>
     </div>
