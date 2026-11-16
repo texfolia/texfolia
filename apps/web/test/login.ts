@@ -163,11 +163,13 @@ try {
       body: "<h1>Projects destination</h1>",
     }),
   );
-  await context.route("**/accept-invitation/**", (route) =>
-    route.fulfill({
-      contentType: "text/html",
-      body: "<h1>Invitation destination</h1>",
-    }),
+  await context.route(
+    (url) => url.pathname.startsWith("/accept-invitation/"),
+    (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<h1>Invitation destination</h1>",
+      }),
   );
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -191,13 +193,53 @@ try {
     await page.screenshot({
       path: join(directory, `${name}.png`),
       fullPage: true,
+      animations: "disabled",
     });
   };
+
+  console.info(
+    "Checking keyboard access to the sign-in form at public viewport widths",
+  );
+  for (const width of [1440, 768, 375, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await login();
+    await page.keyboard.press("Tab");
+    const skip = page.getByRole("link", { name: "Skip to sign-in form" });
+    assert(
+      await skip.evaluate((element) => element === document.activeElement),
+    );
+    const bounds = await skip.boundingBox();
+    assert(bounds && bounds.width > 1 && bounds.height > 1);
+    assert(bounds.x >= 0 && bounds.x + bounds.width <= width);
+    await capture(`skip-link-${width}`);
+    await page.keyboard.press("Enter");
+    const signIn = page.getByRole("form", { name: "Sign in", exact: true });
+    assert(
+      await signIn.evaluate((element) => element === document.activeElement),
+    );
+    await page.keyboard.press("Tab");
+    assert(
+      await page
+        .getByRole("button", { name: "Continue with GitHub" })
+        .evaluate((element) => element === document.activeElement),
+    );
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   console.info(
     "Checking delivery failures, network recovery, and fresh CAPTCHA tokens",
   );
   await login();
+  assert.equal(
+    await page
+      .getByRole("navigation", { name: "Legal information" })
+      .innerText(),
+    "Read our Privacy Policy and Terms of Service.",
+  );
+  assert.equal(
+    await page.getByText(/^Complete the security check to/).count(),
+    0,
+  );
   await capture("email-desktop");
   await page.getByLabel("Email", { exact: true }).fill("person@example.com");
   assert(
@@ -270,6 +312,12 @@ try {
   releaseRequest = undefined;
   await page.getByRole("heading", { name: "Check your email" }).waitFor();
   await page.getByRole("status").filter({ hasText: "Code sent" }).waitFor();
+  assert(
+    await page
+      .getByLabel("One-time password", { exact: true })
+      .evaluate((element) => element === document.activeElement),
+  );
+  await capture("otp-desktop");
   assert.equal(
     new Set(deliveries.map(({ token }) => token)).size,
     deliveries.length,
@@ -282,6 +330,19 @@ try {
     "Checking explicit verification, invalid/expired codes, limits, and resend",
   );
   const otp = page.getByLabel("One-time password", { exact: true });
+  const otpSlots = await page.locator('[data-slot="input-otp-group"]').all();
+  const firstGroup = await otpSlots[0]?.boundingBox();
+  const lastGroup = await otpSlots[1]?.boundingBox();
+  const formBounds = await page
+    .getByRole("form", { name: "Sign in", exact: true })
+    .boundingBox();
+  assert(firstGroup && lastGroup && formBounds);
+  assert(
+    Math.abs(
+      (firstGroup.x + lastGroup.x + lastGroup.width) / 2 -
+        (formBounds.x + formBounds.width / 2),
+    ) < 1,
+  );
   const verify = page.getByRole("button", {
     name: "Verify and sign in",
     exact: true,
@@ -382,7 +443,13 @@ try {
     .waitFor();
   const attemptsBeforeBack = verifications.length;
   await page.getByRole("button", { name: "Change email" }).click();
+  await page.clock.runFor(20);
   await page.getByRole("heading", { name: "Sign in to Texfolia" }).waitFor();
+  assert(
+    await page
+      .getByLabel("Email", { exact: true })
+      .evaluate((element) => element === document.activeElement),
+  );
   assert.equal(verifications.length, attemptsBeforeBack);
   assert.equal(
     await page.getByLabel("Email", { exact: true }).inputValue(),
@@ -393,9 +460,18 @@ try {
   const invitation = "/accept-invitation/invitation-test?from=email";
   await login(invitation);
   for (const provider of ["GitHub", "GitLab", "Google", "Microsoft"]) {
+    const heldSocial = Promise.withResolvers<void>();
+    releaseRequest = heldSocial.promise;
     await page
       .getByRole("button", { name: `Continue with ${provider}`, exact: true })
       .click();
+    const connecting = page.getByRole("button", {
+      name: `Connecting to ${provider}…`,
+    });
+    await connecting.waitFor();
+    assert(await connecting.isDisabled());
+    heldSocial.resolve();
+    releaseRequest = undefined;
     await visibleError(page, "provider is unavailable");
     assert.equal(socialRequests.at(-1)?.callbackURL, invitation);
     assert.equal(

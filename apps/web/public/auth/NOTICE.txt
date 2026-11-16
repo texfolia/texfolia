@@ -1,0 +1,13 @@
+Provider logo sources
+
+GitLab and GitHub: @gitlab/svgs 3.174.0
+https://registry.npmjs.org/@gitlab/svgs/-/svgs-3.174.0.tgz
+GitLab: dist/illustrations/gitlab_logo.svg
+GitHub: dist/illustrations/third-party-logos/integrations-logos/github.svg
+See gitlab-svgs-LICENSE.txt. Third-party marks retain their owners' rights.
+
+Google: https://www.gstatic.com/images/branding/googleg/1x/googleg_standard_color_128dp.png
+Brand guidelines: https://developers.google.com/identity/branding-guidelines
+
+Microsoft: https://learn.microsoft.com/en-us/entra/identity-platform/media/howto-add-branding-in-apps/ms-symbollockup_mssymbol_19.svg
+Brand guidelines: https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-branding-in-apps

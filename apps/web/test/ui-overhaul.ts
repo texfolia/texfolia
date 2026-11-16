@@ -364,6 +364,31 @@ try {
         .getByRole("heading", { level: 1 })
         .filter({ hasText: heading })
         .waitFor();
+      if (path === "/login") {
+        const signIn = publicPage.getByRole("form", {
+          name: "Sign in",
+          exact: true,
+        });
+        assert.equal(
+          await signIn
+            .getByRole("button", {
+              name: /^Continue with (GitHub|GitLab|Google|Microsoft)$/,
+            })
+            .count(),
+          4,
+        );
+        await signIn.evaluate(async (form) => {
+          await Promise.all(
+            [...form.querySelectorAll("img")].map((image) => image.decode()),
+          );
+        });
+        assert.equal(
+          await publicPage
+            .getByRole("link", { name: "Skip to sign-in form" })
+            .count(),
+          1,
+        );
+      }
       await capture(publicPage, `${name}-${width}`);
     }
   }
