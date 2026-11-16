@@ -54,6 +54,8 @@ jobs:
         run: bun run --cwd apps/web test:git
       - name: Exercise project source storage with local R2
         run: bun run apps/web/test/source-storage.ts
+      - name: Test project tags and imports
+        run: bun run --cwd apps/web test:projects
       - name: Exercise templates with Postgres and local R2
         run: bun run apps/web/test/templates.ts
       - name: Exercise template seed commands with Postgres and local R2

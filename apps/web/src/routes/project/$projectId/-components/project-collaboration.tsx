@@ -23,6 +23,10 @@ import { useWorkspace } from "#/providers/workspace-provider";
 
 export function ProjectCollaboration() {
   const { projectId } = useWorkspace();
+  return <ProjectAccessPanel projectId={projectId} />;
+}
+
+export function ProjectAccessPanel({ projectId }: { projectId: string }) {
   const [access, setAccess] =
     useState<Awaited<ReturnType<typeof getProjectAccess>>>();
   const [error, setError] = useState("");

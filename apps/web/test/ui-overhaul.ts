@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac, createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,7 +23,11 @@ import {
   grantProjectAccess,
   revokeProjectAccess,
 } from "../src/lib/project-sharing.server";
-import { createProject } from "../src/lib/project.server";
+import {
+  createProject,
+  getProjects,
+  setProjectTags,
+} from "../src/lib/project.server";
 import { pdfFixture } from "./pdf-fixture";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
@@ -388,6 +392,243 @@ try {
   await owner.goto(`${origin}/projects`);
   await owner.getByRole("heading", { name: "Projects", exact: true }).waitFor();
   await capture(owner, "projects-desktop");
+  await reader.goto(`${origin}/projects`);
+  await reader.getByText("No projects yet", { exact: true }).waitFor();
+  await capture(reader, "projects-empty-desktop");
+  assert.equal(
+    await reader.getByRole("table").count(),
+    0,
+    "Dedicated empty screen has no table",
+  );
+  await reader
+    .getByRole("button", { name: "Create your first project", exact: true })
+    .click();
+  await reader
+    .getByRole("dialog", { name: "New project", exact: true })
+    .waitFor();
+  await capture(reader, "projects-empty-dialog");
+  await reader.keyboard.press("Escape");
+  await owner.getByRole("button", { name: "New project", exact: true }).hover();
+  await owner.getByRole("tooltip").filter({ hasText: "N then P" }).waitFor();
+  await owner.getByRole("heading", { name: "Projects", exact: true }).click();
+  await owner.keyboard.press("n");
+  await owner.keyboard.press("p");
+  const newProject = owner.getByRole("dialog", {
+    name: "New project",
+    exact: true,
+  });
+  await newProject.waitFor();
+  assert.equal(
+    await newProject.getByRole("button", { name: /^Template/ }).count(),
+    1,
+  );
+  assert.equal(
+    await newProject.getByRole("button", { name: /^Git repository/ }).count(),
+    1,
+  );
+  assert.equal(
+    await newProject.getByRole("button", { name: /^Files or folder/ }).count(),
+    1,
+  );
+  await newProject.getByRole("button", { name: /^Git repository/ }).click();
+  await newProject.getByLabel("Repository URL", { exact: true }).waitFor();
+  assert.equal(
+    await owner.locator("details").count(),
+    0,
+    "No page-level import disclosure",
+  );
+  await newProject
+    .getByRole("button", { name: "All options", exact: true })
+    .click();
+  await newProject.getByRole("button", { name: /^Template/ }).click();
+  await newProject.getByRole("radio", { name: /A simple article/ }).check();
+  await newProject
+    .getByLabel("Project name", { exact: true })
+    .fill("Dialog template");
+  await capture(owner, "new-project-template");
+  await newProject
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
+  await owner.waitForURL(/\/project\//);
+  await owner.locator('.cm-content[contenteditable="true"]').waitFor();
+  const templateCopy = (await getProjects({ db, ownerId })).find(
+    (item) => item.name === "Dialog template",
+  );
+  assert(templateCopy, "Template created with the in-dialog name");
+  await owner.goto(`${origin}/projects`);
+  await owner.getByRole("button", { name: "New project", exact: true }).click();
+  await newProject.getByRole("button", { name: /^Files or folder/ }).click();
+  await newProject.getByLabel("Project files", { exact: true }).setInputFiles([
+    {
+      name: "main.tex",
+      mimeType: "text/plain",
+      buffer: Buffer.from("% imported document\n"),
+    },
+    {
+      name: "references.bib",
+      mimeType: "text/plain",
+      buffer: Buffer.from("@book{test,title={Example}}"),
+    },
+  ]);
+  await newProject
+    .getByLabel("Project name", { exact: true })
+    .fill("Dialog files");
+  await newProject
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
+  await owner.waitForURL(/\/project\//);
+  await owner.locator('.cm-content[contenteditable="true"]').waitFor();
+  assert.match(
+    await owner.locator('.cm-content[contenteditable="true"]').innerText(),
+    /imported document/,
+  );
+  const folderPath = join(directory, "Folder import");
+  await mkdir(join(folderPath, "chapters"), { recursive: true });
+  await writeFile(join(folderPath, "main.tex"), "% folder document\n");
+  await writeFile(
+    join(folderPath, "chapters", "intro.tex"),
+    "A nested chapter.",
+  );
+  await owner.goto(`${origin}/projects`);
+  await owner.getByRole("button", { name: "New project", exact: true }).click();
+  await newProject.getByRole("button", { name: /^Files or folder/ }).click();
+  await newProject
+    .getByLabel("Project folder", { exact: true })
+    .setInputFiles(folderPath);
+  await newProject
+    .getByLabel("Project name", { exact: true })
+    .fill("Dialog folder");
+  await newProject
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
+  await owner.waitForURL(/\/project\//);
+  const importedId = new URL(owner.url()).pathname.split("/").at(-1);
+  assert(importedId);
+  const importedNodes = await db.query.projectNode.findMany({
+    where: { projectId: importedId },
+  });
+  const chapter = importedNodes.find((node) => node.name === "chapters");
+  assert(
+    chapter &&
+      importedNodes.some(
+        (node) => node.name === "intro.tex" && node.parentId === chapter.id,
+      ),
+    "Folder hierarchy preserved",
+  );
+  await owner.goto(`${origin}/projects`);
+  const dashboardRow = owner.getByRole("row").filter({
+    has: owner.getByRole("link", { name: project.name, exact: true }),
+  });
+  await dashboardRow
+    .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
+    .click();
+  await owner.getByRole("menuitem", { name: "Your tags", exact: true }).click();
+  await owner.getByLabel("Your tags", { exact: true }).fill("Research, Draft");
+  await owner
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await owner.getByRole("dialog").waitFor({ state: "detached" });
+  await owner.reload();
+  await dashboardRow.getByText("research", { exact: true }).waitFor();
+  const noRefetch: string[] = [];
+  const recordFetch = (request: import("playwright").Request) => {
+    if (request.resourceType() === "fetch") noRefetch.push(request.url());
+  };
+  owner.on("request", recordFetch);
+  await owner
+    .getByLabel("Filter by tag", { exact: true })
+    .selectOption("research");
+  assert.equal(await owner.getByRole("table").getByRole("link").count(), 1);
+  await owner.getByLabel("Filter by tag", { exact: true }).selectOption("");
+  await owner
+    .getByRole("columnheader")
+    .getByRole("button", { name: "Project", exact: true })
+    .click();
+  const namesAscending = await owner
+    .getByRole("table")
+    .getByRole("link")
+    .allTextContents();
+  assert.deepEqual(
+    namesAscending,
+    [...namesAscending].sort((a, b) => a.localeCompare(b)),
+  );
+  await owner
+    .getByRole("columnheader")
+    .getByRole("button", { name: "Project", exact: true })
+    .click();
+  assert.deepEqual(
+    await owner.getByRole("table").getByRole("link").allTextContents(),
+    [...namesAscending].reverse(),
+  );
+  await owner
+    .getByRole("textbox", { name: "Search projects", exact: true })
+    .fill("no such project");
+  await owner.getByText("No matching projects", { exact: true }).waitFor();
+  assert.equal(
+    await owner.getByText("No projects yet", { exact: true }).count(),
+    0,
+  );
+  await owner
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .first()
+    .click();
+  owner.off("request", recordFetch);
+  assert.deepEqual(noRefetch, [], "Filtering and sorting do not fetch");
+  await dashboardRow
+    .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
+    .click();
+  await owner.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await owner
+    .getByRole("dialog")
+    .getByLabel("Project name", { exact: true })
+    .fill("Renamed study");
+  await owner
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await owner
+    .getByRole("table")
+    .getByRole("link", { name: "Renamed study", exact: true })
+    .waitFor();
+  const renamedRow = owner.getByRole("row").filter({
+    has: owner.getByRole("link", { name: "Renamed study", exact: true }),
+  });
+  await renamedRow
+    .getByRole("button", { name: "Actions for Renamed study", exact: true })
+    .click();
+  await owner.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await owner
+    .getByRole("dialog")
+    .getByLabel("Project name", { exact: true })
+    .fill(project.name);
+  await owner
+    .getByRole("dialog")
+    .getByRole("button", { name: "Save changes", exact: true })
+    .click();
+  await dashboardRow.waitFor();
+  await dashboardRow
+    .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
+    .click();
+  await owner.getByRole("menuitem", { name: "Share", exact: true }).click();
+  await owner
+    .getByRole("dialog")
+    .getByRole("form", { name: "Share project", exact: true })
+    .waitFor();
+  await owner.keyboard.press("Escape");
+  await dashboardRow
+    .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
+    .click();
+  const dashboardDownloadReady = owner.waitForEvent("download");
+  await owner
+    .getByRole("menuitem", { name: "Download ZIP", exact: true })
+    .click();
+  const dashboardDownload = await dashboardDownloadReady;
+  assert.equal(dashboardDownload.suggestedFilename(), `${project.name}.zip`);
+  await capture(owner, "projects-redesigned-desktop");
+  console.info(
+    "Projects dialog template/files/folder creation, default N P, tag persistence, client filtering/sorting, rename/share/download passed",
+  );
 
   await owner.getByRole("link", { name: "Settings", exact: true }).click();
   await owner.waitForURL("**/settings/preferences");
@@ -533,16 +774,14 @@ try {
   const projectRow = owner.getByRole("row").filter({
     has: owner.getByRole("link", { name: project.name, exact: true }),
   });
-  await projectRow
-    .getByRole("cell", { name: "Personal", exact: true })
-    .waitFor();
+  await projectRow.locator("[data-slot=avatar]").waitFor();
   assert.equal(await projectRow.locator("img").count(), 0, "No demo avatars");
   assert.equal(await projectRow.getByRole("button").count(), 1);
   await projectRow
-    .getByRole("button", { name: `Delete ${project.name}`, exact: true })
+    .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
     .waitFor();
-  await owner
-    .getByRole("link", { name: `Open ${project.name}`, exact: true })
+  await projectRow
+    .getByRole("link", { name: project.name, exact: true })
     .focus();
   await owner.keyboard.press("Enter");
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
@@ -697,10 +936,48 @@ try {
   const sharedRow = reader.getByRole("row").filter({
     has: reader.getByRole("link", { name: project.name, exact: true }),
   });
+  await sharedRow.waitFor();
+  assert.equal(await sharedRow.locator("[data-slot=avatar]").count(), 2);
+  assert.deepEqual(
+    (await getProjects({ db, ownerId: readerId })).find(
+      (item) => item.id === project.id,
+    )?.tags,
+    [],
+  );
+  await setProjectTags({
+    db,
+    ownerId: readerId,
+    data: { projectId: project.id, tags: ["private-reader-tag"] },
+  });
+  assert.deepEqual(
+    (await getProjects({ db, ownerId })).find((item) => item.id === project.id)
+      ?.tags,
+    ["draft", "research"],
+  );
+  await setProjectTags({
+    db,
+    ownerId,
+    data: { projectId: project.id, tags: [] },
+  });
+  assert.deepEqual(
+    (await getProjects({ db, ownerId: readerId })).find(
+      (item) => item.id === project.id,
+    )?.tags,
+    ["private-reader-tag"],
+  );
+
   await sharedRow
-    .getByRole("cell", { name: "1 collaborator", exact: true })
-    .waitFor();
-  assert.equal(await sharedRow.getByRole("button").count(), 0);
+    .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
+    .click();
+  assert.equal(
+    await reader.getByRole("menuitem", { name: "Delete", exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await reader.getByRole("menuitem", { name: "Rename", exact: true }).count(),
+    0,
+  );
+  await reader.keyboard.press("Escape");
   await sharedRow
     .getByRole("link", { name: project.name, exact: true })
     .focus();
@@ -785,9 +1062,7 @@ try {
   await reader.goto(`${origin}/projects`);
   await reader.getByText("No projects yet", { exact: true }).waitFor();
   await owner.goto(`${origin}/projects`);
-  await projectRow
-    .getByRole("cell", { name: "Personal", exact: true })
-    .waitFor();
+  await projectRow.locator("[data-slot=avatar]").waitFor();
   await projectRow
     .getByRole("link", { name: project.name, exact: true })
     .click();
@@ -1040,25 +1315,27 @@ try {
   await capture(owner, "projects-mobile");
   await owner.getByRole("button", { name: "New project", exact: true }).click();
   await capture(owner, "new-project-mobile");
+  await owner.getByRole("button", { name: /^Template/ }).click();
   await owner
-    .getByLabel("Project Name", { exact: true })
+    .getByLabel("Project name", { exact: true })
     .fill("A new beginning");
   await owner
-    .getByRole("button", { name: "Create Project", exact: true })
+    .getByRole("button", { name: "Create project", exact: true })
     .click();
-  await owner
-    .getByRole("heading", { name: "A new beginning", exact: true })
-    .waitFor();
+  await owner.waitForURL(/\/project\//);
+  await owner.locator('.cm-content[contenteditable="true"]').waitFor();
   await workspaceMenu(owner, "File", "Back to Projects");
   await owner
     .getByRole("textbox", { name: "Search projects", exact: true })
     .fill("A new beginning");
   await owner
+    .getByRole("table")
     .getByRole("link", { name: "A study of small things", exact: true })
     .waitFor({ state: "detached" });
   await owner
-    .getByRole("button", { name: "Delete A new beginning", exact: true })
+    .getByRole("button", { name: "Actions for A new beginning", exact: true })
     .click();
+  await owner.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await owner
     .getByRole("button", { name: "Delete project", exact: true })
     .click();
@@ -1066,7 +1343,24 @@ try {
   await owner
     .getByRole("button", { name: "Toggle Sidebar", exact: true })
     .click();
-  await owner.getByRole("button", { name: "Sign out", exact: true }).click();
+  await owner
+    .getByRole("button", { name: "Account menu", exact: true })
+    .click();
+  await owner.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  const signOutGuard = owner.getByRole("alertdialog");
+  await signOutGuard.waitFor();
+  await capture(owner, "projects-signout-mobile");
+  assert.equal(new URL(owner.url()).pathname, "/projects");
+  await signOutGuard
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await owner
+    .getByRole("button", { name: "Account menu", exact: true })
+    .click();
+  await owner.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  await signOutGuard
+    .getByRole("button", { name: "Sign out", exact: true })
+    .click();
   await owner.waitForURL(origin + "/");
   console.info(
     "Invitation acceptance, project creation/search/deletion, and sign-out passed",

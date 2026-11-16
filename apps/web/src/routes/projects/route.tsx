@@ -52,7 +52,7 @@ function ProjectsPage() {
       <ProjectsProvider store={store}>
         <SettingsProvider userId={user.id}>
           <SidebarProvider>
-            <ProjectList />
+            <ProjectList user={user} />
           </SidebarProvider>
         </SettingsProvider>
       </ProjectsProvider>

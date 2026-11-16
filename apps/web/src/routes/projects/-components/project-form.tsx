@@ -1,85 +1,110 @@
-"use client";
-
-import { useForm, useStore } from "@tanstack/react-form-start";
 import { useNavigate } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { z } from "zod";
 
 import { Button } from "#/components/ui/button";
-import { Field, FieldError, FieldLabel } from "#/components/ui/field";
+import { Field, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import { projectNameSchema } from "#/lib/project.schema";
+import { openTemplate } from "#/lib/template.functions";
 import { useProjects } from "#/providers/projects-provider";
 
-const schema = z.object({
-  name: projectNameSchema,
-});
-
-export function ProjectForm() {
+export function ProjectForm({
+  template,
+  destinations,
+  onPendingChange,
+}: {
+  template: { id: string; title: string } | null;
+  destinations: { id: string; name: string }[];
+  onPendingChange: (pending: boolean) => void;
+}) {
   const navigate = useNavigate();
   const projects = useProjects();
   const nameId = useId();
-  const errorId = `${nameId}-error`;
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const form = useForm({
-    defaultValues: { name: "" },
-    validators: { onChange: schema },
-    onSubmit: async ({ value }) => {
-      setSubmitError(null);
-
-      try {
-        const projectId = await projects.create(value.name);
-
-        await navigate({
-          to: "/project/$projectId",
-          params: { projectId },
-        });
-      } catch {
-        setSubmitError("Unable to create your project. Please try again.");
-      }
-    },
-  });
-  const isSubmitting = useStore(form.store, (state) => state.isSubmitting);
-
+  const [name, setName] = useState(template?.title ?? "");
+  const [organizationId, setOrganizationId] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
   return (
     <form
-      className="flex w-full flex-col gap-4"
-      noValidate
-      onSubmit={(event) => {
+      className="flex flex-col gap-4"
+      onSubmit={async (event) => {
         event.preventDefault();
-        setSubmitError(null);
-        void form.handleSubmit();
+        if (pending) return;
+        const parsed = projectNameSchema.safeParse(name);
+        if (!parsed.success) {
+          setError(parsed.error.issues[0]?.message ?? "Enter a name.");
+          return;
+        }
+        setError("");
+        setPending(true);
+        onPendingChange(true);
+        try {
+          const id = template
+            ? (
+                await openTemplate({
+                  data: {
+                    templateId: template.id,
+                    organizationId: organizationId || null,
+                    name: parsed.data,
+                  },
+                })
+              ).id
+            : await projects.create(parsed.data);
+          await navigate({
+            to: "/project/$projectId",
+            params: { projectId: id },
+          });
+        } catch {
+          setError(
+            "Unable to create your project. Try again or choose a different name.",
+          );
+        } finally {
+          setPending(false);
+          onPendingChange(false);
+        }
       }}
     >
-      <form.Field name="name">
-        {(field) => {
-          const isInvalid =
-            field.state.meta.isTouched && !field.state.meta.isValid;
-
-          return (
-            <Field data-invalid={isInvalid}>
-              <FieldLabel htmlFor={nameId}>Project Name</FieldLabel>
-              <Input
-                id={nameId}
-                name={field.name}
-                placeholder="My Project"
-                value={field.state.value}
-                disabled={isSubmitting}
-                aria-invalid={isInvalid}
-                aria-describedby={isInvalid ? errorId : undefined}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-              {isInvalid && (
-                <FieldError id={errorId} errors={field.state.meta.errors} />
-              )}
-            </Field>
-          );
-        }}
-      </form.Field>
-      {submitError && <FieldError>{submitError}</FieldError>}
-      <Button disabled={isSubmitting} type="submit">
-        {isSubmitting ? "Creating…" : "Create Project"}
+      <Field>
+        <FieldLabel htmlFor={nameId}>Project name</FieldLabel>
+        <Input
+          id={nameId}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="My project"
+          required
+          disabled={pending}
+        />
+      </Field>
+      {template && destinations.length > 0 && (
+        <label className="space-y-2 text-sm">
+          <span>Create in</span>
+          <NativeSelect
+            aria-label="Create in"
+            value={organizationId}
+            onChange={(event) => setOrganizationId(event.target.value)}
+            disabled={pending}
+            className="w-full"
+          >
+            <NativeSelectOption value="">Personal account</NativeSelectOption>
+            {destinations.map((destination) => (
+              <NativeSelectOption key={destination.id} value={destination.id}>
+                {destination.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </label>
+      )}
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
+      <Button type="submit" disabled={pending}>
+        {pending ? "Creating…" : "Create project"}
       </Button>
     </form>
   );

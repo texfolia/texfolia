@@ -3,6 +3,7 @@ import { createContext, type ReactNode, useContext } from "react";
 import {
   createProject,
   deleteProject,
+  getProjects,
   type Project,
 } from "#/lib/project.functions";
 import { projectNameSchema } from "#/lib/project.schema";
@@ -24,6 +25,9 @@ export function createProjectsStore({
   return {
     ownerId,
     projects,
+    async refresh() {
+      projects.utils.replace(await getProjects());
+    },
     async create(name: string) {
       const id = crypto.randomUUID();
       const now = new Date();
@@ -40,6 +44,11 @@ export function createProjectsStore({
           formatWrap: true,
           formatWidth: 80,
           collaborators: [],
+          owner: null,
+          people: [],
+          tags: [],
+          canWrite: true,
+          canDelete: true,
         })
         .when("settled");
       return id;

@@ -98,7 +98,7 @@ Fair use applies to compilation on all plans. Compile timeouts and request rate 
 
 #### First-release scope
 
-The first release includes the editor, compilation, GitHub and GitLab integration, personal-project collaboration, reviewed templates, and the managed Pro assistant. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming and duplication have no controls in v1.
+The first release includes the editor, compilation, GitHub and GitLab integration, personal-project collaboration, reviewed templates, and the managed Pro assistant. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming is available from the projects table. Project duplication has no controls in v1.
 
 ## Owner decisions needed
 

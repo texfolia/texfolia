@@ -13,6 +13,11 @@ Cloudflare email binding during development.
 See [Public auth abuse protection](../../docs/auth-abuse-protection.md) for the
 enabled routes, CAPTCHA policy, rate limits, and verification commands.
 
+## Projects
+
+See [Projects dashboard](../../docs/projects.md) for creation flows, private tags,
+client-side table behavior, and verification.
+
 ## Public templates
 
 The gallery is `/templates`, stable snapshots use `/template/$templateId`, and

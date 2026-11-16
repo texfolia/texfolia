@@ -1,7 +1,9 @@
 import {
   columnFilteringFeature,
-  globalFilteringFeature,
-  rowSelectionFeature,
+  createFilteredRowModel,
+  createSortedRowModel,
+  filterFn_includesString,
+  sortFn_basic,
   rowSortingFeature,
   sortFn_alphanumeric,
   sortFn_datetime,
@@ -10,12 +12,14 @@ import {
 
 export const features = tableFeatures({
   columnFilteringFeature,
-  globalFilteringFeature,
-  rowSelectionFeature,
   rowSortingFeature,
+  filteredRowModel: createFilteredRowModel(),
+  sortedRowModel: createSortedRowModel(),
+  filterFns: { includesString: filterFn_includesString },
   sortFns: {
     alphanumeric: sortFn_alphanumeric,
     datetime: sortFn_datetime,
+    basic: sortFn_basic,
   },
 });
 

@@ -39,6 +39,7 @@ export const publishTemplateSchema = z.object({
 });
 export const openTemplateSchema = templateIdSchema.extend({
   organizationId: z.string().min(1).max(128).nullable(),
+  name: z.string().trim().min(1).optional(),
 });
 export const reportTemplateSchema = templateIdSchema.extend({
   reason: z.string().trim().min(10).max(2000),

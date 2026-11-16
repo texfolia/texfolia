@@ -10,7 +10,11 @@ import {
   DialogDescription,
 } from "#/components/ui/dialog";
 import { newProjectNodePath } from "#/lib/project-paths";
-import { encodeSource, maxSourceFileBytes } from "#/lib/project-source";
+import {
+  encodeSource,
+  maxSourceFileBytes,
+  sourceFileKind,
+} from "#/lib/project-source";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
@@ -57,12 +61,7 @@ export function UploadSource({
       if (file.size > maxSourceFileBytes)
         throw new Error("File exceeds 10 MiB. Choose a smaller file.");
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const kind =
-        /\.(tex|ltx|latex|bib|sty|cls|clo|bst|bbx|cbx|lbx|cfg|def|json|yaml|yml|toml|ini|csv|tsv|md|markdown|txt|svg|xml|lua|py|r|jl|sh|js|ts|css|html)$/i.test(
-          file.name,
-        ) || file.type.startsWith("text/")
-          ? "text"
-          : "binary";
+      const kind = sourceFileKind(file);
       const created = await files.create({
         parentId: targetParentId,
         name: file.name,

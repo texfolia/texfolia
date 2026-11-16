@@ -86,6 +86,34 @@ export const projectGit = pgTable("project_git", {
   objectKey: text("object_key").notNull(),
 });
 
+export const tag = pgTable(
+  "tag",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+  },
+  (t) => [unique("tag_user_name_unique").on(t.userId, t.name)],
+);
+
+export const projectTag = pgTable(
+  "project_tag",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tag.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.tagId] }),
+    index("project_tag_tag_id_idx").on(t.tagId),
+  ],
+);
+
 export const projectCollaborator = pgTable(
   "project_collaborator",
   {

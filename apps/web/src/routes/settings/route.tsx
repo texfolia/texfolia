@@ -1,12 +1,4 @@
-import {
-  IconArrowLeft,
-  IconBrain,
-  IconCreditCard,
-  IconPlug,
-  IconSettings,
-  IconChartBar,
-  IconUser,
-} from "@tabler/icons-react";
+import { IconArrowLeft } from "@tabler/icons-react";
 import {
   createFileRoute,
   Link,
@@ -14,6 +6,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 
+import { settingsLinks } from "#/lib/settings-navigation";
 import { SettingsProvider } from "#/providers/settings-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
 
@@ -27,14 +20,6 @@ export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings | Texfolia" }] }),
   component: SettingsLayout,
 });
-const links = [
-  { to: "/settings/account", label: "Account", icon: IconUser },
-  { to: "/settings/preferences", label: "Preferences", icon: IconSettings },
-  { to: "/settings/connections", label: "Connections", icon: IconPlug },
-  { to: "/settings/ai", label: "AI", icon: IconBrain },
-  { to: "/settings/billing", label: "Billing", icon: IconCreditCard },
-  { to: "/settings/usage", label: "Usage", icon: IconChartBar },
-] as const;
 function SettingsLayout() {
   const { user } = Route.useRouteContext();
   return (
@@ -62,7 +47,7 @@ function SettingsLayout() {
                 aria-label="Settings"
                 className="flex flex-wrap gap-1 sm:flex-col"
               >
-                {links.map(({ to, label, icon: Icon }) => (
+                {settingsLinks.map(({ to, label, icon: Icon }) => (
                   <Link
                     key={to}
                     to={to}
