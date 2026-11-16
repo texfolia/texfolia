@@ -1,7 +1,19 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
-  "globalDependencies": ["packages/typescript-config/**/*.json"],
+  "globalDependencies": [
+    "packages/typescript-config/**/*.json",
+    "tsconfig.json",
+    ".oxlintrc.json",
+    ".oxfmtrc.json",
+    ".github/**",
+    ".env*",
+    ".dev.vars*",
+    "apps/*/.env*",
+    "apps/*/.dev.vars*",
+    "packages/*/.env*",
+    "packages/*/.dev.vars*"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -87,7 +99,7 @@
     },
     "web#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".wrangler/deploy/**"],
+      "outputs": ["dist/**", ".wrangler/deploy/**", "public/core/**"],
       "env": ["CLOUDFLARE_ENV", "VITE_*"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
@@ -112,6 +124,46 @@
     "db:seed": {
       "cache": false,
       "passThroughEnv": ["*"]
+    },
+    "web#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/apps/compiler/test/fixtures/**"
+      ],
+      "outputs": [],
+      "env": [
+        "BETTER_AUTH_*",
+        "TURNSTILE_*",
+        "STRIPE_*",
+        "CLOUDFLARE_*",
+        "GITHUB_CLIENT_*",
+        "GOOGLE_CLIENT_*",
+        "GITLAB_CLIENT_*",
+        "MICROSOFT_CLIENT_*"
+      ]
+    },
+    "web#typecheck": {
+      "dependsOn": ["^typecheck"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/compiler/src/**",
+        "$TURBO_ROOT$/apps/compiler/test/fixtures/**"
+      ],
+      "outputs": []
+    },
+    "compiler#test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "env": ["CI_GO_VERSION", "GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS"],
+      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH"]
+    },
+    "compiler#lint": {
+      "outputs": [],
+      "env": ["CI_GO_VERSION", "GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS"],
+      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH"]
     }
-  }
+  },
+  "globalEnv": ["CI", "NODE_ENV", "CI_BUN_VERSION"]
 }

@@ -1,0 +1,348 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
+import { changedPaths, selectChecks, suites } from "./ci-select.mjs";
+
+function selectedSuites(plan) {
+  return Object.keys(suites).filter((name) => plan[name]);
+}
+
+test("documentation keeps repository checks but skips package tests and browsers", () => {
+  const plan = selectChecks(["docs/projects.md", "apps/compiler/README.md"]);
+  for (const key of [
+    "full",
+    "compiler",
+    "web-checks",
+    "package-checks",
+    "production-assets",
+    "postgres",
+  ])
+    assert.equal(plan[key], false, key);
+});
+
+test("Go-only changes run compiler checks without browser or database suites", () => {
+  const plan = selectChecks(["apps/compiler/engine/compile.go"]);
+  assert.equal(plan.compiler, true);
+  assert.equal(plan["package-checks"], true);
+  assert.equal(plan["web-checks"], false);
+  assert.equal(plan.postgres, false);
+  assert.equal(plan["production-assets"], false);
+});
+
+test("compiler runtime changes also exercise its web consumers", () => {
+  const plan = selectChecks(["apps/compiler/src/local.ts"]);
+  assert.equal(plan["web-checks"], true);
+  assert.equal(plan["cross-package"], true);
+  assert.deepEqual(selectedSuites(plan), [
+    "compile-route",
+    "template-lifecycle",
+  ]);
+  assert.equal(plan["postgres-build"], true);
+});
+
+test("cross-package fixtures select web tests", () => {
+  assert.equal(
+    selectChecks(["apps/compiler/test/fixtures/path-policy.json"])[
+      "web-checks"
+    ],
+    true,
+  );
+});
+
+test("web unit-only changes skip integration and production assets", () => {
+  const plan = selectChecks(["apps/web/src/lib/shortcuts.test.ts"]);
+  assert.equal(plan["web-checks"], true);
+  assert.equal(plan.compiler, false);
+  assert.equal(plan.postgres, false);
+  assert.equal(plan["production-assets"], false);
+});
+
+test("every mapped test input selects its owners and required setup", () => {
+  for (const suite of Object.values(suites)) {
+    for (const input of suite.inputs) {
+      const path = `apps/web/test/${input}${input.endsWith("/") ? "worker.ts" : ""}`;
+      const plan = selectChecks([path]);
+      const owners = Object.entries(suites).filter(([, candidate]) =>
+        candidate.inputs.includes(input),
+      );
+      assert.deepEqual(
+        selectedSuites(plan),
+        owners.map(([name]) => name),
+        path,
+      );
+      assert.equal(plan.postgres, true, path);
+      assert.equal(
+        plan["postgres-build"],
+        owners.some(([, owner]) => Boolean(owner.build)),
+        path,
+      );
+      assert.equal(
+        plan["postgres-browser"],
+        owners.some(([, owner]) => Boolean(owner.browser)),
+        path,
+      );
+    }
+  }
+});
+
+test("production asset test changes need only the Checks build and browser", () => {
+  const plan = selectChecks(["apps/web/test/production-assets.ts"]);
+  assert.equal(plan["production-assets"], true);
+  assert.equal(plan.postgres, false);
+});
+
+test("runtime web changes keep every integration suite", () => {
+  for (const path of [
+    "apps/web/src/components/editor.tsx",
+    "apps/web/public/logo.svg",
+    "apps/web/vite.config.ts",
+  ]) {
+    const plan = selectChecks([path]);
+    assert.deepEqual(selectedSuites(plan), Object.keys(suites), path);
+    assert.equal(plan["production-assets"], true, path);
+  }
+});
+
+test("shared, lockfile, CI, environment, schema, and unknown root changes select everything", () => {
+  for (const path of [
+    "packages/db/src/index.ts",
+    "packages/typescript-config/base.json",
+    "bun.lock",
+    "package.json",
+    "turbo.json",
+    ".github/workflows/ci.yml",
+    ".github/actions/setup-ci/action.yml",
+    "scripts/ci-select.mjs",
+    ".oxfmtrc.json",
+    "apps/web/.env.local",
+    "apps/web/.dev.vars",
+    "apps/web/src/env.ts",
+    "apps/web/src/vite-env.d.ts",
+    "apps/compiler/src/environment.ts",
+    "apps/web/src/env/config.ts",
+    "apps/web/src/lib/project.schema.ts",
+    "apps/compiler/wrangler.jsonc",
+    "apps/web/worker-configuration.d.ts",
+    "new-build-config.json",
+  ]) {
+    const plan = selectChecks([path]);
+    assert.equal(plan.full, true, path);
+    assert.equal(plan.compiler, true, path);
+    assert.equal(plan["web-checks"], true, path);
+    assert.equal(plan["production-assets"], true, path);
+    assert.deepEqual(selectedSuites(plan), Object.keys(suites), path);
+  }
+});
+
+test("unmapped test helpers fall back to all integration suites", () => {
+  assert.deepEqual(
+    selectedSuites(selectChecks(["apps/web/test/new-helper.ts"])),
+    Object.keys(suites),
+  );
+  assert.equal(
+    selectChecks(["apps/web/test/new-helper.ts"])["production-assets"],
+    true,
+  );
+  assert.equal(selectChecks([], { fallback: true }).full, true);
+});
+
+test("multiple changes select the union", () => {
+  assert.deepEqual(
+    selectedSuites(
+      selectChecks([
+        "apps/web/test/collaboration/browser.ts",
+        "apps/web/test/ai-assistant.ts",
+      ]),
+    ),
+    ["assistant", "collaboration"],
+  );
+});
+
+test("PR diff uses the merge base and preserves deleted and renamed inputs", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "texfolia-ci-select-"));
+  const git = (...args) =>
+    execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  try {
+    git("init", "-b", "main");
+    git("config", "user.email", "ci@example.invalid");
+    git("config", "user.name", "CI selector test");
+    writeFileSync(join(cwd, "collaboration.ts"), "fixture");
+    git("add", ".");
+    git("commit", "-m", "base");
+    git("checkout", "-b", "pr");
+    git("mv", "collaboration.ts", "renamed.ts");
+    git("commit", "-m", "rename suite input");
+    const head = git("rev-parse", "HEAD");
+    git("checkout", "main");
+    writeFileSync(join(cwd, "unrelated-main.ts"), "base branch advanced");
+    git("add", ".");
+    git("commit", "-m", "advance main");
+    assert.deepEqual(changedPaths("main", head, cwd).sort(), [
+      "collaboration.ts",
+      "renamed.ts",
+    ]);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("real Turbo filtering and hashes cover package and cross-package inputs", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const cwd = mkdtempSync(join(tmpdir(), "texfolia-ci-turbo-"));
+  const git = (...args) =>
+    execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+  const write = (path, value) => {
+    mkdirSync(dirname(join(cwd, path)), { recursive: true });
+    writeFileSync(join(cwd, path), value);
+  };
+  const turbo = (
+    filter = [],
+    tasks = ["test", "typecheck", "lint", "format:check"],
+  ) =>
+    JSON.parse(
+      execFileSync(
+        join(root, "node_modules/.bin/turbo"),
+        ["run", ...tasks, "--dry=json", ...filter],
+        {
+          cwd,
+          encoding: "utf8",
+          env: process.env,
+        },
+      ),
+    );
+  try {
+    for (const path of [
+      "package.json",
+      "bun.lock",
+      "turbo.json",
+      "tsconfig.json",
+      ".oxfmtrc.json",
+      ".oxlintrc.json",
+      ".gitignore",
+      "apps/web/package.json",
+      "apps/compiler/package.json",
+      "packages/db/package.json",
+      "packages/typescript-config/package.json",
+      "packages/typescript-config/base.json",
+    ]) {
+      mkdirSync(dirname(join(cwd, path)), { recursive: true });
+      copyFileSync(join(root, path), join(cwd, path));
+    }
+    for (const path of [
+      "apps/compiler/src/local.ts",
+      "apps/compiler/test/fixtures/path-policy.json",
+      "apps/compiler/engine/compile.go",
+      "apps/web/src/lib/shortcuts.test.ts",
+      "packages/db/src/index.ts",
+    ])
+      write(path, "base input");
+    git("init", "-b", "main");
+    git("config", "user.email", "ci@example.invalid");
+    git("config", "user.name", "CI selector test");
+    git("add", ".");
+    git("commit", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    const hashes = Object.fromEntries(
+      turbo().tasks.map((task) => [task.taskId, task.hash]),
+    );
+    for (const [path, expectedPackages, invalidated] of [
+      ["docs/ci.md", [], []],
+      [
+        "apps/compiler/engine/compile.go",
+        ["@texfolia/db", "compiler"],
+        ["compiler#test", "compiler#lint"],
+      ],
+      [
+        "apps/web/src/lib/shortcuts.test.ts",
+        ["@texfolia/db", "web"],
+        ["web#test"],
+      ],
+      [
+        "apps/compiler/src/local.ts",
+        ["@texfolia/db", "compiler", "web"],
+        ["web#typecheck"],
+      ],
+      [
+        "apps/compiler/test/fixtures/path-policy.json",
+        ["@texfolia/db", "compiler", "web"],
+        ["web#test", "web#typecheck"],
+      ],
+      [
+        "packages/db/src/index.ts",
+        ["@texfolia/db", "compiler", "web"],
+        ["web#test", "compiler#test", "web#typecheck"],
+      ],
+      [
+        ".github/workflows/ci.yml",
+        ["@texfolia/db", "compiler", "web"],
+        ["web#test", "compiler#test"],
+      ],
+    ]) {
+      git("reset", "--hard", base);
+      git("clean", "-fd");
+      write(path, "changed input");
+      git("add", ".");
+      git("commit", "-m", "change input");
+      const outputs = join(cwd, "outputs");
+      execFileSync(process.execPath, [join(root, "scripts/ci-select.mjs")], {
+        cwd,
+        env: { ...process.env, CI_BASE_SHA: base, GITHUB_OUTPUT: outputs },
+      });
+      const filter = readFileSync(outputs, "utf8")
+        .split("\n")
+        .find((line) => line.startsWith("turbo-filter="))
+        .slice("turbo-filter=".length);
+      const result = turbo(filter ? filter.split(" ") : []);
+      const packages = [
+        ...new Set(
+          result.tasks
+            .filter((task) => task.command && task.command !== "<NONEXISTENT>")
+            .map((task) => task.package),
+        ),
+      ].sort();
+      assert.deepEqual(packages, expectedPackages, path);
+      const updated = Object.fromEntries(
+        result.tasks.map((task) => [task.taskId, task.hash]),
+      );
+      for (const task of invalidated)
+        assert.notEqual(updated[task], hashes[task], `${path}: ${task}`);
+    }
+    git("reset", "--hard", base);
+    git("clean", "-fdx");
+    const buildHash = () =>
+      turbo(["--filter=web"], ["build"]).tasks.find(
+        (task) => task.taskId === "web#build",
+      ).hash;
+    const before = buildHash();
+    write("apps/web/dist/server/.dev.vars", "GENERATED=true");
+    assert.equal(
+      buildHash(),
+      before,
+      "generated environment output must not invalidate its own build",
+    );
+    write("apps/web/.env.ci-test", "VITE_TEST=changed");
+    assert.notEqual(
+      buildHash(),
+      before,
+      "source environment files must invalidate the build",
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
