@@ -1,5 +1,7 @@
 import { createDb } from "@texfolia/db";
+import { z } from "zod";
 
+import { projectTools } from "../../src/lib/ai/tools.server";
 import { createAuth } from "../../src/lib/auth";
 import { Route } from "../../src/routes/api/compile/$projectId";
 
@@ -8,6 +10,25 @@ export default {
     const projectId = new URL(request.url).pathname.split("/").at(-1) ?? "";
     const db = createDb(env.HYPERDRIVE.connectionString);
     try {
+      const auth = createAuth(db);
+      if (new URL(request.url).searchParams.has("assistant")) {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (!session) return new Response(null, { status: 401 });
+        const compile = projectTools({
+          db,
+          auth,
+          env,
+          projectId,
+          userId: session.user.id,
+          headers: request.headers,
+          signal: request.signal,
+        }).find((tool) => tool.name === "compile");
+        if (!compile?.execute) throw new Error("Missing compile tool");
+        const input = z
+          .object({ mainFile: z.string() })
+          .parse(await request.json());
+        return Response.json(await compile.execute(input));
+      }
       const handlers = Route.options.server?.handlers;
       if (!handlers || typeof handlers === "function")
         throw new Error("Missing compile handlers");
@@ -16,7 +37,7 @@ export default {
         throw new Error("Missing compile handler");
       return await handler({
         request,
-        context: { db, auth: createAuth(db) },
+        context: { db, auth },
         params: { projectId },
         pathname: "/api/compile/$projectId",
         next: () => {
