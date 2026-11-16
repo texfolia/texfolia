@@ -3,7 +3,7 @@
 The workspace has File, Edit and View menus above the dock, an Agents sidebar on
 the left, one switchable sidebar on the right, and a status bar below. Use the
 bottom-right icons or View menu to switch Files, Outline, Git or Collaboration.
-Git actions stay in the Git view. Settings opens the existing editor dialog.
+Git actions stay in the Git view. Settings opens as a dock panel alongside file tabs. Appearance changes use Apply, Save, and Cancel; closing a dirty appearance draft prompts before discarding.
 
 The status bar shows compile state, Problems, live collaborators, the git branch
 when a repository exists, and the active editor’s line and column. Compile state

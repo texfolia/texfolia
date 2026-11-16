@@ -1,53 +1,74 @@
 # Themes
 
-Settings > Appearance controls the app theme and CodeMirror colors together.
-Choose a bundled theme, follow system appearance, or import a standalone VS Code
-color theme. Marketing pages retain their own styling. Appearance is stored in
-local storage under `texfolia.appearance.v1:<userId>` and shared between tabs in
-that browser. It does not sync between devices. Editor and formatting preferences
-have a separate account-synced store.
+Settings > Appearance controls workspace colors and the CodeMirror editor together.
+The theme list contains every theme exported by `@uiw/codemirror-themes-all`.
+Marketing pages retain their brand styling.
 
-The default follows system appearance. Selecting another bundled theme replaces
-the imported selection. The app migrates the old editor-only theme preference
-when no account-scoped appearance exists. If browser storage is unavailable,
-theme changes still apply to the current session and an error explains that the
-preference could not be saved.
+The default, **Follow system appearance**, uses GitHub Light or GitHub Dark as
+system appearance changes. Hovering or focusing a theme previews it throughout
+the workspace, including open editors. Moving away restores the selected draft
+or committed theme. Touch users select a theme by tapping it.
+
+In the editor, Settings opens as a dock panel alongside file tabs. Opening it
+again reveals the same tab. Outside the editor, the existing Settings dialog
+uses the same Appearance controls.
+
+Selecting a theme changes the appearance draft without writing storage.
+**Apply** saves it and keeps Settings open with no unsaved appearance changes.
+**Save** saves and closes. **Cancel** discards the appearance draft and closes.
+Closing Settings with unsaved appearance changes prompts for **Apply**,
+**Discard**, or **Keep editing**. Apply in that prompt also keeps Settings open.
+Other editor and formatting controls retain their existing immediate-save behavior;
+the broader settings draft redesign belongs to NAT-311.
 
 PDFs retain their original page colors by default. **Match PDF preview to theme**
-changes the preview surround and applies inversion for dark themes. Downloads
-and exports retain the original PDF bytes.
+in Settings joins the appearance draft. The PDF viewer's separate control saves
+immediately. Matching changes the preview surround and applies inversion for dark
+themes. Downloads and exports retain the original PDF bytes.
 
-## Import limits
+## Storage and migration
 
-Upload or paste the color theme JSON in Settings > Appearance. Comments, trailing
-commas, and a leading byte-order mark are accepted. The parser rejects files over
-1 MiB, themes that reference another file with `include`, and files without colors
-or token rules. Combine included files before importing.
+Appearance is stored per account in `texfolia.appearance.v2:<userId>` in this
+browser, including the selection, PDF mode, and a cached CSS preview for the head
+bootstrap. It is shared between browser tabs and does not sync between devices.
+Hover and focus previews never write storage. If saving fails, Settings remains
+open with the draft and an error so the user can retry.
 
-Colors must be hex values with 3, 4, 6, or 8 digits. The schema permits up to
-2,000 UI color entries and 4,000 token rules. Font styles can contain `italic`,
-`bold`, `underline`, and `strikethrough`. TextMate scopes map to CodeMirror tags;
-unsupported scopes do not create new syntax categories. Missing UI colors fall
-back to the palette derived from the editor background and foreground. Importing
-a theme does not load extension code, remote resources, CSS, or executable scripts.
+On first load, an account's v1 appearance migrates to v2. Old bundled ids that
+also exist in the UIW catalog keep their selection using UIW's colors. Imported
+themes and removed ids, including `texfolia` and `oneDark`, migrate to Follow
+system appearance. PDF mode is preserved. The app no longer parses or imports
+VS Code theme documents.
 
 ## Implementation and verification
 
-[themes.ts](../apps/web/src/lib/themes.ts) owns parsing, bundled palettes, storage
-shape, and the mapping to app tokens. [theme-syntax.ts](../apps/web/src/lib/theme-syntax.ts)
-maps syntax rules. [theme-editor.ts](../apps/web/src/lib/theme-editor.ts) builds the
-CodeMirror extension with `@uiw/codemirror-themes`. The full UIW theme bundle is
-unused. [ThemeProvider](../apps/web/src/providers/theme-provider.tsx) applies the
-palette and handles persistence. The constrained
-[bootstrap](../apps/web/src/lib/theme-bootstrap.ts) applies cached colors before
-hydration and clears app colors outside the app routes.
+[themes.ts](../apps/web/src/lib/themes.ts) builds the catalog from the package's
+`defaultSettings*` exports and pairs each with its native theme extension. The
+extension's CodeMirror dark-theme facet supplies its light or dark mode. Workspace
+tokens derive from the settings' background, foreground, caret, and selection.
+Supporting surfaces and borders mix foreground with background. Gutter border
+shorthands supply a color when present; otherwise workspace borders use a mix.
 
-Run parser, token mapping, persistence, and bootstrap checks from the repo root:
+[theme-editor.ts](../apps/web/src/lib/theme-editor.ts) uses the package's extension
+directly. [LaTeX tags](../apps/web/src/lib/latex/tags.ts) inherit standard CodeMirror
+highlight tags. There is no TextMate scope mapper.
+[ThemeProvider](../apps/web/src/providers/theme-provider.tsx) applies workspace
+variables and separates committed appearance, draft selection, and live preview.
+The [bootstrap](../apps/web/src/lib/theme-bootstrap.ts) accepts cached colors only
+for known v2 selections. Its constrained color grammar supports hex, numeric RGB
+and RGBA, transparent, and the derived color mixes. Unknown properties are ignored
+and unsafe snapshots fall back to the system theme.
+
+The stylesheet and Dockview utility continue to consume the existing CSS variables.
+
+Run unit checks and the browser test from the repository root:
 
 ```sh
 bun test apps/web/src/lib/themes.test.ts
+bun run --cwd apps/web test:themes
 ```
 
-Component styles use Tailwind classes. The stylesheet contains theme variables,
-font setup, imports, and the Dockview variable-mapping utility. Runtime theme
-values and CodeMirror style specifications use their supported APIs.
+The browser test mounts the production workspace with an isolated network fixture
+and needs no database. It covers editor and workspace preview, hover and focus
+restoration, draft selection, Apply, Save, Cancel, tab closing, migration, reload,
+and a narrow viewport.

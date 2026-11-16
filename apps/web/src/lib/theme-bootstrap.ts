@@ -1,7 +1,7 @@
 import {
   appearanceStorageKey,
-  bundledThemes,
-  colorPattern,
+  catalogTheme,
+  themeCatalog,
   resolveTheme,
 } from "./themes";
 
@@ -14,8 +14,8 @@ export function isAppPath(pathname: string) {
   );
 }
 
-const light = resolveTheme(bundledThemes.texfolia);
-const dark = resolveTheme(bundledThemes.vscodeDark);
+const light = resolveTheme(catalogTheme("githubLight"));
+const dark = resolveTheme(catalogTheme("githubDark"));
 
 export function appearanceSnapshot(theme: ReturnType<typeof resolveTheme>) {
   return { mode: theme.mode, variables: theme.variables };
@@ -28,15 +28,17 @@ export function themeBootstrap(userId: string | null) {
       .replace(/</g, "\\u003c")
       .replace(/\u2028/g, "\\u2028")
       .replace(/\u2029/g, "\\u2029");
-  // All property names come from the compiler. Cached values are constrained to
-  // hex or the compiler's color-mix grammar before touching the document.
-  const cachedColorPattern = `^(?:${colorPattern}|color-mix\\(in srgb, ${colorPattern} (?:100|[0-9]{1,2})%, ${colorPattern}\\))$`;
+  const hex = "#(?:[\\da-f]{3}|[\\da-f]{4}|[\\da-f]{6}|[\\da-f]{8})";
+  const number = "(?:[0-9]{1,3}(?:\\.[0-9]+)?|\\.[0-9]+)";
+  const color = `(?:${hex}|transparent|rgba?\\(\\s*${number}\\s*,\\s*${number}\\s*,\\s*${number}(?:\\s*,\\s*${number})?\\s*\\))`;
+  const cachedColorPattern = `^(?:${color}|color-mix\\(in srgb, ${color} (?:100|[0-9]{1,2})%, ${color}\\))$`;
   return `(function(){
     var light=${json(appearanceSnapshot(light))},dark=${json(appearanceSnapshot(dark))};
+    var ids=${json(themeCatalog.map((theme) => theme.id))};
     var theme=matchMedia('(prefers-color-scheme: dark)').matches?dark:light;
     try {
       var preference=JSON.parse(localStorage.getItem(${json(appearanceStorageKey(userId))})||'null');
-      if(preference&&preference.selection&&preference.selection.kind!=='system'&&preference.preview){
+      if(preference&&preference.selection&&preference.selection.kind==='theme'&&ids.indexOf(preference.selection.id)!==-1&&preference.preview){
         var cached=preference.preview;
         var color=new RegExp(${json(cachedColorPattern)},'i');
         if((cached.mode==='light'||cached.mode==='dark')&&cached.variables&&Object.keys(light.variables).every(function(key){

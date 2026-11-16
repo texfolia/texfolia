@@ -1,18 +1,8 @@
-import {
-  LanguageSupport,
-  StreamLanguage,
-  syntaxTree,
-} from "@codemirror/language";
+import { LanguageSupport, StreamLanguage } from "@codemirror/language";
 import { styleTags, tags } from "@lezer/highlight";
-import {
-  Decoration,
-  type EditorView,
-  ViewPlugin,
-  type ViewUpdate,
-} from "@uiw/react-codemirror";
 import { latex, latexLanguage } from "codemirror-lang-latex";
 
-import { latexTags } from "../theme-syntax";
+import { latexTags } from "./tags";
 
 export function themedLatex(filename: string) {
   const support = latex({
@@ -44,55 +34,8 @@ export function themedLatex(filename: string) {
       }),
     ],
   });
-  return new LanguageSupport(language, [support.support, optionKeys]);
+  return new LanguageSupport(language, support.support);
 }
-
-function keyDecorations(view: EditorView) {
-  const ranges: ReturnType<Decoration["range"]>[] = [];
-  for (const visible of view.visibleRanges) {
-    syntaxTree(view.state).iterate({
-      from: visible.from,
-      to: visible.to,
-      enter(node) {
-        if (node.name !== "OptionalArgument") return;
-        const text = view.state.sliceDoc(node.from, node.to);
-        for (const match of text.matchAll(
-          /(?:\[|,)\s*([a-zA-Z@][\w:@.-]*)(?=\s*=)/g,
-        )) {
-          const key = match[1];
-          if (!key) continue;
-          const from = node.from + match.index + match[0].lastIndexOf(key);
-          ranges.push(
-            Decoration.mark({ class: "cm-latex-option-key" }).range(
-              from,
-              from + key.length,
-            ),
-          );
-        }
-        return false;
-      },
-    });
-  }
-  return Decoration.set(ranges, true);
-}
-
-const optionKeys = ViewPlugin.fromClass(
-  class {
-    decorations;
-    constructor(view: EditorView) {
-      this.decorations = keyDecorations(view);
-    }
-    update(update: ViewUpdate) {
-      if (
-        update.docChanged ||
-        update.viewportChanged ||
-        syntaxTree(update.startState) !== syntaxTree(update.state)
-      )
-        this.decorations = keyDecorations(update.view);
-    }
-  },
-  { decorations: (plugin) => plugin.decorations },
-);
 
 export const bibtexLanguage = StreamLanguage.define({
   name: "bibtex",

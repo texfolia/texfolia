@@ -10,6 +10,7 @@ import {
 
 import { createBrowserSettingsStore } from "#/lib/settings.functions";
 import { defaultSettings, type Settings } from "#/lib/settings.schema";
+import { useTheme } from "#/providers/theme-provider";
 export type SettingsSection =
   | "Appearance"
   | "Editor"
@@ -25,7 +26,35 @@ function useSettingsState() {
   });
   const preferences = data?.[0] ?? defaultSettings;
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const [openRequest, setOpenRequest] = useState(0);
+  const [closeGuard, setCloseGuard] = useState(false);
+  const theme = useTheme();
+  function setOpen(next: boolean) {
+    if (next) {
+      setOpenRequest((current) => current + 1);
+      if (!open) theme.beginDraft();
+      setOpenState(true);
+    } else if (theme.dirty) {
+      setCloseGuard(true);
+    } else {
+      theme.discardDraft();
+      setOpenState(false);
+    }
+  }
+  function discard() {
+    theme.discardDraft();
+    setCloseGuard(false);
+    setOpenState(false);
+  }
+  function apply(close = false) {
+    if (!theme.commitDraft()) return;
+    setCloseGuard(false);
+    if (close) {
+      theme.discardDraft();
+      setOpenState(false);
+    }
+  }
   const [section, setSection] = useState<SettingsSection>("Appearance");
 
   useEffect(() => {
@@ -58,7 +87,7 @@ function useSettingsState() {
 
   useHotkeys(
     [
-      { hotkey: "Mod+,", callback: () => setOpen((current) => !current) },
+      { hotkey: "Mod+,", callback: () => setOpen(true) },
       {
         hotkey: "Mod+/",
         callback: () => {
@@ -83,6 +112,12 @@ function useSettingsState() {
     ready,
     open,
     setOpen,
+    closeGuard,
+    openRequest,
+    setCloseGuard,
+    discard,
+    apply,
+    appearanceDirty: theme.dirty,
     section,
     setSection,
   };

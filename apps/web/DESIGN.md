@@ -152,7 +152,7 @@ Semantic roles follow the selected theme; no fixed editor palette is prescribed.
 - **Chrome:** activity, status, and tab tokens distinguish persistent workspace regions and active files.
 - **Boundaries and focus:** `border`, `input`, and `ring` retain the existing Nova treatments.
 
-**The Theme Authority Rule.** Use semantic CSS variables. `src/lib/themes.ts` resolves bundled or imported themes, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
+**The Theme Authority Rule.** Use semantic CSS variables. `src/lib/themes.ts` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
 
 ## Typography
 
@@ -201,6 +201,8 @@ File, Edit, and View use the existing menubar. Sidebar switches live in the bott
 `src/routes/project/$projectId/-components/project-file-tree.tsx` composes Nova SidebarMenu primitives. Folder chevrons, type icons, truncation, selection, hover, focus, and disabled states remain available. Generated files appear under an ordinary `out` folder and are read-only. Preserve permission-aware context actions and the existing dialogs.
 
 ### Dock tabs and PDF
+
+Settings opens as an ordinary dock panel alongside files. Its theme list previews on hover and keyboard focus. Apply commits appearance while keeping the panel open; Save commits and closes; Cancel discards. Closing a dirty appearance draft opens a confirmation prompt.
 
 Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems remains a dock panel.
 

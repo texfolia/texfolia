@@ -791,22 +791,19 @@ try {
   );
   console.info("Rendered file rename, move, and deletion passed");
   await workspaceMenu(owner, "File", "Settings");
-  await owner
-    .getByRole("dialog")
-    .getByLabel("Theme", { exact: true })
-    .selectOption("oneDark");
-  assert.notEqual(
-    await owner
-      .getByRole("dialog")
-      .evaluate((dialog) => getComputedStyle(dialog).borderRadius),
-    "0px",
-    "Editor settings use standard shadcn radius",
+  const settings = owner.getByRole("tabpanel", {
+    name: "Settings",
+    exact: true,
+  });
+  await settings.getByRole("button", { name: "Dracula", exact: true }).click();
+  assert.equal(
+    await owner.getByRole("dialog").count(),
+    0,
+    "Editor Settings opens as a dock panel",
   );
   await capture(owner, "settings-dark");
-  await owner.keyboard.press("Escape");
-  await owner
-    .locator('[data-slot="dialog-content"]')
-    .waitFor({ state: "detached" });
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await settings.waitFor({ state: "detached" });
   await capture(owner, "workspace-dark");
   await sidebarView(owner, "git");
   await owner.locator('[data-testid="git-panel"]').waitFor();
