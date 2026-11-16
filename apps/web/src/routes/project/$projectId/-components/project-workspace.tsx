@@ -11,10 +11,9 @@ import {
   IconCircleCheck,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
-import { useHotkeys } from "@tanstack/react-hotkeys";
+import { ClientOnly } from "@tanstack/react-router";
 
 import "dockview-react/dist/styles/dockview.css";
-import { ClientOnly } from "@tanstack/react-router";
 import type { EditorView } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import {
@@ -28,17 +27,13 @@ import {
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 
-import {
-  SettingsContent,
-  SettingsCloseGuard,
-} from "#/components/settings-dialog";
+import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
 import {
   ContextMenu,
@@ -86,6 +81,7 @@ import {
 } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
+import { useAppShortcut } from "#/providers/shortcuts-provider";
 import {
   type FileState,
   useWorkspace,
@@ -282,51 +278,13 @@ function FileTab(props: IDockviewPanelHeaderProps<{ preview?: boolean }>) {
   );
 }
 
-function SettingsPanel({ api }: IDockviewPanelProps) {
-  const container = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(api.isVisible);
-  const [active, setActive] = useState(api.isActive);
-  useEffect(() => {
-    const visibility = api.onDidVisibilityChange(({ isVisible }) =>
-      setVisible(isVisible),
-    );
-    const activation = api.onDidActiveChange(({ isActive }) =>
-      setActive(isActive),
-    );
-    return () => {
-      visibility.dispose();
-      activation.dispose();
-    };
-  }, [api]);
-  useLayoutEffect(() => {
-    if (visible && active) container.current?.focus({ preventScroll: true });
-  }, [visible, active]);
-  return visible ? (
-    <div
-      ref={container}
-      tabIndex={-1}
-      className="h-full min-h-0 overflow-hidden outline-none"
-    >
-      <SettingsContent />
-    </div>
-  ) : null;
-}
-
-function SettingsTab(props: IDockviewPanelHeaderProps) {
-  const { setOpen } = useSettings();
-  return (
-    <DockviewDefaultTab {...props} closeActionOverride={() => setOpen(false)} />
-  );
-}
-
 const components = {
   editor: FileEditor,
   generated: GeneratedFile,
   markdown: MarkdownPreview,
   problems: WorkspaceProblems,
-  settings: SettingsPanel,
 };
-const tabComponents = { file: FileTab, settings: SettingsTab };
+const tabComponents = { file: FileTab };
 
 export function ProjectWorkspace({
   project,
@@ -495,40 +453,12 @@ export function ProjectWorkspace({
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
   const [jump, setJump] = useState<Workspace["jump"]>();
-  const settings = useSettings();
   const {
-    formatting: { settings: formatSettings },
+    formatting,
     open: settingsOpen,
-    openRequest: settingsRequest,
     setOpen: setSettingsOpen,
-  } = settings;
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-  useEffect(() => {
-    const dock = api.current;
-    if (!ready || !dock) return;
-    const panel = dock.getPanel("settings");
-    if (settingsOpen) {
-      if (window.matchMedia("(max-width: 767px)").matches)
-        setChrome((current) => ({
-          ...current,
-          agentsOpen: false,
-          historyOpen: false,
-          rightOpen: false,
-        }));
-      if (panel) panel.api.setActive();
-      else
-        dock.addPanel({
-          id: "settings",
-          component: "settings",
-          tabComponent: "settings",
-          title: "Settings",
-          position: dock.activePanel
-            ? { referencePanel: dock.activePanel.id, direction: "within" }
-            : undefined,
-        });
-    } else if (panel) dock.removePanel(panel);
-  }, [ready, settingsOpen, settingsRequest, settings.closeGuard]);
+  } = useSettings();
+  const formatSettings = formatting ?? { indent: 2, wrap: true, width: 80 };
   const storageKey = `texfolia.project.${projectId}.sources`;
   const compilation = useRef<AbortController | null>(null);
   const lastEditAt = useRef<number | null>(null);
@@ -1051,33 +981,22 @@ export function ProjectWorkspace({
     ]?.api.setActive();
   }
 
-  useHotkeys(
-    [
-      { hotkey: "Mod+S", callback: () => void saveSources() },
-      { hotkey: "Control+PageDown", callback: () => cycleTab(1) },
-      { hotkey: "Control+PageUp", callback: () => cycleTab(-1) },
-    ],
-    {
-      target: container,
-      capture: true,
-      ignoreInputs: false,
-      enabled: api.current?.activePanel?.id !== "settings",
-    },
-  );
-
-  useHotkeys(
-    [
-      {
-        hotkey: "Mod+B",
-        callback: () => updateChrome({ rightOpen: !chrome.rightOpen }),
-      },
-    ],
-    {
-      target: container,
-      ignoreInputs: true,
-      ignoreDefaultPrevented: true,
-      enabled: api.current?.activePanel?.id !== "settings",
-    },
+  useAppShortcut("save", () => void saveSources(), {
+    target: container,
+    enabled: !settingsOpen,
+  });
+  useAppShortcut("nextTab", () => cycleTab(1), {
+    target: container,
+    enabled: !settingsOpen,
+  });
+  useAppShortcut("previousTab", () => cycleTab(-1), {
+    target: container,
+    enabled: !settingsOpen,
+  });
+  useAppShortcut(
+    "sidebar",
+    () => updateChrome({ rightOpen: !chrome.rightOpen }),
+    { target: container, enabled: !settingsOpen },
   );
 
   useEffect(
@@ -1272,8 +1191,7 @@ export function ProjectWorkspace({
             ? group.slice(index + 1)
             : [panel];
     for (const target of targets) {
-      if (target.id === "settings") settingsRef.current.setOpen(false);
-      else dock.removePanel(target);
+      dock.removePanel(target);
     }
   }
   function openProblems() {
@@ -1364,8 +1282,6 @@ export function ProjectWorkspace({
       }),
       dock.onDidLayoutChange(persistLayout),
       dock.onDidRemovePanel((panel) => {
-        if (panel.id === "settings" && settingsRef.current.open)
-          settingsRef.current.setOpen(false);
         if (previewId.current === panel.id) previewId.current = null;
         setActiveId((previous) =>
           previous === panel.id ? undefined : previous,
@@ -1393,7 +1309,6 @@ export function ProjectWorkspace({
         previewId.current = panel.id;
       }
     }
-    if (dock.getPanel("settings")) settingsRef.current.setOpen(true);
     setReady(true);
   }
 
@@ -1449,7 +1364,7 @@ export function ProjectWorkspace({
           "h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2rem] [--workspace-header-height:2.5rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none [&_[data-slot=sidebar-footer]]:p-0 [&_[data-slot=sidebar-group]]:p-0 [&_[data-slot=sidebar-menu]]:gap-0",
         )}
       >
-        <SettingsCloseGuard />
+        <SettingsDialog />
         <WorkspaceMenu
           name={name}
           canWrite={canWrite && ready && Object.keys(recovery).length === 0}

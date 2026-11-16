@@ -28,7 +28,18 @@ await files.nodes.preload();
 const route = createRootRoute({
   component: () => (
     <ThemeProvider userId="upload-test">
-      <SettingsProvider>
+      <SettingsProvider
+        userId="upload-test"
+        project={{
+          id: project.id,
+          canWrite: project.canWrite,
+          formatting: {
+            indent: project.formatIndent,
+            wrap: project.formatWrap,
+            width: project.formatWidth,
+          },
+        }}
+      >
         <ProjectFilesProvider store={files}>
           <ProjectWorkspace project={project} userId="upload-test" />
         </ProjectFilesProvider>

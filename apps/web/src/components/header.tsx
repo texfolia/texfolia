@@ -1,12 +1,24 @@
-import { Link } from "@tanstack/react-router";
+import { ClientOnly, Link } from "@tanstack/react-router";
 
-import { buttonVariants } from "#/components/ui/button";
+import { NavigationShortcuts } from "#/components/navigation-shortcuts";
+import { Button, buttonVariants } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { authClient } from "#/lib/auth-client";
 
 export function Header() {
   const { data: session } = authClient.useSession();
   return (
     <header className="bg-background border-b">
+      <ClientOnly>
+        {session && (
+          <NavigationShortcuts key={session.user.id} userId={session.user.id} />
+        )}
+      </ClientOnly>
       <a
         href="#main-content"
         className="bg-background sr-only z-50 p-3 focus:not-sr-only focus:absolute"
@@ -36,7 +48,7 @@ export function Header() {
           </Link>
           {session && (
             <Link
-              to="/billing"
+              to="/settings/billing"
               className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
             >
               Billing
@@ -49,6 +61,24 @@ export function Header() {
             Pricing
           </Link>
         </nav>
+        {session && (
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" />}>
+              {session.user.name}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem render={<Link to="/settings/account" />}>
+                Account
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link to="/settings/preferences" />}>
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link to="/settings/billing" />}>
+                Billing
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Link
           to={session ? "/projects" : "/login"}
           className={buttonVariants({ size: "lg" })}

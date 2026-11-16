@@ -20,7 +20,6 @@ import {
   IconDots,
   IconMathSymbols,
 } from "@tabler/icons-react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
 import CodeMirror, {
   EditorState,
   EditorView,
@@ -70,6 +69,7 @@ import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
 import { addLatexPackage, insertLatexSymbol } from "#/lib/latex/symbols";
 import { useSettings } from "#/providers/settings-provider";
+import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";
 
 import { SymbolPalette, type SymbolPreamble } from "./symbol-palette";
@@ -147,44 +147,75 @@ export function Editor({
   const canFormat = isLatex || /\.bib$/i.test(name);
   const { format, formatting, formatError } = useLatexFormatter(formatSettings);
 
-  useHotkeys([{ hotkey: "Mod+Shift+V", callback: () => onOpenPreview?.() }], {
+  useAppShortcut("markdown", () => onOpenPreview?.(), {
     target: container,
-    capture: true,
-    ignoreInputs: false,
     enabled: isMarkdown && !!onOpenPreview,
   });
-
-  useHotkeys(
-    [
-      {
-        hotkey: "Mod+I",
-        callback: () => {
-          const view = editor.current?.view;
-          if (view) toggleLatexCommand("textit")(view);
-        },
-      },
-      {
-        hotkey: "Mod+U",
-        callback: () => {
-          const view = editor.current?.view;
-          if (view) toggleLatexCommand("underline")(view);
-        },
-      },
-      ...headingCommands.map((command, level) => ({
-        hotkey: { code: `Digit${level}`, mod: true, alt: true },
-        callback: () => {
-          const view = editor.current?.view;
-          if (view) applyLatexHeading(command)(view);
-        },
-      })),
-    ],
-    {
-      target: container,
-      capture: true,
-      ignoreInputs: false,
-      enabled: isLatex && !readOnly,
+  useAppShortcut(
+    "bold",
+    () => {
+      const view = editor.current?.view;
+      if (view) toggleLatexCommand("textbf")(view);
     },
+    { target: container, enabled: isLatex && !readOnly },
   );
+  useAppShortcut(
+    "italic",
+    () => {
+      const view = editor.current?.view;
+      if (view) toggleLatexCommand("textit")(view);
+    },
+    { target: container, enabled: isLatex && !readOnly },
+  );
+  useAppShortcut(
+    "underline",
+    () => {
+      const view = editor.current?.view;
+      if (view) toggleLatexCommand("underline")(view);
+    },
+    { target: container, enabled: isLatex && !readOnly },
+  );
+  useAppShortcut(
+    "format",
+    () => {
+      const view = editor.current?.view;
+      if (view) format(view);
+    },
+    { target: container, enabled: canFormat && !readOnly },
+  );
+  const heading = (level: number) => {
+    const view = editor.current?.view;
+    const command = headingCommands[level];
+    if (view && command !== undefined) applyLatexHeading(command)(view);
+  };
+  useAppShortcut("heading0", () => heading(0), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
+  useAppShortcut("heading1", () => heading(1), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
+  useAppShortcut("heading2", () => heading(2), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
+  useAppShortcut("heading3", () => heading(3), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
+  useAppShortcut("heading4", () => heading(4), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
+  useAppShortcut("heading5", () => heading(5), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
+  useAppShortcut("heading6", () => heading(6), {
+    target: container,
+    enabled: isLatex && !readOnly,
+  });
 
   useEffect(() => {
     const view = editor.current?.view;
@@ -246,18 +277,8 @@ export function Editor({
       ),
       indentUnit.of(" ".repeat(formatSettings.indent)),
       ...(preferences.wrapLines ? [EditorView.lineWrapping] : []),
-      Prec.high(
-        keymap.of([
-          { key: "Tab", run: acceptCompletion },
-          ...(isLatex && !readOnly
-            ? [{ key: "Mod-b", run: toggleLatexCommand("textbf") }]
-            : []),
-        ]),
-      ),
+      Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
       keymap.of([
-        ...(canFormat && !readOnly
-          ? [{ key: "Mod-Shift-f", run: format }]
-          : []),
         { key: "Mod-h", mac: "Mod-Shift-h", run: openSearchPanel },
         { key: "Mod-]", run: indentMore },
         { key: "Mod-[", run: indentLess },

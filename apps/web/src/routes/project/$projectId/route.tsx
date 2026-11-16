@@ -56,9 +56,22 @@ function WorkspacePage() {
 
 function ThemedWorkspace() {
   const { user } = Route.useRouteContext();
+  const { project } = Route.useLoaderData();
   return (
     <ThemeProvider userId={user.id}>
-      <SettingsProvider>
+      <SettingsProvider
+        key={project.id}
+        userId={user.id}
+        project={{
+          id: project.id,
+          canWrite: project.canWrite,
+          formatting: {
+            indent: project.formatIndent,
+            wrap: project.formatWrap,
+            width: project.formatWidth,
+          },
+        }}
+      >
         <WorkspacePage />
       </SettingsProvider>
     </ThemeProvider>

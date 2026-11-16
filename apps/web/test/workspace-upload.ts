@@ -45,6 +45,9 @@ const project: ProjectDetails = {
   createdAt: new Date(),
   updatedAt: new Date(),
   deletedAt: null,
+  formatIndent: 2,
+  formatWrap: true,
+  formatWidth: 80,
   canWrite: true,
   nodes: [
     { id: rootId, projectId, parentId: null, name: "root", kind: "folder" },
@@ -311,6 +314,7 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
+      "#/lib/project.functions": rpc,
       "#/lib/project-node.functions": rpc,
       "#/lib/project-source.functions": rpc,
       "#/lib/git.functions": rpc,

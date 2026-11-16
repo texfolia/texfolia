@@ -173,7 +173,10 @@ function RouteComponent() {
                   className="w-full"
                   render={
                     plan.plan ? (
-                      <Link to="/billing" search={{ plan: plan.plan }} />
+                      <Link
+                        to="/settings/billing"
+                        search={{ plan: plan.plan }}
+                      />
                     ) : (
                       <Link to="/projects" />
                     )

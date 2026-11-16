@@ -27,6 +27,9 @@ const project: ProjectDetails = {
   createdAt: new Date(),
   updatedAt: new Date(),
   deletedAt: null,
+  formatIndent: 2,
+  formatWrap: true,
+  formatWidth: 80,
   canWrite: true,
   nodes: [
     { id: rootId, projectId, parentId: null, name: "root", kind: "folder" },
@@ -37,6 +40,8 @@ const project: ProjectDetails = {
 };
 const doc = new Y.Doc();
 doc.getText("source").insert(0, source);
+let formattingSaves = 0;
+let rejectFormatting = false;
 const backend = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -59,8 +64,20 @@ const backend = Bun.serve({
         );
     },
   },
-  fetch(request, server) {
+  async fetch(request, server) {
     const url = new URL(request.url);
+    if (url.pathname === "/fixture/formatting") {
+      if (rejectFormatting)
+        return new Response("Project settings unavailable", { status: 503 });
+      const data = (
+        await import("../src/lib/project.schema")
+      ).updateProjectFormattingSchema.parse(await request.json());
+      formattingSaves++;
+      project.formatIndent = data.formatting.indent;
+      project.formatWrap = data.formatting.wrap;
+      project.formatWidth = data.formatting.width;
+      return Response.json(data.formatting);
+    }
     if (url.pathname.startsWith("/api/collaboration/")) {
       if (server.upgrade(request)) return;
       return new Response(null, { status: 400 });
@@ -108,6 +125,7 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
+      "#/lib/project.functions": rpc,
       "#/lib/project-node.functions": rpc,
       "#/lib/project-source.functions": rpc,
       "#/lib/git.functions": rpc,
@@ -153,16 +171,17 @@ try {
       .first()
       .evaluate((editor) => getComputedStyle(editor).backgroundColor);
   const open = async () => {
+    await page.locator('.cm-content[contenteditable="true"]').waitFor();
     await page.keyboard.press("ControlOrMeta+,");
     await page
-      .getByRole("tabpanel", { name: "Settings", exact: true })
+      .getByRole("dialog", { name: "Settings", exact: true })
       .waitFor()
       .catch(async (error) => {
         console.error(await page.locator("body").innerText());
         throw error;
       });
   };
-  const settings = page.getByRole("tabpanel", {
+  const settings = page.getByRole("dialog", {
     name: "Settings",
     exact: true,
   });
@@ -171,6 +190,16 @@ try {
   const blur = async () => {
     await button("Appearance").focus();
     await button("Appearance").hover();
+    const selected = await settings
+      .getByRole("group", { name: "Theme", exact: true })
+      .locator('button[aria-pressed="true"]')
+      .getAttribute("aria-label");
+    await page.waitForFunction(
+      (name) =>
+        document.documentElement.dataset.appTheme ===
+        (name === "Follow system appearance" ? "GitHub Light" : name),
+      selected,
+    );
   };
   const themeName = () =>
     page.evaluate(() => document.documentElement.dataset.appTheme);
@@ -180,21 +209,141 @@ try {
   assert(original);
   const lightBackground = await background();
   await open();
+  assert.equal(await settings.count(), 1, "Editor Settings is a dialog");
+  const overlay = page.locator('[data-slot="dialog-overlay"]');
+  assert.notEqual(
+    await overlay.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+    "rgba(0, 0, 0, 0)",
+    "Dialog has a dimmed overlay",
+  );
+
+  const preferencesKey = "texfolia.settings.v2:upload-test";
+  const preferencesStorage = () =>
+    page.evaluate((key) => localStorage.getItem(key), preferencesKey);
+  const originalPreferences = await preferencesStorage();
+  await button("Editor").click();
+  const font = settings.getByRole("spinbutton", { name: "Editor font size" });
+  await font.fill("");
+  await font.pressSequentially("20");
   assert.equal(
-    await page.getByRole("dialog").count(),
-    0,
-    "Editor Settings is a dock panel",
+    await preferencesStorage(),
+    originalPreferences,
+    "Editor draft does not persist",
   );
   assert.equal(
-    await page.getByRole("tab", { name: "Settings", exact: true }).count(),
-    1,
+    await page
+      .locator(".cm-content")
+      .first()
+      .evaluate((element) => getComputedStyle(element).fontSize),
+    "13px",
+    "Editor reads committed font until Apply",
+  );
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Keep editing" })
+    .click();
+  assert.equal(await font.inputValue(), "20");
+  await button("Apply").click();
+  assert.equal(
+    JSON.parse((await preferencesStorage())!)["s:preferences"].data.editor
+      .fontSize,
+    20,
+  );
+  assert.equal(await button("Apply").isDisabled(), true);
+  await font.fill("18");
+  await overlay.click({ position: { x: 5, y: 5 } });
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Discard" })
+    .click();
+  await settings.waitFor({ state: "detached" });
+  assert.equal(
+    JSON.parse((await preferencesStorage())!)["s:preferences"].data.editor
+      .fontSize,
+    20,
   );
   await open();
+  await button("Keyboard shortcuts").click();
+  const recordSidebar = settings.getByRole("button", {
+    name: "Record Toggle sidebar",
+    exact: true,
+  });
+  await recordSidebar.click();
+  await page.keyboard.press("ControlOrMeta+B");
+  await page.keyboard.press("Enter");
+  await settings
+    .getByRole("alert")
+    .filter({ hasText: "Resolve conflicting bindings" })
+    .waitFor();
+  await button("Apply").click();
   assert.equal(
-    await page.getByRole("tab", { name: "Settings", exact: true }).count(),
-    1,
-    "Repeated shortcut reveals the same Settings tab",
+    JSON.parse((await preferencesStorage())!)["s:preferences"].data.shortcuts
+      .sidebar,
+    "Mod+Shift+B",
+    "Conflicting draft remains uncommitted",
   );
+  await settings
+    .getByRole("button", { name: "Reset Toggle sidebar", exact: true })
+    .click();
+  const recordBold = settings.getByRole("button", {
+    name: "Record Bold",
+    exact: true,
+  });
+  await recordBold.click();
+  await page.keyboard.press("ControlOrMeta+Shift+J");
+  await page.keyboard.press("Enter");
+  await button("Save").click();
+  await settings.waitFor({ state: "detached" });
+  await page.locator(".cm-content").first().focus();
+  await page.keyboard.press("ControlOrMeta+Shift+J");
+  assert(
+    (await page.locator(".cm-content").first().innerText()).includes(
+      "\\textbf{}",
+    ),
+    "Editor honors remapped Bold",
+  );
+  await open();
+  await button("Appearance").click();
+
+  await settings.getByRole("tab", { name: "Project", exact: true }).click();
+  const indent = settings.getByRole("spinbutton", {
+    name: "Indent width",
+    exact: true,
+  });
+  await indent.fill("4");
+  assert.equal(formattingSaves, 0, "Project draft does not write the server");
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Keep editing" })
+    .click();
+  await button("Apply").click();
+  assert.equal(project.formatIndent, 4);
+  assert.equal(formattingSaves, 1);
+  assert.equal(await button("Apply").isDisabled(), true);
+  await settings
+    .getByRole("spinbutton", { name: "Maximum line width", exact: true })
+    .fill("100");
+  rejectFormatting = true;
+  await button("Save").click();
+  await settings
+    .getByRole("alert")
+    .filter({ hasText: "Project settings unavailable" })
+    .waitFor();
+  assert.equal(
+    await settings.count(),
+    1,
+    "Failed project Save keeps the dialog open",
+  );
+  assert.equal(project.formatWidth, 80);
+  rejectFormatting = false;
+  await button("Save").click();
+  await settings.waitFor({ state: "detached" });
+  assert.equal(project.formatWidth, 100);
+  await open();
   await button("Dracula").hover();
   await page.waitForFunction(
     () => document.documentElement.dataset.appTheme === "Dracula",
@@ -226,20 +375,11 @@ try {
     "Dracula",
     "Leaving preview restores current draft",
   );
-  // Moving to a file tab removes focus/hover preview while retaining the draft.
-  await button("Nord").focus();
-  await page.keyboard.press("ControlOrMeta+/");
+  await button("Keyboard shortcuts").click();
   await settings
     .getByRole("heading", { name: "Keyboard shortcuts", exact: true })
     .waitFor();
   await button("Appearance").click();
-  await page.getByRole("tab", { name: "main.tex", exact: true }).click();
-  await page.getByRole("tabpanel", { name: "main.tex", exact: true }).waitFor();
-  await page.locator('.cm-content[contenteditable="true"]').focus();
-  await page.waitForFunction(
-    () => document.documentElement.dataset.appTheme === "Dracula",
-  );
-  await open();
   assert.equal(await button("Dracula").getAttribute("aria-pressed"), "true");
   await button("Apply").click();
   assert.equal(JSON.parse((await stored())!).selection.id, "dracula");
@@ -263,6 +403,7 @@ try {
   await settings
     .getByRole("alert")
     .filter({ hasText: "Appearance could not be saved" })
+    .first()
     .waitFor();
   assert.equal(await button("Apply").isEnabled(), true);
   assert.equal(await stored(), applied);
@@ -283,15 +424,15 @@ try {
   );
   await open();
   await button("Nord").click();
-  const tab = page.getByRole("tab", { name: "Settings", exact: true });
-  await tab.getByRole("button", { name: "Close tab", exact: true }).click();
+  const close = settings.getByRole("button", { name: "Close", exact: true });
+  await close.click();
   const guard = page.getByRole("alertdialog");
   await guard.waitFor();
   await guard
     .getByRole("button", { name: "Keep editing", exact: true })
     .click();
   await guard.waitFor({ state: "detached" });
-  await tab.getByRole("button", { name: "Close tab", exact: true }).click();
+  await close.click();
   await guard.getByRole("button", { name: "Apply", exact: true }).click();
   await guard.waitFor({ state: "detached" });
   assert.equal(
@@ -302,7 +443,7 @@ try {
   assert.equal(await button("Apply").isDisabled(), true);
   assert.equal(JSON.parse((await stored())!).selection.id, "nord");
   await button("Dracula").click();
-  await tab.getByRole("button", { name: "Close tab", exact: true }).click();
+  await close.click();
   await guard.getByRole("button", { name: "Discard", exact: true }).click();
   await settings.waitFor({ state: "detached" });
   assert.equal(await themeName(), "Nord");
@@ -316,9 +457,9 @@ try {
   assert.equal(await themeName(), "Dracula", "Saved selection survives reload");
   await open();
   await blur();
-  // Clean Settings tabs also survive layout restoration.
+  // Dialogs are transient and reopen cleanly after reload.
   await page.reload();
-  await settings.waitFor();
+  await open();
   await blur();
   await page.screenshot({ path: `${screenshots}/settings-dark.png` });
   await button("GitHub Light").hover();
@@ -359,9 +500,35 @@ try {
   assert.equal(await background(), lightBackground);
   assert.deepEqual(JSON.parse((await stored())!).selection, { kind: "system" });
   assert.equal(JSON.parse((await stored())!).pdfMode, "match");
+
+  await page.evaluate(() =>
+    localStorage.setItem("texfolia.settings.v2:upload-test", "{broken"),
+  );
+  await page.reload();
+  await open();
+  await button("Editor").click();
+  assert.equal(
+    await settings
+      .getByRole("spinbutton", { name: "Editor font size" })
+      .isDisabled(),
+    true,
+    "Unavailable browser storage disables only its own fields",
+  );
+  await settings.getByRole("tab", { name: "Project", exact: true }).click();
+  await settings
+    .getByRole("spinbutton", { name: "Indent width", exact: true })
+    .fill("6");
+  await button("Apply").click();
+  assert.equal(
+    project.formatIndent,
+    6,
+    "Browser preference load failure does not block project saves",
+  );
+  await button("Cancel").click();
+  await settings.waitFor({ state: "detached" });
   assert.deepEqual(errors, []);
   console.info(
-    "Theme UI passed: dock panel, hover/focus, editor and workspace preview, draft restoration, Apply/Save/Cancel, tab close guard, reload, migration, and narrow layout",
+    "Settings/theme UI passed: dialog, editor drafts, shortcut recording/conflicts/remapping, hover/focus, editor and workspace preview, draft restoration, Apply/Save/Cancel, Esc/overlay/X close guards, reload, migration, and narrow layout",
   );
 } catch (error) {
   console.error(await debugPage?.locator("body").innerText());

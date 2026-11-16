@@ -9,17 +9,16 @@ system appearance changes. Hovering or focusing a theme previews it throughout
 the workspace, including open editors. Moving away restores the selected draft
 or committed theme. Touch users select a theme by tapping it.
 
-In the editor, Settings opens as a dock panel alongside file tabs. Opening it
-again reveals the same tab. Outside the editor, the existing Settings dialog
-uses the same Appearance controls.
+In the editor, Settings opens as a dialog with User and Project tabs. Outside
+the editor, `/settings/preferences` uses the same Appearance controls.
 
 Selecting a theme changes the appearance draft without writing storage.
 **Apply** saves it and keeps Settings open with no unsaved appearance changes.
 **Save** saves and closes. **Cancel** discards the appearance draft and closes.
 Closing Settings with unsaved appearance changes prompts for **Apply**,
 **Discard**, or **Keep editing**. Apply in that prompt also keeps Settings open.
-Other editor and formatting controls retain their existing immediate-save behavior;
-the broader settings draft redesign belongs to NAT-311.
+Editor preferences and project formatting follow the same draft rules. The
+editor toolbar Wrap lines control still saves immediately. See [Settings](settings.md).
 
 PDFs retain their original page colors by default. **Match PDF preview to theme**
 in Settings joins the appearance draft. The PDF viewer's separate control saves

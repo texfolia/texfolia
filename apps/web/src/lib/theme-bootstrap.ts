@@ -9,6 +9,8 @@ export function isAppPath(pathname: string) {
   const path = pathname.replace(/\/+$/, "");
   return (
     path === "/projects" ||
+    path === "/settings" ||
+    path.startsWith("/settings/") ||
     path.startsWith("/project/") ||
     path.startsWith("/accept-invitation/")
   );

@@ -15,9 +15,36 @@ import {
 import { fetchCompiler } from "./compiler.server";
 import { lockProject } from "./project-access.server";
 import type { SourceBucket } from "./project-source.server";
-import type { createProjectSchema } from "./project.schema";
+import type {
+  createProjectSchema,
+  updateProjectFormattingSchema,
+} from "./project.schema";
 
 type ProjectOwner = { db: Db; ownerId: string };
+
+export async function updateProjectFormatting({
+  db,
+  ownerId,
+  data,
+}: ProjectOwner & { data: z.infer<typeof updateProjectFormattingSchema> }) {
+  return db.transaction(async (tx) => {
+    await lockProject({
+      tx,
+      projectId: data.projectId,
+      userId: ownerId,
+      access: "write",
+    });
+    await tx
+      .update(project)
+      .set({
+        formatIndent: data.formatting.indent,
+        formatWrap: data.formatting.wrap,
+        formatWidth: data.formatting.width,
+      })
+      .where(eq(project.id, data.projectId));
+    return data.formatting;
+  });
+}
 
 export async function createProject({
   db,

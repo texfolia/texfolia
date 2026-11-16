@@ -23,6 +23,7 @@ async function sendEmail(
 export function createEmailOTPPlugin(sendOTPEmail: typeof sendEmail) {
   return emailOTP({
     expiresIn: 300,
+    changeEmail: { enabled: true },
     async sendVerificationOTP({ email, otp, type }) {
       const purpose = {
         "sign-in": "sign-in",
@@ -142,6 +143,19 @@ export function createAuth(db: Db) {
     rateLimit: { enabled: true },
     hooks: { before: enforceBillingScope },
     account: { encryptOAuthTokens: true, accountLinking: { enabled: true } },
+    user: {
+      deleteUser: {
+        enabled: true,
+        async sendDeleteAccountVerification({ user, url }) {
+          await sendEmail({
+            to: user.email,
+            subject: "Confirm deletion of your Texfolia account",
+            text: `Confirm account deletion: ${url}. This permanently deletes your account and personal projects. If you did not request this, ignore this email.`,
+            html: `<p>Confirm deletion of your Texfolia account and personal projects:</p><p><a href="${url.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}">Delete my account</a></p><p>If you did not request this, ignore this email.</p>`,
+          });
+        },
+      },
+    },
     socialProviders: {
       github: {
         clientId: process.env.GITHUB_CLIENT_ID!,

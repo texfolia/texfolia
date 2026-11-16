@@ -1,6 +1,7 @@
 import { defineRelations, sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -50,6 +51,9 @@ export const project = pgTable(
       onDelete: "cascade",
     }),
     name: text("name").notNull(),
+    formatIndent: integer("format_indent").notNull().default(2),
+    formatWrap: boolean("format_wrap").notNull().default(true),
+    formatWidth: integer("format_width").notNull().default(80),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -60,6 +64,8 @@ export const project = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
+    check("project_format_indent", sql`${t.formatIndent} BETWEEN 1 AND 8`),
+    check("project_format_width", sql`${t.formatWidth} BETWEEN 40 AND 200`),
     uniqueIndex("project_owner_id_name_idx")
       .on(t.ownerId, t.name)
       .where(sql`${t.deletedAt} IS NULL`),

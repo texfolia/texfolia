@@ -23,14 +23,19 @@ export function LatexFormatSettingsFields({
           type="number"
           min={1}
           max={8}
-          key={`indent-${settings.indent}`}
           defaultValue={settings.indent}
           onBlur={(event) => {
+            if (
+              !settingsSchema.shape.indent.safeParse(event.target.valueAsNumber)
+                .success
+            )
+              event.target.value = String(settings.indent);
+          }}
+          onChange={(event) => {
             const value = settingsSchema.shape.indent.safeParse(
               event.target.valueAsNumber,
             );
             if (value.success) onChange({ ...settings, indent: value.data });
-            else event.target.value = String(settings.indent);
           }}
         />
       </Field>
@@ -49,15 +54,20 @@ export function LatexFormatSettingsFields({
           type="number"
           min={40}
           max={200}
-          key={`width-${settings.width}`}
           defaultValue={settings.width}
-          disabled={!settings.wrap}
           onBlur={(event) => {
+            if (
+              !settingsSchema.shape.width.safeParse(event.target.valueAsNumber)
+                .success
+            )
+              event.target.value = String(settings.width);
+          }}
+          disabled={!settings.wrap}
+          onChange={(event) => {
             const value = settingsSchema.shape.width.safeParse(
               event.target.valueAsNumber,
             );
             if (value.success) onChange({ ...settings, width: value.data });
-            else event.target.value = String(settings.width);
           }}
         />
       </Field>
