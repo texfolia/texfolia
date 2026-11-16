@@ -3,15 +3,24 @@ import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
-export default defineConfig(() => ({
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    devtools(),
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
-    tailwindcss(),
-    tanstackStart(),
-    viteReact(),
-  ],
-}));
+import { assertLocalEnvironment } from "../../scripts/local-environment.mts";
+
+export default defineConfig(({ command, mode }) => {
+  if (command === "serve")
+    assertLocalEnvironment({
+      ...loadEnv(mode, process.cwd(), ""),
+      ...process.env,
+    });
+  return {
+    resolve: { tsconfigPaths: true },
+    plugins: [
+      devtools(),
+      cloudflare({ viteEnvironment: { name: "ssr" }, remoteBindings: false }),
+      tailwindcss(),
+      tanstackStart(),
+      viteReact(),
+    ],
+  };
+});

@@ -309,6 +309,13 @@ not count as submissions. The policy is defined in [limits.ts](src/limits.ts).
 
 ## Deploy to Cloudflare
 
+`wrangler.jsonc` configures only the production `texfolia-compiler` Worker and its
+existing cloud resources. Local development uses the Bun runtime, Docker engine
+containers, and local SQLite storage described above. Its queues, coordinator
+state, and artifacts do not use Cloudflare resources. Local startup rejects
+non-loopback database and engine URLs. Keep production secrets out of local
+environment files.
+
 Use a Workers Paid account with Containers enabled. Run `bun install` from
 the repository root. With Docker running, create the required resources from `apps/compiler`:
 

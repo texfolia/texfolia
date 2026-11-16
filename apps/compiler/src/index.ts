@@ -1,7 +1,10 @@
+import { assertLocalEnvironment } from "../../../scripts/local-environment.mts";
 import { createEngineClient } from "./engine";
 import { createLocalRuntime } from "./local";
 import { createLocalContainerPool } from "./local-containers";
 import { maxSourceSyncBytes } from "./source-sync";
+
+assertLocalEnvironment(process.env);
 
 const path = process.env.COMPILER_DB_PATH ?? ".cache/compiler.sqlite";
 const pool = createLocalContainerPool({

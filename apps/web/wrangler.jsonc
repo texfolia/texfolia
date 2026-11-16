@@ -1,10 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "texfolia-web",
+  "name": "texfolia-web-local",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/worker.ts",
-  "r2_buckets": [{ "binding": "SOURCES", "bucket_name": "texfolia-sources" }],
+  "r2_buckets": [
+    {
+      "binding": "SOURCES",
+      "bucket_name": "texfolia-sources-local",
+      "remote": false,
+    },
+  ],
   "durable_objects": {
     "bindings": [
       { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
@@ -20,7 +26,8 @@
   "services": [
     {
       "binding": "COMPILER",
-      "service": "texfolia-compiler",
+      "service": "texfolia-compiler-local",
+      "remote": false,
     },
   ],
   "observability": {
@@ -36,12 +43,14 @@
   "vars": {
     "TEMPLATE_REVIEWER_IDS": "",
     "EMAIL_FROM": "noreply@texfolia.com",
-    "TURNSTILE_HOSTNAMES": "www.texfolia.com",
+    "TURNSTILE_HOSTNAMES": "localhost",
   },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "<local-only; configure production or staging before deploying>",
+      "id": "<local-only; configure production before deploying>",
+      "localConnectionString": "postgres://user:password@localhost:5432/db",
+      "remote": false,
     },
   ],
   "env": {
@@ -64,29 +73,6 @@
         "TEMPLATE_REVIEWER_IDS": "",
         "EMAIL_FROM": "noreply@texfolia.com",
         "TURNSTILE_HOSTNAMES": "www.texfolia.com",
-      },
-    },
-    "staging": {
-      "name": "texfolia-web-staging",
-      "r2_buckets": [
-        { "binding": "SOURCES", "bucket_name": "texfolia-sources-staging" },
-      ],
-      "durable_objects": {
-        "bindings": [
-          { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
-        ],
-      },
-      "hyperdrive": [
-        { "binding": "HYPERDRIVE", "id": "<staging hyperdrive id>" },
-      ],
-      "services": [
-        { "binding": "COMPILER", "service": "texfolia-compiler-staging" },
-      ],
-      "send_email": [{ "name": "EMAIL" }],
-      "vars": {
-        "TEMPLATE_REVIEWER_IDS": "",
-        "EMAIL_FROM": "noreply@texfolia.com",
-        "TURNSTILE_HOSTNAMES": "<staging hostname>",
       },
     },
   },

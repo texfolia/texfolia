@@ -14,6 +14,12 @@ Texfolia is a browser-based LaTeX workspace. Edit project files, check LaTeX err
 
 ## Local development
 
+Texfolia has two environments: local development and production. Local development
+uses local Postgres, Docker compiler containers, and Wrangler's local storage and
+Durable Object emulation through Vite. Production resources and secrets belong
+only in the Cloudflare deployment configuration and production secret store.
+Never put production database URLs or secrets in local environment files.
+
 Install [Bun](https://bun.sh) 1.4.4, [Docker](https://www.docker.com) with Compose, and the [Stripe CLI](https://docs.stripe.com/stripe-cli). Start Docker before running the app. Postgres, the Workers runtime, compiler storage, and email delivery run locally. API integrations use your configured credentials.
 
 ```sh
@@ -29,6 +35,11 @@ Set `BETTER_AUTH_SECRET` in `apps/web/.env`, for example with a value generated 
 Run `bun run --cwd apps/web billing:setup` to create or reuse the $15 Pro and $20/user Team monthly prices, then copy its price IDs into `apps/web/.env`. See [subscription billing setup and verification](docs/billing.md) for shared billing, portal configuration, and sandbox checks.
 
 Set `DATABASE_URL` in `packages/db/.env` to your local database. Keep `DATABASE_URL` and `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` in `apps/web/.env` pointed at the same database. The example values match the Compose Postgres credentials and use `db` on `localhost:5432`.
+
+Local database, compiler, and engine URLs must use `localhost`, `127.0.0.1`, or
+`[::1]`. Startup rejects cloud URLs and `CLOUDFLARE_ENV` overrides. Vite disables
+remote bindings. `db:push` and `auth:schema` also require a local database.
+Keep local integration credentials separate from production credentials.
 
 ### Forward Stripe webhooks
 
@@ -218,6 +229,9 @@ Run `bun run lint:fix` to apply automatic Oxlint fixes.
 the compiler before the web Worker. Before the first deploy, complete the
 [database deployment setup](docs/database-deployment.md), including committed
 migrations and explicit environment targeting.
+The web build script selects `env.production`; the default Wrangler web
+configuration is local emulation only. Existing production resource placeholders
+must be configured before deployment.
 
 ## Projects
 

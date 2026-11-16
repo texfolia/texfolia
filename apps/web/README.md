@@ -185,9 +185,15 @@ remain in the collaboration journal and still flush to source storage.
 
 The R2 binding in `wrangler.jsonc` uses Wrangler's local simulation during
 `bun run dev`. No R2 credentials are required locally, and local bucket data is
-stored under `.wrangler/state`. Production uses `texfolia-sources`; staging uses
-`texfolia-sources-staging`. Provision those buckets before deploying, retain
-their independent bindings, and enable the configured hourly cron.
+stored under `.wrangler/state`. The local bucket is `texfolia-sources-local`.
+Production uses `texfolia-sources` under `env.production`. Provision the production
+bucket before deploying and enable the configured hourly cron. Vite disables
+remote bindings, and local database and compiler URLs must use loopback hosts.
+
+On the first `bun run dev` after the local bucket rename, the startup script
+copies existing emulated sources into `texfolia-sources-local`. It preserves the
+old local bucket, skips files already in the new bucket, and records completion
+under `.wrangler/state/v3`. Later starts do not restore files you have deleted.
 
 Apply the schema change before deploying the Worker. Local `bun run db:push`
 updates the constraint that allows text nodes to reference R2 objects.
