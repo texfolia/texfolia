@@ -304,6 +304,8 @@ export const compileHandlers = {
         submitted = true;
         return fetchCompiler(`/projects/${params.projectId}/compile`, {
           method: "POST",
+          // Source synchronization can outlast the default 15-second timeout.
+          signal: request.signal,
           headers: {
             "Content-Type": "application/json",
             "X-Compilation-Id": id,

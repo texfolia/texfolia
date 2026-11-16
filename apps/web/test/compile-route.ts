@@ -241,8 +241,17 @@ async function completed(projectId: string, userId: string, id: string) {
 
 try {
   const original = { ...(await fixture()), id: crypto.randomUUID() };
+  beforeSubmit = async () => {
+    await Bun.sleep(16_000);
+  };
   const first = await submit(original);
+  beforeSubmit = async () => {};
   assert.equal(first.status, 202);
+  assert.equal(
+    accepted.parse(await first.clone().json()).sourceRevision,
+    1,
+    "Slow source synchronization must return compiler acceptance after 15 seconds",
+  );
   const statusUrl = first.headers.get("Location");
   // Drop the submission response before the client can read its job details.
   await first.body?.cancel();
@@ -392,10 +401,19 @@ try {
   const headers = {
     "X-Source-Metadata": await projectMetadataVersion(metadata),
   };
+  let resyncAttempts = 0;
+  beforeSubmit = async () => {
+    if (++resyncAttempts === 2) await Bun.sleep(16_000);
+  };
   const response = await submit({ ...resync, headers });
+  beforeSubmit = async () => {};
   assert.equal(response.status, 202, await response.clone().text());
   const synced = accepted.parse(await response.json());
-  assert.equal(synced.sourceRevision, 1);
+  assert.equal(
+    synced.sourceRevision,
+    1,
+    "Full resync must return compiler acceptance after 15 seconds",
+  );
   const resynced = submissions.filter((request) => request.id === resync.id);
   assert.deepEqual(
     resynced.map((request) => request.status),
