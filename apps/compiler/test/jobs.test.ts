@@ -50,10 +50,11 @@ test("preview jobs persist PNGs once and expose them through the local API", asy
       body: JSON.stringify({ ...project, preview: true }),
     });
   try {
-    expect(
-      (await runtime.fetch(new Request(`http://local/compilations/${id}.png`)))
-        .status,
-    ).toBe(404);
+    const missingPreview = await runtime.fetch(
+      new Request(`http://local/compilations/${id}.png`),
+    );
+    expect(missingPreview.status).toBe(404);
+    expect(await missingPreview.json()).toEqual({ error: "PNG not found" });
     expect((await runtime.fetch(request())).status).toBe(202);
     await started.promise;
     await runtime.close();
@@ -111,7 +112,9 @@ test("local API accepts jobs without a token and retains results across restarts
     expect(await (await first.fetch(request(statusUrl))).json()).toMatchObject({
       status: "running",
     });
-    expect((await first.fetch(request(artifactUrl))).status).toBe(404);
+    const missingPdf = await first.fetch(request(artifactUrl));
+    expect(missingPdf.status).toBe(404);
+    expect(await missingPdf.json()).toEqual({ error: "PDF not found" });
     expect((await first.fetch(submit())).status).toBe(202);
     for (let i = 0; i < 8; i++)
       expect((await first.fetch(submit())).status).toBe(202);
