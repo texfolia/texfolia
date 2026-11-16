@@ -4,6 +4,7 @@
   "globalDependencies": [
     "packages/typescript-config/**/*.json",
     "tsconfig.json",
+    "scripts/local-environment.mts",
     ".oxlintrc.json",
     ".oxfmtrc.json",
     ".github/**",

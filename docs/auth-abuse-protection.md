@@ -53,8 +53,9 @@ These unused routes cannot send email or create accounts:
 `TURNSTILE_HOSTNAMES` is a comma-separated list of exact hostnames, without
 schemes, ports, paths, or wildcards. Whitespace is trimmed and names are lowercased.
 If the variable is absent, the hostname of `BETTER_AUTH_URL` is used. Empty or
-malformed lists fail during auth configuration. Production and staging values
-are configured independently in `apps/web/wrangler.jsonc`.
+malformed lists fail during auth configuration. Local development allows
+`localhost`. The production value is configured under `env.production` in
+`apps/web/wrangler.jsonc`.
 
 Every token must report an allowed hostname and action `auth-email`. The login
 widget and server share the action constant in `auth-captcha.ts`. Missing tokens,

@@ -25,7 +25,9 @@ For standalone schema commands, copy `.env.example` to `.env` in this directory 
 bun run db:push
 ```
 
-Standalone schema tasks use the configured database without starting Docker.
+Standalone schema tasks do not start Docker. `db:push` requires a loopback
+database URL. Use reviewed migrations from the production deployment context
+for Neon.
 `bun run db:seed` runs this package's template CLI. It seeds the original templates
 in the local database configured in `packages/db/.env` or the shell and the
 web app's local R2 bucket. Run it after `db:push`; it does not apply the schema.
@@ -34,8 +36,8 @@ seed behavior and remote seeding.
 
 Local development and CI use `db:push`. No generated migrations or
 snapshots are tracked yet. Generate and review the baseline only after the v1
-schema settles, immediately before the first production deploy. Staging and
-production must use committed migrations. Follow the
+schema settles, immediately before the first production deploy. Production
+must use committed migrations. Follow the
 [Neon and Hyperdrive deployment guide](../../docs/database-deployment.md).
 
 ## Change the schema

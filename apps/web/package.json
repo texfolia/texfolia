@@ -8,10 +8,10 @@
   "scripts": {
     "auth:schema": "bunx auth generate --output ../../packages/db/src/auth-schema.ts --config ./auth.config.ts --yes",
     "billing:setup": "bun run scripts/setup-billing.ts",
-    "build": "bun run latex:assets && vite build",
+    "build": "bun run latex:assets && CLOUDFLARE_ENV=production vite build",
     "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --strict-vars=false",
     "deploy": "wrangler deploy",
-    "dev": "bun run latex:assets && vite dev --port 3000 --strictPort",
+    "dev": "bun run scripts/migrate-local-storage.ts && bun run latex:assets && vite dev --port 3000 --strictPort",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "generate-routes": "tsr generate",

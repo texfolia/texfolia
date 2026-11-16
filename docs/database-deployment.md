@@ -26,85 +26,86 @@ Local development and CI continue to use plain Postgres and `db:push`.
 
 The current deploy scripts do not run database migrations. Complete the workflow
 change at launch. After the baseline is committed, generate a new reviewed
-migration for each schema change. Preserve migrations already applied to staging
-or production. See [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
+migration for each schema change. Preserve migrations already applied to production. See [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
 
 The repository has no SQL scripts or generated migrations before production
 setup. For a new production database, apply the baseline once. For any existing
 deployment, inspect its actual schema and migration history, then prepare and
 review the required upgrade separately.
 
-## Provision the databases and Hyperdrive
+## Provision the production database and Hyperdrive
 
-1. Create a Neon project in the chosen database region. Use `main` for production
-   and create a `staging` branch before production receives user data. Record the
-   provider and region for Worker placement. See [Neon branches](https://neon.com/docs/manage/branches).
-2. Save each branch's direct Postgres connection string in the deployment secret
-   store. Turn off Neon's connection-pooling option when retrieving the
-   Hyperdrive origin connection. Follow the
+1. Create a Neon project in the chosen database region. Use `main` for production.
+   Record the provider and region for Worker placement.
+2. Save the direct Postgres connection string in the production deployment secret
+   store. Keep production credentials out of local `.env` and `.dev.vars` files.
+   Turn off Neon's connection-pooling option when retrieving the Hyperdrive origin
+   connection. Follow the
    [Neon connection guide](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-database-providers/neon/).
-3. In the intended Cloudflare account, create separate Hyperdrive configurations
-   for those branch connections. Disable query caching on both configurations
-   before binding them to a Worker. Keep credentials out of tracked files and
-   command history.
-4. Verify each configuration's origin branch and `caching.disabled` value in the
-   dashboard or with the project-local `wrangler hyperdrive get` command. Both
-   must have caching disabled. Record their IDs for the bindings.
+3. In the intended Cloudflare account, create the production Hyperdrive
+   configuration. Disable query caching before binding it to the Worker.
+   Keep credentials out of tracked files and command history.
+4. Verify the configuration's origin and `caching.disabled` value in the dashboard
+   or with the project-local `wrangler hyperdrive get` command. Record its ID for
+   the production binding.
 
 Caching belongs to the Hyperdrive configuration, not the Wrangler binding.
 Cloudflare enables it by default. See
 [Disable caching](https://developers.cloudflare.com/hyperdrive/concepts/query-caching/#disable-caching)
 for the `--caching-disabled` option when creating or updating configurations.
 
-## Configure each Worker environment
+## Configure the production Workers
 
-Edit `apps/web/wrangler.jsonc` before building the deployment artifact.
+Texfolia has two environments: local development and production. Local development
+uses loopback Postgres, Docker compiler containers, and local Worker storage.
+Production uses Cloudflare Workers, Containers, R2, queues, Durable Objects, and
+Neon through Hyperdrive. These environments do not share resources or secrets.
 
-1. Replace `env.production.hyperdrive` and `env.staging.hyperdrive` placeholder
-   IDs with the corresponding cache-disabled configurations. Keep the binding
-   name `HYPERDRIVE` so all application queries use it.
-2. Add a `placement` setting to each environment with the matching database
-   region. For example, use `"placement": { "region": "aws:us-east-1" }` only
-   for a database in that region. See
+Edit `apps/web/wrangler.jsonc` before building the production deployment artifact.
+
+1. Replace the existing `env.production.hyperdrive` placeholder ID with the
+   cache-disabled production configuration. Keep the binding name `HYPERDRIVE`.
+2. Add a production `placement` setting with the matching database region.
+   For example, use `"placement": { "region": "aws:us-east-1" }` only for a
+   database in that region. See
    [Placement hints](https://developers.cloudflare.com/workers/configuration/placement/#configure-explicit-placement-hints).
-3. Replace `<staging hostname>` in staging's `TURNSTILE_HOSTNAMES`. Configure the
-   actual routes, auth origins, Turnstile keys, OAuth callbacks, Stripe settings,
-   email delivery, and secrets for each deployed hostname.
-4. Provision `texfolia-sources` and `texfolia-sources-staging`. Keep their existing
-   environment bindings independent. Provision compiler buckets and queues using
-   the [compiler deployment guide](../apps/compiler/README.md#deploy-to-cloudflare).
-5. Configure a separate staging compiler before deploying staging. The current
-   compiler configuration defines only `texfolia-compiler`, while the web staging
-   binding expects `texfolia-compiler-staging`. Give the staging compiler its own
-   bucket and queues. Do not point it at production storage or queue consumers.
-6. Run `bun run cf:typegen` after changing bindings.
+3. Configure production routes, auth origins, Turnstile keys, OAuth callbacks,
+   Stripe settings, email delivery, and Worker secrets in the production account.
+   Never copy production secrets into local environment files.
+4. Provision the existing production source bucket `texfolia-sources`. Provision
+   the compiler's existing bucket, queues, and container infrastructure using the
+   [compiler deployment guide](../apps/compiler/README.md#deploy-to-cloudflare).
+   The production web service binds `COMPILER` to `texfolia-compiler`.
+5. Run `bun run cf:typegen` after changing bindings.
 
-Keep the default web configuration for local development. Its placeholder
-Hyperdrive ID works with the local connection override and is not a deploy
-target. Keep `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` pointed at
-local Postgres. Local R2 and email remain Wrangler simulations.
+The top-level web configuration is for local emulation. Its local Worker,
+source bucket, and compiler service names are distinct from production. Remote
+Vite bindings are disabled. Keep `DATABASE_URL` and
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` on loopback hosts.
+The local Hyperdrive placeholder is not a cloud configuration ID.
 
-## Migrate, deploy, and verify each environment
+## Migrate, deploy, and verify production
 
-1. Run the reviewed, committed migrations with `DATABASE_URL` set to the target
-   branch's direct connection. Never use `db:push` against staging or production.
-2. Deploy that environment's compiler before its web Worker.
-3. Build the web app with `CLOUDFLARE_ENV=staging` or `CLOUDFLARE_ENV=production`
-   set at build time. Inspect the generated Wrangler configuration for the Worker
-   name, Hyperdrive ID, source bucket, and compiler service before deploying it.
-   Deploy the artifact built for that environment. Selecting an environment only
-   at deploy time does not retarget the Vite build. See
+1. Run the full app checks locally before deployment. Verify sign-in, project
+   creation, source save and reload, collaboration, compilation, PDF retrieval,
+   and template copying against local Postgres and local storage.
+2. Run the reviewed, committed migrations from the production deployment context
+   with `DATABASE_URL` set to Neon's direct connection. Use `db:migrate`.
+   `db:push` accepts only local databases.
+3. Run `bun run deploy` after the migration succeeds. Turbo builds the web app
+   for `env.production` and deploys `texfolia-compiler` before `texfolia-web`.
+   `bun run --cwd apps/web build` explicitly sets `CLOUDFLARE_ENV=production`.
+   Inspect the generated Worker name, Hyperdrive ID, source bucket, and compiler
+   service before deploying the artifact. Selecting an environment only at deploy
+   time does not retarget a Vite build. See
    [Cloudflare Vite environments](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/).
-4. Seed the original templates using the target database and source bucket as
-   described in [Seed original templates](templates.md#seed-original-templates).
-5. Verify sign-in, project creation, source save and reload, collaboration,
-   compilation, PDF retrieval, and template copying on staging before production.
-   Confirm a saved write is visible immediately and recheck that Hyperdrive
-   caching is disabled. Inspect Worker logs for database and binding errors.
-6. Repeat the migration, deployment, seed, and verification steps for production
-   using its own configuration and secrets.
+4. Seed the original templates from the production deployment context using the
+   production database and source bucket as described in
+   [Seed original templates](templates.md#seed-original-templates).
+5. Check the deployed production app and inspect Worker logs for database and
+   binding errors. Confirm saved writes are visible immediately and Hyperdrive
+   query caching remains disabled.
 
-Treat `bun run deploy` as incomplete launch tooling until the migration step and
-environment targeting above are wired in. It currently builds the default web
-configuration and deploys the default compiler. Completing this guide's launch
-steps is required before closing NAT-198.
+The current deploy scripts do not run database migrations. Complete that launch
+workflow before the first production deploy. Account, route, secret provisioning,
+and the existing production placeholder values remain launch setup work.
