@@ -95,7 +95,7 @@ export function createApp() {
             "Cache-Control": "no-store",
           },
         })
-      : c.json({ error: "PDF not found" }, 404);
+      : c.json({ error: `${extension.toUpperCase()} not found` }, 404);
   });
   app.onError((error, c) => {
     if (error instanceof HTTPException) return error.getResponse();
