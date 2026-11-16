@@ -238,9 +238,10 @@ export async function openTemplate({
           )
       ).map((row) => row.name),
     );
-    let name = source.title;
+    const requestedName = data.name ?? source.title;
+    let name = requestedName;
     for (let suffix = 2; names.has(name); suffix++)
-      name = `${source.title} (${suffix})`;
+      name = `${requestedName} (${suffix})`;
     const projectId = crypto.randomUUID();
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,

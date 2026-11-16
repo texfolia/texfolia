@@ -4,6 +4,9 @@ import {
   project,
   projectCollaborator,
   projectNode,
+  projectTag,
+  tag,
+  user,
 } from "@texfolia/db/schema";
 import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import type { z } from "zod";
@@ -17,6 +20,8 @@ import { lockProject } from "./project-access.server";
 import type { SourceBucket } from "./project-source.server";
 import type {
   createProjectSchema,
+  renameProjectSchema,
+  projectTagsSchema,
   updateProjectFormattingSchema,
 } from "./project.schema";
 
@@ -89,13 +94,25 @@ export async function createProject({
       sizeBytes: 0n,
     });
 
-    return { ...newProject, collaborators: [] };
+    const owner = await tx.query.user.findFirst({
+      where: { id: ownerId },
+      columns: { id: true, name: true, image: true },
+    });
+    return {
+      ...newProject,
+      collaborators: [],
+      owner: owner ?? null,
+      people: owner ? [{ ...owner, role: "owner" }] : [],
+      tags: [],
+      canWrite: true,
+      canDelete: true,
+    };
   });
 }
 
 export async function getProjects({ db, ownerId }: ProjectOwner) {
   const memberships = await db
-    .select({ id: member.organizationId })
+    .select({ id: member.organizationId, role: member.role })
     .from(member)
     .where(eq(member.userId, ownerId));
   const accessible = await db
@@ -128,11 +145,12 @@ export async function getProjects({ db, ownerId }: ProjectOwner) {
       ),
     );
   if (!accessible.length) return [];
-  return db.query.project.findMany({
+  const rows = await db.query.project.findMany({
     with: {
+      owner: { columns: { id: true, name: true, image: true } },
       collaborators: {
         with: {
-          user: true,
+          user: { columns: { id: true, name: true, image: true } },
         },
       },
     },
@@ -140,6 +158,132 @@ export async function getProjects({ db, ownerId }: ProjectOwner) {
       id: { in: accessible.map((item) => item.id) },
       deletedAt: { isNull: true },
     },
+  });
+  const labels = await db
+    .select({ projectId: projectTag.projectId, name: tag.name })
+    .from(projectTag)
+    .innerJoin(tag, eq(tag.id, projectTag.tagId))
+    .where(
+      and(
+        eq(tag.userId, ownerId),
+        inArray(
+          projectTag.projectId,
+          accessible.map((item) => item.id),
+        ),
+      ),
+    );
+  const organizationPeople = memberships.length
+    ? await db
+        .select({
+          organizationId: member.organizationId,
+          id: user.id,
+          name: user.name,
+          image: user.image,
+          role: member.role,
+        })
+        .from(member)
+        .innerJoin(user, eq(member.userId, user.id))
+        .where(
+          inArray(
+            member.organizationId,
+            memberships.map((item) => item.id),
+          ),
+        )
+    : [];
+  return rows.map((row) => ({
+    ...row,
+    tags: labels
+      .filter((label) => label.projectId === row.id)
+      .map((label) => label.name)
+      .sort(),
+    people: row.organizationId
+      ? organizationPeople
+          .filter((person) => person.organizationId === row.organizationId)
+          .map(({ organizationId: _organizationId, ...person }) => person)
+      : [
+          ...(row.owner ? [{ ...row.owner, role: "owner" }] : []),
+          ...row.collaborators.flatMap((person) =>
+            person.user ? [{ ...person.user, role: person.role }] : [],
+          ),
+        ],
+    canWrite:
+      !!row.organizationId ||
+      row.ownerId === ownerId ||
+      row.collaborators.some(
+        (person) => person.userId === ownerId && person.role === "editor",
+      ),
+    canDelete:
+      row.ownerId === ownerId ||
+      memberships.some(
+        (membership) =>
+          membership.id === row.organizationId &&
+          membership.role
+            .split(",")
+            .some((role) => role === "owner" || role === "admin"),
+      ),
+  }));
+}
+
+export async function renameProject({
+  db,
+  ownerId,
+  data,
+}: ProjectOwner & { data: z.infer<typeof renameProjectSchema> }) {
+  await db.transaction(async (tx) => {
+    await lockProject({ tx, projectId: data.projectId, userId: ownerId });
+    await tx
+      .update(project)
+      .set({ name: data.name })
+      .where(eq(project.id, data.projectId));
+  });
+}
+
+export async function setProjectTags({
+  db,
+  ownerId,
+  data,
+}: ProjectOwner & { data: z.infer<typeof projectTagsSchema> }) {
+  await db.transaction(async (tx) => {
+    // Private labels serialize per user, including when that user labels different projects.
+    await tx
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, ownerId))
+      .for("update");
+    await lockProject({
+      tx,
+      projectId: data.projectId,
+      userId: ownerId,
+      access: "read",
+    });
+    const ownTags = await tx
+      .select({ id: tag.id })
+      .from(tag)
+      .where(eq(tag.userId, ownerId));
+    if (ownTags.length)
+      await tx.delete(projectTag).where(
+        and(
+          eq(projectTag.projectId, data.projectId),
+          inArray(
+            projectTag.tagId,
+            ownTags.map((item) => item.id),
+          ),
+        ),
+      );
+    if (!data.tags.length) return;
+    await tx
+      .insert(tag)
+      .values(data.tags.map((name) => ({ userId: ownerId, name })))
+      .onConflictDoNothing();
+    const selected = await tx
+      .select({ id: tag.id })
+      .from(tag)
+      .where(and(eq(tag.userId, ownerId), inArray(tag.name, data.tags)));
+    await tx
+      .insert(projectTag)
+      .values(
+        selected.map((item) => ({ projectId: data.projectId, tagId: item.id })),
+      );
   });
 }
 

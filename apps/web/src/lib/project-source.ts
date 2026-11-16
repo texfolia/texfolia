@@ -10,6 +10,17 @@ export const sourceContentSchema = z
 
 export type SourceFiles = Record<string, string | { base64: string }>;
 
+export function sourceFileKind(file: {
+  name: string;
+  type: string;
+}): "text" | "binary" {
+  return /\.(tex|ltx|latex|bib|sty|cls|clo|bst|bbx|cbx|lbx|cfg|def|json|yaml|yml|toml|ini|csv|tsv|md|markdown|txt|svg|xml|lua|py|r|jl|sh|js|ts|css|html)$/i.test(
+    file.name,
+  ) || file.type.startsWith("text/")
+    ? "text"
+    : "binary";
+}
+
 export function encodeSource(bytes: Uint8Array) {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 8192)

@@ -1,29 +1,20 @@
 import {
+  IconArrowDown,
+  IconArrowsSort,
+  IconArrowUp,
+  IconFileText,
   IconFolderOpen,
-  IconSearch,
   IconLayoutGrid,
-  IconTemplate,
-  IconLogout,
   IconPlus,
+  IconSearch,
   IconSettings,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
-import { ClientOnly, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
-import { Card } from "#/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "#/components/ui/dialog";
 import {
   Empty,
   EmptyContent,
@@ -39,15 +30,20 @@ import {
 } from "#/components/ui/input-group";
 import { Kbd } from "#/components/ui/kbd";
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuItem,
   SidebarTrigger,
 } from "#/components/ui/sidebar";
 import {
@@ -58,54 +54,71 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
-import { authClient } from "#/lib/auth-client";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
 import { features } from "#/lib/features";
 import { useProjects } from "#/providers/projects-provider";
 import { useSettings } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 
-import { GitImport } from "./git-import";
+import { NewProjectDialog } from "./new-project-dialog";
+import { ProjectAccountMenu } from "./project-account-menu";
 import { columns } from "./project-columns";
-import { ProjectForm } from "./project-form";
 
-function SearchShortcut() {
-  const { shortcuts } = useSettings();
-  return <Kbd>{shortcuts.search}</Kbd>;
-}
-
-export function ProjectList() {
-  const [query, setQuery] = useState("");
-  const [signOutError, setSignOutError] = useState("");
+export function ProjectList({
+  user,
+}: {
+  user: { name: string; email: string; image?: string | null };
+}) {
   const [creating, setCreating] = useState(false);
   const store = useProjects();
   const { data: projects } = useLiveQuery(store.projects);
+  const { shortcuts } = useSettings();
   const search = useRef<HTMLInputElement>(null);
   useAppShortcut("search", () => {
     search.current?.focus();
     search.current?.select();
   });
   useAppShortcut("newProject", () => setCreating(true));
-
+  useEffect(() => {
+    if (sessionStorage.getItem("texfolia.git.import")) setCreating(true);
+  }, []);
   const table = useTable({
     key: "projects",
     features,
     columns,
-    data: projects.filter((project) =>
-      project.name.toLowerCase().includes(query.trim().toLowerCase()),
-    ),
+    data: projects,
+    initialState: { sorting: [{ id: "updatedAt", desc: true }] },
   });
-
+  const nameFilter = table.getColumn("name");
+  const tagFilter = table.getColumn("tags");
+  const query = nameFilter?.getFilterValue();
+  const tagValue = tagFilter?.getFilterValue();
+  const selectedTag =
+    Array.isArray(tagValue) && typeof tagValue[0] === "string"
+      ? tagValue[0]
+      : "";
+  const recent = [...projects]
+    .sort(
+      (a, b) =>
+        b.updatedAt.getTime() - a.updatedAt.getTime() ||
+        a.name.localeCompare(b.name),
+    )
+    .slice(0, 6);
+  const tags = [...new Set(projects.flatMap((project) => project.tags))].sort();
   return (
-    <Dialog open={creating} onOpenChange={setCreating}>
-      <Sidebar>
-        <SidebarHeader className="h-20 justify-center px-6">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <Link to="/" className="font-serif text-3xl tracking-tight">
-                Texfolia.
-              </Link>
-            </SidebarMenuItem>
-          </SidebarMenu>
+    <>
+      <Sidebar variant="inset">
+        <SidebarHeader className="px-4 py-5">
+          <Link
+            to="/projects"
+            className="px-2 text-xl font-semibold tracking-tight"
+          >
+            Texfolia<span className="text-muted-foreground">.</span>
+          </Link>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
@@ -116,168 +129,241 @@ export function ProjectList() {
                   Projects
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  render={<Link to="/templates" search={{ page: 0 }} />}
-                >
-                  <IconTemplate />
-                  Templates
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
+          </SidebarGroup>
+          <SidebarGroup>
+            <SidebarGroupLabel title="Most recently updated">
+              Recent projects
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {recent.map((project) => (
+                <SidebarMenuItem key={project.id}>
+                  <SidebarMenuButton
+                    render={
+                      <Link
+                        to="/project/$projectId"
+                        params={{ projectId: project.id }}
+                      />
+                    }
+                    tooltip={project.name}
+                  >
+                    <IconFileText />
+                    <span>{project.name}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+            {!recent.length && (
+              <p className="text-muted-foreground px-2 py-2 text-xs">
+                Your projects will appear here.
+              </p>
+            )}
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton render={<Link to="/settings/billing" />}>
-                Billing
-              </SidebarMenuButton>
               <SidebarMenuButton render={<Link to="/settings" />}>
                 <IconSettings />
                 Settings
               </SidebarMenuButton>
-              <SidebarMenuButton
-                onClick={async () => {
-                  try {
-                    const result = await authClient.signOut();
-                    if (result.error) throw new Error();
-                    window.location.assign("/");
-                  } catch {
-                    setSignOutError("Could not sign out. Try again.");
-                  }
-                }}
-              >
-                <IconLogout />
-                Sign out
-              </SidebarMenuButton>
-              {signOutError && (
-                <p role="alert" className="text-destructive p-2 text-xs">
-                  {signOutError}
-                </p>
-              )}
             </SidebarMenuItem>
           </SidebarMenu>
+          <ProjectAccountMenu user={user} />
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 sm:px-6">
+          <SidebarTrigger />
+          <span className="text-muted-foreground text-sm">Workspace</span>
+        </header>
         <div
           id="main-content"
-          className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8 sm:px-10 sm:py-12"
+          className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-7 px-4 py-7 sm:px-8 sm:py-9"
         >
-          <div className="flex items-center gap-2">
-            <SidebarTrigger />
-            <div className="flex-1">
-              <h1 className="text-3xl font-semibold tracking-tight">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
                 Projects
               </h1>
-              <p className="text-muted-foreground mt-2 hidden text-sm sm:block">
+              <p className="text-muted-foreground mt-1 text-sm">
                 Your papers, ideas, and works in progress.
               </p>
             </div>
-            <Link
-              to="/templates"
-              search={{ page: 0 }}
-              className="hidden text-sm underline underline-offset-4 sm:inline"
-            >
-              Templates
-            </Link>
-            <DialogTrigger render={<Button size="lg" />}>
-              <IconPlus />
-              New project
-            </DialogTrigger>
+            <Tooltip>
+              <TooltipTrigger
+                render={<Button onClick={() => setCreating(true)} />}
+              >
+                <IconPlus />
+                New project
+              </TooltipTrigger>
+              <TooltipContent role="tooltip">
+                New project{" "}
+                <Kbd>{shortcuts.newProject.replaceAll(" ", " then ")}</Kbd>
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <GitImport />
-          <InputGroup className="max-w-sm">
-            <InputGroupInput
-              ref={search}
-              aria-label="Search projects"
-              placeholder="Search projects..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <InputGroupAddon>
-              <IconSearch />
-            </InputGroupAddon>
-            <InputGroupAddon align="inline-end">
-              <ClientOnly fallback={<Kbd>Mod+K</Kbd>}>
-                <SearchShortcut />
-              </ClientOnly>
-            </InputGroupAddon>
-          </InputGroup>
-          <Card className="gap-0 overflow-hidden py-0">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        <table.FlexRender header={header} />
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && "selected"}
-                    >
-                      {row.getAllCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          <table.FlexRender cell={cell} />
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={columns.length}>
-                      <Empty>
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <IconFolderOpen />
-                          </EmptyMedia>
-                          <EmptyTitle>
-                            {projects.length
-                              ? "No matching projects"
-                              : "No projects yet"}
-                          </EmptyTitle>
-                          <EmptyDescription>
-                            {projects.length
-                              ? "Try another search, or create a project."
-                              : "Create your first LaTeX workspace."}
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <EmptyContent>
-                          <Button onClick={() => setCreating(true)}>
-                            Create Project
-                          </Button>
-                        </EmptyContent>
-                      </Empty>
-                    </TableCell>
-                  </TableRow>
+          {projects.length === 0 ? (
+            <Empty className="min-h-[55svh] border-0">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <IconFolderOpen />
+                </EmptyMedia>
+                <EmptyTitle className="text-2xl">No projects yet</EmptyTitle>
+                <EmptyDescription className="max-w-sm">
+                  Make room for your next idea. Start with a blank document,
+                  choose a template, or bring your existing work.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={() => setCreating(true)}>
+                  <IconPlus />
+                  Create your first project
+                </Button>
+                <p className="text-muted-foreground text-xs">
+                  Template, Git repository, or files and folders
+                </p>
+              </EmptyContent>
+            </Empty>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <InputGroup className="w-full sm:max-w-sm">
+                  <InputGroupInput
+                    ref={search}
+                    aria-label="Search projects"
+                    placeholder="Search projects…"
+                    value={typeof query === "string" ? query : ""}
+                    onChange={(event) =>
+                      nameFilter?.setFilterValue(event.target.value)
+                    }
+                  />
+                  <InputGroupAddon>
+                    <IconSearch />
+                  </InputGroupAddon>
+                  <InputGroupAddon align="inline-end">
+                    <Kbd>{shortcuts.search}</Kbd>
+                  </InputGroupAddon>
+                </InputGroup>
+                <NativeSelect
+                  aria-label="Filter by tag"
+                  value={typeof selectedTag === "string" ? selectedTag : ""}
+                  onChange={(event) =>
+                    tagFilter?.setFilterValue(
+                      event.target.value ? [event.target.value] : undefined,
+                    )
+                  }
+                >
+                  <NativeSelectOption value="">All tags</NativeSelectOption>
+                  {tags.map((tag) => (
+                    <NativeSelectOption key={tag} value={tag}>
+                      {tag}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                {Boolean(query || selectedTag) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => table.resetColumnFilters()}
+                  >
+                    Clear filters
+                  </Button>
                 )}
-              </TableBody>
-            </Table>
-          </Card>
+                <span
+                  className="text-muted-foreground ml-auto text-xs tabular-nums"
+                  role="status"
+                >
+                  {table.getRowModel().rows.length} of {projects.length}{" "}
+                  projects
+                </span>
+              </div>
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((group) => (
+                      <TableRow key={group.id}>
+                        {group.headers.map((header) => {
+                          const sorted = header.column.getIsSorted();
+                          return (
+                            <TableHead
+                              key={header.id}
+                              aria-sort={
+                                sorted === "asc"
+                                  ? "ascending"
+                                  : sorted === "desc"
+                                    ? "descending"
+                                    : undefined
+                              }
+                              className="bg-muted/40 px-4"
+                            >
+                              {header.column.getCanSort() ? (
+                                <button
+                                  type="button"
+                                  className="hover:text-foreground focus-visible:ring-ring -mx-1 flex items-center gap-2 rounded px-1 py-3 text-xs font-medium outline-none focus-visible:ring-2"
+                                  onClick={header.column.getToggleSortingHandler()}
+                                >
+                                  <table.FlexRender header={header} />
+                                  {sorted === "asc" ? (
+                                    <IconArrowUp className="size-3.5" />
+                                  ) : sorted === "desc" ? (
+                                    <IconArrowDown className="size-3.5" />
+                                  ) : (
+                                    <IconArrowsSort className="size-3.5 opacity-50" />
+                                  )}
+                                </button>
+                              ) : (
+                                <table.FlexRender header={header} />
+                              )}
+                            </TableHead>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getAllCells().map((cell) => (
+                          <TableCell key={cell.id} className="px-4">
+                            <table.FlexRender cell={cell} />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                    {!table.getRowModel().rows.length && (
+                      <TableRow>
+                        <TableCell colSpan={columns.length}>
+                          <Empty className="py-14">
+                            <EmptyHeader>
+                              <EmptyMedia variant="icon">
+                                <IconSearch />
+                              </EmptyMedia>
+                              <EmptyTitle>No matching projects</EmptyTitle>
+                              <EmptyDescription>
+                                Try a different name or tag.
+                              </EmptyDescription>
+                            </EmptyHeader>
+                            <EmptyContent>
+                              <Button
+                                variant="outline"
+                                onClick={() => table.resetColumnFilters()}
+                              >
+                                Clear filters
+                              </Button>
+                            </EmptyContent>
+                          </Empty>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
         </div>
       </SidebarInset>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New Project</DialogTitle>
-          <DialogDescription>
-            Give your workspace a name. You can add files and share with
-            existing Texfolia accounts inside.
-          </DialogDescription>
-        </DialogHeader>
-        <ProjectForm />
-        <DialogFooter>
-          <DialogClose>Close</DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {creating && <NewProjectDialog open onOpenChange={setCreating} />}
+    </>
   );
 }

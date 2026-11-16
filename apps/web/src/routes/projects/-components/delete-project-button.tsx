@@ -1,4 +1,3 @@
-import { IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 
 import {
@@ -10,20 +9,21 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "#/components/ui/alert-dialog";
-import { Button } from "#/components/ui/button";
 import { toast } from "#/components/ui/toast";
 import type { Project } from "#/lib/project.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 export function DeleteProjectButton({
   project,
+  open,
+  onOpenChange,
 }: {
   project: Pick<Project, "id" | "name">;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const projects = useProjects();
-  const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +44,7 @@ export function DeleteProjectButton({
       return;
     }
 
-    setOpen(false);
+    onOpenChange(false);
     setIsDeleting(false);
   }
 
@@ -54,15 +54,9 @@ export function DeleteProjectButton({
       onOpenChange={(nextOpen) => {
         if (isDeleting) return;
         setError(null);
-        setOpen(nextOpen);
+        onOpenChange(nextOpen);
       }}
     >
-      <AlertDialogTrigger
-        render={<Button size="icon" variant="ghost" />}
-        aria-label={`Delete ${project.name}`}
-      >
-        <IconTrash />
-      </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete project?</AlertDialogTitle>

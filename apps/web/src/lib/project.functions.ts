@@ -6,6 +6,9 @@ import { ensureSession } from "./auth.functions";
 import {
   createProjectSchema,
   updateProjectFormattingSchema,
+  renameProjectSchema,
+  projectTagsSchema,
+  importProjectFilesSchema,
 } from "./project.schema";
 
 export const createProject = createServerFn({ method: "POST" })
@@ -57,6 +60,43 @@ export const getProject = createServerFn({ method: "GET" })
 export type Project = Awaited<ReturnType<typeof getProjects>>[number];
 export type ProjectDetails = Awaited<ReturnType<typeof getProject>>;
 export type ProjectNode = ProjectDetails["nodes"][number];
+
+export const renameProject = createServerFn({ method: "POST" })
+  .validator(renameProjectSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.renameProject({
+      db: context.db,
+      ownerId: session.user.id,
+      data,
+    });
+  });
+
+export const setProjectTags = createServerFn({ method: "POST" })
+  .validator(projectTagsSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.setProjectTags({
+      db: context.db,
+      ownerId: session.user.id,
+      data,
+    });
+  });
+
+export const importProjectFiles = createServerFn({ method: "POST" })
+  .validator(importProjectFilesSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-import.server");
+    return server.importProjectFiles({
+      db: context.db,
+      bucket: env.SOURCES,
+      ownerId: session.user.id,
+      data,
+    });
+  });
 
 export const updateProjectFormatting = createServerFn({ method: "POST" })
   .validator(updateProjectFormattingSchema)

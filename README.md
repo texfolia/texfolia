@@ -219,6 +219,12 @@ the compiler before the web Worker. Before the first deploy, complete the
 [database deployment setup](docs/database-deployment.md), including committed
 migrations and explicit environment targeting.
 
+## Projects
+
+The authenticated `/projects` dashboard combines blank/template creation, Git import,
+and files/folder uploads in one dialog. It includes private tags and a sortable,
+client-filtered table. See [Projects dashboard](docs/projects.md) for details.
+
 ## Templates
 
 Browse `/templates`, publish a saved project at `/templates/publish`, and open an
