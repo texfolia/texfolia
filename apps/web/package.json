@@ -31,6 +31,7 @@
     "test:production-assets": "bun run test/production-assets.ts",
     "test:projects": "bun run test/projects.ts",
     "test:settings": "bun run test/settings.ts",
+    "test:synctex": "bun run test/synctex.ts",
     "test:template-lifecycle": "bun run build && bun run test/template-lifecycle.ts",
     "test:template-lifecycle:prebuilt": "bun run test/template-lifecycle.ts",
     "test:themes": "bun run test/theme-preview.ts",

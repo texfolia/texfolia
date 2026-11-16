@@ -43,6 +43,7 @@ import {
 } from "#/components/ui/context-menu";
 import { SidebarProvider } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
+import { useSyncTex } from "#/hooks/use-synctex";
 import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
 import { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
@@ -56,6 +57,7 @@ import { projectOutline } from "#/lib/latex/outline";
 import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
 import type { CompileSources } from "#/lib/latex/source-sync";
 import { addLatexPackage, packageInsertion } from "#/lib/latex/symbols";
+import { sourceToPdf } from "#/lib/latex/synctex";
 import {
   reconcileSourceDrafts,
   serializeSourceDrafts,
@@ -227,6 +229,11 @@ function FileEditor({
             ...workspace.symbolPreamble,
             addPackage: workspace.addSymbolPackage,
           }
+        }
+        onRevealPdf={
+          workspace.synctex
+            ? (line) => workspace.revealPdf(path, line)
+            : undefined
         }
         onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
       />
@@ -565,6 +572,25 @@ export function ProjectWorkspace({
     return () => controller.abort();
   }, [sharedPdfUrl, compiling, buildMetadata, streamedBuild]);
   const stale = sourceChanged || (buildMetadata?.stale ?? false);
+  const synctex = useSyncTex({
+    projectId,
+    build: buildMetadata,
+    pdfBuildId:
+      streamedBuild?.id ??
+      (pdf && sharedPdfUrl && displayedPdfUrl.current === sharedPdfUrl
+        ? (buildMetadata?.artifacts?.id ?? null)
+        : null),
+    paths,
+    stale,
+  });
+  const [pdfJump, setPdfJump] = useState<Workspace["pdfJump"]>(null);
+  function revealPdf(path: string, line: number) {
+    if (!synctex || !buildMetadata?.artifacts?.pdf) return;
+    const location = sourceToPdf(synctex, path, line);
+    if (!location) return;
+    openGenerated(buildMetadata.artifacts.pdf, true);
+    setPdfJump({ index: synctex, location });
+  }
   const pdfSaveState =
     !streamedBuild || buildMetadata?.artifacts?.id === streamedBuild.id
       ? "saved"
@@ -1353,6 +1379,9 @@ export function ProjectWorkspace({
         reportSyntax,
         jump,
         pdf,
+        synctex,
+        pdfJump,
+        revealPdf,
         pdfSaveState,
         formatSettings,
       }}

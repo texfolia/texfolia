@@ -85,6 +85,7 @@ type EditorProps = {
   onChange?: (value: string) => void;
   onCreateEditor?: (view: EditorView) => void;
   onOpenPreview?: () => void;
+  onRevealPdf?: (line: number) => void;
   allowOpenFile?: boolean;
   completion?: CompletionSource;
   problems?: LatexProblem[];
@@ -105,6 +106,7 @@ export function Editor({
   onChange,
   onCreateEditor,
   onOpenPreview,
+  onRevealPdf,
   allowOpenFile = true,
   completion,
   problems,
@@ -117,6 +119,8 @@ export function Editor({
   const editor = useRef<ReactCodeMirrorRef>(null);
   const problemsRef = useRef(problems);
   problemsRef.current = problems;
+  const revealPdf = useRef(onRevealPdf);
+  revealPdf.current = onRevealPdf;
   const syntaxCallback = useRef(onSyntaxProblems);
   syntaxCallback.current = onSyntaxProblems;
   const container = useRef<HTMLDivElement>(null);
@@ -258,6 +262,24 @@ export function Editor({
             ...(readOnly ? [] : [Prec.highest(keymap.of(yUndoManagerKeymap))]),
           ]
         : []),
+      EditorView.domEventHandlers({
+        mousedown(event, view) {
+          if (
+            event.button !== 0 ||
+            !(event.metaKey || event.ctrlKey) ||
+            !revealPdf.current
+          )
+            return false;
+          const position = view.posAtCoords({
+            x: event.clientX,
+            y: event.clientY,
+          });
+          if (position === null) return false;
+          event.preventDefault();
+          revealPdf.current(view.state.doc.lineAt(position).number);
+          return true;
+        },
+      }),
       language,
       ...(isMarkdown ? [markdown()] : []),
       EditorView.theme({
@@ -457,6 +479,20 @@ export function Editor({
                 <IconDots />
               </DropdownMenuTrigger>
               <DropdownMenuContent>
+                {onRevealPdf && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const view = editor.current?.view;
+                      if (view)
+                        onRevealPdf(
+                          view.state.doc.lineAt(view.state.selection.main.head)
+                            .number,
+                        );
+                    }}
+                  >
+                    Reveal in PDF
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   disabled={readOnly || !status.undo}
                   onClick={() => commandRef.current("undo")}

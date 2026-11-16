@@ -30,6 +30,12 @@ import {
 import { Input } from "#/components/ui/input";
 import { downloadFile } from "#/lib/download-file";
 import { reportCompilePreview } from "#/lib/latex/compile-telemetry";
+import {
+  pdfToSource,
+  rotatePdfPoint,
+  type SyncTexIndex,
+  type SyncTexLocation,
+} from "#/lib/latex/synctex";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";
@@ -41,26 +47,38 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 type PdfFile = string | File;
-type PdfViewerProps = { file: PdfFile; filename?: string };
+type PdfSync = {
+  index: SyncTexIndex;
+  reveal: (path: string, line: number) => void;
+  target: SyncTexLocation | null;
+};
+type PdfViewerProps = { file: PdfFile; filename?: string; sync?: PdfSync };
 type LoadState =
   | { kind: "loading" }
   | { kind: "ready"; pages: number }
   | { kind: "error"; message: string };
 type Zoom = { kind: "fit" } | { kind: "scale"; value: number };
 
-export default function PdfViewer({ file, filename }: PdfViewerProps) {
+export default function PdfViewer({ file, filename, sync }: PdfViewerProps) {
   return (
     <PdfPanel
       file={file}
+      sync={sync}
       filename={filename ?? (file instanceof File ? file.name : "document.pdf")}
     />
   );
 }
 
-function PdfPanel({ file, filename }: { file: PdfFile; filename: string }) {
+function PdfPanel({
+  file,
+  filename,
+  sync,
+}: PdfViewerProps & { filename: string }) {
   const { appearance, setPdfMode, theme } = useTheme();
   const matchTheme = appearance.pdfMode === "match";
   const viewport = useRef<HTMLDivElement>(null);
+  const pageElement = useRef<HTMLDivElement>(null);
+  const marker = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -109,6 +127,36 @@ function PdfPanel({ file, filename }: { file: PdfFile; filename: string }) {
     setPageInput(String(bounded));
     viewport.current?.scrollTo({ top: 0, left: 0 });
   }
+
+  const target = sync?.target;
+  useEffect(() => {
+    if (ready && target) goToPage(target.page);
+  }, [ready, target]);
+
+  useEffect(() => {
+    if (!target || target.page !== page) return;
+    const frame = requestAnimationFrame(() =>
+      marker.current?.scrollIntoView({ block: "center", inline: "center" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [target, page, scale, rotation, nativeSize]);
+
+  const totalRotation = (nativeSize.rotation + rotation) % 360;
+  const corners =
+    target && target.page === page
+      ? [
+          rotatePdfPoint(
+            target.x / nativeSize.width,
+            target.y / nativeSize.height,
+            totalRotation,
+          ),
+          rotatePdfPoint(
+            (target.x + target.width) / nativeSize.width,
+            (target.y + target.height) / nativeSize.height,
+            totalRotation,
+          ),
+        ]
+      : null;
 
   function changeZoom(delta: number) {
     setZoom({
@@ -260,6 +308,12 @@ function PdfPanel({ file, filename }: { file: PdfFile; filename: string }) {
           {downloadError}
         </p>
       )}
+      {sync && (
+        <p className="text-muted-foreground border-b px-3 py-1 text-xs">
+          Cmd/Ctrl-click the PDF to reveal its source. Cmd/Ctrl-click source to
+          reveal it here.
+        </p>
+      )}
       <div
         ref={viewport}
         data-pdf-mode={appearance.pdfMode}
@@ -333,33 +387,80 @@ function PdfPanel({ file, filename }: { file: PdfFile; filename: string }) {
           }
         >
           {ready && (
-            <Page
-              pageNumber={page}
-              scale={scale}
-              rotate={(nativeSize.rotation + rotation) % 360}
-              onRenderSuccess={() => reportCompilePreview(file, "rendered")}
-              onRenderError={() => reportCompilePreview(file, "preview_failed")}
-              onLoadSuccess={(pdfPage) => {
-                const box = pdfPage.getViewport({ scale: 1, rotation: 0 });
-                setNativeSize({
-                  width: box.width,
-                  height: box.height,
-                  rotation: pdfPage.rotate,
-                });
+            <div
+              ref={pageElement}
+              className="relative w-fit"
+              onClickCapture={(event) => {
+                if (
+                  !sync ||
+                  event.button !== 0 ||
+                  !(event.metaKey || event.ctrlKey)
+                )
+                  return;
+                const bounds = pageElement.current?.getBoundingClientRect();
+                if (!bounds?.width || !bounds.height) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const point = rotatePdfPoint(
+                  (event.clientX - bounds.left) / bounds.width,
+                  (event.clientY - bounds.top) / bounds.height,
+                  -totalRotation,
+                );
+                const location = pdfToSource(
+                  sync.index,
+                  page,
+                  point.x * nativeSize.width,
+                  point.y * nativeSize.height,
+                );
+                if (location) sync.reveal(location.path, location.line);
               }}
-              className="shadow-md"
-              loading={
-                <p role="status" className="text-muted-foreground p-8 text-sm">
-                  Loading page…
-                </p>
-              }
-              error={
-                <p role="alert" className="text-destructive p-8 text-sm">
-                  Could not render this page. Try another page or reopen the
-                  PDF.
-                </p>
-              }
-            />
+            >
+              <Page
+                pageNumber={page}
+                scale={scale}
+                rotate={totalRotation}
+                onRenderSuccess={() => reportCompilePreview(file, "rendered")}
+                onRenderError={() =>
+                  reportCompilePreview(file, "preview_failed")
+                }
+                onLoadSuccess={(pdfPage) => {
+                  const box = pdfPage.getViewport({ scale: 1, rotation: 0 });
+                  setNativeSize({
+                    width: box.width,
+                    height: box.height,
+                    rotation: pdfPage.rotate,
+                  });
+                }}
+                className="shadow-md"
+                loading={
+                  <p
+                    role="status"
+                    className="text-muted-foreground p-8 text-sm"
+                  >
+                    Loading page…
+                  </p>
+                }
+                error={
+                  <p role="alert" className="text-destructive p-8 text-sm">
+                    Could not render this page. Try another page or reopen the
+                    PDF.
+                  </p>
+                }
+              />
+              {corners && corners[0] && corners[1] && (
+                <div
+                  ref={marker}
+                  aria-label="Source location in PDF"
+                  className="border-primary bg-primary/20 pointer-events-none absolute min-h-1 min-w-1 border"
+                  style={{
+                    left: `${Math.min(corners[0].x, corners[1].x) * 100}%`,
+                    top: `${Math.min(corners[0].y, corners[1].y) * 100}%`,
+                    width: `${Math.abs(corners[1].x - corners[0].x) * 100}%`,
+                    height: `${Math.abs(corners[1].y - corners[0].y) * 100}%`,
+                  }}
+                />
+              )}
+            </div>
           )}
         </Document>
       </div>

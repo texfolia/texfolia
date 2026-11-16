@@ -7,6 +7,7 @@ import type { EditorCommand } from "#/lib/editor-command";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import type { latexCompletion } from "#/lib/latex/completion";
 import type { FormatSettings } from "#/lib/latex/format";
+import type { SyncTexIndex, SyncTexLocation } from "#/lib/latex/synctex";
 
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {
@@ -34,6 +35,9 @@ export type Workspace = {
   reportSyntax: (path: string, problems: LatexProblem[]) => void;
   jump: { id: string; line: number } | undefined;
   pdf: File | null;
+  synctex: SyncTexIndex | null;
+  pdfJump: { index: SyncTexIndex; location: SyncTexLocation } | null;
+  revealPdf: (path: string, line: number) => void;
   pdfSaveState: "saved" | "saving" | "not-saved";
   formatSettings: FormatSettings;
   keepOpen: (id: string) => void;
