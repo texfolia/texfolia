@@ -68,7 +68,12 @@ func testEngine(t *testing.T, timeout time.Duration) (http.Handler, string, stri
 	bin, temp, marker := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "started")
 	script := `#!/bin/sh
 set -eu
-[ "$1" = --untrusted ] && [ "$2" = --keep-logs ] && [ "$3" = --outdir ]
+[ "$1" = --untrusted ]
+[ "$2" = --keep-logs ]
+[ "$3" = --outdir ]
+[ "$TECTONIC_UNTRUSTED_MODE" = 1 ]
+[ -d "$TMPDIR" ]
+echo private > "$TMPDIR/job-secret"
 [ "${SERVICE_SECRET-unset}" = unset ]
 case "$5" in ./*) ;; *) exit 99 ;; esac
 out="$4"

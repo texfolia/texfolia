@@ -29,6 +29,7 @@ type sourceDelta struct {
 }
 
 type workingCopy struct {
+	tempDir  string
 	revision int64
 	project  project
 	hashes   map[string]string
@@ -160,7 +161,7 @@ func (working *workingCopy) apply(body []byte) (project, error) {
 		}
 		cache[path] = content
 	}
-	directory, err := os.MkdirTemp("", "texfolia-sources-")
+	directory, err := os.MkdirTemp(working.tempDir, "texfolia-sources-")
 	if err != nil {
 		return project{}, err
 	}

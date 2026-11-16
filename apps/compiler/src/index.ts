@@ -1,21 +1,22 @@
 import { createEngineClient } from "./engine";
 import { createLocalRuntime } from "./local";
-import { localProjectEngine } from "./local-containers";
+import { createLocalContainerPool } from "./local-containers";
 import { maxSourceSyncBytes } from "./source-sync";
 
+const path = process.env.COMPILER_DB_PATH ?? ".cache/compiler.sqlite";
+const pool = createLocalContainerPool({
+  path: `${path}.pool.sqlite`,
+  socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
+  image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
+  network: process.env.COMPILER_DOCKER_NETWORK,
+});
 const runtime = createLocalRuntime({
-  path: process.env.COMPILER_DB_PATH ?? ".cache/compiler.sqlite",
+  path,
   engine: createEngineClient(
     (request) => fetch(request),
     process.env.ENGINE_URL ?? "http://127.0.0.1:8081",
   ),
-  projectEngine: (projectId, store) =>
-    localProjectEngine(projectId, {
-      socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
-      image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
-      network: process.env.COMPILER_DOCKER_NETWORK,
-      store,
-    }),
+  projectEngine: pool.projectEngine,
 });
 
 const server = Bun.serve({
