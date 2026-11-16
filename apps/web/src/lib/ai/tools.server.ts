@@ -8,7 +8,6 @@ import type { createAuth } from "../auth";
 import { handleCompileGet, handleCompilePost } from "../compile-route.server";
 import { gitBranchSchema } from "../git";
 import { parseCompileLog } from "../latex/compile-log";
-import { hashSource } from "../latex/source-sync";
 import { lockProject } from "../project-access.server";
 import { projectPaths } from "../project-paths";
 import { encodeSource } from "../project-source";
@@ -195,9 +194,10 @@ export function projectTools({
       inputSchema: z.object({ mainFile: z.string().min(1).max(1024) }),
     }).server(async ({ mainFile }) => {
       await files();
-      const source = await readFile(mainFile);
       const requestHeaders = new Headers(headers);
       requestHeaders.set("Content-Type", "application/json");
+      // Without editor metadata, the route snapshots every saved source under lock.
+      requestHeaders.delete("X-Source-Metadata");
       const response = await handleCompilePost({
         request: new Request(`https://internal/api/compile/${projectId}`, {
           method: "POST",
@@ -207,14 +207,7 @@ export function projectTools({
             mainFile,
             baseRevision: 0,
             revision: 1,
-            files: {
-              [mainFile]: {
-                content: source.content,
-                hash: await hashSource(
-                  new TextEncoder().encode(source.content),
-                ),
-              },
-            },
+            files: {},
             deleted: [],
           }),
         }),

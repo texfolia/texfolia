@@ -9,7 +9,9 @@ import { createDb } from "@texfolia/db";
 import {
   projectCollaborator,
   projectJob,
+  projectNode,
   session,
+  subscription,
   user,
 } from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";
@@ -19,6 +21,7 @@ import { z } from "zod";
 
 import type { Engine } from "../../compiler/src/jobs";
 import { createLocalRuntime } from "../../compiler/src/local";
+import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import { unknownEngineTiming } from "../../compiler/src/telemetry";
 import { hashSource } from "../src/lib/latex/source-sync";
 import { projectMetadataVersion } from "../src/lib/project-metadata";
@@ -41,9 +44,25 @@ const accepted = z.object({
   sourceRevision: z.number().optional(),
 });
 const submissions: Array<{ id: string; body: unknown; status: number }> = [];
+const expectedSources = new Map<
+  string,
+  Record<string, string | { base64: string }>
+>();
 let engineCalls = 0;
-const engine: Engine = async () => {
+const engine: Engine = async (project, context) => {
   engineCalls++;
+  const expected = expectedSources.get(context.projectId ?? "");
+  if (expected) {
+    assert("kind" in project);
+    assert.equal(project.kind, "synced");
+    assert(context.readSource);
+    assert.deepEqual(
+      Object.keys(project.files).sort(),
+      Object.keys(expected).sort(),
+    );
+    for (const [path, file] of Object.entries(project.files))
+      assert.deepEqual(await context.readSource(file), expected[path]);
+  }
   const pdf = new TextEncoder().encode("%PDF-compile-route-test");
   return {
     pdf,
@@ -396,6 +415,132 @@ try {
   await completed(resync.projectId, resync.userId, resync.id);
   assert.equal(engineCalls, 4);
 
+  const assistant = await fixture();
+  await db.insert(subscription).values({
+    id: crypto.randomUUID(),
+    referenceId: assistant.userId,
+    plan: "pro",
+    status: "active",
+    stripeCustomerId: "cus_compile_assistant",
+    stripeSubscriptionId: "sub_compile_assistant",
+  });
+  const bucket = await mf.getR2Bucket("SOURCES");
+  const nodes = await db.query.projectNode.findMany({
+    where: { projectId: assistant.projectId },
+  });
+  const root = nodes.find((node) => node.kind === "folder");
+  const main = nodes.find((node) => node.name === "main.tex");
+  assert(root && main);
+  const sources = {
+    "main.tex":
+      "\\documentclass{article}\n\\begin{document}\n\\input{sections/body}\n\\end{document}",
+    "sections/body.tex": "Saved section content.",
+    "image.bin": { base64: "AAH/" },
+    "empty.tex": "",
+  };
+  expectedSources.set(assistant.projectId, sources);
+  const sectionId = crypto.randomUUID();
+  await db.insert(projectNode).values({
+    id: sectionId,
+    projectId: assistant.projectId,
+    parentId: root.id,
+    name: "sections",
+    kind: "folder",
+    sizeBytes: 0n,
+  });
+  for (const [path, content] of Object.entries(sources)) {
+    const bytes =
+      typeof content === "string"
+        ? new TextEncoder().encode(content)
+        : Buffer.from(content.base64, "base64");
+    const objectKey = `projects/${assistant.projectId}/sources/${await hashSource(bytes)}`;
+    await bucket.put(objectKey, bytes);
+    if (path === "main.tex")
+      await db
+        .update(projectNode)
+        .set({ objectKey, sizeBytes: BigInt(bytes.length) })
+        .where(eq(projectNode.id, main.id));
+    else
+      await db.insert(projectNode).values({
+        projectId: assistant.projectId,
+        parentId: path.includes("/") ? sectionId : root.id,
+        name: path.split("/").at(-1) ?? path,
+        kind: typeof content === "string" ? "text" : "binary",
+        objectKey,
+        sizeBytes: BigInt(bytes.length),
+      });
+  }
+  const assistantMetadata = await db.transaction((tx) =>
+    readProjectMetadata({ tx, ...assistant }),
+  );
+  const version = await projectMetadataVersion(assistantMetadata);
+  async function assistantCompile(
+    label: string,
+    statuses: number[],
+    metadata?: string,
+  ) {
+    const start = submissions.length;
+    const response = await mf.dispatchFetch(
+      `${(await mf.ready).origin}/api/compile/${assistant.projectId}?assistant=1`,
+      {
+        method: "POST",
+        headers: {
+          Cookie: cookies.get(assistant.userId) ?? "",
+          "Content-Type": "application/json",
+          ...(metadata ? { "X-Source-Metadata": metadata } : {}),
+        },
+        body: JSON.stringify({ mainFile: "main.tex" }),
+      },
+    );
+    assert.equal(response.status, 200, await response.clone().text());
+    const job = accepted.parse(await response.json());
+    const attempts = submissions.slice(start);
+    assert.deepEqual(
+      attempts.map((attempt) => attempt.status),
+      statuses,
+      label,
+    );
+    for (const attempt of attempts) {
+      const snapshot = sourceDeltaSchema.parse(attempt.body);
+      assert.equal(
+        snapshot.resync,
+        true,
+        `${label}: submit saved sources immediately`,
+      );
+      assert.deepEqual(
+        Object.keys(snapshot.files).sort(),
+        Object.keys(sources).sort(),
+        label,
+      );
+      for (const [path, content] of Object.entries(sources))
+        assert.deepEqual(snapshot.files[path]?.content, content, label);
+    }
+    await completed(assistant.projectId, assistant.userId, job.id);
+  }
+  await assistantCompile("first assistant compile", [202]);
+  await assistantCompile(
+    "later assistant compile with inherited metadata",
+    [409, 202],
+    version,
+  );
+  // Clearing the mirror sets sources to null, just like the 30-day source wipe.
+  assert.equal(
+    (
+      await compiler.fetch(
+        new Request(`http://local/projects/${assistant.projectId}/build`, {
+          method: "DELETE",
+        }),
+      )
+    ).status,
+    204,
+  );
+  await assistantCompile("assistant compile after source wipe", [202], version);
+  assert.equal(
+    engineCalls,
+    7,
+    "Each assistant submission reaches the engine with all saved files",
+  );
+
   await db.delete(session).where(eq(session.userId, original.userId));
   assert.equal(
     (await submit(original)).status,
@@ -403,7 +548,7 @@ try {
     "Retry still requires a valid session",
   );
   console.info(
-    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, and Postgres reconciliation",
+    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, and Postgres reconciliation",
   );
 } finally {
   for (const id of cookies.keys()) await db.delete(user).where(eq(user.id, id));
