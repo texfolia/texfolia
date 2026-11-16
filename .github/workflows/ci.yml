@@ -5,6 +5,9 @@ on: pull_request
 permissions:
   contents: read
 
+env:
+  CI_BUN_VERSION: 1.4.4
+
 jobs:
   postgres:
     name: App database with plain Postgres
@@ -26,69 +29,117 @@ jobs:
       INTEGRATION_DATABASE_URL: postgres://user:password@127.0.0.1:5432/texfolia_test
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
-      - run: bun install --frozen-lockfile
+          fetch-depth: 0
+      - name: Select affected checks
+        id: select
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/ci-select.mjs
+      - uses: ./.github/actions/setup-ci
+        if: steps.select.outputs.postgres == 'true'
+        with:
+          playwright: ${{ steps.select.outputs.postgres-browser }}
+      - name: Build web once for browser suites
+        if: steps.select.outputs.postgres-build == 'true'
+        run: bunx turbo run build --filter=web
       - name: Apply database schema
+        if: steps.select.outputs.postgres == 'true'
         run: bun run db:push
       - name: Exercise app database operations
+        if: steps.select.outputs.database == 'true'
         run: bun run apps/web/test/postgres.ts
       - name: Exercise authenticated compile retries with Postgres
+        if: steps.select.outputs.compile-route == 'true'
         run: bun run --cwd apps/web test:compile-route
       - name: Exercise AI billing with Postgres
+        if: steps.select.outputs.ai-billing == 'true'
         run: bun run --cwd apps/web test:ai-billing
-      - name: Install Chromium
-        run: bun run --cwd apps/web playwright install --with-deps chromium
-      - name: Build and exercise the managed assistant
-        run: |
-          bun run --cwd apps/web build
-          bun run --cwd apps/web test:ai-assistant
+      - name: Exercise the managed assistant
+        if: steps.select.outputs.assistant == 'true'
+        run: bun run --cwd apps/web test:ai-assistant
       - name: Exercise real-time collaboration locally
+        if: steps.select.outputs.collaboration == 'true'
         run: bun run --cwd apps/web test:collaboration
       - name: Exercise metadata synchronization in two authenticated workspaces
-        run: bun run --cwd apps/web test:workspace-metadata
+        if: steps.select.outputs.workspace-metadata == 'true'
+        run: bun run --cwd apps/web test:workspace-metadata:prebuilt
       - name: Exercise project controls, sharing, and keyboard access
+        if: steps.select.outputs.ui-overhaul == 'true'
         run: bun run --cwd apps/web test/ui-overhaul.ts
       - name: Exercise GitHub and GitLab integration with Postgres and local R2
+        if: steps.select.outputs.git == 'true'
         run: bun run --cwd apps/web test:git
       - name: Exercise project source storage with local R2
+        if: steps.select.outputs.source-storage == 'true'
         run: bun run apps/web/test/source-storage.ts
       - name: Test project tags and imports
+        if: steps.select.outputs.projects == 'true'
         run: bun run --cwd apps/web test:projects
       - name: Exercise templates with Postgres and local R2
+        if: steps.select.outputs.templates == 'true'
         run: bun run apps/web/test/templates.ts
       - name: Exercise template seed commands with Postgres and local R2
+        if: steps.select.outputs.template-seed == 'true'
         run: bun run packages/db/test/template-seed-cli.ts
       - name: Exercise template previews and retries in a browser without cron
-        run: bun run --cwd apps/web test:template-lifecycle
+        if: steps.select.outputs.template-lifecycle == 'true'
+        run: bun run --cwd apps/web test:template-lifecycle:prebuilt
   checks:
     name: Checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          fetch-depth: 0
+      - name: Select affected checks
+        id: select
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/ci-select.mjs
+      - uses: ./.github/actions/setup-ci
+        with:
+          playwright: ${{ steps.select.outputs.production-assets }}
+      - name: Verify CI selection rules
+        run: node --test scripts/ci-select.test.mjs
       - uses: actions/setup-go@v6
+        if: steps.select.outputs.compiler == 'true'
         with:
           go-version-file: apps/compiler/engine/go.mod
-          cache: false
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+          cache: true
+          cache-dependency-path: apps/compiler/engine/go.sum
+      - name: Record Go version for Turbo task hashes
+        if: steps.select.outputs.compiler == 'true'
+        run: echo "CI_GO_VERSION=$(go env GOVERSION)" >> "$GITHUB_ENV"
       - name: Build web for production
-        run: bun run --cwd apps/web build
-      - name: Install Chromium
-        run: bun run --cwd apps/web playwright install --with-deps chromium
+        if: steps.select.outputs.production-assets == 'true'
+        run: bunx turbo run build --filter=web
       - name: Check production CSS and worker assets
+        if: steps.select.outputs.production-assets == 'true'
         run: bun run --cwd apps/web test:production-assets
       - name: Install PDF preview renderer
+        if: steps.select.outputs.compiler == 'true'
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
-      - name: Typecheck
-        run: bun run typecheck
-      - name: Test
-        run: bun run test
-      - name: Lint
-        run: bun run lint
-      - name: Check formatting
-        run: bun run format:check
+      - name: Typecheck affected packages and dependents
+        if: steps.select.outputs.package-checks == 'true'
+        env:
+          TURBO_FILTER: ${{ steps.select.outputs.turbo-filter }}
+        run: bunx turbo run typecheck $TURBO_FILTER
+      - name: Test affected packages and dependents
+        if: steps.select.outputs.package-checks == 'true'
+        env:
+          TURBO_FILTER: ${{ steps.select.outputs.turbo-filter }}
+        run: bunx turbo run test $TURBO_FILTER
+      - name: Lint repository and affected packages
+        env:
+          TURBO_FILTER: ${{ steps.select.outputs.turbo-filter }}
+        run: |
+          bun run check:repo
+          bunx oxlint
+          bunx turbo run lint $TURBO_FILTER
+      - name: Check repository and affected package formatting
+        env:
+          TURBO_FILTER: ${{ steps.select.outputs.turbo-filter }}
+        run: |
+          bunx oxfmt --check
+          bunx turbo run format:check $TURBO_FILTER

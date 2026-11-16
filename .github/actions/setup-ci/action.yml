@@ -1,0 +1,46 @@
+name: Set up CI dependencies and caches
+description: Install Bun packages and restore task and browser caches
+inputs:
+  playwright:
+    description: Install Chromium and its system dependencies
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.4.4
+    - name: Cache Bun downloads
+      uses: actions/cache@v5
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-${{ runner.arch }}-bun-1.4.4-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-bun-1.4.4-
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+    - name: Cache Turbo tasks
+      uses: actions/cache@v5
+      with:
+        path: .turbo
+        key: ${{ runner.os }}-${{ runner.arch }}-turbo-bun-1.4.4-${{ github.job }}-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-turbo-bun-1.4.4-${{ github.job }}-${{ hashFiles('bun.lock') }}-
+          ${{ runner.os }}-${{ runner.arch }}-turbo-bun-1.4.4-${{ github.job }}-
+    - name: Read Playwright version
+      if: inputs.playwright == 'true'
+      id: playwright
+      shell: bash
+      run: echo "version=$(bun -p 'require("./apps/web/node_modules/playwright/package.json").version')" >> "$GITHUB_OUTPUT"
+    - name: Cache Chromium
+      if: inputs.playwright == 'true'
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright.outputs.version }}-chromium
+    # The installer reuses cached binaries; Linux libraries still need installing.
+    - name: Install Chromium and system dependencies
+      if: inputs.playwright == 'true'
+      shell: bash
+      run: bun run --cwd apps/web playwright install --with-deps chromium
