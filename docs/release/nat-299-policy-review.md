@@ -1,10 +1,12 @@
 # NAT-299 policy review
 
-Status: draft for product-owner review. This document is not approved for publication.
+Status: placeholder templates implemented for review. Final release policies are not approved.
 
-Prepared on November 15, 2026 against `990686e` on main. The owner requested a source-backed draft in the NAT-299 working session. No approved Texfolia policy text was found in the issue, its comments, or the repository. The draft below describes implemented behavior. The open decisions at the end are still needed for complete release policies.
+Originally prepared on November 15, 2026 against `990686e` on main. Refreshed on November 16 against `1edcc41` for saved assistant chats, account deletion, optional local Git history, and the release work order. No approved final Texfolia policy text was found in the issue, its comments, or the repository. The draft below describes implemented behavior. The open decisions at the end are still needed for complete release policies.
 
-The git and history sections include the NAT-267 implementation changes. The public `/privacy` and `/terms` routes remain unchanged until the owner approves the final wording. The current fair-use paragraph is preserved verbatim below.
+On November 16, the owner requested general templates directly on `/privacy` and `/terms`, with their placeholder status made clear. Both pages now show an unapproved-template notice, an unset effective date, product descriptions, and explicit **To be completed** sections. Their page titles identify them as templates, and both routes send `noindex, nofollow` metadata while unfinished. This instruction approves the template presentation, not final legal commitments. The existing fair-use paragraph is preserved verbatim.
+
+The route templates organize the factual material below with prompts for the unresolved decisions. Before release, replace those prompts and the placeholder notice with the approved wording, set the effective date, update the page titles, and remove the placeholder indexing restriction.
 
 ## Proposed privacy copy
 
@@ -40,7 +42,7 @@ Template visitors can download the source archive or create an independent proje
 
 When you use the managed assistant, your messages and conversation context are sent through Cloudflare AI Gateway to the selected model service. The assistant can list project files, read saved text files, edit text files, and request compilation. File contents and tool results used in the conversation form part of the model context. Assistant edits are saved and shared with collaborators immediately.
 
-The conversation is held for the current page session, rather than saved as a chat history in Texfolia. Texfolia separately stores run and request records, including user and project identifiers, model, timestamps, token usage, costs, billing status, and the original payer. AI Gateway logging is enabled for usage reconciliation, with request and response payload storage disabled by the application.
+Chats are saved on the server for each user and project. Stored content includes conversation titles, model choices, messages, tool calls and results, and model reasoning when returned. Chat history lets users delete individual conversations. Texfolia separately stores run and request records, including user and project identifiers, model, timestamps, token usage, costs, billing status, and the original payer. AI Gateway logging is enabled for usage reconciliation, with request and response payload storage disabled by the application.
 
 #### Payments and service records
 
@@ -54,11 +56,11 @@ Your browser stores appearance and editor preferences and workspace layout. For 
 
 #### Git history, deletion, and retention
 
-Version history uses git through a linked GitHub or GitLab repository. Commits record project files, including binary files and folder changes. Push commits to keep them on your repository host. Unlinking removes the local repository data and keeps current project files. Copies pushed to a repository host follow that host's retention and access policies.
+Version history uses an optional Git repository stored on Texfolia, with or without a linked GitHub or GitLab remote. Commits record project files, including binary files and folder changes. Push commits to keep them on your repository host. Unlinking removes Texfolia's repository data and keeps current project files. Copies pushed to a repository host follow that host's retention and access policies.
 
-Deleting a project removes access and starts cleanup of its saved sources, collaboration state, history, and generated build artifacts. Some cleanup runs in background jobs and retries after failures. Project and file metadata can remain marked as deleted in the database. Deletion does not mean immediate erasure of every related record or copy.
+Deleting a project removes access and starts cleanup of its saved sources, collaboration state, history, and generated build artifacts. Some cleanup runs in background jobs and retries after failures. Project and file metadata can remain marked as deleted in the database. Project deletion sets `deletedAt` rather than deleting the project row, so the database cascade does not remove its saved chat rows. Deletion does not mean immediate erasure of every related record or copy.
 
-AI run and request billing records survive project deletion and are separate from document history. Texfolia currently has no self-service account deletion flow. Published template snapshots and independent copies have a separate lifecycle from the original project. Copies downloaded to other devices remain on those devices.
+Account settings includes an account deletion flow confirmed through an email link. The database schema cascades user deletion to personal projects and the user's saved chats. AI run and request billing records survive account and project deletion. Published template snapshots and independent copies have a separate lifecycle from the original project. Copies downloaded to other devices remain on those devices. The schema and cleanup jobs do not establish an overall erasure deadline.
 
 ## Proposed terms copy
 
@@ -90,7 +92,7 @@ AI spending limits apply per user and per UTC calendar month. The default monthl
 
 #### Using the assistant
 
-The assistant sends conversation context and the project content it reads to the selected model service through Cloudflare AI Gateway. Its file edits are saved immediately and shared with collaborators. Review its answers and changes before relying on them. Git commits and project exports provide ways to keep versions and current sources.
+The assistant sends conversation context and the project content it reads to the selected model service through Cloudflare AI Gateway. Its file edits are saved immediately and shared with collaborators. Chats are saved for each user and project and can be deleted from chat history. Review its answers and changes before relying on them. Git commits and project exports provide ways to keep versions and current sources.
 
 #### Fair use
 
@@ -98,66 +100,73 @@ Fair use applies to compilation on all plans. Compile timeouts and request rate 
 
 #### First-release scope
 
-The first release includes the editor, compilation, GitHub and GitLab integration, personal-project collaboration, reviewed templates, and the managed Pro assistant. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming is available from the projects table. Project duplication has no controls in v1.
+The templates describe the implemented editor, compilation, optional Git history and remote integration, personal-project collaboration, reviewed templates, and managed assistant. They do not promise planned compile-engine options or other unimplemented features. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming is available from the projects table. Project duplication has no controls in v1.
 
 ## Owner decisions needed
 
 These are unresolved decisions, not proposed commitments. They cannot be established by source inspection.
 
-| Decision                                     | What the owner needs to supply or approve                                                                                                                                                                                                                             |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operator and contact                         | Legal operator name, location or address where appropriate, privacy and support contact channels, and effective date. The configured outbound `noreply@texfolia.com` address is not evidence of a monitored support inbox.                                            |
-| Privacy requests and account deletion        | How a person requests access, correction, or account deletion; how identity is checked; who handles requests; and which records are retained. There is no account deletion implementation to point users to today.                                                    |
-| Retention outside document history           | Approved periods and handling for account and session records, deleted metadata, operational logs, backups, and billing records. Source code does not establish an overall erasure deadline.                                                                          |
-| Providers and processing locations           | Actual production database host, processing locations, provider list and applicable agreements. Confirm the selected AI services' retention and training practices. The Gateway payload flag does not establish those providers' policies.                            |
-| Privacy commitments and required disclosures | Applicable privacy rights and request process, disclosures about legal demands or business transfers, and any commitments about selling data, advertising, or AI training. No certification, compliance, residency, or end-to-end encryption claim has been inferred. |
-| Content rights and service permission        | Ownership wording and the permission Texfolia needs to store, process, compile, share, and publish user content. Template license selection alone does not establish a general service license.                                                                       |
-| Eligibility and acceptable use               | Age or other eligibility rules, account responsibilities, prohibited use, abuse handling, suspension, termination, and the process for content or copyright complaints.                                                                                               |
-| Subscription terms                           | Approved price and currency wording, renewal and cancellation behavior, refunds, taxes, failed payments, plan changes, and payment disputes. Keep Team checkout and unenforced plan caps aligned with NAT-283.                                                        |
-| AI terms                                     | Approve the implemented separate billing and markup disclosure, responsibility for AI output, provider conditions, and handling of billing errors.                                                                                                                    |
-| Remaining legal terms                        | Warranty and availability language, liability, dispute handling, governing law, and how policy or service changes are announced. No legal jurisdiction or liability limit has been selected by the agent.                                                             |
+| Decision                                     | What the owner needs to supply or approve                                                                                                                                                                                                                               |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operator and contact                         | Legal operator name, location or address where appropriate, privacy and support contact channels, and effective date. The configured outbound `noreply@texfolia.com` address is not evidence of a monitored support inbox.                                              |
+| Privacy requests and account deletion        | Approve how people request access or correction, identity checks, who handles requests, and which records remain. Account settings now provides email-confirmed deletion; that flow does not establish the remaining privacy-request process or retention policy.       |
+| Retention outside document history           | Approved periods and handling for account and session records, saved chats, deleted metadata, operational logs, backups, and billing records. Project soft deletion leaves saved chat rows in the database. Source code does not establish an overall erasure deadline. |
+| Providers and processing locations           | Actual production database host, processing locations, provider list and applicable agreements. Confirm the selected AI services' retention and training practices. The Gateway payload flag does not establish those providers' policies.                              |
+| Privacy commitments and required disclosures | Applicable privacy rights and request process, disclosures about legal demands or business transfers, and any commitments about selling data, advertising, or AI training. No certification, compliance, residency, or end-to-end encryption claim has been inferred.   |
+| Content rights and service permission        | Ownership wording and the permission Texfolia needs to store, process, compile, share, and publish user content. Template license selection alone does not establish a general service license.                                                                         |
+| Eligibility and acceptable use               | Age or other eligibility rules, account responsibilities, prohibited use, abuse handling, suspension, termination, and the process for content or copyright complaints.                                                                                                 |
+| Subscription terms                           | Approved price and currency wording, renewal and cancellation behavior, refunds, taxes, failed payments, plan changes, and payment disputes. Keep Team checkout and unenforced plan caps aligned with NAT-283.                                                          |
+| AI terms                                     | Approve the implemented separate billing and markup disclosure, responsibility for AI output, provider conditions, and handling of billing errors.                                                                                                                      |
+| Remaining legal terms                        | Warranty and availability language, liability, dispute handling, governing law, and how policy or service changes are announced. No legal jurisdiction or liability limit has been selected by the agent.                                                               |
 
 ## Implementation evidence
 
 These links support the factual draft. They are not evidence of legal approval or deployed provider configuration.
 
-| Subject                                                                            | Source                                                                                                                                                                                                                           |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sign-in methods, email codes, Turnstile, Stripe, no account deletion configuration | [Auth configuration](../../apps/web/src/lib/auth.ts), [auth behavior inventory](../auth-abuse-protection.md)                                                                                                                     |
-| Stored account, provider-token, session, organization, and subscription fields     | [Auth database schema](../../packages/db/src/auth-schema.ts)                                                                                                                                                                     |
-| Email delivery                                                                     | [Email adapter](../../apps/web/src/lib/email.ts)                                                                                                                                                                                 |
-| Project deletion and build cleanup                                                 | [Project service](../../apps/web/src/lib/project.server.ts), [source collector](../../apps/web/src/lib/project-source.server.ts), [collaboration collector](../../apps/web/src/lib/collaboration/cleanup.server.ts)              |
-| Sharing names, email addresses, and roles                                          | [Sharing service](../../apps/web/src/lib/project-sharing.server.ts)                                                                                                                                                              |
-| Browser text cache and its lifecycle                                               | [Collaborative file](../../apps/web/src/lib/collaboration/file.ts)                                                                                                                                                               |
-| Preferences and workspace layout                                                   | [Settings storage](../../apps/web/src/lib/settings.functions.ts), [theme provider](../../apps/web/src/providers/theme-provider.tsx), [workspace](../../apps/web/src/routes/project/$projectId/-components/project-workspace.tsx) |
-| History duration and cleanup                                                       | [History policy](../../apps/web/src/lib/git.ts), [history behavior](../git-integration.md)                                                                                                                                       |
-| Template snapshots, review, license confirmation, and retention                    | [Template lifecycle](../templates.md), [template validation](../../apps/web/src/lib/template.schema.ts)                                                                                                                          |
-| AI context, immediate edits, Gateway payload flag, and run lifecycle               | [Assistant service](../../apps/web/src/lib/ai/chat.server.ts), [assistant tools](../../apps/web/src/lib/ai/tools.server.ts)                                                                                                      |
-| AI charging, caps, and retained payer records                                      | [AI billing setup](../ai-assistant.md), [AI schema](../../packages/db/src/schema.ts)                                                                                                                                             |
-| Cloudflare infrastructure and operational logs                                     | [Web Worker configuration](../../apps/web/wrangler.jsonc), [compile telemetry](../compile-telemetry.md)                                                                                                                          |
-| Current fair-use wording                                                           | [Terms route](../../apps/web/src/routes/terms/route.tsx)                                                                                                                                                                         |
-| v1 controls and deferred features                                                  | [Project controls](../project-controls.md)                                                                                                                                                                                       |
+| Subject                                                                               | Source                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in methods, email codes, Turnstile, Stripe, and email-confirmed account deletion | [Auth configuration](../../apps/web/src/lib/auth.ts), [account settings](../../apps/web/src/routes/settings/account/route.tsx)                                                                                                   |
+| Stored account, provider-token, session, organization, and subscription fields        | [Auth database schema](../../packages/db/src/auth-schema.ts)                                                                                                                                                                     |
+| Email delivery                                                                        | [Email adapter](../../apps/web/src/lib/email.ts)                                                                                                                                                                                 |
+| Project deletion and build cleanup                                                    | [Project service](../../apps/web/src/lib/project.server.ts), [source collector](../../apps/web/src/lib/project-source.server.ts), [collaboration collector](../../apps/web/src/lib/collaboration/cleanup.server.ts)              |
+| Sharing names, email addresses, and roles                                             | [Sharing service](../../apps/web/src/lib/project-sharing.server.ts)                                                                                                                                                              |
+| Browser text cache and its lifecycle                                                  | [Collaborative file](../../apps/web/src/lib/collaboration/file.ts)                                                                                                                                                               |
+| Preferences and workspace layout                                                      | [Settings storage](../../apps/web/src/lib/settings.functions.ts), [theme provider](../../apps/web/src/providers/theme-provider.tsx), [workspace](../../apps/web/src/routes/project/$projectId/-components/project-workspace.tsx) |
+| Optional local Git history, remote credentials, and cleanup                           | [Git service](../../apps/web/src/lib/git.server.ts), [Git behavior](../git-integration.md)                                                                                                                                       |
+| Template snapshots, review, license confirmation, and retention                       | [Template lifecycle](../templates.md), [template validation](../../apps/web/src/lib/template.schema.ts)                                                                                                                          |
+| AI context, immediate edits, Gateway payload flag, and run lifecycle                  | [Assistant service](../../apps/web/src/lib/ai/chat.server.ts), [assistant tools](../../apps/web/src/lib/ai/tools.server.ts)                                                                                                      |
+| Saved chat ownership, deletion, and database cascades                                 | [Chat service](../../apps/web/src/lib/ai/threads.server.ts), [message schema](../../apps/web/src/lib/ai/threads.ts), [database schema](../../packages/db/src/schema.ts)                                                          |
+| AI charging, caps, and retained payer records                                         | [AI billing setup](../ai-assistant.md), [AI schema](../../packages/db/src/schema.ts)                                                                                                                                             |
+| Cloudflare infrastructure and operational logs                                        | [Web Worker configuration](../../apps/web/wrangler.jsonc), [compile telemetry](../compile-telemetry.md)                                                                                                                          |
+| PostgreSQL through Hyperdrive; production provisioning remains a deployment decision  | [Database deployment guide](../database-deployment.md), [database package](../../packages/db/README.md)                                                                                                                          |
+| Current fair-use wording                                                              | [Terms route](../../apps/web/src/routes/terms/route.tsx)                                                                                                                                                                         |
+| v1 controls and deferred features                                                     | [Project controls](../project-controls.md)                                                                                                                                                                                       |
 
 ## v1 UI and content pass
 
-NAT-299 remains a release requirement under [NAT-286](https://linear.app/nbaby/issue/NAT-286). [NAT-283](https://linear.app/nbaby/issue/NAT-283) follows it and owns pricing copy and plan claims.
+NAT-299 remains a release requirement under [NAT-286](https://linear.app/nbaby/issue/NAT-286). The November 16 work order places it after [NAT-318](https://linear.app/nbaby/issue/NAT-318), now Done in Linear, and before [NAT-302](https://linear.app/nbaby/issue/NAT-302). [NAT-283](https://linear.app/nbaby/issue/NAT-283) owns pricing copy and plan claims.
 
 - [x] Inventory implemented account, document, collaboration, storage, billing, and service behavior.
 - [x] Prepare factual privacy and terms copy for owner review.
+- [x] Put clearly labeled general templates on both routes, as requested by the owner on November 16.
+- [x] Verify the placeholder content, section navigation, and policy links at desktop and mobile sizes.
 - [ ] Obtain the owner's missing policy decisions and approval of complete release wording.
 - [ ] Replace the public privacy notice and incomplete terms with the approved copy.
 - [ ] Verify the complete approved content on both rendered routes at desktop and mobile sizes, including policy links and navigation.
 
 The current shared footer links to Privacy and Terms, and the sign-in page links to both routes. Pricing links to the compile fair-use terms. Those links already exist on main.
 
-Current-page verification on November 15, 2026 passed against the production build served by a local Worker:
+## Template verification
 
-- `bun run --cwd apps/web build` completed successfully.
-- Both existing policy pages rendered at 1440, 375, and 320 pixels without horizontal overflow or browser page errors. Desktop and mobile captures were inspected.
-- Footer links opened both routes. Keyboard activation of the Terms link worked.
-- Sign-in links had the correct policy destinations, and its Privacy link opened the privacy route.
-- Pricing's **fair use** link opened the terms route.
-- The rendered fair-use paragraph matched the existing source. The draft preserves that paragraph verbatim.
-- Repository Markdown-link checks, formatting checks for the changed documents, and `git diff --check` passed.
+On November 16, 2026, the production build was served by an isolated local Worker and checked in headless Chromium:
 
-These checks cover the current unfinished pages. They do not establish completion of the approved policy content.
+- `bun run --cwd apps/web build` and `bun run --cwd apps/web typecheck` passed.
+- Both templates rendered at 1440, 768, 375, and 320 pixels without horizontal overflow or browser page errors. Desktop and mobile captures were inspected.
+- Both pages rendered their placeholder notices and all policy sections with JavaScript disabled.
+- Placeholder notices, unset effective dates, template page titles, and `noindex, nofollow` metadata were present.
+- Every contents link had a unique, correctly labeled section target. Keyboard activation of **Fair use** scrolled to its section, with a visible focus outline before activation.
+- Policy cross-links and shared footer links opened the expected routes. Sign-in links had the correct destinations, and its Privacy link opened the privacy template. Pricing's **fair use** link opened the terms template.
+- The rendered fair-use paragraph matched the paragraph on `1edcc41`, ignoring source whitespace.
+- Targeted Oxlint, Oxfmt checks, `bun run check:repo`, and `git diff --check` passed. The Impeccable detector reported no findings in the changed UI files.
+
+These checks cover the requested placeholders. Final wording, owner approval, and the release checks above remain outstanding. No production deployment was performed.
