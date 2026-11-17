@@ -21,8 +21,10 @@ The public header links to Templates and Pricing. GitHub and GitLab integration 
 
 ## Release policy content
 
-NAT-299 remains open in the v1 UI and content pass. The privacy page and release
-terms need product-owner approval before publication. The
+NAT-299 remains open in the v1 UI and content pass. The privacy and terms pages
+now show general templates with prominent placeholder notices, unset effective
+dates, and sections marked **To be completed**. Final policies still need
+product-owner approval before release. The
 [policy review draft](release/nat-299-policy-review.md) records source-backed copy,
 the missing owner decisions, and the remaining release checks. Privacy and Terms
 are already linked from the shared footer and sign-in page.
