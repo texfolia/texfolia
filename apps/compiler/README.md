@@ -1,5 +1,14 @@
 # Compiler
 
+## Supported engines
+
+The compiler currently runs only patched Tectonic. TeX Live and latexmk are not
+installed, and the app has no engine picker. The existing `texlive` telemetry
+value does not indicate runtime support.
+
+See the [multiple compile engine plan](../../docs/compile-engines.md) for NAT-316's
+proposed backend contracts, image options, and unresolved product decisions.
+
 ## Template previews
 
 Legacy snapshot jobs accept an opt-in `preview: true` in `POST /compile` alongside
