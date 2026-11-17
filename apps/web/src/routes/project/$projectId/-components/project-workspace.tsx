@@ -1527,7 +1527,12 @@ export function ProjectWorkspace({
               }
             />
           )}
-          <main className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <main
+            id="main-content"
+            tabIndex={-1}
+            aria-label="Editor"
+            className="bg-background flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden focus:outline-none"
+          >
             {!ready && (
               <p role="status" className="border-b px-3 py-2 text-sm">
                 Loading server sources and checking browser drafts…

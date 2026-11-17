@@ -60,6 +60,12 @@ export function WorkspaceMenu({
 }) {
   return (
     <header className="flex h-10 shrink-0 items-center gap-3 border-b bg-(--activity-background) px-2 text-(--activity-foreground)">
+      <a
+        href="#main-content"
+        className="bg-background text-foreground sr-only z-50 p-3 focus:not-sr-only focus:absolute"
+      >
+        Skip to editor
+      </a>
       <Menubar
         aria-label="Workspace menu"
         className="h-8 shrink-0 border-0 bg-transparent p-0"
