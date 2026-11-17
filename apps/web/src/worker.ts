@@ -5,14 +5,27 @@ import { reconcileAiUsage } from "./lib/ai/billing.server";
 import { aiConfig } from "./lib/ai/gateway.server";
 import { collectGitObjects } from "./lib/git.server";
 import { collectProjectSources } from "./lib/project-source.server";
+import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
 import { refreshTemplatePreviews } from "./lib/template-preview.server";
 
 export { ProjectCollaboration } from "./lib/collaboration/project-collaboration";
 
 export default {
-  fetch(request) {
-    return handler.fetch(request);
+  async fetch(request) {
+    const nonce = btoa(
+      String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))),
+    );
+    const headers = new Headers(request.headers);
+    // Always replace a client-supplied value before the router reads it.
+    headers.set(cspNonceHeader, nonce);
+    const response = await handler.fetch(new Request(request, { headers }));
+    return withSecurityHeaders({
+      response,
+      nonce,
+      url: request.url,
+      development: import.meta.env.DEV,
+    });
   },
   async scheduled(controller, env) {
     const db = createDb(env.HYPERDRIVE.connectionString);

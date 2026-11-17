@@ -120,6 +120,13 @@ async function pageFor(userId?: string) {
   const page = await context.newPage();
   page.setDefaultTimeout(20_000);
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /content security policy/i.test(message.text())
+    )
+      errors.push(message.text());
+  });
   await page.route("https://challenges.cloudflare.com/**", (route) =>
     route.abort(),
   );
@@ -163,7 +170,7 @@ try {
       await publicPage.getByRole("table").getByRole("row").count(),
       10,
     );
-    const text = await publicPage.locator("main").innerText();
+    const text = await publicPage.locator("main").first().innerText();
     assert.match(text, /10 MiB per source file; 50 MiB per project/);
     assert.match(text, /No AI assistant/);
     assert.match(text, /GitHub and GitLab integration/);
@@ -179,7 +186,7 @@ try {
   await publicPage.waitForURL(/\/login/);
   assert.equal(
     new URL(publicPage.url()).searchParams.get("redirectTo"),
-    "/billing?plan=pro",
+    "/settings/billing?plan=pro",
   );
   await publicPage.goto(`${origin}/pricing`);
   await publicPage
@@ -188,7 +195,7 @@ try {
   await publicPage.waitForURL(/\/login/);
   assert.equal(
     new URL(publicPage.url()).searchParams.get("redirectTo"),
-    "/billing?plan=team",
+    "/settings/billing?plan=team",
   );
   await publicPage.goto(`${origin}/pricing`);
   await publicPage
@@ -201,7 +208,7 @@ try {
   );
 
   const owner = await pageFor(ownerId);
-  await owner.goto(`${origin}/billing?plan=pro`);
+  await owner.goto(`${origin}/settings/billing?plan=pro`);
   const payloads: unknown[] = [];
   await owner.route("**/api/auth/subscription/upgrade", async (route) => {
     payloads.push(route.request().postDataJSON());
@@ -219,15 +226,15 @@ try {
   assert.deepEqual(payloads[0], {
     customerType: "user",
     plan: "pro",
-    successUrl: "/billing",
-    cancelUrl: "/billing?plan=pro",
-    returnUrl: "/billing",
+    successUrl: "/settings/billing",
+    cancelUrl: "/settings/billing?plan=pro",
+    returnUrl: "/settings/billing",
   });
   await capture(owner, "billing-pro-error");
-  await owner.goto(`${origin}/billing?organizationId=${orgId}`);
+  await owner.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await owner.getByRole("heading", { name: "Research group · Team" }).waitFor();
   assert.match(
-    await owner.locator("main").innerText(),
+    await owner.locator("main").first().innerText(),
     /2 members × \$20 USD\/month = \$40 USD\/month/,
   );
   await owner
@@ -237,7 +244,7 @@ try {
     .getByRole("alert")
     .filter({ hasText: "Checkout fixture unavailable" })
     .waitFor();
-  const teamReturn = `/billing?organizationId=${orgId}`;
+  const teamReturn = `/settings/billing?organizationId=${orgId}`;
   assert.deepEqual(payloads[1], {
     customerType: "organization",
     referenceId: orgId,
@@ -258,7 +265,7 @@ try {
     stripeSubscriptionId: "sub_fixture",
     periodEnd: new Date(Date.now() - 1000),
   });
-  await owner.goto(`${origin}/billing?organizationId=${orgId}`);
+  await owner.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await owner
     .getByRole("button", { name: "Manage subscription and invoices" })
     .waitFor();
@@ -300,10 +307,10 @@ try {
   assert.deepEqual(portalRequests[0], {
     customerType: "organization",
     referenceId: orgId,
-    returnUrl: `${origin}/billing?organizationId=${orgId}`,
+    returnUrl: `${origin}/settings/billing?organizationId=${orgId}`,
   });
   const teammate = await pageFor(memberId);
-  await teammate.goto(`${origin}/billing?organizationId=${orgId}`);
+  await teammate.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await teammate
     .getByText(
       "Only an organization owner or admin can manage billing and members.",
@@ -315,11 +322,11 @@ try {
       .count(),
     0,
   );
-  await teammate.goto(`${origin}/billing?organizationId=unrelated`);
+  await teammate.goto(`${origin}/settings/billing?organizationId=unrelated`);
   await teammate
     .getByRole("heading", { name: "Billing unavailable" })
     .waitFor();
-  await owner.goto(`${origin}/billing?plan=team`);
+  await owner.goto(`${origin}/settings/billing?plan=team`);
   await owner.getByLabel("Organization name").fill("New billing team");
   await owner
     .getByRole("button", { name: "Create organization", exact: true })
@@ -331,10 +338,10 @@ try {
   assert(newId);
   organizations.push(newId);
   assert.match(
-    await owner.locator("main").innerText(),
+    await owner.locator("main").first().innerText(),
     /1 member × \$20 USD\/month = \$20 USD\/month/,
   );
-  await owner.goto(`${origin}/billing?organizationId=${orgId}`);
+  await owner.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await owner
     .getByRole("button", { name: "Remove member", exact: true })
     .click();
@@ -343,7 +350,7 @@ try {
     .filter({ hasText: "Member removed" })
     .waitFor();
   assert.match(
-    await owner.locator("main").innerText(),
+    await owner.locator("main").first().innerText(),
     /1 member × \$20 USD\/month = \$20 USD\/month/,
   );
   assert.deepEqual(errors, []);

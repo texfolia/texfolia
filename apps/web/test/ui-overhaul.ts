@@ -174,7 +174,9 @@ function monitor(page: Page) {
   page.on("console", (message) => {
     if (
       message.type() === "error" &&
-      /hydration|hydrated|React error/i.test(message.text())
+      /hydration|hydrated|React error|content security policy/i.test(
+        message.text(),
+      )
     )
       errors.push(message.text());
   });
