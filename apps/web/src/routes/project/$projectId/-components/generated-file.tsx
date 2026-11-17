@@ -13,7 +13,15 @@ const PdfViewer = lazy(() => import("./pdf"));
 export function GeneratedFile({
   params,
 }: IDockviewPanelProps<{ path: string }>) {
-  const { build, projectId, stale, pdf: compiledPdf } = useWorkspace();
+  const {
+    build,
+    projectId,
+    stale,
+    pdf: compiledPdf,
+    synctex,
+    pdfJump,
+    reveal,
+  } = useWorkspace();
   const { theme } = useTheme();
   const file = build?.artifacts?.files.find(
     (file) => file.path === params.path,
@@ -61,10 +69,10 @@ export function GeneratedFile({
   }, [url]);
   const pdf = useMemo(
     () =>
-      loaded
+      loaded?.url === url
         ? new File([loaded.blob], params.path, { type: "application/pdf" })
         : null,
-    [loaded, params.path],
+    [loaded, params.path, url],
   );
   if (!file)
     return (
@@ -96,7 +104,20 @@ export function GeneratedFile({
           <Suspense
             fallback={<p className="p-3 text-sm">Loading PDF viewer…</p>}
           >
-            <PdfViewer file={output} filename={file.path} />
+            <PdfViewer
+              file={output}
+              filename={file.path}
+              sync={
+                output === compiledPdf && synctex
+                  ? {
+                      index: synctex,
+                      reveal,
+                      target:
+                        pdfJump?.index === synctex ? pdfJump.location : null,
+                    }
+                  : undefined
+              }
+            />
           </Suspense>
         </div>
       </div>
