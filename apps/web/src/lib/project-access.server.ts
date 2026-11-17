@@ -35,6 +35,7 @@ export async function lockProject({
       )
       .for("share");
     if (!membership) throw new Error("Project not found");
+    // Every org role can edit org projects; see docs/project-controls.md.
     return { ...found, canWrite: true };
   }
   if (found.ownerId === userId) return { ...found, canWrite: true };
