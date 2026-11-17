@@ -13,12 +13,24 @@ import { projectPaths } from "../project-paths";
 import { encodeSource } from "../project-source";
 import { aiEntitlement } from "./billing.server";
 
+/** Tools that change project state; offered only to collaborators who can edit. */
+export const writeToolNames = new Set([
+  "git_commit",
+  "git_push",
+  "git_pull",
+  "git_create_branch",
+  "git_checkout",
+  "edit_file",
+  "compile",
+]);
+
 export function projectTools({
   db,
   auth,
   env,
   projectId,
   userId,
+  canWrite,
   headers,
   signal,
 }: {
@@ -27,6 +39,7 @@ export function projectTools({
   env: Env;
   projectId: string;
   userId: string;
+  canWrite: boolean;
   headers: Headers;
   signal: AbortSignal;
 }) {
@@ -83,7 +96,7 @@ export function projectTools({
     });
     return { status: result.status, diff: result.diff };
   }
-  return [
+  const tools = [
     toolDefinition({
       name: "git_status",
       description:
@@ -259,4 +272,7 @@ export function projectTools({
       };
     }),
   ];
+  return canWrite
+    ? tools
+    : tools.filter((tool) => !writeToolNames.has(tool.name));
 }

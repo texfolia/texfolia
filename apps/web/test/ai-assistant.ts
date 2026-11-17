@@ -11,6 +11,7 @@ import {
   aiThread,
   aiMessage,
   project,
+  projectCollaborator,
   projectNode,
   projectGit,
   session,
@@ -38,7 +39,9 @@ const root = new URL("../dist/server/", import.meta.url).pathname;
 const filenames = await readdir(root, { recursive: true });
 const userId = crypto.randomUUID();
 const freeId = crypto.randomUUID();
+const viewerId = crypto.randomUUID();
 const subscriptionId = crypto.randomUUID();
+const viewerSubscriptionId = crypto.randomUUID();
 const projectIds: string[] = [];
 const secret = "ai-assistant-fixture-secret-not-for-production";
 const accountId = "a".repeat(32);
@@ -121,10 +124,13 @@ const mf = new Miniflare({
               meter: "mtr_ai",
             },
           });
-        if (url.pathname === "/v1/subscriptions/sub_pro")
+        const subscriber = /^\/v1\/subscriptions\/sub_(pro|viewer)$/.exec(
+          url.pathname,
+        )?.[1];
+        if (subscriber)
           return Response.json({
-            id: "sub_pro",
-            customer: "cus_pro",
+            id: `sub_${subscriber}`,
+            customer: `cus_${subscriber}`,
             status: "active",
             items: { data: [{ id: "si_ai", price: { id: "price_ai" } }] },
           });
@@ -144,7 +150,11 @@ const mf = new Miniflare({
           const body = new URLSearchParams(await request.text());
           meterEvents.push(body);
           assert.equal(body.get("payload[value]"), "12000000");
-          assert.equal(body.get("payload[stripe_customer_id]"), "cus_pro");
+          assert(
+            ["cus_pro", "cus_viewer"].includes(
+              body.get("payload[stripe_customer_id]") ?? "",
+            ),
+          );
           assert.equal(
             request.headers.get("Idempotency-Key"),
             body.get("identifier"),
@@ -418,6 +428,33 @@ function chatBody(modelId = model.id) {
     forwardedProps: { model: modelId },
   };
 }
+function toolNames(body: unknown) {
+  return z
+    .object({
+      tools: z
+        .array(z.object({ function: z.object({ name: z.string() }) }))
+        .default([]),
+    })
+    .parse(body)
+    .tools.map((tool) => tool.function.name)
+    .sort();
+}
+const readTools = [
+  "git_diff",
+  "git_status",
+  "list_files",
+  "read_compile_logs",
+  "read_file",
+];
+const writeTools = [
+  "compile",
+  "edit_file",
+  "git_checkout",
+  "git_commit",
+  "git_create_branch",
+  "git_pull",
+  "git_push",
+];
 async function eventually(check: () => Promise<boolean>, label: string) {
   const deadline = Date.now() + 20_000;
   while (!(await check())) {
@@ -587,6 +624,46 @@ try {
     409,
     "a duplicate run never repeats inference",
   );
+  assert.deepEqual(
+    toolNames(inference[0]?.body),
+    [...readTools, ...writeTools].sort(),
+    "editors receive read and write tools",
+  );
+  await actor(viewerId);
+  await db.insert(subscription).values({
+    id: viewerSubscriptionId,
+    referenceId: viewerId,
+    plan: "pro",
+    status: "active",
+    stripeCustomerId: "cus_viewer",
+    stripeSubscriptionId: "sub_viewer",
+  });
+  await db
+    .insert(projectCollaborator)
+    .values({ projectId: paidProject, userId: viewerId, role: "viewer" });
+  const viewerThread = threadHistorySchema.parse(
+    await (
+      await send(`${path}?threads=1`, viewerId, "POST", { kind: "create" })
+    ).json(),
+  );
+  mode = "simple";
+  const viewerCalls = inference.length;
+  const viewerRun = await send(path, viewerId, "POST", {
+    ...chatBody(),
+    threadId: viewerThread.thread.id,
+  });
+  assert.equal(viewerRun.status, 200, await viewerRun.clone().text());
+  assert(!(await viewerRun.text()).includes("RUN_ERROR"));
+  assert.equal(inference.length, viewerCalls + 1);
+  assert.deepEqual(
+    toolNames(inference.at(-1)?.body),
+    readTools,
+    "viewers receive only read tools",
+  );
+  const viewerSaved = await bucket.get(main.objectKey);
+  assert(viewerSaved);
+  assert((await viewerSaved.text()).includes("Revised text."));
+  assert.equal(compileJobs.size, 1, "viewer runs never compile");
   const git = new GitRepository();
   await git.init("https://github.com/fixture/project.git");
   git.overlay({ "main.tex": new TextEncoder().encode(source) });
@@ -1009,7 +1086,7 @@ try {
   assert.deepEqual(pageErrors, []);
   await context.close();
   console.info(
-    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
+    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, read-only viewer tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
   );
 } finally {
   for (const timer of streamingTimers) clearInterval(timer);
@@ -1018,7 +1095,7 @@ try {
   const runs = await db
     .select({ id: aiRun.id })
     .from(aiRun)
-    .where(eq(aiRun.userId, userId));
+    .where(inArray(aiRun.userId, [userId, viewerId]));
   if (runs.length) {
     await db.delete(aiRequest).where(
       inArray(
@@ -1026,12 +1103,14 @@ try {
         runs.map((r) => r.id),
       ),
     );
-    await db.delete(aiRun).where(eq(aiRun.userId, userId));
+    await db.delete(aiRun).where(inArray(aiRun.userId, [userId, viewerId]));
   }
-  await db.delete(subscription).where(eq(subscription.id, subscriptionId));
+  await db
+    .delete(subscription)
+    .where(inArray(subscription.id, [subscriptionId, viewerSubscriptionId]));
   if (projectIds.length)
     await db.delete(project).where(inArray(project.id, projectIds));
-  await db.delete(user).where(inArray(user.id, [userId, freeId]));
+  await db.delete(user).where(inArray(user.id, [userId, freeId, viewerId]));
   await db.$client.end();
   await rm(directory, { recursive: true, force: true });
 }

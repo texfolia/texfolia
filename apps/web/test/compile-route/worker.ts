@@ -20,6 +20,7 @@ export default {
           env,
           projectId,
           userId: session.user.id,
+          canWrite: true,
           headers: request.headers,
           signal: request.signal,
         }).find((tool) => tool.name === "compile");
