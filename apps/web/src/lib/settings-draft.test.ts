@@ -43,3 +43,13 @@ test("project reloads update untouched values and preserve a formatting draft", 
     rebaseFormattingDraft({ ...previous, width: 120 }, previous, current),
   ).toEqual({ ...current, width: 120 });
 });
+test("compile on save follows external changes unless the draft changed it", () => {
+  const current = { ...defaultSettings, compile: { onSave: false } };
+  expect(
+    rebaseUserDraft(defaultSettings, defaultSettings, current).compile,
+  ).toEqual({ onSave: false });
+  const draft = { ...current, compile: { onSave: true } };
+  expect(rebaseUserDraft(draft, current, current).compile).toEqual({
+    onSave: true,
+  });
+});

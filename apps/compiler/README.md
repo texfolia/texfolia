@@ -255,9 +255,10 @@ The local [cold-start measurements](cold-start-measurements.md) describe the
 previous dedicated-container model.
 
 **Save & compile** saves sources to the web
-Worker's R2 bucket, then POSTs a revisioned delta. Save and
-Cmd/Ctrl+S persist without compiling. Typing marks the preview stale and leaves
-the saved build running. Browser storage is only an unsaved/offline draft cache;
+Worker's R2 bucket, then POSTs a revisioned delta. Save and Cmd/Ctrl+S run it
+by default (Settings → Editor → **Compile after saving**); **Save without
+compiling** persists only. Typing marks the
+preview stale and leaves the saved build running. Browser storage is only an unsaved/offline draft cache;
 opening a project reads saved sources from the server, with explicit recovery
 for conflicting browser drafts. The interactive request is
 `{ mainFile, baseRevision, revision, files: { path: { hash, content? } }, deleted }`.

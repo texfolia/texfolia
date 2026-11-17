@@ -174,7 +174,8 @@ function EditorSettingsFields() {
         <div>
           <ItemTitle>Editor</ItemTitle>
           <ItemDescription>
-            Font and line wrapping are your preferences in this browser.
+            Font, line wrapping, and saving are your preferences in this
+            browser.
           </ItemDescription>
         </div>
         <Field>
@@ -216,6 +217,22 @@ function EditorSettingsFields() {
         <p className="text-muted-foreground text-xs">
           The editor toolbar’s Wrap lines control saves immediately.
         </p>
+        <Field orientation="horizontal">
+          <Checkbox
+            id={`${id}-compile`}
+            checked={draft.compile.onSave}
+            onCheckedChange={(onSave) =>
+              setDraft({ ...draft, compile: { onSave } })
+            }
+          />
+          <FieldLabel htmlFor={`${id}-compile`}>
+            Compile after saving
+          </FieldLabel>
+        </Field>
+        <p className="text-muted-foreground text-xs">
+          Save reuses the build cache. Save without compiling and Clean build
+          stay available in the File menu and as shortcuts.
+        </p>
       </ItemContent>
     </Item>
   );
@@ -252,7 +269,8 @@ function ShortcutSettingsFields() {
       </div>
       <p className="text-muted-foreground text-sm">
         Choose Record, press a chord or a sequence of up to four keys, then
-        Enter. Escape cancels recording. Sequences never run while typing.
+        Enter. Escape cancels recording. While typing, only bindings that start
+        with Mod, Ctrl, or Alt run, including sequences such as Mod+K S.
       </p>
       {conflicts.length > 0 && (
         <p role="alert" className="text-destructive text-sm">
@@ -279,7 +297,8 @@ function ShortcutSettingsFields() {
             <Kbd className="h-auto w-fit whitespace-normal">
               {recording === action
                 ? chords.join(" → ") || "Press keys…"
-                : draft.shortcuts[action].replaceAll(" ", " → ")}
+                : draft.shortcuts[action].replaceAll(" ", " → ") ||
+                  "Unassigned"}
             </Kbd>
           </ItemContent>
           <div className="flex gap-2">
@@ -323,6 +342,14 @@ function ShortcutSettingsFields() {
               }}
             >
               {recording === action ? "Recording…" : "Record"}
+            </Button>
+            <Button
+              variant="ghost"
+              aria-label={`Clear ${shortcutActions[action].label}`}
+              disabled={!draft.shortcuts[action]}
+              onClick={() => change(action, "")}
+            >
+              Clear
             </Button>
             <Button
               variant="ghost"

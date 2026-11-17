@@ -117,7 +117,7 @@ and integration checks. For deployed environments, follow
 
 1. Open [localhost:3000](http://localhost:3000) and sign in.
 2. Create a project and paste the example below into `main.tex`.
-3. Select **Save & compile**. The PDF Preview panel shows the result.
+3. Press Cmd/Ctrl+S or select **File → Save & compile**. The PDF Preview panel shows the result.
 
 ```latex
 \documentclass{article}
@@ -152,7 +152,7 @@ flowchart TD
 
 Text edits merge through Yjs and persist in the collaboration object before broadcast. An alarm writes merged text to R2, and IndexedDB retains offline updates. PostgreSQL stores the file tree, saved source versions, and job records.
 
-**Save** and Cmd/Ctrl+S wait for merged text to reach R2 without compiling. **Save & compile** saves first, then submits a revisioned source delta to the compiler coordinator. Binary files use their saved content hashes. Typing marks the preview stale. See the [source storage and collaboration reference](apps/web/README.md#project-source-storage).
+**Save** (Cmd/Ctrl+S) compiles after saving by default; turn off **Compile after saving** in Settings → Editor to save only. **Save without compiling** (Cmd/Ctrl+K S) never compiles. **Save & compile** (Cmd/Ctrl+Shift+B) saves first, then submits a revisioned source delta to the compiler coordinator. Binary files use their saved content hashes. Typing marks the preview stale. See the [source storage and collaboration reference](apps/web/README.md#project-source-storage).
 
 Browser workers check references as you edit and format LaTeX on request.
 

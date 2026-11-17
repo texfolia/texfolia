@@ -757,7 +757,8 @@ try {
   await owner
     .getByRole("heading", { name: "Start a Team plan", exact: true })
     .waitFor();
-  await owner.keyboard.press("ControlOrMeta+/");
+  await owner.keyboard.press("ControlOrMeta+K");
+  await owner.keyboard.press("ControlOrMeta+S");
   await owner.waitForURL("**/settings/preferences?section=shortcuts");
   await owner
     .getByRole("heading", { name: "Keyboard shortcuts", exact: true })
@@ -1212,7 +1213,7 @@ try {
   );
   await owner.keyboard.press("Escape");
   await owner.getByRole("tab", { name: /^main\.tex/ }).click();
-  await workspaceMenu(owner, "File", "Save");
+  await workspaceMenu(owner, "File", "Save without compiling");
   await owner.getByRole("tab", { name: "main.tex", exact: true }).waitFor();
   console.info(
     "Keyboard project navigation, file dialog focus, and source ZIP download passed",

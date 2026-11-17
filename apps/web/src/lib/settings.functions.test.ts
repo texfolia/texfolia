@@ -68,6 +68,7 @@ test("existing editor preferences migrate without local formatting and survive a
   expect(settingsSchema.parse(fresh.preferences.get("preferences"))).toEqual({
     id: "preferences",
     editor: { fontSize: 20, wrapLines: true },
+    compile: { onSave: true },
     shortcuts: defaultShortcuts,
   });
 });
@@ -96,6 +97,7 @@ test("active settings consumers see each other's updates", async () => {
   await first.save({
     id: "preferences",
     editor: { fontSize: 13, wrapLines: true },
+    compile: { onSave: true },
     shortcuts: { ...defaultShortcuts, save: "Mod+Shift+S" },
   });
   expect(second.preferences.get("preferences")?.shortcuts.save).toBe(
@@ -160,14 +162,17 @@ test("user preferences and shortcuts are isolated by account", async () => {
   await first.save({
     id: "preferences",
     editor: { fontSize: 24, wrapLines: false },
+    compile: { onSave: false },
     shortcuts: { ...defaultShortcuts, newProject: "G P" },
   });
   expect(second.preferences.get("preferences")?.editor.fontSize).toBe(13);
+  expect(second.preferences.get("preferences")?.compile.onSave).toBe(true);
   expect(second.preferences.get("preferences")?.shortcuts.newProject).toBe(
     "N P",
   );
   const reopened = storeFor(backend);
   await reopened.initialize();
+  expect(reopened.preferences.get("preferences")?.compile.onSave).toBe(false);
   expect(reopened.preferences.get("preferences")?.shortcuts.newProject).toBe(
     "G P",
   );

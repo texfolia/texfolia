@@ -9,7 +9,11 @@ and preserves the selected plan and organization.
 
 The dialog's User tab and the Preferences page share the Appearance, Editor,
 and Keyboard shortcuts sections. Appearance previews across the app. Font size,
-line wrapping, and shortcut changes take effect after saving.
+line wrapping, compile on save, and shortcut changes take effect after saving.
+
+Compile after saving is on by default. With it on, Save and Mod+S save sources
+and then run a cached compile. With it off, they only save. Save without
+compiling, Save & compile, and Clean build stay available either way.
 
 Apply saves changes and keeps the form open. Save saves changes and returns to
 the workspace or projects. Cancel discards changes and restores the committed
@@ -19,8 +23,8 @@ Apply in that prompt saves changes and keeps Settings open. Discard leaves
 without saving. Keep editing returns to the draft. Browser reloads and tab
 closure use the browser's unsaved-changes prompt on Preferences.
 
-Appearance uses `texfolia.appearance.v2:<userId>`. Editor preferences and the
-shortcut map use `texfolia.settings.v2:<userId>`. These are browser-local values,
+Appearance uses `texfolia.appearance.v2:<userId>`. Editor and compile preferences
+and the shortcut map use `texfolia.settings.v2:<userId>`. These are browser-local values,
 with no account sync. The old browser editor preference migrates on first use.
 The editor toolbar's Wrap lines control and the PDF viewer's match-theme control
 continue to save immediately.
@@ -53,18 +57,39 @@ size edit.
 ## Keyboard shortcuts
 
 `apps/web/src/lib/shortcuts.ts` owns the action catalog, default bindings,
-validation, and conflict checks. The recorder accepts one chord or up to four
-chords separated by spaces. Enter finishes recording. Escape cancels it.
-Reset restores one action, and Reset all restores every default.
+validation, and conflict checks. Defaults copy VS Code unless that would take
+over an important browser or editor function. The recorder accepts one chord or
+up to four chords separated by spaces. Enter finishes recording. Escape cancels
+it. Clear leaves an action unassigned. Reset restores one action, and Reset all
+restores every default.
+
+| Action                     | Default                     | VS Code equivalent                   |
+| -------------------------- | --------------------------- | ------------------------------------ |
+| Settings                   | Mod+,                       | Preferences: Open Settings           |
+| Keyboard shortcuts         | Mod+K Mod+S                 | Preferences: Open Keyboard Shortcuts |
+| Save                       | Mod+S                       | File: Save                           |
+| Save without compiling     | Mod+K S                     | File: Save without Formatting        |
+| Save & compile             | Mod+Shift+B                 | Tasks: Run Build Task                |
+| Clean build                | Unassigned                  | None                                 |
+| Format document            | Alt+Shift+F                 | Format Document                      |
+| Open Markdown preview      | Mod+Shift+V                 | Markdown: Open Preview               |
+| Next / previous editor tab | Ctrl+PageDown / Ctrl+PageUp | View: Open Next / Previous Editor    |
+| Toggle sidebar             | Mod+Alt+B                   | View: Toggle Secondary Side Bar      |
+| Search projects            | Mod+P                       | Go to File                           |
+
+Bold, Italic, Underline (Mod+B/I/U) and headings (Mod+Alt+0–6) keep the
+standard rich-text bindings. New project keeps the N P sequence because the
+browser reserves Mod+N.
 
 Bindings conflict when they match or when one is the prefix of another
 sequence. Explicit Ctrl and Meta modifiers are checked against Mod on their
-respective platforms. Conflicts prevent Apply and Save. Bold defaults to Mod+B,
-and Toggle sidebar defaults to Mod+Shift+B.
+respective platforms. Unassigned actions never conflict. Conflicts prevent Apply
+and Save.
 
 The shortcut dispatcher uses the committed map. Sequences expire after one
-second and are ignored in inputs, editable content, and CodeMirror. Modifier
-chords for actions such as saving still work while typing. Browser and editor
+second. In inputs, editable content, and CodeMirror, only bindings whose first
+chord uses Mod, Ctrl, Meta, or Alt run, so Mod+S and Mod+K S work while typing
+but N P does not. The editor keeps Mod+/ for toggling comments. Browser and editor
 defaults for clipboard actions, selection, undo, redo, search, and Tab indentation
 remain fixed.
 

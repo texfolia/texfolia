@@ -467,6 +467,7 @@ export function ProjectWorkspace({
   const [jump, setJump] = useState<Workspace["jump"]>();
   const {
     formatting,
+    compile: compileSettings,
     open: settingsOpen,
     setOpen: setSettingsOpen,
   } = useSettings();
@@ -933,7 +934,8 @@ export function ProjectWorkspace({
   async function compileProject(clean = false) {
     const snapshot = revision.current;
     const events = buildEvents.current;
-    if (!main || !events || !canWrite || !(await saveSources())) return;
+    // Save first so the default save path persists even when compiling isn't possible.
+    if (!canWrite || !(await saveSources()) || !main || !events) return;
     compilation.current?.abort();
     const startedAt = performance.now();
     const editedAt = lastEditAt.current;
@@ -1027,9 +1029,20 @@ export function ProjectWorkspace({
     ]?.api.setActive();
   }
 
-  useAppShortcut("save", () => void saveSources(), {
+  const save = () =>
+    void (compileSettings.onSave ? compileProject() : saveSources());
+  useAppShortcut("save", save, { target: container, enabled: !settingsOpen });
+  useAppShortcut("saveWithoutCompiling", () => void saveSources(), {
     target: container,
     enabled: !settingsOpen,
+  });
+  useAppShortcut("compile", () => void compileProject(), {
+    target: container,
+    enabled: !settingsOpen,
+  });
+  useAppShortcut("cleanBuild", () => void compileProject(true), {
+    target: container,
+    enabled: !settingsOpen && !compiling,
   });
   useAppShortcut("nextTab", () => cycleTab(1), {
     target: container,
@@ -1424,8 +1437,11 @@ export function ProjectWorkspace({
           editorAvailable={nodes.some(
             (node) => node.id === activeId && node.kind === "text",
           )}
-          onSave={() => void saveSources()}
-          onCompile={(clean) => void compileProject(clean)}
+          compileOnSave={compileSettings.onSave}
+          onSave={save}
+          onSaveOnly={() => void saveSources()}
+          onCompile={() => void compileProject()}
+          onClean={() => void compileProject(true)}
           onCreate={(kind) => createRef.current?.start(kind)}
           onUpload={() => uploadRef.current?.open()}
           onExport={() => exportRef.current?.open()}

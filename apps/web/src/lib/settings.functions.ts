@@ -108,6 +108,7 @@ export function createSettingsStore({
       await preferences
         .update("preferences", (draft) => {
           draft.editor = next.editor;
+          draft.compile = next.compile;
           draft.shortcuts = next.shortcuts;
         })
         .when("settled");

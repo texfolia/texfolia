@@ -209,6 +209,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
   }
   return {
     editor: preferences.editor,
+    compile: preferences.compile,
     shortcuts: preferences.shortcuts,
     updateEditor,
     draft: draft ?? preferences,

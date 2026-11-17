@@ -19,6 +19,12 @@ export function rebaseUserDraft(
           ? current.editor.wrapLines
           : draft.editor.wrapLines,
     },
+    compile: {
+      onSave:
+        draft.compile.onSave === previous.compile.onSave
+          ? current.compile.onSave
+          : draft.compile.onSave,
+    },
     shortcuts: Object.fromEntries(
       shortcutIds.map((action) => [
         action,
