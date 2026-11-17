@@ -153,6 +153,7 @@ async function sidebarView(page: Page, view: string) {
   const names: Record<string, string> = {
     files: "Files",
     outline: "Outline",
+    search: "Search",
     git: "Git",
     collaboration: "Collaboration",
   };
@@ -926,6 +927,29 @@ try {
     .getByRole("button", { name: "Workspace heading", exact: true })
     .click();
   assert.equal(await owner.getByRole("tab", { name: /^main\.tex/ }).count(), 1);
+  await owner.locator('.cm-content[contenteditable="true"]').click();
+  await owner.keyboard.press("ControlOrMeta+Shift+F");
+  const fileSearch = owner.getByRole("searchbox", {
+    name: "Search project files",
+  });
+  await eventually(
+    () => fileSearch.evaluate((input) => input === document.activeElement),
+    "Mod+Shift+F focuses project search",
+  );
+  await fileSearch.fill("workspace HEADING");
+  await owner
+    .getByRole("status")
+    .filter({ hasText: "1 result in 1 file" })
+    .waitFor();
+  await owner
+    .getByRole("region", { name: "main.tex", exact: true })
+    .getByRole("button", { name: /Workspace heading/ })
+    .click();
+  assert.equal(
+    await owner.evaluate(() => document.getSelection()?.toString()),
+    "Workspace heading",
+    "Selecting a search result selects the match",
+  );
   await owner.locator('.cm-content[contenteditable="true"]').fill("");
   await sidebarView(owner, "files");
 

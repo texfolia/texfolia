@@ -4,6 +4,7 @@ import { z } from "zod";
 export const sidebarViewSchema = z.enum([
   "files",
   "outline",
+  "search",
   "git",
   "collaboration",
 ]);

@@ -21,7 +21,12 @@ export type Workspace = {
   completion: ReturnType<typeof latexCompletion>;
   problems: ReadonlyMap<string, LatexProblem[]>;
   allProblems: LatexProblem[];
-  reveal: (path: string, line?: number) => void;
+  reveal: (
+    path: string,
+    line?: number,
+    column?: number,
+    length?: number,
+  ) => void;
   closeTabs: (id: string, mode: "one" | "others" | "all" | "right") => void;
   reportGitBranch: (branch: string | null) => void;
   registerCommands: (
@@ -33,7 +38,9 @@ export type Workspace = {
     position: { line: number; column: number },
   ) => void;
   reportSyntax: (path: string, problems: LatexProblem[]) => void;
-  jump: { id: string; line: number } | undefined;
+  jump:
+    | { id: string; line: number; column?: number; length?: number }
+    | undefined;
   pdf: File | null;
   synctex: SyncTexIndex | null;
   pdfJump: { index: SyncTexIndex; location: SyncTexLocation } | null;

@@ -3,6 +3,7 @@ import {
   IconLayoutSidebarLeftExpand,
   IconFiles,
   IconListTree,
+  IconSearch,
   IconHistory,
   IconUsers,
   IconGitBranch,
@@ -104,6 +105,7 @@ import {
   type MarkdownPreviewParams,
 } from "./markdown-preview";
 import type { ProjectExportHandle } from "./project-export";
+import type { SearchRequest } from "./project-search";
 import { ProjectSidebar } from "./project-sidebar";
 import type { RepairSourcePathsHandle } from "./repair-source-paths";
 import { SidebarResize } from "./sidebar-resize";
@@ -465,6 +467,22 @@ export function ProjectWorkspace({
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
   const [jump, setJump] = useState<Workspace["jump"]>();
+  const [searchRequest, setSearchRequest] = useState<SearchRequest>({
+    sequence: 0,
+  });
+  function openSearch() {
+    // Seed the query from a single-line selection, like VS Code's Find in Files.
+    const view = activeId ? editors.current.get(activeId) : undefined;
+    const selection = view?.state.sliceDoc(
+      view.state.selection.main.from,
+      view.state.selection.main.to,
+    );
+    updateChrome({ rightOpen: true, rightView: "search" });
+    setSearchRequest((previous) => ({
+      sequence: previous.sequence + 1,
+      query: selection && !/[\r\n]/.test(selection) ? selection : undefined,
+    }));
+  }
   const {
     formatting,
     compile: compileSettings,
@@ -1052,6 +1070,10 @@ export function ProjectWorkspace({
     target: container,
     enabled: !settingsOpen,
   });
+  useAppShortcut("projectSearch", openSearch, {
+    target: container,
+    enabled: !settingsOpen,
+  });
   useAppShortcut(
     "sidebar",
     () => updateChrome({ rightOpen: !chrome.rightOpen }),
@@ -1230,11 +1252,11 @@ export function ProjectWorkspace({
     }
   }
 
-  function reveal(path: string, line = 1) {
+  function reveal(path: string, line = 1, column?: number, length?: number) {
     const node = nodes.find((node) => paths.get(node.id) === path);
     if (!node) return;
     openFile(node, true);
-    setJump({ id: node.id, line });
+    setJump({ id: node.id, line, column, length });
   }
   function closeTabs(id: string, mode: "one" | "others" | "all" | "right") {
     const dock = api.current;
@@ -1454,6 +1476,7 @@ export function ProjectWorkspace({
           onEditor={(command) => {
             if (activeId) commands.current.get(activeId)?.(command);
           }}
+          onSearch={openSearch}
           chrome={chrome}
           onChrome={updateChrome}
           onProblems={openProblems}
@@ -1625,6 +1648,7 @@ export function ProjectWorkspace({
               uploadRef={uploadRef}
               exportRef={exportRef}
               repairRef={repairRef}
+              searchRequest={searchRequest}
               outline={projectOutline(
                 new Map(
                   [...paths].flatMap(([id, path]) => {
@@ -1741,6 +1765,7 @@ export function ProjectWorkspace({
               [
                 { view: "files", label: "Files", icon: IconFiles },
                 { view: "outline", label: "Outline", icon: IconListTree },
+                { view: "search", label: "Search", icon: IconSearch },
                 { view: "git", label: "Git", icon: IconGitBranch },
                 {
                   view: "collaboration",

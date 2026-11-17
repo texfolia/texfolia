@@ -41,6 +41,11 @@ export const shortcutActions = {
   },
   sidebar: { label: "Toggle sidebar", binding: "Mod+Alt+B", typing: false },
   search: { label: "Search projects", binding: "Mod+P", typing: true },
+  projectSearch: {
+    label: "Search in project",
+    binding: "Mod+Shift+F",
+    typing: true,
+  },
   newProject: { label: "New project", binding: "N P", typing: false },
 } as const;
 export type ShortcutAction = keyof typeof shortcutActions;

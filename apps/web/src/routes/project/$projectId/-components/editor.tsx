@@ -91,7 +91,7 @@ type EditorProps = {
   completion?: CompletionSource;
   problems?: LatexProblem[];
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
-  jump?: { line: number };
+  jump?: { line: number; column?: number; length?: number };
   formatSettings?: FormatSettings;
   preamble?: SymbolPreamble;
 };
@@ -231,7 +231,14 @@ export function Editor({
     const view = editor.current?.view;
     if (!jump || !view) return;
     const line = view.state.doc.line(Math.min(jump.line, view.state.doc.lines));
-    view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+    const anchor = line.from + Math.min((jump.column ?? 1) - 1, line.length);
+    view.dispatch({
+      selection: {
+        anchor,
+        head: Math.min(anchor + (jump.length ?? 0), line.to),
+      },
+      scrollIntoView: true,
+    });
     view.focus();
   }, [jump]);
 
