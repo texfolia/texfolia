@@ -12,6 +12,7 @@ import {
   eventChord,
   isTypingTarget,
   shortcutActions,
+  startsWithModifier,
   type ShortcutAction,
   type ShortcutMap,
 } from "#/lib/shortcuts";
@@ -51,10 +52,18 @@ export function ShortcutsProvider({
       const typing = isTypingTarget(event.target);
       const chord = eventChord(event, mac);
       if (!chord) return;
-      if (typing) matcher.reset();
+      if (
+        typing &&
+        !(event.metaKey || event.ctrlKey || event.altKey) &&
+        !matcher.pending(Date.now())
+      ) {
+        matcher.reset();
+        return;
+      }
       const entries = [...registrations.current].filter(
         (entry) =>
           entry.enabled() &&
+          !!latest.current[entry.action] &&
           (!inDialog ||
             entry.action === "settings" ||
             entry.action === "shortcuts") &&
@@ -63,8 +72,7 @@ export function ShortcutsProvider({
               entry.target.current?.contains(event.target))) &&
           (!typing ||
             (shortcutActions[entry.action].typing &&
-              (event.metaKey || event.ctrlKey || event.altKey) &&
-              !latest.current[entry.action].includes(" "))),
+              startsWithModifier(latest.current[entry.action]))),
       );
       const result = matcher.match(
         chord,

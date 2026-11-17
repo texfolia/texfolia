@@ -282,7 +282,7 @@ try {
   assert.equal(
     JSON.parse((await preferencesStorage())!)["s:preferences"].data.shortcuts
       .sidebar,
-    "Mod+Shift+B",
+    "Mod+Alt+B",
     "Conflicting draft remains uncommitted",
   );
   await settings

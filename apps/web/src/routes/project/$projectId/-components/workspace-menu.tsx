@@ -20,8 +20,10 @@ export function WorkspaceMenu({
   compiling,
   compileAvailable,
   editorAvailable,
+  compileOnSave,
   onSave,
   onSaveOnly,
+  onCompile,
   onClean,
   onCreate,
   onUpload,
@@ -39,8 +41,10 @@ export function WorkspaceMenu({
   compiling: boolean;
   compileAvailable: boolean;
   editorAvailable: boolean;
+  compileOnSave: boolean;
   onSave: () => void;
   onSaveOnly: () => void;
+  onCompile: () => void;
   onClean: () => void;
   onCreate: (kind: "text" | "folder") => void;
   onUpload: () => void;
@@ -83,14 +87,14 @@ export function WorkspaceMenu({
               </MenubarItem>
               <MenubarSeparator />
               <MenubarItem disabled={!canWrite || saving} onClick={onSave}>
-                {compileAvailable ? "Save & compile" : "Save"}
+                {compileAvailable && compileOnSave ? "Save & compile" : "Save"}
               </MenubarItem>
               {compileAvailable && (
                 <MenubarItem
                   disabled={!canWrite || saving}
-                  onClick={onSaveOnly}
+                  onClick={compileOnSave ? onSaveOnly : onCompile}
                 >
-                  Save without compiling
+                  {compileOnSave ? "Save without compiling" : "Save & compile"}
                 </MenubarItem>
               )}
               <MenubarItem

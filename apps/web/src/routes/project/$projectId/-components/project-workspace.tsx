@@ -467,6 +467,7 @@ export function ProjectWorkspace({
   const [jump, setJump] = useState<Workspace["jump"]>();
   const {
     formatting,
+    compile: compileSettings,
     open: settingsOpen,
     setOpen: setSettingsOpen,
   } = useSettings();
@@ -1028,9 +1029,20 @@ export function ProjectWorkspace({
     ]?.api.setActive();
   }
 
-  useAppShortcut("save", () => void compileProject(), {
+  const save = () =>
+    void (compileSettings.onSave ? compileProject() : saveSources());
+  useAppShortcut("save", save, { target: container, enabled: !settingsOpen });
+  useAppShortcut("saveWithoutCompiling", () => void saveSources(), {
     target: container,
     enabled: !settingsOpen,
+  });
+  useAppShortcut("compile", () => void compileProject(), {
+    target: container,
+    enabled: !settingsOpen,
+  });
+  useAppShortcut("cleanBuild", () => void compileProject(true), {
+    target: container,
+    enabled: !settingsOpen && !compiling,
   });
   useAppShortcut("nextTab", () => cycleTab(1), {
     target: container,
@@ -1425,8 +1437,10 @@ export function ProjectWorkspace({
           editorAvailable={nodes.some(
             (node) => node.id === activeId && node.kind === "text",
           )}
-          onSave={() => void compileProject()}
+          compileOnSave={compileSettings.onSave}
+          onSave={save}
           onSaveOnly={() => void saveSources()}
+          onCompile={() => void compileProject()}
           onClean={() => void compileProject(true)}
           onCreate={(kind) => createRef.current?.start(kind)}
           onUpload={() => uploadRef.current?.open()}

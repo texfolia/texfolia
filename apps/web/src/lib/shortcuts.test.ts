@@ -7,6 +7,7 @@ import {
   normalizeBinding,
   shortcutConflicts,
   shortcutMapSchema,
+  startsWithModifier,
 } from "./shortcuts";
 
 test("defaults are complete, valid, and resolve the old sidebar/Bold conflict", () => {
@@ -67,4 +68,46 @@ test("physical heading digits survive Alt keyboard layout characters", () => {
       true,
     ),
   ).toBe("Mod+Alt+1");
+});
+test("save defaults follow VS Code and Clean build starts unassigned", () => {
+  expect(defaultShortcuts.save).toBe("Mod+S");
+  expect(defaultShortcuts.saveWithoutCompiling).toBe("Mod+K S");
+  expect(defaultShortcuts.compile).toBe("Mod+Shift+B");
+  expect(defaultShortcuts.shortcuts).toBe("Mod+K Mod+S");
+  expect(defaultShortcuts.cleanBuild).toBe("");
+});
+test("unassigned bindings parse and never conflict", () => {
+  const map = shortcutMapSchema.parse({
+    ...defaultShortcuts,
+    save: " ",
+    compile: "",
+  });
+  expect(map.save).toBe("");
+  expect(shortcutConflicts(map)).toEqual([]);
+});
+test("modifier-led sequences run while typing; plain first keys do not", () => {
+  expect(startsWithModifier("Mod+K S")).toBe(true);
+  expect(startsWithModifier("Alt+Shift+F")).toBe(true);
+  expect(startsWithModifier("Shift+F")).toBe(false);
+  expect(startsWithModifier("N P")).toBe(false);
+  expect(startsWithModifier("")).toBe(false);
+});
+test("Mod+K prefixes resolve to save without compiling or keyboard shortcuts", () => {
+  const matcher = createSequenceMatcher();
+  const bindings = [
+    { id: "save", binding: "Mod+S" },
+    { id: "saveWithoutCompiling", binding: "Mod+K S" },
+    { id: "shortcuts", binding: "Mod+K Mod+S" },
+  ] as const;
+  expect(matcher.match("Mod+K", [...bindings], 0).pending).toBe(true);
+  expect(matcher.pending(500)).toBe(true);
+  expect(matcher.match("S", [...bindings], 500).action).toBe(
+    "saveWithoutCompiling",
+  );
+  expect(matcher.pending(600)).toBe(false);
+  matcher.match("Mod+K", [...bindings], 1000);
+  expect(matcher.match("Mod+S", [...bindings], 1200).action).toBe("shortcuts");
+  expect(matcher.match("Mod+S", [...bindings], 1400).action).toBe("save");
+  matcher.match("Mod+K", [...bindings], 2000);
+  expect(matcher.pending(3100)).toBe(false);
 });

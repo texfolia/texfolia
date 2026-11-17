@@ -1,9 +1,22 @@
 import { z } from "zod";
 
+// Defaults follow VS Code unless a binding would take over an important
+// browser or editor function. An empty binding leaves the action unassigned.
 export const shortcutActions = {
   settings: { label: "Settings", binding: "Mod+,", typing: true },
-  shortcuts: { label: "Keyboard shortcuts", binding: "Mod+/", typing: true },
-  save: { label: "Save & compile", binding: "Mod+S", typing: true },
+  shortcuts: {
+    label: "Keyboard shortcuts",
+    binding: "Mod+K Mod+S",
+    typing: true,
+  },
+  save: { label: "Save", binding: "Mod+S", typing: true },
+  saveWithoutCompiling: {
+    label: "Save without compiling",
+    binding: "Mod+K S",
+    typing: true,
+  },
+  compile: { label: "Save & compile", binding: "Mod+Shift+B", typing: true },
+  cleanBuild: { label: "Clean build", binding: "", typing: true },
   bold: { label: "Bold", binding: "Mod+B", typing: true },
   italic: { label: "Italic", binding: "Mod+I", typing: true },
   underline: { label: "Underline", binding: "Mod+U", typing: true },
@@ -14,7 +27,7 @@ export const shortcutActions = {
   heading4: { label: "Heading 4", binding: "Mod+Alt+4", typing: true },
   heading5: { label: "Heading 5", binding: "Mod+Alt+5", typing: true },
   heading6: { label: "Heading 6", binding: "Mod+Alt+6", typing: true },
-  format: { label: "Format document", binding: "Mod+Shift+F", typing: true },
+  format: { label: "Format document", binding: "Alt+Shift+F", typing: true },
   markdown: {
     label: "Open Markdown preview",
     binding: "Mod+Shift+V",
@@ -26,8 +39,8 @@ export const shortcutActions = {
     binding: "Ctrl+PageUp",
     typing: true,
   },
-  sidebar: { label: "Toggle sidebar", binding: "Mod+Shift+B", typing: false },
-  search: { label: "Search projects", binding: "Mod+K", typing: true },
+  sidebar: { label: "Toggle sidebar", binding: "Mod+Alt+B", typing: false },
+  search: { label: "Search projects", binding: "Mod+P", typing: true },
   newProject: { label: "New project", binding: "N P", typing: false },
 } as const;
 export type ShortcutAction = keyof typeof shortcutActions;
@@ -66,6 +79,7 @@ export function normalizeBinding(value: string): string | null {
   return result.join(" ");
 }
 export const bindingSchema = z.string().transform((value, context) => {
+  if (!value.trim()) return "";
   const binding = normalizeBinding(value);
   if (binding) return binding;
   context.addIssue({
@@ -86,6 +100,7 @@ export function shortcutConflicts(map: ShortcutMap) {
   const conflicts: { first: ShortcutAction; second: ShortcutAction }[] = [];
   for (const [index, first] of shortcutIds.entries()) {
     for (const second of shortcutIds.slice(index + 1)) {
+      if (!map[first] || !map[second]) continue;
       // Mod and explicit Ctrl/Meta can resolve to the same physical key.
       const variants = (binding: string) => [
         binding.replaceAll("Mod", "Ctrl"),
@@ -135,6 +150,11 @@ export function eventChord(
     .filter(Boolean)
     .join("+");
 }
+// Bindings that start with Ctrl, Meta, or Alt can run while typing, including
+// sequences such as Mod+K S; unmodified first keys belong to the text.
+export function startsWithModifier(binding: string) {
+  return /^(?:Mod|Ctrl|Meta|Alt)\+/.test(binding);
+}
 export function isTypingTarget(target: EventTarget | null) {
   return (
     target instanceof Element &&
@@ -150,6 +170,9 @@ export function createSequenceMatcher() {
   return {
     reset() {
       prefix = "";
+    },
+    pending(now: number) {
+      return !!prefix && now - lastKeyAt <= 1000;
     },
     match(
       chord: string,
