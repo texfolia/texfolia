@@ -52,7 +52,7 @@ Operational logs and traces record requests, errors, and compilation activity. C
 
 #### Browser storage
 
-Your browser stores appearance and editor preferences and workspace layout. For editors, Texfolia also caches collaborative text in IndexedDB to support reconnecting and offline edits. Closing a project or signing out does not automatically erase that local document cache. You can remove it by clearing Texfolia's site data in your browser. Clearing site data can discard edits that have not synchronized.
+Your browser stores appearance and editor preferences and workspace layout. For editors, Texfolia also caches collaborative text in IndexedDB to support reconnecting and offline edits. Closing a project keeps this cache. After a warning, signing out removes your account's cached collaborative text and workspace layouts, which can contain Markdown previews. It also removes legacy recovery drafts shared across accounts. This includes unsynced edits. Save those edits while connected before signing out. Saved documents can be downloaded again after sign-in. Appearance and editor preferences remain. If removal fails, Texfolia shows an error so you can retry or clear Texfolia's site data in your browser.
 
 #### Git history, deletion, and retention
 

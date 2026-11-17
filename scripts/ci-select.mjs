@@ -12,7 +12,12 @@ export const suites = {
   "ai-billing": { inputs: ["ai-billing.ts"] },
   assistant: { inputs: ["ai-assistant.ts"], build: true, browser: true },
   collaboration: {
-    inputs: ["collaboration.ts", "collaboration/"],
+    inputs: [
+      "collaboration.ts",
+      "collaboration/",
+      "collaboration-cache.ts",
+      "collaboration-cache/",
+    ],
     browser: true,
   },
   "workspace-metadata": {

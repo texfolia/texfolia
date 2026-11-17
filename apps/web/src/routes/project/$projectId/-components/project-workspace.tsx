@@ -45,6 +45,10 @@ import { SidebarProvider } from "#/components/ui/sidebar";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
+import {
+  documentCachingStopped,
+  stopDocumentCaching,
+} from "#/lib/collaboration/cache";
 import { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
 import type { EditorCommand } from "#/lib/editor-command";
@@ -411,6 +415,7 @@ export function ProjectWorkspace({
     [],
   );
   const persistLayout = useCallback(() => {
+    if (documentCachingStopped()) return;
     const dock = api.current;
     if (dock) writeWorkspaceLayout(layoutKey, chromeRef.current, dock.toJSON());
   }, [layoutKey]);
@@ -467,6 +472,20 @@ export function ProjectWorkspace({
   } = useSettings();
   const formatSettings = formatting ?? { indent: 2, wrap: true, width: 80 };
   const storageKey = `texfolia.project.${projectId}.sources`;
+  useEffect(() => {
+    const cleared = (event: StorageEvent) => {
+      if (
+        event.storageArea !== localStorage ||
+        event.newValue !== null ||
+        (event.key !== storageKey && event.key !== layoutKey)
+      )
+        return;
+      stopDocumentCaching();
+      window.location.replace("/");
+    };
+    window.addEventListener("storage", cleared);
+    return () => window.removeEventListener("storage", cleared);
+  }, [storageKey, layoutKey]);
   const compilation = useRef<AbortController | null>(null);
   const lastEditAt = useRef<number | null>(null);
   const editorId = useRef(crypto.randomUUID());
@@ -849,6 +868,7 @@ export function ProjectWorkspace({
   );
 
   function cacheDrafts() {
+    if (documentCachingStopped()) return;
     try {
       localStorage.setItem(
         storageKey,
@@ -1035,6 +1055,7 @@ export function ProjectWorkspace({
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
+      if (documentCachingStopped()) return;
       if (
         [...drafts.current.values()].some(
           (draft) => draft.value !== draft.savedValue,

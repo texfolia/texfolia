@@ -1370,25 +1370,134 @@ try {
   await owner
     .getByRole("button", { name: "Toggle Sidebar", exact: true })
     .click();
+  const cacheNames = {
+    owner: `texfolia.yjs.${ownerId}.${project.id}.signout-test`,
+    other: `texfolia.yjs.${readerId}.${project.id}.signout-test`,
+  };
+  const offlineEditor = await owner.context().newPage();
+  monitor(offlineEditor);
+  await offlineEditor.goto(`${origin}/project/${project.id}`);
+  const offlineContent = offlineEditor
+    .locator('.cm-content[contenteditable="true"]')
+    .first();
+  await offlineContent.waitFor();
+  await offlineEditor.routeWebSocket("**/api/collaboration/**", (socket) =>
+    socket.close(),
+  );
+  await owner.context().setOffline(true);
+  await offlineEditor
+    .getByText("Offline. Edits will merge when reconnected.")
+    .first()
+    .waitFor();
+  await offlineContent.fill("Private unsynced sign-out draft");
+  await owner.context().setOffline(false);
+  let unloadPrompts = 0;
+  offlineEditor.on("dialog", async (dialog) => {
+    unloadPrompts++;
+    await dialog.dismiss();
+  });
+  await owner.evaluate(async (names) => {
+    localStorage.setItem(
+      "texfolia.project.legacy.sources",
+      "Private legacy draft",
+    );
+    for (const name of Object.values(names)) {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(name);
+        request.onupgradeneeded = () =>
+          request.result.createObjectStore("source");
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction("source", "readwrite");
+          transaction.objectStore("source").put("Offline draft", "text");
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onerror = () => reject(transaction.error);
+        };
+        request.onerror = () => reject(request.error);
+      });
+    }
+  }, cacheNames);
   await owner
     .getByRole("button", { name: "Account menu", exact: true })
     .click();
   await owner.getByRole("menuitem", { name: "Sign out", exact: true }).click();
   const signOutGuard = owner.getByRole("alertdialog");
   await signOutGuard.waitFor();
+  await signOutGuard
+    .getByText(/including any edits that have not synced/)
+    .waitFor();
   await capture(owner, "projects-signout-mobile");
   assert.equal(new URL(owner.url()).pathname, "/projects");
   await signOutGuard
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
+  assert(
+    (await owner.evaluate(() => indexedDB.databases())).some(
+      ({ name }) => name === cacheNames.owner,
+    ),
+  );
   await owner
     .getByRole("button", { name: "Account menu", exact: true })
     .click();
   await owner.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  await owner.evaluate(() => {
+    const databases = indexedDB.databases.bind(indexedDB);
+    indexedDB.databases = () => {
+      indexedDB.databases = databases;
+      return Promise.reject(new Error("Cache enumeration unavailable"));
+    };
+  });
+  await signOutGuard
+    .getByRole("button", { name: "Sign out", exact: true })
+    .click();
+  await signOutGuard
+    .getByRole("alert")
+    .getByText(/local document copies could not be removed/)
+    .waitFor();
+  assert.equal(new URL(owner.url()).pathname, "/projects");
+  assert(
+    (await owner.evaluate(() => indexedDB.databases())).some(
+      ({ name }) => name === cacheNames.owner,
+    ),
+  );
   await signOutGuard
     .getByRole("button", { name: "Sign out", exact: true })
     .click();
   await owner.waitForURL(origin + "/");
+  await offlineEditor.waitForURL(origin + "/");
+  assert.equal(
+    unloadPrompts,
+    0,
+    "Confirmed sign-out closes dirty editors without another unload prompt",
+  );
+  const remainingCaches = await owner.evaluate(() => indexedDB.databases());
+  assert(
+    !remainingCaches.some(({ name }) =>
+      name?.startsWith(`texfolia.yjs.${ownerId}.`),
+    ),
+  );
+  assert(remainingCaches.some(({ name }) => name === cacheNames.other));
+  assert(
+    await owner.evaluate(
+      () =>
+        !Object.keys(localStorage).some(
+          (key) =>
+            key.startsWith("texfolia.project.") && key.endsWith(".sources"),
+        ),
+    ),
+  );
+  assert(
+    await owner.evaluate(
+      (userId) =>
+        !Object.keys(localStorage).some((key) =>
+          key.startsWith(`texfolia.workspace.layout.v1:${userId}:`),
+        ),
+      ownerId,
+    ),
+  );
   console.info(
     "Invitation acceptance, project creation/search/deletion, and sign-out passed",
   );

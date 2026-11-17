@@ -60,7 +60,9 @@ jobs:
         run: bun run --cwd apps/web test:ai-assistant
       - name: Exercise real-time collaboration locally
         if: steps.select.outputs.collaboration == 'true'
-        run: bun run --cwd apps/web test:collaboration
+        run: |
+          bun run --cwd apps/web test:collaboration
+          bun run --cwd apps/web test:collaboration-cache
       - name: Exercise metadata synchronization in two authenticated workspaces
         if: steps.select.outputs.workspace-metadata == 'true'
         run: bun run --cwd apps/web test:workspace-metadata:prebuilt

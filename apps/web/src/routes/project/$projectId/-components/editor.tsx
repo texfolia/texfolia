@@ -56,6 +56,7 @@ import {
   DropdownMenuSeparator,
 } from "#/components/ui/dropdown-menu";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+import { documentCachingStopped } from "#/lib/collaboration/cache";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
 import type { EditorCommand } from "#/lib/editor-command";
@@ -236,7 +237,9 @@ export function Editor({
 
   useEffect(() => {
     if (!modified) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!documentCachingStopped()) event.preventDefault();
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [modified]);
