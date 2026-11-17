@@ -162,9 +162,15 @@ function RouteComponent() {
               Session cookies support sign-in. Your browser also stores
               appearance and editor preferences, workspace layout, and a local
               cache of collaborative text for reconnecting and offline edits.
-              Signing out does not automatically erase that document cache.
-              Clearing Texfolia's site data removes local copies and can discard
-              edits that have not synchronized.
+              Signing out removes your account’s cached collaborative text and
+              workspace layouts from the current browser, along with legacy
+              recovery drafts shared across accounts. This includes edits that
+              have not synchronized. The sign-out dialog warns before discarding
+              these edits. Save them while connected before signing out. Saved
+              documents can be downloaded again after you sign in. Appearance
+              and editor preferences remain in this browser. If cache removal
+              fails, Texfolia shows an error so you can retry or clear
+              Texfolia's site data in your browser.
             </p>
           ),
         },

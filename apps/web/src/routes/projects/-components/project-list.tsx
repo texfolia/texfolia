@@ -71,7 +71,7 @@ import { columns } from "./project-columns";
 export function ProjectList({
   user,
 }: {
-  user: { name: string; email: string; image?: string | null };
+  user: { id: string; name: string; email: string; image?: string | null };
 }) {
   const [creating, setCreating] = useState(false);
   const store = useProjects();

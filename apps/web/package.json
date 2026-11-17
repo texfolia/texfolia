@@ -24,6 +24,7 @@
     "test:ai-billing": "bun run test/ai-billing.ts",
     "test:billing": "bun run test/billing.ts",
     "test:collaboration": "bun run test/collaboration.ts",
+    "test:collaboration-cache": "bun run test/collaboration-cache.ts",
     "test:compile-route": "bun run test/compile-route.ts",
     "test:git": "bun run test/git-integration.ts",
     "test:login": "bun run test/login.ts",

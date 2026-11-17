@@ -27,15 +27,15 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
-import { authClient } from "#/lib/auth-client";
 import { settingsLinks } from "#/lib/settings-navigation";
+import { signOut } from "#/lib/sign-out";
 
 import { initials } from "./project-columns";
 
 export function ProjectAccountMenu({
   user,
 }: {
-  user: { name: string; email: string; image?: string | null };
+  user: { id: string; name: string; email: string; image?: string | null };
 }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
@@ -95,7 +95,10 @@ export function ProjectAccountMenu({
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out of Texfolia?</AlertDialogTitle>
             <AlertDialogDescription>
-              You can sign back in to return to your projects.
+              Signing out removes local document copies and resets your
+              workspace layouts in this browser, including any edits that have
+              not synced. Cancel and reconnect to save those edits first. Saved
+              projects will be available when you sign back in.
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && (
@@ -112,11 +115,14 @@ export function ProjectAccountMenu({
                 setPending(true);
                 setError("");
                 try {
-                  const result = await authClient.signOut();
-                  if (result.error) throw new Error();
+                  await signOut(user.id);
                   window.location.assign("/");
-                } catch {
-                  setError("Could not sign out. Try again.");
+                } catch (cause) {
+                  setError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Could not sign out. Try again.",
+                  );
                   setPending(false);
                 }
               }}

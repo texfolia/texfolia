@@ -9,6 +9,7 @@ import * as Y from "yjs";
 
 import { formatChanges } from "../latex/format";
 import { decodeSource, encodeSource } from "../project-source";
+import { collaborationCachePrefix, stopDocumentCaching } from "./cache";
 import {
   serverMessageSchema,
   type ClientMessage,
@@ -97,11 +98,17 @@ export class CollaborativeFile {
     if (this.options.canWrite && typeof indexedDB !== "undefined") {
       try {
         this.persistence = new IndexeddbPersistence(
-          `texfolia.yjs.${this.options.userId}.${this.options.projectId}.${this.options.nodeId}`,
+          `${collaborationCachePrefix(this.options.userId)}${this.options.projectId}.${this.options.nodeId}`,
           this.doc,
         );
         await this.persistence.whenSynced;
         if (this.stopped) return;
+        this.persistence.db?.addEventListener("versionchange", (event) => {
+          if (event.newVersion !== null) return;
+          stopDocumentCaching();
+          this.destroy();
+          window.location.replace("/");
+        });
         if ((await this.persistence.get("initialized")) === 1) {
           this.setStatus({ ready: true });
           this.options.onChange(this.text.toString());

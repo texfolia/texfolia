@@ -21,6 +21,19 @@ preview replaces it. Double-clicking a row or tab, editing a source, or choosing
 close one tab, other tabs, all tabs, or tabs to the right in the same group. Edits
 remain in the existing collaboration and draft storage when a tab closes.
 
+Signing out warns that unsynced edits will be discarded, then removes the
+current user's `texfolia.yjs.<userId>.*` IndexedDB databases from this browser.
+It also removes legacy `texfolia.project.<projectId>.sources` recovery drafts,
+which are shared across accounts, and the current user's workspace layouts,
+which can contain Markdown preview text.
+Open editors using those databases close and return to the home page. Cancel
+sign-out and reconnect to save offline edits first. Saved documents synchronize
+again after sign-in. Appearance and editor preferences remain. If deletion is
+blocked, sign-out shows a retryable error after ending the server session.
+Close other Texfolia tabs and retry, or clear Texfolia's site data if the browser
+cannot remove the databases. Account deletion is a separate email-confirmed
+flow and does not invoke this client cleanup.
+
 Generated files appear under an ordinary `out` folder within the project tree.
 They remain read-only build artifacts and support open and download. Source
 files, folders, the editor, tabs, git changes and collaborators have context

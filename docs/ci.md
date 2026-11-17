@@ -25,22 +25,22 @@ dependencies can be proven. Changes confined to a mapped integration test select
 only its owners in the table below. Unknown web test helpers select every
 Postgres suite and production-assets.
 
-| Suite                       | Test inputs under `apps/web/test`                               | Additional inputs                                                                     | Production build | Chromium |
-| --------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------- | -------- |
-| database                    | `postgres.ts`                                                   | Runtime web inputs                                                                    | No               | No       |
-| compile-route               | `compile-route.ts`, `compile-route/`                            | Runtime web inputs, compiler runtime and fixtures                                     | No               | No       |
-| ai-billing                  | `ai-billing.ts`                                                 | Runtime web inputs                                                                    | No               | No       |
-| assistant                   | `ai-assistant.ts`                                               | Runtime web inputs                                                                    | Yes              | Yes      |
-| collaboration               | `collaboration.ts`, `collaboration/`                            | Runtime web inputs                                                                    | No               | Yes      |
-| workspace-metadata          | `workspace-metadata.ts`                                         | Runtime web inputs                                                                    | Yes              | Yes      |
-| ui-overhaul                 | `ui-overhaul.ts`, `pdf-fixture.ts`                              | Runtime web inputs                                                                    | Yes              | Yes      |
-| git                         | `git-integration.ts`, `git/`                                    | Runtime web inputs                                                                    | No               | No       |
-| source-storage              | `source-storage.ts`, `source-storage/`, `worker-integration.ts` | Runtime web inputs                                                                    | No               | No       |
-| projects                    | `projects.ts`, `projects/`, `worker-integration.ts`             | Runtime web inputs                                                                    | No               | No       |
-| templates                   | `templates.ts`, `templates/`, `worker-integration.ts`           | Runtime web inputs                                                                    | No               | No       |
-| template-seed               | None                                                            | Runtime web inputs, shared packages including `packages/db/test/template-seed-cli.ts` | No               | No       |
-| template-lifecycle          | `template-lifecycle.ts`, `template-pages.ts`                    | Runtime web inputs, compiler runtime and fixtures                                     | Yes              | Yes      |
-| production-assets in Checks | `production-assets.ts`                                          | Runtime web inputs                                                                    | Yes              | Yes      |
+| Suite                       | Test inputs under `apps/web/test`                                                      | Additional inputs                                                                     | Production build | Chromium |
+| --------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------- | -------- |
+| database                    | `postgres.ts`                                                                          | Runtime web inputs                                                                    | No               | No       |
+| compile-route               | `compile-route.ts`, `compile-route/`                                                   | Runtime web inputs, compiler runtime and fixtures                                     | No               | No       |
+| ai-billing                  | `ai-billing.ts`                                                                        | Runtime web inputs                                                                    | No               | No       |
+| assistant                   | `ai-assistant.ts`                                                                      | Runtime web inputs                                                                    | Yes              | Yes      |
+| collaboration               | `collaboration.ts`, `collaboration/`, `collaboration-cache.ts`, `collaboration-cache/` | Runtime web inputs                                                                    | No               | Yes      |
+| workspace-metadata          | `workspace-metadata.ts`                                                                | Runtime web inputs                                                                    | Yes              | Yes      |
+| ui-overhaul                 | `ui-overhaul.ts`, `pdf-fixture.ts`                                                     | Runtime web inputs                                                                    | Yes              | Yes      |
+| git                         | `git-integration.ts`, `git/`                                                           | Runtime web inputs                                                                    | No               | No       |
+| source-storage              | `source-storage.ts`, `source-storage/`, `worker-integration.ts`                        | Runtime web inputs                                                                    | No               | No       |
+| projects                    | `projects.ts`, `projects/`, `worker-integration.ts`                                    | Runtime web inputs                                                                    | No               | No       |
+| templates                   | `templates.ts`, `templates/`, `worker-integration.ts`                                  | Runtime web inputs                                                                    | No               | No       |
+| template-seed               | None                                                                                   | Runtime web inputs, shared packages including `packages/db/test/template-seed-cli.ts` | No               | No       |
+| template-lifecycle          | `template-lifecycle.ts`, `template-pages.ts`                                           | Runtime web inputs, compiler runtime and fixtures                                     | Yes              | Yes      |
+| production-assets in Checks | `production-assets.ts`                                                                 | Runtime web inputs                                                                    | Yes              | Yes      |
 
 The browser rows are the existing end-to-end coverage. There is no separate
 `e2e` package script in the current workflow. Compiler-only Go changes run the
