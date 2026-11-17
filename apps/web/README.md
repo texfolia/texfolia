@@ -167,17 +167,27 @@ IndexedDB. Viewer clients do not load writable caches.
 
 ### Live access revocation
 
-Collaboration WebSockets, compile SSE subscriptions, and progressive PDF streams
-check project access before each outgoing payload. The check holds shared locks
-on the project and the recipient's collaborator or membership row through delivery.
-A committed removal therefore prevents subsequent source, awareness, and build
-payloads from being sent. Failure to verify access also closes the subscription.
+Compile SSE subscriptions and progressive PDF streams check project access
+before each outgoing payload. The check holds shared locks on the project and the
+recipient's collaborator or membership row through delivery. A committed removal
+therefore prevents subsequent build payloads from being sent. Failure to verify
+access also closes the subscription.
 
-Idle subscriptions recheck access every five seconds. Database query time and
-runtime scheduling add to that interval. Collaboration uses a durable alarm so
-checks continue after hibernation. Revoked WebSockets close with code `1008`.
-Compile streams close and cancel their upstream reader. Reconnects use the
-normal authenticated routes and reject removed users.
+Collaboration rooms cache each connected user's access in memory, so edits and
+cursor updates do not query Postgres. Paths that change access notify the room
+through `invalidateAccess`. Sharing changes notify it inside the revoking
+transaction. The next delivery to that user then waits on the revocation's locks
+and sees the committed change. Organization member removal and leaving notify
+every registered room of the organization after Better Auth commits. Project and
+file deletion close sockets through source cleanup. Eviction clears the cache.
+
+Idle subscriptions and collaboration rooms recheck access every five seconds.
+If a notification fails, this check is the backstop: a revoked user can receive
+updates for up to five seconds, plus database time and runtime scheduling.
+Collaboration uses a durable alarm so checks continue after hibernation. The alarm
+also reconciles open documents with sources saved outside collaboration. Revoked
+WebSockets close with code `1008`. Compile streams close and cancel their upstream
+reader. Reconnects use the normal authenticated routes and reject removed users.
 
 Personal collaborators downgraded to viewers keep read access, but cannot submit
 edits. Organization members keep project access when their organization role
@@ -249,6 +259,7 @@ with signed Better Auth sessions stored in Postgres. A compiler fixture supplies
 controlled SSE and progressive PDF chunks. Revocation cases cover personal
 collaborators and organization members, including idle sockets after hibernation,
 role changes, denied reconnects, viewer access, and persistence of accepted edits.
+They also assert that edits and cursor updates run no Postgres queries.
 Deletion cases inspect actual SQLite tables, R2 objects, and SQL metadata after
 project and recursive file deletion, owner cascades, and retries following SQLite
 and Postgres failures. They also check dirty edits, idle clean rooms, chunk

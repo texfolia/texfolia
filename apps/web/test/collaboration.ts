@@ -652,10 +652,19 @@ try {
 
   console.log("Checking permission change");
   // A connected editor downgraded to viewer cannot keep writing through its socket.
-  await db
-    .update(projectCollaborator)
-    .set({ role: "viewer" })
-    .where(eq(projectCollaborator.userId, editorId));
+  assert.equal(
+    (
+      await mf.dispatchFetch(`${origin}/access/grant/${projectId}`, {
+        method: "POST",
+        headers: { "X-Owner": ownerId },
+        body: JSON.stringify({
+          email: `${editorId}@example.com`,
+          role: "viewer",
+        }),
+      })
+    ).status,
+    204,
+  );
   await b.page.evaluate(() => window.collaborationTest.insert(0, "DENIED"));
   await b.page.waitForFunction(() =>
     window.collaborationTest.status().error.includes("Viewers cannot edit"),

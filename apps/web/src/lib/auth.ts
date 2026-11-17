@@ -3,6 +3,7 @@ import { stripe, type SubscriptionOptions } from "@better-auth/stripe";
 import { type Db } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import { captcha, emailOTP, organization } from "better-auth/plugins";
 import type { Member } from "better-auth/plugins/organization";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
@@ -12,6 +13,10 @@ import { z } from "zod";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./auth-captcha";
 import { canManageBilling, subscriptionPlans } from "./billing";
 import { enforceBillingScope } from "./billing.server";
+import {
+  invalidateOrganizationCollaborationAccess,
+  type CollaborationAccess,
+} from "./collaboration/access.server";
 
 async function sendEmail(
   options: Parameters<typeof import("./email").sendEmail>[0],
@@ -109,7 +114,17 @@ export function createBillingPlugin({
   });
 }
 
-export function createAuth(db: Db) {
+const removedMemberSchema = z.object({
+  organizationId: z.string(),
+  userId: z.string(),
+});
+// Both endpoints return the removed member; failures return an APIError.
+const removedMemberResponseSchema = z.union([
+  z.object({ member: removedMemberSchema }).transform(({ member }) => member),
+  removedMemberSchema,
+]);
+
+export function createAuth(db: Db, collaboration?: CollaborationAccess) {
   const baseURL = process.env.BETTER_AUTH_URL!;
   const allowedHostnames = z
     .array(z.hostname())
@@ -141,7 +156,25 @@ export function createAuth(db: Db) {
       "/refresh-token",
     ],
     rateLimit: { enabled: true },
-    hooks: { before: enforceBillingScope },
+    hooks: {
+      before: enforceBillingScope,
+      after: createAuthMiddleware(async (ctx) => {
+        if (
+          ctx.path !== "/organization/remove-member" &&
+          ctx.path !== "/organization/leave"
+        )
+          return;
+        const removed = removedMemberResponseSchema.safeParse(
+          ctx.context.returned,
+        );
+        if (removed.success)
+          await invalidateOrganizationCollaborationAccess({
+            db,
+            collaboration,
+            ...removed.data,
+          });
+      }),
+    },
     account: { encryptOAuthTokens: true, accountLinking: { enabled: true } },
     user: {
       deleteUser: {
