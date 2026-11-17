@@ -52,17 +52,34 @@ export async function gitAccount({
   return token.accessToken;
 }
 
-async function readFiles(
-  tx: ProjectTransaction,
-  bucket: SourceBucket,
-  projectId: string,
-) {
-  const nodes = await tx
+type GitNode = typeof projectNode.$inferSelect;
+
+async function readNodes(tx: ProjectTransaction, projectId: string) {
+  return tx
     .select()
     .from(projectNode)
     .where(
       and(eq(projectNode.projectId, projectId), isNull(projectNode.deletedAt)),
     );
+}
+
+// Node identity, placement and content version; any change means a concurrent edit.
+function nodeVersions(nodes: GitNode[]) {
+  return JSON.stringify(
+    nodes
+      .map((node) => [
+        node.id,
+        node.parentId,
+        node.name,
+        node.kind,
+        node.objectKey,
+        node.updatedAt.getTime(),
+      ])
+      .sort(([a], [b]) => String(a).localeCompare(String(b))),
+  );
+}
+
+async function readFiles(bucket: SourceBucket, nodes: GitNode[]) {
   const paths = projectPaths(nodes);
   const files: GitFiles = {};
   for (const node of nodes) {
@@ -75,7 +92,34 @@ async function readFiles(
       ? new Uint8Array(await object.arrayBuffer())
       : new Uint8Array();
   }
-  return { files, nodes };
+  return files;
+}
+
+async function requireRemoteManager(
+  tx: ProjectTransaction,
+  found: { organizationId: string | null; ownerId: string | null },
+  userId: string,
+) {
+  if (found.organizationId) {
+    const [membership] = await tx
+      .select()
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, found.organizationId),
+          eq(member.userId, userId),
+        ),
+      );
+    if (
+      !membership?.role
+        .split(",")
+        .some((role) => role === "owner" || role === "admin")
+    )
+      throw new Error(
+        "Only project owners and organization admins can link or unlink a remote.",
+      );
+  } else if (found.ownerId !== userId)
+    throw new Error("Only the project owner can link or unlink a remote.");
 }
 
 async function replaceFiles(
@@ -83,7 +127,7 @@ async function replaceFiles(
   bucket: SourceBucket,
   projectId: string,
   files: GitFiles,
-  nodes: Awaited<ReturnType<typeof readFiles>>["nodes"],
+  nodes: GitNode[],
 ) {
   const root = nodes.find(
     (node) => node.parentId === null && node.kind === "folder",
@@ -196,125 +240,134 @@ export async function runGit({
   user: { id: string; name: string; email: string };
   action: GitAction;
 }): Promise<GitResult> {
+  const readOnly = action.kind === "status" || action.kind === "diff";
+  const access = readOnly ? "read" : "write";
+  const empty = {
+    remote: null,
+    branch: null,
+    branches: [],
+    changes: [],
+    commits: [],
+  };
   try {
-    return await db.transaction(async (tx) => {
+    // Short snapshot transaction: no Git host requests while the project row is locked.
+    const snapshot = await db.transaction(async (tx) => {
       const found = await lockProject({
         tx,
         projectId,
         userId: user.id,
-        access:
-          action.kind === "status" || action.kind === "diff" ? "read" : "write",
+        access,
       });
-      if (action.kind === "link" || action.kind === "unlink") {
-        if (found.organizationId) {
-          const [membership] = await tx
-            .select()
-            .from(member)
-            .where(
-              and(
-                eq(member.organizationId, found.organizationId),
-                eq(member.userId, user.id),
-              ),
-            );
-          if (
-            !membership?.role
-              .split(",")
-              .some((role) => role === "owner" || role === "admin")
-          )
-            throw new Error(
-              "Only project owners and organization admins can link or unlink a remote.",
-            );
-        } else if (found.ownerId !== user.id)
-          throw new Error(
-            "Only the project owner can link or unlink a remote.",
-          );
+      if (action.kind === "link" || action.kind === "unlink")
+        await requireRemoteManager(tx, found, user.id);
+      if (action.kind === "unlink") {
+        await tx.delete(projectGit).where(eq(projectGit.projectId, projectId));
+        return null;
       }
       const [linked] = await tx
         .select()
         .from(projectGit)
         .where(eq(projectGit.projectId, projectId));
-      const empty = {
-        remote: null,
-        branch: null,
-        branches: [],
-        changes: [],
-        commits: [],
-      };
-      if (action.kind === "unlink") {
-        await tx.delete(projectGit).where(eq(projectGit.projectId, projectId));
-        return { status: empty };
-      }
-      if (!linked && (action.kind === "status" || action.kind === "diff"))
-        return { status: empty };
-      const connecting = action.kind === "link" || action.kind === "import";
-      if (connecting && linked?.url)
-        throw new Error(
-          "Unlink the current repository before connecting another.",
-        );
-      if (!connecting && action.kind !== "initialize" && !linked)
-        throw new Error("Initialize or link a repository first.");
-      const remote = connecting
-        ? action.remote
-        : linked?.url
-          ? gitRemoteSchema.parse(linked.url)
-          : null;
+      if (!linked && readOnly) return null;
       const object = linked ? await bucket.get(linked.objectKey) : null;
       if (linked && !object)
         throw new Error("Saved git repository is missing.");
-      const repo = object
-        ? GitRepository.restore(await object.text())
-        : new GitRepository();
-      const { files, nodes } = await readFiles(tx, bucket, projectId);
-      let http: git.HttpClient | undefined;
-      if (
-        remote &&
-        (connecting ||
-          action.kind === "push" ||
-          action.kind === "pull" ||
-          (action.kind === "checkout" &&
-            !(await repo.hasLocalBranch(action.name))) ||
-          action.kind === "fetch")
-      )
-        http = gitHttp(
-          remote.url,
-          await gitAccount({ db, userId: user.id, provider: remote.provider }),
-        );
-      if (connecting && http && remote) {
-        if (action.kind === "import") await repo.clone(remote.url, http);
-        else await repo.requireEmptyRemote(remote.url, http);
-      }
-      if (action.kind === "initialize" && !linked) await repo.init();
-      if (!remote && ["push", "pull", "fetch"].includes(action.kind))
-        throw new Error("Link a remote before syncing this repository.");
-      if (action.kind !== "import") repo.overlay(files);
-      const author = { name: user.name || "Texfolia user", email: user.email };
-      switch (action.kind) {
-        case "fetch":
-          if (http && remote) await repo.remoteBranches(http, remote.url);
-          break;
-        case "commit":
-          await repo.commit(action.message, author);
-          break;
-        case "push":
-          if (http) await repo.push(http);
-          break;
-        case "pull":
-          if (http) await repo.pull(http, author);
-          break;
-        case "branch":
-          await repo.branch(action.name);
-          break;
-        case "checkout":
-          await repo.checkout(action.name, http);
-          break;
-      }
-      if (
-        action.kind === "import" ||
+      const nodes = await readNodes(tx, projectId);
+      return {
+        linked,
+        saved: object ? await object.text() : null,
+        nodes,
+        files: await readFiles(bucket, nodes),
+      };
+    });
+    if (!snapshot) return { status: empty };
+    const { linked, saved, nodes, files } = snapshot;
+    const connecting = action.kind === "link" || action.kind === "import";
+    if (connecting && linked?.url)
+      throw new Error(
+        "Unlink the current repository before connecting another.",
+      );
+    if (!connecting && action.kind !== "initialize" && !linked)
+      throw new Error("Initialize or link a repository first.");
+    const remote = connecting
+      ? action.remote
+      : linked?.url
+        ? gitRemoteSchema.parse(linked.url)
+        : null;
+    const repo = saved ? GitRepository.restore(saved) : new GitRepository();
+    let http: git.HttpClient | undefined;
+    if (
+      remote &&
+      (connecting ||
+        action.kind === "push" ||
         action.kind === "pull" ||
-        action.kind === "checkout"
-      )
-        await replaceFiles(tx, bucket, projectId, repo.sources(), nodes);
-      if (action.kind !== "status" && action.kind !== "diff") {
+        (action.kind === "checkout" &&
+          !(await repo.hasLocalBranch(action.name))) ||
+        action.kind === "fetch")
+    )
+      http = gitHttp(
+        remote.url,
+        await gitAccount({ db, userId: user.id, provider: remote.provider }),
+      );
+    if (connecting && http && remote) {
+      if (action.kind === "import") await repo.clone(remote.url, http);
+      else await repo.requireEmptyRemote(remote.url, http);
+    }
+    if (action.kind === "initialize" && !linked) await repo.init();
+    if (!remote && ["push", "pull", "fetch"].includes(action.kind))
+      throw new Error("Link a remote before syncing this repository.");
+    if (action.kind !== "import") repo.overlay(files);
+    const author = { name: user.name || "Texfolia user", email: user.email };
+    switch (action.kind) {
+      case "fetch":
+        if (http && remote) await repo.remoteBranches(http, remote.url);
+        break;
+      case "commit":
+        await repo.commit(action.message, author);
+        break;
+      case "push":
+        if (http) await repo.push(http);
+        break;
+      case "pull":
+        if (http) await repo.pull(http, author);
+        break;
+      case "branch":
+        await repo.branch(action.name);
+        break;
+      case "checkout":
+        await repo.checkout(action.name, http);
+        break;
+    }
+    const replacing =
+      action.kind === "import" ||
+      action.kind === "pull" ||
+      action.kind === "checkout";
+    if (!readOnly)
+      // Short commit transaction: apply only if nothing changed since the snapshot.
+      await db.transaction(async (tx) => {
+        const found = await lockProject({
+          tx,
+          projectId,
+          userId: user.id,
+          access,
+        });
+        if (action.kind === "link")
+          await requireRemoteManager(tx, found, user.id);
+        const [current] = await tx
+          .select()
+          .from(projectGit)
+          .where(eq(projectGit.projectId, projectId));
+        const latest = replacing ? await readNodes(tx, projectId) : [];
+        if (
+          current?.objectKey !== linked?.objectKey ||
+          (replacing && nodeVersions(latest) !== nodeVersions(nodes))
+        )
+          throw new Error(
+            "The project changed while Git was syncing. Nothing was applied; try again.",
+          );
+        if (replacing)
+          await replaceFiles(tx, bucket, projectId, repo.sources(), latest);
+        // Written under the lock so garbage collection can't remove it first.
         const objectKey = `git/${projectId}/${crypto.randomUUID()}.json`;
         await bucket.put(objectKey, repo.serialize());
         await tx
@@ -337,12 +390,11 @@ export async function runGit({
           .insert(projectCollaboration)
           .values({ projectId })
           .onConflictDoNothing();
-      }
-      return {
-        status: { remote, ...(await repo.status()) },
-        ...(action.kind === "diff" ? { diff: await repo.diff() } : {}),
-      };
-    });
+      });
+    return {
+      status: { remote, ...(await repo.status()) },
+      ...(action.kind === "diff" ? { diff: await repo.diff() } : {}),
+    };
   } catch (error) {
     if (error instanceof git.Errors.MergeConflictError)
       throw new Error(
