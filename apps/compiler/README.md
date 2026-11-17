@@ -318,12 +318,25 @@ not count as submissions. The policy is defined in [limits.ts](src/limits.ts).
 
 ## Deploy to Cloudflare
 
-`wrangler.jsonc` configures only the production `texfolia-compiler` Worker and its
-existing cloud resources. Local development uses the Bun runtime, Docker engine
-containers, and local SQLite storage described above. Its queues, coordinator
-state, and artifacts do not use Cloudflare resources. Local startup rejects
-non-loopback database and engine URLs. Keep production secrets out of local
-environment files.
+The default `wrangler.jsonc` configuration uses `texfolia-compiler-local`, the
+`texfolia-compilations-local` bucket, and the `compile-pro-local`,
+`compile-free-local`, `compile-dlq-local`, and `background-local` queues.
+R2 and queue producers have `remote: false` for local Wrangler development.
+The local rate limiter uses a separate namespace. The web Worker's default
+`COMPILER` service binding points to `texfolia-compiler-local`.
+
+`env.production` selects the existing `texfolia-compiler` Worker,
+`texfolia-compilations` bucket, and queues without the `-local` suffix.
+Production repeats the Containers, Durable Object, R2, queue, and rate-limit
+bindings because Wrangler does not inherit them across environments. The
+production container application name is pinned to
+`texfolia-compiler-tectoniccontainer` to preserve its existing identity. Both
+configurations keep the compiler private, with no public routes or preview URLs.
+
+Normal local development still uses the Bun runtime, Docker engine containers,
+and local SQLite storage described above. Its queues, coordinator state, and
+artifacts do not use Cloudflare resources. Local startup rejects non-loopback
+database and engine URLs. Keep production secrets out of local environment files.
 
 Use a Workers Paid account with Containers enabled. Run `bun install` from
 the repository root. With Docker running, create the required resources from `apps/compiler`:
@@ -337,11 +350,19 @@ bunx wrangler queues create compile-dlq
 bunx wrangler queues create background
 ```
 
-Then deploy from the repository root:
+To deploy production, run from the repository root:
 
 ```sh
 bun run deploy
 ```
+
+`bun run deploy` is the production deployment command for both Workers. Both
+app deploy scripts pass `--env production`; the web build also sets
+`CLOUDFLARE_ENV=production` before Vite generates its deployment configuration.
+To deploy only the compiler, run `bun run --cwd apps/compiler deploy`.
+For a compiler packaging check without uploading, run
+`bun run --cwd apps/compiler deploy --dry-run`. Direct `bunx wrangler deploy`
+without an environment targets the local resource names instead.
 
 Reuse the bucket and queues if they already exist. When upgrading from
 `texfolia-compile`, stop new submissions and drain its backlog with the old
@@ -374,7 +395,7 @@ a newer build. The DLQ consumer logs `Compile dead-letter message` with the
 project/job UUID, revision, and failure reason, then persists a terminal failure
 and notifies the editor through the normal coordinator event stream. It never
 runs TeX. Inspect these structured events in Workers Logs or with
-`bunx wrangler tail --format json`; the active DLQ consumer acknowledges a
+`bunx wrangler tail --env production --format json`; the active DLQ consumer acknowledges a
 message only after the failure is recorded, so acknowledged messages are no
 longer in the queue.
 

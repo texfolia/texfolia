@@ -57,7 +57,8 @@ export async function processQueueMessage(options: {
     projectId: string,
   ) => Pick<ProjectCoordinatorCore, "consume" | "fail" | "maintain">;
 }) {
-  const { queue, body, attempts, jobs, legacy, coordinator } = options;
+  const { body, attempts, jobs, legacy, coordinator } = options;
+  const queue = options.queue.replace(/-local$/, "");
   if (queue === "background") {
     const task = backgroundMessageSchema.safeParse(body);
     if (!task.success) {

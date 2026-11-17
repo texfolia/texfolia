@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "texfolia-compiler",
+  "name": "texfolia-compiler-local",
   "main": "worker.ts",
   "workers_dev": false,
   "preview_urls": false,
@@ -29,38 +29,52 @@
     { "tag": "v3", "new_sqlite_classes": ["PoolManager"] },
     { "tag": "v4", "new_sqlite_classes": ["UserCompileUsage"] },
   ],
-  "r2_buckets": [{ "binding": "PDFS", "bucket_name": "texfolia-compilations" }],
+  "r2_buckets": [
+    {
+      "binding": "PDFS",
+      "bucket_name": "texfolia-compilations-local",
+      "remote": false,
+    },
+  ],
   "queues": {
     "producers": [
-      { "binding": "COMPILE_PRO", "queue": "compile-pro" },
-      { "binding": "COMPILE_FREE", "queue": "compile-free" },
-      { "binding": "BACKGROUND", "queue": "background" },
+      {
+        "binding": "COMPILE_PRO",
+        "queue": "compile-pro-local",
+        "remote": false,
+      },
+      {
+        "binding": "COMPILE_FREE",
+        "queue": "compile-free-local",
+        "remote": false,
+      },
+      { "binding": "BACKGROUND", "queue": "background-local", "remote": false },
     ],
     "consumers": [
       {
-        "queue": "compile-pro",
+        "queue": "compile-pro-local",
         "max_batch_size": 1,
         "max_batch_timeout": 0,
         "max_concurrency": 4,
         "max_retries": 1,
-        "dead_letter_queue": "compile-dlq",
+        "dead_letter_queue": "compile-dlq-local",
       },
       {
-        "queue": "compile-free",
+        "queue": "compile-free-local",
         "max_batch_size": 1,
         "max_batch_timeout": 0,
         "max_concurrency": 1,
         "max_retries": 1,
-        "dead_letter_queue": "compile-dlq",
+        "dead_letter_queue": "compile-dlq-local",
       },
       {
-        "queue": "compile-dlq",
+        "queue": "compile-dlq-local",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_concurrency": 2,
       },
       {
-        "queue": "background",
+        "queue": "background-local",
         "max_batch_size": 20,
         "max_batch_timeout": 5,
         "max_concurrency": 1,
@@ -70,7 +84,7 @@
   "ratelimits": [
     {
       "name": "COMPILE_LIMIT",
-      "namespace_id": "243",
+      "namespace_id": "244",
       "simple": { "limit": 2, "period": 10 },
     },
   ],
@@ -79,5 +93,75 @@
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 },
     "traces": { "enabled": true, "head_sampling_rate": 0.01 },
+  },
+  "env": {
+    "production": {
+      "name": "texfolia-compiler",
+      "containers": [
+        {
+          "name": "texfolia-compiler-tectoniccontainer",
+          "class_name": "TectonicContainer",
+          "image": "./Dockerfile",
+          "image_build_context": "../..",
+          "max_instances": 20,
+          "instance_type": "basic",
+        },
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "COMPILER", "class_name": "TectonicContainer" },
+          { "name": "PROJECTS", "class_name": "ProjectCoordinator" },
+          { "name": "POOL", "class_name": "PoolManager" },
+          { "name": "COMPILE_USAGE", "class_name": "UserCompileUsage" },
+        ],
+      },
+      "r2_buckets": [
+        { "binding": "PDFS", "bucket_name": "texfolia-compilations" },
+      ],
+      "queues": {
+        "producers": [
+          { "binding": "COMPILE_PRO", "queue": "compile-pro" },
+          { "binding": "COMPILE_FREE", "queue": "compile-free" },
+          { "binding": "BACKGROUND", "queue": "background" },
+        ],
+        "consumers": [
+          {
+            "queue": "compile-pro",
+            "max_batch_size": 1,
+            "max_batch_timeout": 0,
+            "max_concurrency": 4,
+            "max_retries": 1,
+            "dead_letter_queue": "compile-dlq",
+          },
+          {
+            "queue": "compile-free",
+            "max_batch_size": 1,
+            "max_batch_timeout": 0,
+            "max_concurrency": 1,
+            "max_retries": 1,
+            "dead_letter_queue": "compile-dlq",
+          },
+          {
+            "queue": "compile-dlq",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_concurrency": 2,
+          },
+          {
+            "queue": "background",
+            "max_batch_size": 20,
+            "max_batch_timeout": 5,
+            "max_concurrency": 1,
+          },
+        ],
+      },
+      "ratelimits": [
+        {
+          "name": "COMPILE_LIMIT",
+          "namespace_id": "243",
+          "simple": { "limit": 2, "period": 10 },
+        },
+      ],
+    },
   },
 }

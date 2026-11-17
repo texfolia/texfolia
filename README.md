@@ -225,12 +225,14 @@ Run `bun run check:repo` separately while editing.
 Run `bun run lint:fix` to apply automatic Oxlint fixes.
 
 `bun run db:push`, `bun run auth:schema`, `bun run cf:typegen`, and
-`bun run deploy` also run through Turbo. Deploy builds the web app and deploys
-the compiler before the web Worker. Before the first deploy, complete the
+`bun run deploy` also run through Turbo. Deploy explicitly selects `production`
+for both Workers, builds the web app, and deploys the compiler before the web
+Worker. Before the first deploy, complete the
 [database deployment setup](docs/database-deployment.md), including committed
 migrations and explicit environment targeting.
-The web build script selects `env.production`; the default Wrangler web
-configuration is local emulation only. Existing production resource placeholders
+The web build script selects `env.production` before Vite generates its deploy
+configuration. Both Workers' default Wrangler configurations use isolated local
+resource names. Existing production resource placeholders
 must be configured before deployment.
 
 ## Projects
