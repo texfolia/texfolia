@@ -6,7 +6,7 @@
   "scripts": {
     "build": "docker build --platform linux/amd64 -t texfolia-latex-engine:local -f Dockerfile ../..",
     "cf:typegen": "wrangler types --include-runtime=false --strict-vars=false && oxfmt worker-configuration.d.ts",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env production",
     "dev": "bun --watch src/index.ts",
     "format": "gofmt -w engine",
     "format:check": "bun run scripts/check-go-format.ts",

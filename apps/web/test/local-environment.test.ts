@@ -181,11 +181,16 @@ test("web configuration has local resources and one explicit production environm
     new URL("../../compiler/wrangler.jsonc", import.meta.url),
     "utf8",
   );
-  expect(
-    z
-      .object({ env: z.unknown().optional() })
-      .parse(
-        ts.parseConfigFileTextToJson("wrangler.jsonc", compilerText).config,
-      ).env,
-  ).toBeUndefined();
+  const compilerConfig = z
+    .object({
+      name: z.string(),
+      env: z.object({ production: z.object({ name: z.string() }) }),
+    })
+    .parse(ts.parseConfigFileTextToJson("wrangler.jsonc", compilerText).config);
+  expect(config.services.map((service) => service.service)).toContain(
+    compilerConfig.name,
+  );
+  expect(production?.services.map((service) => service.service)).toContain(
+    compilerConfig.env.production.name,
+  );
 });

@@ -10,7 +10,7 @@
     "billing:setup": "bun run scripts/setup-billing.ts",
     "build": "bun run latex:assets && CLOUDFLARE_ENV=production vite build",
     "cf:typegen": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --strict-vars=false",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env production",
     "dev": "bun run scripts/migrate-local-storage.ts && bun run latex:assets && vite dev --port 3000 --strictPort",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

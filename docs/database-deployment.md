@@ -94,6 +94,7 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
    `db:push` accepts only local databases.
 3. Run `bun run deploy` after the migration succeeds. Turbo builds the web app
    for `env.production` and deploys `texfolia-compiler` before `texfolia-web`.
+   Both Worker deploy scripts explicitly pass `--env production`.
    `bun run --cwd apps/web build` explicitly sets `CLOUDFLARE_ENV=production`.
    Inspect the generated Worker name, Hyperdrive ID, source bucket, and compiler
    service before deploying the artifact. Selecting an environment only at deploy

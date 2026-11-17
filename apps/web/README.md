@@ -329,7 +329,10 @@ Deployment remains deferred until the first production launch. Follow
 resources, review and apply migrations, configure secrets, and build for the
 intended environment. Use the repository's installed Wrangler version.
 
-Deploy `texfolia-compiler` before deploying the web app. Production compiler
+Run `bun run deploy` from the repository root to deploy production. Both Worker
+deploy scripts pass `--env production`, and the web build selects
+`CLOUDFLARE_ENV=production`. Turbo deploys `texfolia-compiler` before the web app.
+Production compiler
 requests use the `COMPILER` service binding in `wrangler.jsonc` and need no
 internal token. `COMPILER_URL` is only a development setting and defaults to
 `http://localhost:8080`. See the [compiler deployment guide](../compiler/README.md).

@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import ts from "typescript";
+import { unstable_readConfig } from "wrangler";
 import { z } from "zod";
 
 import { ProjectCoordinatorCore } from "../src/coordinator";
@@ -189,63 +189,190 @@ function harness(engine: Engine) {
   };
 }
 
-test("compile consumers have independent priority, one retry, and a shared DLQ; background batches separately", async () => {
-  const parsed: unknown = ts.parseConfigFileTextToJson(
-    "wrangler.jsonc",
-    await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
-  ).config;
-  const config = z
-    .object({
-      queues: z.object({
-        producers: z.array(
-          z.object({ binding: z.string(), queue: z.string() }),
-        ),
-        consumers: z.array(
+test.each([
+  { env: undefined, suffix: "-local" },
+  { env: "production", suffix: "" },
+])(
+  "compiler $env configuration isolates resources and preserves queue policy",
+  ({ env, suffix }) => {
+    const config = z
+      .object({
+        name: z.string(),
+        workers_dev: z.boolean(),
+        preview_urls: z.boolean(),
+        routes: z.array(z.unknown()),
+        r2_buckets: z.array(
           z.object({
-            queue: z.string(),
-            max_retries: z.number().optional(),
-            dead_letter_queue: z.string().optional(),
-            max_concurrency: z.number(),
-            max_batch_size: z.number(),
+            binding: z.string(),
+            bucket_name: z.string(),
+            remote: z.boolean().optional(),
           }),
         ),
-      }),
-    })
-    .parse(parsed);
-  for (const name of ["compile-pro", "compile-free"]) {
+        durable_objects: z.object({
+          bindings: z.array(z.object({ name: z.string() })),
+        }),
+        containers: z.array(
+          z.object({
+            name: z.string(),
+            class_name: z.string(),
+            max_instances: z.number(),
+            instance_type: z.string(),
+          }),
+        ),
+        migrations: z.array(z.object({ tag: z.string() })),
+        ratelimits: z.array(
+          z.object({
+            name: z.string(),
+            namespace_id: z.string(),
+            simple: z.object({ limit: z.number(), period: z.number() }),
+          }),
+        ),
+        queues: z.object({
+          producers: z.array(
+            z.object({
+              binding: z.string(),
+              queue: z.string(),
+              remote: z.boolean().optional(),
+            }),
+          ),
+          consumers: z.array(
+            z.object({
+              queue: z.string(),
+              max_retries: z.number().optional(),
+              dead_letter_queue: z.string().optional(),
+              max_concurrency: z.number(),
+              max_batch_size: z.number(),
+            }),
+          ),
+        }),
+      })
+      .parse(
+        unstable_readConfig({
+          config: new URL("../wrangler.jsonc", import.meta.url).pathname,
+          env,
+        }),
+      );
+    expect(config.name).toBe(`texfolia-compiler${suffix}`);
+    expect(config.r2_buckets).toMatchObject([
+      { binding: "PDFS", bucket_name: `texfolia-compilations${suffix}` },
+    ]);
+    if (!env) {
+      expect(config.r2_buckets[0]?.remote).toBe(false);
+      for (const producer of config.queues.producers)
+        expect(producer.remote).toBe(false);
+    }
     expect(
-      config.queues.consumers.find((consumer) => consumer.queue === name),
-    ).toMatchObject({
-      max_retries: 1,
-      dead_letter_queue: "compile-dlq",
-      max_batch_size: 1,
+      config.durable_objects.bindings.map((binding) => binding.name),
+    ).toEqual(["COMPILER", "PROJECTS", "POOL", "COMPILE_USAGE"]);
+    expect(config.containers).toHaveLength(1);
+    expect(config.containers[0]).toMatchObject({
+      name: env
+        ? "texfolia-compiler-tectoniccontainer"
+        : "texfolia-compiler-local-tectoniccontainer",
+      class_name: "TectonicContainer",
+      max_instances: 20,
+      instance_type: "basic",
     });
+    expect(config.migrations.map((migration) => migration.tag)).toEqual([
+      "v1",
+      "v2",
+      "v3",
+      "v4",
+    ]);
+    expect(config.ratelimits).toMatchObject([
+      {
+        name: "COMPILE_LIMIT",
+        namespace_id: env ? "243" : "244",
+        simple: { limit: 2, period: 10 },
+      },
+    ]);
+    expect(config.workers_dev).toBe(false);
+    expect(config.preview_urls).toBe(false);
+    expect(config.routes).toEqual([]);
+    for (const name of ["compile-pro", "compile-free"]) {
+      expect(
+        config.queues.consumers.find(
+          (consumer) => consumer.queue === `${name}${suffix}`,
+        ),
+      ).toMatchObject({
+        max_retries: 1,
+        dead_letter_queue: `compile-dlq${suffix}`,
+        max_batch_size: 1,
+      });
+      expect(
+        config.queues.producers.some(
+          (producer) => producer.queue === `${name}${suffix}`,
+        ),
+      ).toBe(true);
+    }
     expect(
-      config.queues.producers.some((producer) => producer.queue === name),
+      config.queues.consumers.find(
+        (consumer) => consumer.queue === `compile-pro${suffix}`,
+      )?.max_concurrency,
+    ).toBeGreaterThan(
+      config.queues.consumers.find(
+        (consumer) => consumer.queue === `compile-free${suffix}`,
+      )?.max_concurrency ?? Infinity,
+    );
+    expect(
+      config.queues.consumers.find(
+        (consumer) => consumer.queue === `background${suffix}`,
+      )?.max_batch_size,
+    ).toBeGreaterThan(1);
+    expect(
+      config.queues.consumers.some(
+        (consumer) => consumer.queue === `compile-dlq${suffix}`,
+      ),
     ).toBe(true);
-  }
-  expect(
-    config.queues.consumers.find((consumer) => consumer.queue === "compile-pro")
-      ?.max_concurrency,
-  ).toBeGreaterThan(
-    config.queues.consumers.find(
-      (consumer) => consumer.queue === "compile-free",
-    )?.max_concurrency ?? Infinity,
-  );
-  expect(
-    config.queues.consumers.find((consumer) => consumer.queue === "background")
-      ?.max_batch_size,
-  ).toBeGreaterThan(1);
-  expect(
-    config.queues.consumers.some(
-      (consumer) => consumer.queue === "compile-dlq",
-    ),
-  ).toBe(true);
-  expect(
-    config.queues.producers.some((producer) => producer.queue === "background"),
-  ).toBe(true);
-  expect(config.queues.consumers).toHaveLength(4);
-});
+    expect(
+      config.queues.producers.some(
+        (producer) => producer.queue === `background${suffix}`,
+      ),
+    ).toBe(true);
+    expect(config.queues.consumers).toHaveLength(4);
+    expect(config.queues.producers).toHaveLength(3);
+  },
+);
+
+test.each(["", "-local"])(
+  "queue delivery routes compile, DLQ, and background messages with suffix '%s'",
+  async (suffix) => {
+    const fixture = harness(async () => output);
+    try {
+      for (const lane of ["compile-pro", "compile-free"]) {
+        const id = crypto.randomUUID();
+        await fixture.jobs.submit(id, project);
+        expect(
+          await fixture.deliver(`${lane}${suffix}`, {
+            projectId: id,
+            revision: 0,
+          }),
+        ).toBe(true);
+        expect((await fixture.jobs.get(id))?.status).toBe("succeeded");
+      }
+      const id = crypto.randomUUID();
+      await fixture.jobs.submit(id, project);
+      expect(
+        await fixture.deliver(`compile-dlq${suffix}`, {
+          projectId: id,
+          revision: 0,
+        }),
+      ).toBe(true);
+      expect((await fixture.jobs.get(id))?.status).toBe("failed");
+      const expiredArtifact = "compilations/expired.pdf";
+      fixture.objects.set(expiredArtifact, {
+        bytes: new TextEncoder().encode("%PDF-expired"),
+        uploaded: 0,
+      });
+      expect(
+        await fixture.deliver(`background${suffix}`, { kind: "recover" }),
+      ).toBe(true);
+      expect(fixture.objects.has(expiredArtifact)).toBe(false);
+    } finally {
+      await fixture.core.close();
+    }
+  },
+);
 
 test("interactive success stays direct; X-Compile-Plan selects only the overflow lane", async () => {
   for (const plan of ["pro", "team", "free", "unknown", "invalid"]) {
