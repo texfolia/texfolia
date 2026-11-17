@@ -814,6 +814,25 @@ try {
     .focus();
   await owner.keyboard.press("Enter");
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
+  await owner.mouse.click(2, 2);
+  await owner.keyboard.press("Tab");
+  const skipToEditor = owner.getByRole("link", {
+    name: "Skip to editor",
+    exact: true,
+  });
+  assert.equal(
+    await skipToEditor.evaluate((link) => link === document.activeElement),
+    true,
+    "Skip link is the first workspace tab stop",
+  );
+  await owner.keyboard.press("Enter");
+  assert.equal(
+    await owner
+      .getByRole("main", { name: "Editor", exact: true })
+      .evaluate((main) => main === document.activeElement),
+    true,
+    "Skip link focuses the workspace main landmark",
+  );
   await sidebarView(owner, "collaboration");
   await owner.getByRole("form", { name: "Share project" }).waitFor();
   await owner
