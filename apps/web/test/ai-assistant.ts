@@ -49,6 +49,7 @@ let objectKey = "";
 let mode: "tools" | "error" | "simple" | "slow" = "tools";
 let call = 0;
 let logCalls = 0;
+const streamingTimers = new Set<ReturnType<typeof setInterval>>();
 const inference: { headers: Pick<Headers, "get">; body: unknown }[] = [];
 const meterEvents: URLSearchParams[] = [];
 const compileJobs = new Map<string, string>();
@@ -283,8 +284,9 @@ const mf = new Miniflare({
             chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
             "data: [DONE]\n\n";
           if (mode === "slow") {
+            // Keep streaming until Stop; a fixed end time races slower CI browsers.
             const encoder = new TextEncoder();
-            let timer: ReturnType<typeof setTimeout>;
+            let timer: ReturnType<typeof setInterval>;
             return new Response(
               new ReadableStream({
                 start(controller) {
@@ -293,13 +295,18 @@ const mf = new Miniflare({
                       `data: ${JSON.stringify(chunk({ role: "assistant", content: "Working…" }))}\n\n`,
                     ),
                   );
-                  timer = setTimeout(() => {
-                    controller.enqueue(encoder.encode(data));
-                    controller.close();
-                  }, 2000);
+                  timer = setInterval(() => {
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify(chunk({ content: "." }))}\n\n`,
+                      ),
+                    );
+                  }, 100);
+                  streamingTimers.add(timer);
                 },
                 cancel() {
-                  clearTimeout(timer);
+                  clearInterval(timer);
+                  streamingTimers.delete(timer);
                 },
               }),
               { headers },
@@ -786,7 +793,10 @@ try {
     .getByRole("textbox", { name: "Message the assistant" })
     .fill("Continue, then stop.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await page.getByRole("log").getByText("Working…", { exact: true }).waitFor();
+  await page
+    .getByRole("log")
+    .getByText(/^Working…/)
+    .waitFor();
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   const lastCall = inference.at(-1);
   assert(lastCall);
@@ -1002,6 +1012,7 @@ try {
     `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
   );
 } finally {
+  for (const timer of streamingTimers) clearInterval(timer);
   await browser.close();
   await mf.dispose();
   const runs = await db

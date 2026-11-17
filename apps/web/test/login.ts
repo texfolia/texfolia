@@ -174,6 +174,13 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      /content security policy/i.test(message.text())
+    )
+      browserErrors.push(message.text());
+  });
   await page.clock.install();
   const login = async (redirectTo?: string, error?: string) => {
     const url = new URL("/login", origin);

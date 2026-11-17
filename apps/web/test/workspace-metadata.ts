@@ -332,6 +332,13 @@ try {
       errors.push(error.message);
       console.error(error);
     });
+    page.on("console", (message) => {
+      if (
+        message.type() === "error" &&
+        /content security policy/i.test(message.text())
+      )
+        errors.push(message.text());
+    });
     await page.goto(`${origin}/project/${projectId}`);
     await page.locator('.cm-content[contenteditable="true"]').waitFor();
   }
@@ -422,7 +429,17 @@ try {
     where: { projectId, name: "asset.bin" },
   });
   assert(asset);
-  await owner.addScriptTag({ content: rpcScript });
+  await owner.evaluate((content) => {
+    const nonce = document
+      .querySelector('meta[property="csp-nonce"]')
+      ?.getAttribute("content");
+    if (!nonce)
+      throw new Error("Missing document CSP nonce for the RPC fixture");
+    const script = document.createElement("script");
+    script.nonce = nonce;
+    script.textContent = content;
+    document.head.appendChild(script);
+  }, rpcScript);
   await owner.evaluate(
     (data) => window.metadataSaveRpc({ method: "POST", data }),
     {

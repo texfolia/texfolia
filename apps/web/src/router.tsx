@@ -1,6 +1,13 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
+import { createIsomorphicFn } from "@tanstack/react-start";
+import { getRequestHeader } from "@tanstack/react-start/server";
 
+import { cspNonceHeader } from "./lib/security-headers";
 import { routeTree } from "./routeTree.gen";
+
+const getNonce = createIsomorphicFn()
+  .server(() => getRequestHeader(cspNonceHeader))
+  .client(() => undefined);
 
 export function getRouter() {
   const router = createTanStackRouter({
@@ -8,6 +15,7 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
+    ssr: { nonce: getNonce() },
   });
 
   return router;
