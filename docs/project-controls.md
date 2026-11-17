@@ -15,7 +15,7 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 | File management  | Editors can create files and folders, upload source files, and rename, move, or delete items. Deletion requires confirmation. Viewers have no source management controls.          |
 | Access display   | The project list shows the actual collaborator count, **Personal** when there are none, or **Organization** for inherited membership. The workspace lists actual people and roles. |
 
-Organization projects inherit access from membership. The workspace explains this and shows no personal-project sharing form. Organization creation, invitations, and membership administration have no management UI in v1. The invitation acceptance route remains available for existing invitations.
+Organization projects inherit access from membership. Every organization member is an editor on every organization project, whatever their role (`owner`, `admin`, or `member`). Members can save sources, compile, write to collaboration, and use write assistant tools. Organization projects have no viewer role and no per-project roles. Owners and admins additionally can delete organization projects and link or unlink a git remote. The workspace explains this and shows no personal-project sharing form. Organization creation, invitations, and membership administration have no management UI in v1. The invitation acceptance route remains available for existing invitations.
 
 The public header links to Templates and Pricing. GitHub and GitLab integration is available from the right sidebar. Repositories can be imported from Projects. The Pro AI assistant is part of v1.
 

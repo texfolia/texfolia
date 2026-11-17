@@ -244,7 +244,7 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
       )}
       {access?.organization && (
         <p className="text-muted-foreground p-2">
-          Access is inherited from organization membership.
+          Every organization member can edit this project.
         </p>
       )}
       {access && !access.organization && access.people.length === 1 && (
