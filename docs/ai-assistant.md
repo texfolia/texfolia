@@ -74,6 +74,12 @@ git mutations. The **Generate message** button in the Git panel uses the same
 subscription, Gateway, spending cap, and usage meter. It suggests an editable
 message and creates no commit. See [Git integration](git-integration.md).
 
+Project viewers can use the assistant for read-only questions. Their runs
+receive only `list_files`, `read_file`, `git_status`, `git_diff`, and
+`read_compile_logs`; file edits, compiles, and git mutations are not offered.
+The server write checks still apply to editors' tool calls. A run stops if the
+user's role changes while it is in progress.
+
 ## Check metering
 
 Each model request first creates an `ai_request` row. Its reservation includes
