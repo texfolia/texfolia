@@ -33,8 +33,9 @@ seeds, schema setup, retention, and verification commands.
 Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed
 by `project_node.object_key` and `size_bytes`. Keys are
 `projects/{projectId}/sources/{sha256}`. Collaborative text edits persist automatically.
-Save and Cmd/Ctrl+S wait for merged text to reach R2. **Save & compile** persists
-first and submits the acknowledged source snapshot.
+**Save & compile** (the default save, including Cmd/Ctrl+S) waits for merged text
+to reach R2, then submits the acknowledged source snapshot as a cached build.
+**Save without compiling** only persists; **Clean build** discards the cache.
 Uploads use the same storage and quota checks. Text uploads (including `.bib`)
 remain editable; binary sources can be downloaded, exported, and compiled.
 

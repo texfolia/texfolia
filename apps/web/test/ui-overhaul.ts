@@ -1212,7 +1212,7 @@ try {
   );
   await owner.keyboard.press("Escape");
   await owner.getByRole("tab", { name: /^main\.tex/ }).click();
-  await workspaceMenu(owner, "File", "Save");
+  await workspaceMenu(owner, "File", "Save without compiling");
   await owner.getByRole("tab", { name: "main.tex", exact: true }).waitFor();
   console.info(
     "Keyboard project navigation, file dialog focus, and source ZIP download passed",

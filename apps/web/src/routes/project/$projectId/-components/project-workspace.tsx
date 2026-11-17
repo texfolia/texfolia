@@ -933,7 +933,8 @@ export function ProjectWorkspace({
   async function compileProject(clean = false) {
     const snapshot = revision.current;
     const events = buildEvents.current;
-    if (!main || !events || !canWrite || !(await saveSources())) return;
+    // Save first so the default save path persists even when compiling isn't possible.
+    if (!canWrite || !(await saveSources()) || !main || !events) return;
     compilation.current?.abort();
     const startedAt = performance.now();
     const editedAt = lastEditAt.current;
@@ -1027,7 +1028,7 @@ export function ProjectWorkspace({
     ]?.api.setActive();
   }
 
-  useAppShortcut("save", () => void saveSources(), {
+  useAppShortcut("save", () => void compileProject(), {
     target: container,
     enabled: !settingsOpen,
   });
@@ -1424,8 +1425,9 @@ export function ProjectWorkspace({
           editorAvailable={nodes.some(
             (node) => node.id === activeId && node.kind === "text",
           )}
-          onSave={() => void saveSources()}
-          onCompile={(clean) => void compileProject(clean)}
+          onSave={() => void compileProject()}
+          onSaveOnly={() => void saveSources()}
+          onClean={() => void compileProject(true)}
           onCreate={(kind) => createRef.current?.start(kind)}
           onUpload={() => uploadRef.current?.open()}
           onExport={() => exportRef.current?.open()}

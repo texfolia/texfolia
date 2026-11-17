@@ -3,7 +3,7 @@ import { z } from "zod";
 export const shortcutActions = {
   settings: { label: "Settings", binding: "Mod+,", typing: true },
   shortcuts: { label: "Keyboard shortcuts", binding: "Mod+/", typing: true },
-  save: { label: "Save sources", binding: "Mod+S", typing: true },
+  save: { label: "Save & compile", binding: "Mod+S", typing: true },
   bold: { label: "Bold", binding: "Mod+B", typing: true },
   italic: { label: "Italic", binding: "Mod+I", typing: true },
   underline: { label: "Underline", binding: "Mod+U", typing: true },
