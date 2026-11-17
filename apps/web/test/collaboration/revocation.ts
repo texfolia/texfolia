@@ -12,6 +12,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import type { Miniflare } from "miniflare";
 import * as Y from "yjs";
+import { z } from "zod";
 
 import {
   awarenessFrame,
@@ -45,6 +46,12 @@ async function bounded<T>(promise: Promise<T>, label: string) {
     clearTimeout(timer);
   }
 }
+
+type Client = {
+  doc: Y.Doc;
+  messages: ServerMessage[];
+  send: (message: ClientMessage) => void;
+};
 
 export async function checkRevocation({
   mf,
@@ -156,6 +163,69 @@ export async function checkRevocation({
           );
           return { socket, messages, doc, send, closeCode: () => closeCode };
         }
+        async function changeAccess(
+          action: "grant" | "revoke" | "member-removed",
+          body: Record<string, string>,
+        ) {
+          const response = await mf.dispatchFetch(
+            `${origin}/access/${action}/${projectId}`,
+            {
+              method: "POST",
+              headers: { "X-Owner": ownerId },
+              body: JSON.stringify(body),
+            },
+          );
+          assert.equal(response.status, 204, `Access ${action} failed`);
+        }
+        async function usage() {
+          const response = await mf.dispatchFetch(
+            `${origin}/usage/${projectId}`,
+          );
+          return z
+            .object({ databaseUses: z.number(), alarms: z.number() })
+            .parse(await response.json());
+        }
+        // Edits and cursors from users with unchanged access must not touch Postgres.
+        async function checkEditsSkipDatabase(...clients: Client[]) {
+          const [author, ...peers] = clients;
+          assert(author);
+          for (let attempt = 0; ; attempt++) {
+            const before = await usage();
+            for (let index = 0; index < 10; index++) {
+              const vector = Y.encodeStateVector(author.doc);
+              author.doc.getText("source").insert(0, "k");
+              author.send({
+                type: "update",
+                update: encodeSource(Y.encodeStateAsUpdate(author.doc, vector)),
+              });
+              author.send({
+                type: "awareness",
+                update: encodeSource(
+                  awarenessFrame(123, attempt * 10 + index + 2, {
+                    cursor: null,
+                  }),
+                ),
+              });
+            }
+            const expected = author.doc.getText("source").toString();
+            await eventually(
+              () =>
+                peers.every(
+                  (peer) => peer.doc.getText("source").toString() === expected,
+                ),
+              "Peers missed edits",
+            );
+            const after = await usage();
+            // The flush and access alarms query Postgres by design.
+            if (after.alarms !== before.alarms && attempt < 3) continue;
+            assert.equal(
+              after.databaseUses,
+              before.databaseUses,
+              "Edits queried Postgres",
+            );
+            return;
+          }
+        }
         async function openStream(userId: string, query = "events=1") {
           const response = await fetch(
             `${origin}/api/compile/${projectId}?${query}`,
@@ -187,6 +257,8 @@ export async function checkRevocation({
           () => owner.doc.getText("source").toString() === accepted,
           "Accepted edit missing",
         );
+        if (ownership === "personal" && trigger === "source")
+          await checkEditsSkipDatabase(owner, recipient, viewer);
         const revokedEvents = await openStream(editorId);
         const allowedEvents = await openStream(viewerId);
         const revokedPdf = await openStream(
@@ -195,15 +267,10 @@ export async function checkRevocation({
         );
 
         if (ownership === "personal") {
-          await db
-            .update(projectCollaborator)
-            .set({ role: "viewer" })
-            .where(
-              and(
-                eq(projectCollaborator.projectId, projectId),
-                eq(projectCollaborator.userId, editorId),
-              ),
-            );
+          await changeAccess("grant", {
+            email: `${editorId}@example.com`,
+            role: "viewer",
+          });
           recipient.send({
             type: "sync",
             vector: encodeSource(Y.encodeStateVector(recipient.doc)),
@@ -256,7 +323,10 @@ export async function checkRevocation({
         assert.equal(recipient.closeCode(), 0);
         const receivedBefore = recipient.messages.length;
 
-        if (ownership === "personal")
+        // Idle revocation skips the notification to exercise the alarm backstop.
+        if (ownership === "personal" && trigger !== "idle")
+          await changeAccess("revoke", { userId: editorId });
+        else if (ownership === "personal")
           await db
             .delete(projectCollaborator)
             .where(
@@ -265,7 +335,14 @@ export async function checkRevocation({
                 eq(projectCollaborator.userId, editorId),
               ),
             );
-        else await db.delete(member).where(eq(member.id, removedMembershipId));
+        else {
+          await db.delete(member).where(eq(member.id, removedMembershipId));
+          if (trigger !== "idle")
+            await changeAccess("member-removed", {
+              organizationId,
+              userId: editorId,
+            });
+        }
         // The recipient sends nothing after deletion, including no application pings.
         const secret = `secret-${crypto.randomUUID()}`;
         if (trigger === "source") {

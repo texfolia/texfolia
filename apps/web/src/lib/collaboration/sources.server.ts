@@ -15,7 +15,7 @@ export async function collaborationAccess(
   projectId: string,
   nodeId: string,
   userId: string,
-  options?: { deliver?: () => void; register?: boolean },
+  options?: { register?: boolean },
 ) {
   return db.transaction(async (tx) => {
     const access = await lockProject({ tx, projectId, userId, access: "read" });
@@ -33,10 +33,36 @@ export async function collaborationAccess(
         .insert(projectCollaboration)
         .values({ projectId })
         .onConflictDoNothing();
-    // Keep access rows locked through delivery, ordering it against revocation.
-    options?.deliver?.();
     return { node, canWrite: access.canWrite };
   });
+}
+
+export type SourceNode = { objectKey: string | null; updatedAt: Date };
+
+// Callers verify access first; this only reads a live text node.
+export async function sourceNode(
+  db: Db,
+  projectId: string,
+  nodeId: string,
+): Promise<SourceNode> {
+  const [node] = await db
+    .select({
+      objectKey: projectNode.objectKey,
+      updatedAt: projectNode.updatedAt,
+    })
+    .from(projectNode)
+    .innerJoin(project, eq(project.id, projectNode.projectId))
+    .where(
+      and(
+        eq(projectNode.id, nodeId),
+        eq(projectNode.projectId, projectId),
+        eq(projectNode.kind, "text"),
+        isNull(projectNode.deletedAt),
+        isNull(project.deletedAt),
+      ),
+    );
+  if (!node) throw new Error("File not found");
+  return node;
 }
 
 // Accepted edits remain durable even if their author's access is later revoked.

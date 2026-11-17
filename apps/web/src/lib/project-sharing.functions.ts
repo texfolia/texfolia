@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
 
 import { ensureSession } from "./auth.functions";
 import {
@@ -27,6 +28,7 @@ export const grantProjectAccess = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
+      collaboration: env.COLLABORATION,
     });
   });
 export const revokeProjectAccess = createServerFn({ method: "POST" })
@@ -38,5 +40,6 @@ export const revokeProjectAccess = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
+      collaboration: env.COLLABORATION,
     });
   });

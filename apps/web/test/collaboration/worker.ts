@@ -4,6 +4,12 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 
 import { createAuth } from "../../src/lib/auth";
+import { invalidateOrganizationCollaborationAccess } from "../../src/lib/collaboration/access.server";
+import { ProjectCollaboration as Room } from "../../src/lib/collaboration/project-collaboration";
+import {
+  grantProjectAccess,
+  revokeProjectAccess,
+} from "../../src/lib/project-sharing.server";
 import {
   collectProjectSources,
   deleteProjectNode,
@@ -11,7 +17,33 @@ import {
 import { deleteProject } from "../../src/lib/project.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
 import { Route as compileRoute } from "../../src/routes/api/compile/$projectId";
-export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration";
+
+// Count Postgres use and alarms so tests can assert edits stay off the database.
+export class ProjectCollaboration extends Room {
+  private databaseUses = 0;
+  private alarms = 0;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    const room = this as unknown as {
+      withDb: (operation: unknown) => Promise<unknown>;
+    };
+    const withDb = room.withDb.bind(this);
+    room.withDb = (operation) => {
+      this.databaseUses++;
+      return withDb(operation);
+    };
+  }
+
+  override async alarm() {
+    this.alarms++;
+    return super.alarm();
+  }
+
+  async usage() {
+    return { databaseUses: this.databaseUses, alarms: this.alarms };
+  }
+}
 
 // Exercise production route authorization with real signed sessions and Postgres.
 export default {
@@ -76,6 +108,55 @@ export default {
         await db.$client.end();
       }
     }
+    if (url.pathname.startsWith("/access/")) {
+      // Run the production revocation paths, which notify collaboration rooms.
+      const db = createDb(env.HYPERDRIVE.connectionString);
+      const [, , action, projectId = ""] = url.pathname.split("/");
+      const ownerId = request.headers.get("X-Owner") ?? "";
+      const body: Record<string, string> = await request.json();
+      try {
+        if (action === "grant")
+          await grantProjectAccess({
+            db,
+            userId: ownerId,
+            data: {
+              projectId,
+              email: body.email ?? "",
+              role: body.role === "editor" ? "editor" : "viewer",
+            },
+            collaboration: env.COLLABORATION,
+          });
+        else if (action === "revoke")
+          await revokeProjectAccess({
+            db,
+            userId: ownerId,
+            data: { projectId, userId: body.userId ?? "" },
+            collaboration: env.COLLABORATION,
+          });
+        else if (action === "member-removed")
+          await invalidateOrganizationCollaborationAccess({
+            db,
+            collaboration: env.COLLABORATION,
+            organizationId: body.organizationId ?? "",
+            userId: body.userId ?? "",
+          });
+        else throw new Error("Unknown access action");
+        return new Response(null, { status: 204 });
+      } catch (error) {
+        console.error("Access fixture failed", error);
+        return new Response("Access change failed", { status: 500 });
+      } finally {
+        await db.$client.end();
+      }
+    }
+    if (url.pathname.startsWith("/usage/"))
+      return Response.json(
+        await (
+          env.COLLABORATION as unknown as DurableObjectNamespace<ProjectCollaboration>
+        )
+          .getByName(url.pathname.split("/")[2] ?? "")
+          .usage(),
+      );
     if (url.pathname === "/client.js") return env.CLIENT.fetch(request);
     if (url.pathname.startsWith("/fixture/"))
       return env.COMPILER.fetch(
@@ -88,7 +169,7 @@ export default {
       );
     const [, , channel, projectId = "", nodeId = ""] = url.pathname.split("/");
     const db = createDb(env.HYPERDRIVE.connectionString);
-    const context = { db, auth: createAuth(db) };
+    const context = { db, auth: createAuth(db, env.COLLABORATION) };
     try {
       const next = () => {
         throw new Error("Unexpected route chaining");

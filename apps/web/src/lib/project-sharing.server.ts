@@ -3,6 +3,10 @@ import { member, projectCollaborator, user } from "@texfolia/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import {
+  invalidateCollaborationAccess,
+  type CollaborationAccess,
+} from "./collaboration/access.server";
 import { lockProject } from "./project-access.server";
 import type {
   grantProjectAccessSchema,
@@ -59,10 +63,12 @@ export async function grantProjectAccess({
   db,
   userId,
   data,
+  collaboration,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof grantProjectAccessSchema>;
+  collaboration?: CollaborationAccess;
 }) {
   await db.transaction(async (tx) => {
     const found = await lockProject({ tx, projectId: data.projectId, userId });
@@ -85,6 +91,10 @@ export async function grantProjectAccess({
         target: [projectCollaborator.projectId, projectCollaborator.userId],
         set: { role: data.role, updatedAt: new Date() },
       });
+    // Invalidate before commit so open sockets re-verify behind this lock.
+    await invalidateCollaborationAccess(collaboration, data.projectId, [
+      person.id,
+    ]);
   });
 }
 
@@ -92,10 +102,12 @@ export async function revokeProjectAccess({
   db,
   userId,
   data,
+  collaboration,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof revokeProjectAccessSchema>;
+  collaboration?: CollaborationAccess;
 }) {
   await db.transaction(async (tx) => {
     const found = await lockProject({ tx, projectId: data.projectId, userId });
@@ -109,5 +121,9 @@ export async function revokeProjectAccess({
           eq(projectCollaborator.userId, data.userId),
         ),
       );
+    // Invalidate before commit so open sockets re-verify behind this lock.
+    await invalidateCollaborationAccess(collaboration, data.projectId, [
+      data.userId,
+    ]);
   });
 }

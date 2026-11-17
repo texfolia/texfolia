@@ -25,7 +25,12 @@ import {
   readAwareness,
   type ServerMessage,
 } from "./protocol";
-import { collaborationAccess, persistMergedSource } from "./sources.server";
+import {
+  collaborationAccess,
+  persistMergedSource,
+  sourceNode,
+  type SourceNode,
+} from "./sources.server";
 import {
   initializeChunks,
   readSnapshot,
@@ -67,6 +72,10 @@ const retentionIntervalMs = 60 * 60_000;
 export class ProjectCollaboration extends DurableObject<Env> {
   private documents = new Map<string, Y.Doc>();
   private queue: Promise<void> = Promise.resolve();
+  // Verified access per user. Revocation paths clear it through invalidateAccess,
+  // and the alarm re-verifies every connected user as a backstop.
+  private access = new Map<string, { canWrite: boolean }>();
+  private accessGeneration = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -154,7 +163,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
     }
     const live = await this.withDb((db) =>
       db
-        .select({ id: projectNode.id })
+        .select({
+          id: projectNode.id,
+          objectKey: projectNode.objectKey,
+          updatedAt: projectNode.updatedAt,
+        })
         .from(project)
         .leftJoin(
           projectNode,
@@ -166,10 +179,24 @@ export class ProjectCollaboration extends DurableObject<Env> {
         )
         .where(and(eq(project.id, projectId), isNull(project.deletedAt))),
     );
-    const liveIds = new Set(live.map((node) => node.id));
+    const nodes = new Map<string, SourceNode>();
+    for (const { id, objectKey, updatedAt } of live)
+      if (id && updatedAt) nodes.set(id, { objectKey, updatedAt });
     for (const nodeId of nodeIds)
-      if (!liveIds.has(nodeId)) this.removeDocument(nodeId);
-    return { projectDeleted: live.length === 0 };
+      if (!nodes.has(nodeId)) this.removeDocument(nodeId);
+    return { projectDeleted: live.length === 0, nodes };
+  }
+
+  // Bring loaded documents up to date with sources written outside collaboration.
+  private async reconcileLoaded(
+    projectId: string,
+    nodes: Map<string, SourceNode>,
+  ) {
+    for (const [nodeId, doc] of this.documents) {
+      const node = nodes.get(nodeId);
+      if (node && this.row(nodeId)?.project_id === projectId)
+        await this.reconcileSource({ nodeId, projectId }, doc, node);
+    }
   }
 
   async purgeDeletedSources(projectId: string) {
@@ -193,17 +220,20 @@ export class ProjectCollaboration extends DurableObject<Env> {
           cursor = page.truncated ? page.cursor : undefined;
         } while (cursor);
       }
-      return result;
+      return { projectDeleted: result.projectDeleted };
     });
   }
 
+  // Loading reconciles with Postgres; a cached document reconciles only when the
+  // caller already holds a fresh node, so edits do not query the database.
   private async document(
-    info: Pick<Attachment, "nodeId" | "projectId" | "userId">,
-    recover = true,
+    info: Pick<Attachment, "nodeId" | "projectId">,
+    options: { node?: SourceNode; recover?: boolean } = {},
   ) {
+    const { recover = true } = options;
     const cached = this.documents.get(info.nodeId);
     if (cached) {
-      await this.reconcileSource(info, cached);
+      if (options.node) await this.reconcileSource(info, cached, options.node);
       return cached;
     }
     const doc = new Y.Doc();
@@ -216,31 +246,24 @@ export class ProjectCollaboration extends DurableObject<Env> {
       for (const update of readUpdates(this.ctx.storage.sql, info.nodeId))
         Y.applyUpdate(doc, update);
     } else {
-      const source = await this.withDb(async (db) => {
-        const { node } = await collaborationAccess(
-          db,
-          info.projectId,
-          info.nodeId,
-          info.userId,
-        );
-        const object = node.objectKey
-          ? await this.env.SOURCES.get(node.objectKey)
-          : null;
-        if (node.objectKey && !object)
-          throw new Error("Saved source is missing from storage");
-        return {
-          value: object ? await object.text() : "",
-          objectKey: node.objectKey,
-        };
-      });
-      doc.getText("source").insert(0, source.value);
+      const node =
+        options.node ??
+        (await this.withDb((db) =>
+          sourceNode(db, info.projectId, info.nodeId),
+        ));
+      const object = node.objectKey
+        ? await this.env.SOURCES.get(node.objectKey)
+        : null;
+      if (node.objectKey && !object)
+        throw new Error("Saved source is missing from storage");
+      doc.getText("source").insert(0, object ? await object.text() : "");
       this.ctx.storage.transactionSync(() => {
         this.ctx.storage.sql.exec(
           "INSERT INTO documents (node_id, project_id, snapshot, object_key) VALUES (?, ?, ?, ?)",
           info.nodeId,
           info.projectId,
           new Uint8Array(),
-          source.objectKey,
+          node.objectKey,
         );
         writeSnapshot(
           this.ctx.storage.sql,
@@ -250,14 +273,16 @@ export class ProjectCollaboration extends DurableObject<Env> {
       });
     }
     this.documents.set(info.nodeId, doc);
-    // Reconcile a commit whose SQLite acknowledgement was interrupted. A pending
-    // write that never committed must stay editable, including after quota errors.
-    if (row?.dirty && recover) {
+    if (row && recover) {
       try {
-        const { node } = await this.withDb((db) =>
-          collaborationAccess(db, info.projectId, info.nodeId, info.userId),
-        );
-        if (node.objectKey !== row.object_key) {
+        const node =
+          options.node ??
+          (await this.withDb((db) =>
+            sourceNode(db, info.projectId, info.nodeId),
+          ));
+        // Reconcile a commit whose SQLite acknowledgement was interrupted. A pending
+        // write that never committed must stay editable, including after quota errors.
+        if (row.dirty && node.objectKey !== row.object_key) {
           const hash = await hashSource(
             new TextEncoder().encode(doc.getText("source").toString()),
           );
@@ -272,13 +297,13 @@ export class ProjectCollaboration extends DurableObject<Env> {
             info.nodeId,
           );
         }
+        await this.reconcileSource(info, doc, node);
       } catch (error) {
         this.documents.delete(info.nodeId);
         doc.destroy();
         throw error;
       }
     }
-    if (info.userId) await this.reconcileSource(info, doc);
     return doc;
   }
 
@@ -292,25 +317,83 @@ export class ProjectCollaboration extends DurableObject<Env> {
     };
   }
 
-  private async checkRecipient(ws: WebSocket, deliver?: () => void) {
-    if (ws.readyState !== WebSocket.OPEN) return;
-    try {
-      const info = attachmentSchema.parse(ws.deserializeAttachment());
-      await this.withDb((db) =>
-        collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
-          deliver: () => {
-            if (ws.readyState === WebSocket.OPEN) deliver?.();
-          },
-        }),
-      );
-    } catch {
-      // Failure to verify access must never leave a recipient subscribed.
-      ws.close(1008, "Project access could not be verified");
+  private remember(userId: string, generation: number, canWrite: boolean) {
+    // An invalidation during the check may have revoked what it read.
+    if (generation !== this.accessGeneration) return false;
+    this.access.set(userId, { canWrite });
+    return true;
+  }
+
+  private disconnect(userId: string) {
+    this.access.delete(userId);
+    for (const ws of this.ctx.getWebSockets())
+      if (
+        ws.readyState === WebSocket.OPEN &&
+        attachmentSchema.parse(ws.deserializeAttachment()).userId === userId
+      )
+        ws.close(1008, "Project access could not be verified");
+  }
+
+  private async verifyAccess(info: Pick<Attachment, "projectId" | "userId">) {
+    for (;;) {
+      const cached = this.access.get(info.userId);
+      if (cached) return cached;
+      const generation = this.accessGeneration;
+      try {
+        const { canWrite } = await this.withDb((db) =>
+          db.transaction((tx) =>
+            lockProject({
+              tx,
+              projectId: info.projectId,
+              userId: info.userId,
+              access: "read",
+            }),
+          ),
+        );
+        if (this.remember(info.userId, generation, canWrite))
+          return { canWrite };
+      } catch (error) {
+        // Failure to verify access must never leave a recipient subscribed.
+        this.disconnect(info.userId);
+        throw error;
+      }
     }
   }
 
+  // Revocation paths call this, possibly inside the revoking transaction, so it
+  // must not wait on Postgres. Later deliveries re-verify behind the revocation's
+  // locks, and the alarm closes revoked sockets that receive nothing.
+  async invalidateAccess(userIds?: string[]) {
+    this.accessGeneration++;
+    if (userIds) for (const userId of userIds) this.access.delete(userId);
+    else this.access.clear();
+    await this.ctx.storage.setAlarm(Date.now());
+  }
+
+  private async verifyConnected() {
+    const connected = new Map<string, Attachment>();
+    for (const ws of this.ctx.getWebSockets())
+      if (ws.readyState === WebSocket.OPEN) {
+        const info = attachmentSchema.parse(ws.deserializeAttachment());
+        connected.set(info.userId, info);
+      }
+    this.accessGeneration++;
+    this.access.clear();
+    for (const info of connected.values())
+      await this.verifyAccess(info).catch(() => {});
+  }
+
   private async send(ws: WebSocket, message: ServerMessage) {
-    await this.checkRecipient(ws, () => ws.send(JSON.stringify(message)));
+    if (ws.readyState !== WebSocket.OPEN) return;
+    try {
+      await this.verifyAccess(
+        attachmentSchema.parse(ws.deserializeAttachment()),
+      );
+    } catch {
+      ws.close(1008, "Project access could not be verified");
+      return;
+    }
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
   }
 
   private async broadcast(
@@ -329,12 +412,14 @@ export class ProjectCollaboration extends DurableObject<Env> {
       const info = attachmentSchema.parse(
         JSON.parse(request.headers.get("X-Collaboration-Session") ?? "null"),
       );
-      await this.withDb((db) =>
+      const generation = this.accessGeneration;
+      const { node, canWrite } = await this.withDb((db) =>
         collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
           register: true,
         }),
       );
-      await this.document(info);
+      this.remember(info.userId, generation, canWrite);
+      await this.document(info, { node });
       const pair = new WebSocketPair();
       pair[1].serializeAttachment(info);
       this.ctx.acceptWebSocket(pair[1], [info.nodeId]);
@@ -421,9 +506,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         const data = clientMessageSchema.parse(JSON.parse(message));
         if (data.type === "save") requestId = data.id;
         const info = attachmentSchema.parse(ws.deserializeAttachment());
-        const access = await this.withDb((db) =>
-          collaborationAccess(db, info.projectId, info.nodeId, info.userId),
-        );
+        const access = await this.verifyAccess(info);
         const doc = await this.document(info);
         switch (data.type) {
           case "sync":
@@ -502,8 +585,8 @@ export class ProjectCollaboration extends DurableObject<Env> {
     const doc =
       this.documents.get(nodeId) ??
       (await this.document(
-        { nodeId, projectId: row.project_id, userId: "" },
-        false,
+        { nodeId, projectId: row.project_id },
+        { recover: false },
       ));
     let version;
     try {
@@ -539,8 +622,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
   override async alarm() {
     return this.serial(async () => {
       try {
-        for (const ws of this.ctx.getWebSockets())
-          await this.checkRecipient(ws);
+        await this.verifyConnected();
         const projectIds = new Set(
           this.ctx.storage.sql
             .exec<Pick<DocumentRow, "project_id">>(
@@ -549,7 +631,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
             .toArray()
             .map((row) => row.project_id),
         );
-        for (const projectId of projectIds) await this.purgeDeleted(projectId);
+        for (const projectId of projectIds)
+          await this.reconcileLoaded(
+            projectId,
+            (await this.purgeDeleted(projectId)).nodes,
+          );
         for (const row of this.ctx.storage.sql
           .exec<DocumentRow>("SELECT * FROM documents WHERE dirty = 1")
           .toArray()) {
@@ -612,7 +698,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         }),
       );
       if (!access.canWrite) throw new Error("Viewers cannot edit documents");
-      const doc = await this.document(info);
+      const doc = await this.document(info, { node: access.node });
       const row = this.row(data.nodeId);
       if (!row || row.dirty || row.object_key !== data.expectedObjectKey)
         throw new Error(
@@ -671,28 +757,19 @@ export class ProjectCollaboration extends DurableObject<Env> {
         runGit({ db, bucket: this.env.SOURCES, ...options }),
       );
       if (["import", "pull", "checkout"].includes(options.action.kind)) {
-        await this.purgeDeleted(options.projectId);
+        const { nodes } = await this.purgeDeleted(options.projectId);
         for (const row of this.ctx.storage.sql
           .exec<DocumentRow>(
             "SELECT * FROM documents WHERE project_id = ?",
             options.projectId,
           )
           .toArray()) {
-          const doc =
-            this.documents.get(row.node_id) ??
-            (await this.document({
-              nodeId: row.node_id,
-              projectId: row.project_id,
-              userId: options.user.id,
-            }));
-          await this.reconcileSource(
-            {
-              nodeId: row.node_id,
-              projectId: row.project_id,
-              userId: options.user.id,
-            },
-            doc,
-          );
+          const node = nodes.get(row.node_id);
+          if (node)
+            await this.document(
+              { nodeId: row.node_id, projectId: row.project_id },
+              { node },
+            );
         }
         await invalidateSourceBuild(options.projectId, this.env.COMPILER);
       }
@@ -701,14 +778,12 @@ export class ProjectCollaboration extends DurableObject<Env> {
   }
 
   private async reconcileSource(
-    info: Pick<Attachment, "nodeId" | "projectId" | "userId">,
+    info: Pick<Attachment, "nodeId" | "projectId">,
     doc: Y.Doc,
+    node: SourceNode,
   ) {
     const row = this.row(info.nodeId);
     if (!row || row.dirty) return;
-    const { node } = await this.withDb((db) =>
-      collaborationAccess(db, info.projectId, info.nodeId, info.userId),
-    );
     if (row.object_key === node.objectKey) return;
     const object = node.objectKey
       ? await this.env.SOURCES.get(node.objectKey)

@@ -7,7 +7,7 @@ import { createAuth } from "./lib/auth";
 const requestContext = createMiddleware().server(async ({ next }) => {
   const db = createDb(env.HYPERDRIVE.connectionString);
   try {
-    const auth = createAuth(db);
+    const auth = createAuth(db, env.COLLABORATION);
     return await next({ context: { auth, db } });
   } finally {
     await db.$client.end();
