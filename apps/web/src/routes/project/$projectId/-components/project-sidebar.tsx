@@ -25,6 +25,7 @@ import { ProjectCollaboration } from "./project-collaboration";
 import { ProjectExport, type ProjectExportHandle } from "./project-export";
 import { ProjectFileTree } from "./project-file-tree";
 import { ProjectOutline } from "./project-outline";
+import { ProjectSearch, type SearchRequest } from "./project-search";
 import {
   RepairSourcePaths,
   type RepairSourcePathsHandle,
@@ -42,6 +43,7 @@ export function ProjectSidebar({
   view,
   onClose,
   outline,
+  searchRequest,
   createRef,
   uploadRef,
   exportRef,
@@ -57,6 +59,7 @@ export function ProjectSidebar({
   view: SidebarView;
   onClose: () => void;
   outline: OutlineEntry[];
+  searchRequest: SearchRequest;
   createRef: RefObject<CreateNodeHandle | null>;
   uploadRef: RefObject<UploadSourceHandle | null>;
   exportRef: RefObject<ProjectExportHandle | null>;
@@ -110,6 +113,7 @@ export function ProjectSidebar({
             {
               files: "Files",
               outline: "Outline",
+              search: "Search",
               git: "Git",
               collaboration: "Collaboration",
             }[view]
@@ -187,6 +191,13 @@ export function ProjectSidebar({
           <ProjectOutline entries={outline} />
         </div>
       )}
+      {/* Stays mounted so the query survives switching views. */}
+      <div
+        hidden={view !== "search"}
+        className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
+      >
+        <ProjectSearch active={view === "search"} request={searchRequest} />
+      </div>
       {view === "git" && (
         <div className="min-h-0 flex-1 overflow-auto">
           {ready && <GitPanel />}

@@ -31,6 +31,7 @@ export function WorkspaceMenu({
   onRepair,
   onSettings,
   onEditor,
+  onSearch,
   chrome,
   onChrome,
   onProblems,
@@ -52,6 +53,7 @@ export function WorkspaceMenu({
   onRepair?: () => void;
   onSettings: () => void;
   onEditor: (command: EditorCommand) => void;
+  onSearch: () => void;
   chrome: WorkspaceChrome;
   onChrome: (patch: Partial<WorkspaceChrome>) => void;
   onProblems: () => void;
@@ -138,6 +140,8 @@ export function WorkspaceMenu({
                   {title}
                 </MenubarItem>
               ))}
+              <MenubarSeparator />
+              <MenubarItem onClick={onSearch}>Search in project</MenubarItem>
             </MenubarGroup>
           </MenubarContent>
         </MenubarMenu>
@@ -164,6 +168,7 @@ export function WorkspaceMenu({
                 [
                   ["files", "Files"],
                   ["outline", "Outline"],
+                  ["search", "Search"],
                   ["git", "Git"],
                   ["collaboration", "Collaboration"],
                 ] satisfies [SidebarView, string][]

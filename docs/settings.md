@@ -76,6 +76,7 @@ restores every default.
 | Next / previous editor tab | Ctrl+PageDown / Ctrl+PageUp | View: Open Next / Previous Editor    |
 | Toggle sidebar             | Mod+Alt+B                   | View: Toggle Secondary Side Bar      |
 | Search projects            | Mod+P                       | Go to File                           |
+| Search in project          | Mod+Shift+F                 | Search: Find in Files                |
 
 Bold, Italic, Underline (Mod+B/I/U) and headings (Mod+Alt+0–6) keep the
 standard rich-text bindings. New project keeps the N P sequence because the
