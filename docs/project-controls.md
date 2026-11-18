@@ -14,6 +14,7 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 | Change access    | Sharing with the same email updates that person's role.                                                                                                                            |
 | Revoke access    | **Remove** revokes a collaborator's access. The project disappears from their project list, and their open workspace loses access.                                                 |
 | File management  | Editors can create files and folders, upload source files, and rename, move, or delete items. Deletion requires confirmation. Viewers have no source management controls.          |
+| Review comments  | Everyone with access, including viewers, can comment on a passage, reply, and resolve or reopen threads. See [Review comments](#review-comments).                                  |
 | Access display   | The project list shows the actual collaborator count, **Personal** when there are none, or **Organization** for inherited membership. The workspace lists actual people and roles. |
 
 Organization projects inherit access from membership. Every organization member is an editor on every organization project, whatever their role (`owner`, `admin`, or `member`). Members can save sources, compile, write to collaboration, and use write assistant tools. Organization projects have no viewer role and no per-project roles. Owners and admins additionally can delete organization projects and link or unlink a git remote. The workspace explains this and shows no personal-project sharing form. Organization creation, invitations, and membership administration have no management UI in v1. The invitation acceptance route remains available for existing invitations.
@@ -36,6 +37,25 @@ Decisions on the open questions in NAT-390:
 - Links do not expire. Revoke a link when it is no longer needed.
 
 Server-side, a link acts as the principal `share:<linkId>` wherever a user ID is checked. `lockProject` resolves it against `project_share_link`, rejects writes, and rejects PDF-only links unless the caller asks for build content. API requests carry the token in the `share` query parameter, which takes precedence over the session.
+
+## Review comments
+
+Anyone with access to a project can comment on a passage, including viewers.
+Comments never change sources. Share-link guests cannot read or write comments.
+
+- **Add comment** is in the editor toolbar and context menu. It comments on the selection, or on the cursor's line when nothing is selected. The draft opens in the **Comments** view.
+- Commented ranges are highlighted, and the gutter shows a marker on each open thread's first line. Selecting a marker opens its thread. On a line with several threads, each click opens the next one.
+- **Comments** in the right sidebar lists **Open** and **Resolved** threads by file and position. Selecting a thread scrolls its editor to the range.
+- Anyone who can comment can reply, resolve, and reopen. Replying to a resolved thread reopens it.
+- Authors edit and delete their own comments. Deleting a thread's last comment deletes the thread. A thread's author and project editors can delete the whole thread.
+- Limits are 10,000 characters per comment, 200 comments per thread, and 2,000 threads per project.
+
+A thread stores the start and end of its range as Yjs relative positions in the file's collaboration document. Ranges therefore follow everyone's edits, saves, and Git pulls, which merge into the document as diffs. Text typed at either edge stays outside the range. When the commented text is deleted, the thread remains and shows **text deleted**. A thread whose author was offline shows **position unavailable** until their edits synchronize. Threads on deleted files disappear. Deleting a user account deletes that user's comments.
+
+Decisions on the open questions in NAT-386:
+
+- Comments are stored in Postgres (`project_comment_thread` and `project_comment`), not in the collaboration Durable Object. The object rejects document updates from viewers, and viewers must still be able to comment. Postgres also keeps access checks in `lockProject` and cascades deletion with projects, files, and users. Open workspaces notice changes through `commentsVersion` in the existing two-second metadata poll, then reload the threads.
+- Comments send no email notifications in v1.
 
 ## Release policy content
 

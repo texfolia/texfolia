@@ -17,6 +17,9 @@ export const projectMetadataSchema = z.object({
     z.object({ objectKey: z.string().nullable(), updatedAt: z.number() }),
   ),
   canWrite: z.boolean(),
+  // Changes whenever the project's review comments change. Absent for
+  // share-link guests.
+  commentsVersion: z.string().optional(),
 });
 export type ProjectMetadata = z.infer<typeof projectMetadataSchema>;
 

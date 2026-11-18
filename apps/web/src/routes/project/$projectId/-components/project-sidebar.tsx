@@ -22,6 +22,7 @@ import { CreateNodeForm, type CreateNodeHandle } from "./create-node-form";
 import { generatedTreeNodes } from "./generated-files";
 import { GitPanel } from "./git-panel";
 import { ProjectCollaboration } from "./project-collaboration";
+import { ProjectComments } from "./project-comments";
 import { ProjectExport, type ProjectExportHandle } from "./project-export";
 import { ProjectFileTree } from "./project-file-tree";
 import { ProjectOutline } from "./project-outline";
@@ -115,6 +116,7 @@ export function ProjectSidebar({
               outline: "Outline",
               search: "Search",
               git: "Git",
+              comments: "Comments",
               collaboration: "Collaboration",
             }[view]
           }
@@ -204,6 +206,11 @@ export function ProjectSidebar({
       {view === "git" && (
         <div className="min-h-0 flex-1 overflow-auto">
           {ready && <GitPanel />}
+        </div>
+      )}
+      {view === "comments" && (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <ProjectComments />
         </div>
       )}
       {view === "collaboration" && (

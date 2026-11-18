@@ -1,6 +1,7 @@
 import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
+import type { Comments } from "#/hooks/use-comments";
 import type { BuildSnapshot } from "#/lib/build";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import type { EditorCommand } from "#/lib/editor-command";
@@ -39,8 +40,17 @@ export type Workspace = {
   ) => void;
   reportSyntax: (path: string, problems: LatexProblem[]) => void;
   jump:
-    | { id: string; line: number; column?: number; length?: number }
+    | {
+        id: string;
+        line: number;
+        column?: number;
+        length?: number;
+        range?: { from: number; to: number };
+      }
     | undefined;
+  comments: Comments;
+  // Opens a text file and scrolls to a range without moving its selection.
+  revealRange: (nodeId: string, range: { from: number; to: number }) => void;
   pdf: File | null;
   synctex: SyncTexIndex | null;
   pdfJump: { index: SyncTexIndex; location: SyncTexLocation } | null;

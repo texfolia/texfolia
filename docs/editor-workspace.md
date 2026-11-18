@@ -2,8 +2,8 @@
 
 The workspace has File, Edit and View menus above the dock, an Agents sidebar on
 the left, one switchable sidebar on the right, and a status bar below. Use the
-bottom-right icons or View menu to switch Files, Outline, Search, Git or
-Collaboration.
+bottom-right icons or View menu to switch Files, Outline, Search, Git, Comments
+or Collaboration.
 Git actions stay in the Git view. Settings opens as a dialog with User and Project tabs. Changes use Apply, Save, and Cancel. Closing a dirty draft prompts before discarding. See [Settings](settings.md).
 
 The status bar shows compile state, Problems, live collaborators, the git branch
@@ -63,6 +63,10 @@ Match case is off by default, and results stop at 1,000 matches. Open it with
 Edit > Search in project or Mod+Shift+F, which also seeds the query from a
 single-line editor selection. Viewers can search; editing still follows file
 permissions. Find in the Edit menu still searches only the active file.
+
+Comments lists review comment threads anchored to source ranges. Add one from the
+editor toolbar or context menu; commented ranges are highlighted and marked in the
+gutter. See [Review comments](project-controls.md#review-comments).
 
 Chat history is a separate sidebar to the left of Agents, hidden by default.
 The bottom-left history button opens it without embedding a thread list above

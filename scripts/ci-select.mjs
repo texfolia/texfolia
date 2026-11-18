@@ -7,7 +7,7 @@ const test = `${web}test/`;
 
 // Production browser suites load the entire app. Keep runtime inputs broad.
 export const suites = {
-  database: { inputs: ["postgres.ts"] },
+  database: { inputs: ["postgres.ts", "postgres/"] },
   "compile-route": { inputs: ["compile-route.ts", "compile-route/"] },
   "ai-billing": { inputs: ["ai-billing.ts"] },
   assistant: { inputs: ["ai-assistant.ts"], build: true, browser: true },

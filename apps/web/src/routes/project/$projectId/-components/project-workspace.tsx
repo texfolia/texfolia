@@ -10,6 +10,7 @@ import {
   IconPlayerPlay,
   IconLoader2,
   IconCircleCheck,
+  IconMessage,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { ClientOnly } from "@tanstack/react-router";
@@ -43,6 +44,7 @@ import {
   ContextMenuItem,
 } from "#/components/ui/context-menu";
 import { SidebarProvider } from "#/components/ui/sidebar";
+import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
@@ -98,7 +100,7 @@ import {
 
 import { AssistantSidebar } from "./assistant-sidebar";
 import type { CreateNodeHandle } from "./create-node-form";
-import { Editor } from "./editor";
+import { Editor, type EditorComments } from "./editor";
 import { GeneratedFile } from "./generated-file";
 import {
   MarkdownPreview,
@@ -155,6 +157,28 @@ function FileEditor({
   );
   const draft = workspace.drafts.get(params.node.id);
   const path = workspace.paths.get(params.node.id) ?? params.node.name;
+  const { comments } = workspace;
+  const threads = comments.data?.threads;
+  const openThreads = useMemo(
+    () =>
+      threads?.filter(
+        (thread) => thread.nodeId === params.node.id && !thread.resolvedAt,
+      ),
+    [threads, params.node.id],
+  );
+  const editorComments = useMemo<EditorComments | undefined>(
+    () =>
+      openThreads
+        ? {
+            threads: openThreads,
+            activeId: comments.activeId,
+            onSelect: (id) => comments.selectThread(id, true),
+            onAdd: (anchor) =>
+              comments.startComment({ ...anchor, nodeId: params.node.id }),
+          }
+        : undefined,
+    [comments, openThreads, params.node.id],
+  );
   if (params.node.kind === "binary" && /\.pdf$/i.test(params.node.name))
     return <SourcePdf node={params.node} />;
   if (params.node.kind === "binary")
@@ -242,6 +266,7 @@ function FileEditor({
             : undefined
         }
         onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
+        comments={editorComments}
       />
     </div>
   );
@@ -467,6 +492,10 @@ export function ProjectWorkspace({
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
   const [jump, setJump] = useState<Workspace["jump"]>();
+  const comments = useComments({
+    projectId,
+    onShow: () => updateChrome({ rightOpen: true, rightView: "comments" }),
+  });
   const [searchRequest, setSearchRequest] = useState<SearchRequest>({
     sequence: 0,
   });
@@ -1266,6 +1295,12 @@ export function ProjectWorkspace({
     openFile(node, true);
     setJump({ id: node.id, line, column, length });
   }
+  function revealRange(nodeId: string, range: { from: number; to: number }) {
+    const node = nodes.find((node) => node.id === nodeId);
+    if (!node) return;
+    openFile(node, true);
+    setJump({ id: node.id, line: 1, range });
+  }
   function closeTabs(id: string, mode: "one" | "others" | "all" | "right") {
     const dock = api.current;
     const panel = dock?.getPanel(id);
@@ -1436,6 +1471,8 @@ export function ProjectWorkspace({
         problems,
         allProblems,
         reveal,
+        revealRange,
+        comments,
         closeTabs,
         reportGitBranch: setGitBranch,
         registerCommands,
@@ -1780,6 +1817,7 @@ export function ProjectWorkspace({
                 { view: "outline", label: "Outline", icon: IconListTree },
                 { view: "search", label: "Search", icon: IconSearch },
                 { view: "git", label: "Git", icon: IconGitBranch },
+                { view: "comments", label: "Comments", icon: IconMessage },
                 {
                   view: "collaboration",
                   label: "Collaboration",
