@@ -5,6 +5,7 @@ import type { StorageApi, StorageEventApi } from "@tanstack/react-db";
 import {
   createBrowserSettingsStore,
   createSettingsStore,
+  userSettingsStorageKey,
 } from "./settings.functions";
 import { settingsSchema } from "./settings.schema";
 import { defaultShortcuts } from "./shortcuts";
@@ -68,7 +69,7 @@ test("existing editor preferences migrate without local formatting and survive a
   expect(settingsSchema.parse(fresh.preferences.get("preferences"))).toEqual({
     id: "preferences",
     editor: { fontSize: 20, wrapLines: true },
-    compile: { onSave: true },
+    compile: { onSave: true, afterIdle: 0 },
     shortcuts: defaultShortcuts,
   });
 });
@@ -97,7 +98,7 @@ test("active settings consumers see each other's updates", async () => {
   await first.save({
     id: "preferences",
     editor: { fontSize: 13, wrapLines: true },
-    compile: { onSave: true },
+    compile: { onSave: true, afterIdle: 0 },
     shortcuts: { ...defaultShortcuts, save: "Mod+Shift+S" },
   });
   expect(second.preferences.get("preferences")?.shortcuts.save).toBe(
@@ -162,7 +163,7 @@ test("user preferences and shortcuts are isolated by account", async () => {
   await first.save({
     id: "preferences",
     editor: { fontSize: 24, wrapLines: false },
-    compile: { onSave: false },
+    compile: { onSave: false, afterIdle: 5 },
     shortcuts: { ...defaultShortcuts, newProject: "G P" },
   });
   expect(second.preferences.get("preferences")?.editor.fontSize).toBe(13);
@@ -172,7 +173,10 @@ test("user preferences and shortcuts are isolated by account", async () => {
   );
   const reopened = storeFor(backend);
   await reopened.initialize();
-  expect(reopened.preferences.get("preferences")?.compile.onSave).toBe(false);
+  expect(reopened.preferences.get("preferences")?.compile).toEqual({
+    onSave: false,
+    afterIdle: 5,
+  });
   expect(reopened.preferences.get("preferences")?.shortcuts.newProject).toBe(
     "G P",
   );
@@ -202,4 +206,23 @@ test("v1 collection editor values migrate without copying browser formatting", a
   expect(
     Object.hasOwn(store.preferences.get("preferences") ?? {}, "formatting"),
   ).toBe(false);
+});
+
+test("stored preferences from before auto-compile keep it off", async () => {
+  const backend = createStorage();
+  const store = storeFor(backend);
+  await store.initialize();
+  await store.updateEditor({ fontSize: 15, wrapLines: true });
+  const key = userSettingsStorageKey("test-user");
+  const stored = JSON.parse(backend.storage.getItem(key) ?? "{}");
+  for (const row of Object.values<{ data: { compile: object } }>(stored))
+    row.data.compile = { onSave: false };
+  backend.storage.setItem(key, JSON.stringify(stored));
+  const reopened = storeFor(backend);
+  await reopened.initialize();
+  expect(reopened.preferences.get("preferences")?.editor.fontSize).toBe(15);
+  expect(reopened.preferences.get("preferences")?.compile).toEqual({
+    onSave: false,
+    afterIdle: 0,
+  });
 });

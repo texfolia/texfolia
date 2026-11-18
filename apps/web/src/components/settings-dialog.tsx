@@ -28,7 +28,12 @@ import {
   ItemDescription,
 } from "#/components/ui/item";
 import { Kbd } from "#/components/ui/kbd";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+import { autoCompileDelays } from "#/lib/settings.schema";
 import {
   defaultShortcuts,
   eventChord,
@@ -222,7 +227,7 @@ function EditorSettingsFields() {
             id={`${id}-compile`}
             checked={draft.compile.onSave}
             onCheckedChange={(onSave) =>
-              setDraft({ ...draft, compile: { onSave } })
+              setDraft({ ...draft, compile: { ...draft.compile, onSave } })
             }
           />
           <FieldLabel htmlFor={`${id}-compile`}>
@@ -232,6 +237,36 @@ function EditorSettingsFields() {
         <p className="text-muted-foreground text-xs">
           Save reuses the build cache. Save without compiling and Clean build
           stay available in the File menu and as shortcuts.
+        </p>
+        <Field>
+          <FieldLabel htmlFor={`${id}-auto-compile`}>
+            Compile after editing stops
+          </FieldLabel>
+          <NativeSelect
+            id={`${id}-auto-compile`}
+            value={String(draft.compile.afterIdle)}
+            onChange={(event) => {
+              const afterIdle = autoCompileDelays.find(
+                (seconds) => String(seconds) === event.target.value,
+              );
+              if (afterIdle !== undefined)
+                setDraft({
+                  ...draft,
+                  compile: { ...draft.compile, afterIdle },
+                });
+            }}
+          >
+            {autoCompileDelays.map((seconds) => (
+              <NativeSelectOption key={seconds} value={seconds}>
+                {seconds ? `After ${seconds}s idle` : "Off"}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+        <p className="text-muted-foreground text-xs">
+          Saves and compiles once you stop typing. Builds count toward your
+          plan’s usage limits, and pause if a limit is reached until you compile
+          manually.
         </p>
       </ItemContent>
     </Item>
