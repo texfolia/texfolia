@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { createDb } from "@texfolia/db";
 import {
   account,
+  project,
   projectCollaborator,
   projectGit,
   projectNode,
@@ -38,6 +39,9 @@ const secret = "git-integration-test-secret-not-for-production";
 const ids = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
 const [ownerId, viewerId, editorId] = ids;
 assert(ownerId && viewerId && editorId);
+let currentProject: string | undefined;
+let duringRemote: (() => Promise<void>) | undefined;
+const lockedRequests: string[] = [];
 const worker = await build({
   entryPoints: [new URL("./git/worker.ts", import.meta.url).pathname],
   bundle: true,
@@ -95,6 +99,20 @@ const options = {
         ["github.com", "gitlab.com"].includes(url.hostname),
         `Unexpected outbound request ${url.hostname}`,
       );
+      const projectId = currentProject;
+      if (projectId)
+        await db
+          .transaction((tx) =>
+            tx
+              .select()
+              .from(project)
+              .where(eq(project.id, projectId))
+              .for("update", { noWait: true }),
+          )
+          .catch(() => lockedRequests.push(url.pathname));
+      const hook = duringRemote;
+      duringRemote = undefined;
+      await hook?.();
       const target = new URL(`${url.pathname}${url.search}`, host.origin);
       return fetch(target, {
         method: request.method,
@@ -118,6 +136,7 @@ const resultSchema = z.object({
   diff: z.string().optional(),
 });
 async function action(projectId: string, action: unknown, userId = ownerId) {
+  currentProject = projectId;
   const response = await mf.dispatchFetch(`${(await mf.ready).origin}/git`, {
     method: "POST",
     body: JSON.stringify({ projectId, userId, action }),
@@ -331,6 +350,22 @@ try {
     await peer.commit("Remote update", author);
     await peer.push(gitHttp(local, "private-token"));
     await action(projectId, { kind: "checkout", name: "main" });
+    const beforePull = doc.getText("source").toString();
+    duringRemote = async () => {
+      await db
+        .update(projectNode)
+        .set({ updatedAt: new Date() })
+        .where(eq(projectNode.id, node.id));
+    };
+    await assert.rejects(
+      action(projectId, { kind: "pull" }),
+      /changed while Git was syncing/,
+    );
+    assert.equal(
+      doc.getText("source").toString(),
+      beforePull,
+      "A concurrent edit during pull is never overwritten",
+    );
     await action(projectId, { kind: "pull" });
     assert.equal(
       doc.getText("source").toString(),
@@ -423,6 +458,11 @@ try {
       "main",
     ),
     localOid,
+  );
+  assert.deepEqual(
+    lockedRequests,
+    [],
+    "No Git host request runs while the project row is locked",
   );
   console.info(
     "No-repository status, remote-free init/commit/history, and later empty-remote link/push passed",
