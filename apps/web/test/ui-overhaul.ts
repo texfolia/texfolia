@@ -149,6 +149,12 @@ async function workspaceMenu(page: Page, menu: string, item: string) {
   await entry.focus();
   await page.keyboard.press("Enter");
 }
+// The bottom panel's Problems tab includes the problem count.
+function problemsTab(page: Page) {
+  return page
+    .getByRole("tablist", { name: "Panel views" })
+    .getByRole("tab", { name: /^Problems \(\d+\)$/ });
+}
 async function sidebarView(page: Page, view: string) {
   const names: Record<string, string> = {
     files: "Files",
@@ -1299,20 +1305,25 @@ try {
   await owner
     .getByRole("button", { name: "Toggle agents sidebar", exact: true })
     .click();
+  // The bottom panel stays closed until the user opens it.
+  assert.equal(
+    await owner.getByRole("tablist", { name: "Panel views" }).count(),
+    0,
+  );
   await workspaceMenu(owner, "View", "Problems");
-  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await problemsTab(owner).waitFor();
   await owner
     .getByRole("tab", { name: "main.tex", exact: true })
     .click({ button: "right" });
   await owner
     .getByRole("menuitem", { name: "Close others", exact: true })
     .click();
-  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await problemsTab(owner).waitFor();
   await owner
     .getByRole("tab", { name: "main.tex", exact: true })
     .click({ button: "right" });
   await owner.getByRole("menuitem", { name: "Close all", exact: true }).click();
-  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await problemsTab(owner).waitFor();
   await sidebarView(owner, "files");
   await owner.getByRole("button", { name: "main.tex", exact: true }).dblclick();
   await sidebarView(owner, "git");
@@ -1325,7 +1336,7 @@ try {
       .getAttribute("aria-pressed"),
     "true",
   );
-  await owner.getByRole("tab", { name: "Problems", exact: true }).waitFor();
+  await problemsTab(owner).waitFor();
   assert.equal(
     await owner
       .getByRole("button", { name: "Toggle agents sidebar", exact: true })
