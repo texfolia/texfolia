@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "#/components/ui/dialog";
+import { readDroppedFiles, type DroppedFile } from "#/lib/dropped-files";
 import { newProjectNodePath } from "#/lib/project-paths";
 import {
   encodeSource,
@@ -18,7 +19,10 @@ import {
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
-export type UploadSourceHandle = { open: (parentId?: string) => void };
+export type UploadSourceHandle = {
+  open: (parentId?: string) => void;
+  drop: (parentId: string, entries: Array<FileSystemEntry | File>) => void;
+};
 
 export function UploadSource({
   ref,
@@ -44,31 +48,92 @@ export function UploadSource({
       targetFolder.current = parentId;
       input.current?.click();
     },
+    drop: (parentId, entries) => {
+      targetFolder.current = parentId;
+      void upload(readDroppedFiles(entries));
+    },
   }));
   const active = nodes.find((node) => node.id === activeId);
   const parentId =
     (active?.kind === "folder" ? active.id : active?.parentId) ??
     nodes.find((node) => node.kind === "folder" && node.parentId === null)?.id;
 
-  async function upload(file: File) {
+  async function upload(source: Promise<DroppedFile[]>) {
     const targetParentId = targetFolder.current ?? parentId;
     targetFolder.current = undefined;
     if (!targetParentId || pending) return;
     setError("");
     setPending(true);
     try {
-      newProjectNodePath(nodes, targetParentId, file.name);
-      if (file.size > maxSourceFileBytes)
-        throw new Error("File exceeds 10 MiB. Choose a smaller file.");
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const kind = sourceFileKind(file);
-      const created = await files.create({
-        parentId: targetParentId,
-        name: file.name,
-        kind,
-        content: encodeSource(bytes),
-      });
-      onCreated(created, true);
+      const dropped = await source;
+      // Validate every path before creating anything, so a bad drop leaves
+      // the tree unchanged. Dropped folders merge into existing ones.
+      const planned: Pick<ProjectNode, "id" | "parentId" | "name" | "kind">[] =
+        [...nodes];
+      const steps: {
+        id: string;
+        parentId: string;
+        name: string;
+        file?: File;
+      }[] = [];
+      for (const { path, file } of dropped) {
+        if (file.size > maxSourceFileBytes)
+          throw new Error(
+            `${path.join("/")} exceeds 10 MiB. Choose a smaller file.`,
+          );
+        let parent = targetParentId;
+        for (const [index, name] of path.entries()) {
+          const last = index === path.length - 1;
+          const existing = planned.find(
+            (node) =>
+              node.parentId === parent &&
+              node.name.toLowerCase() === name.toLowerCase(),
+          );
+          if (existing?.kind === "folder" && !last) {
+            parent = existing.id;
+            continue;
+          }
+          if (existing)
+            throw new Error(
+              `${path.slice(0, index + 1).join("/")}: A file or folder with this name already exists here.`,
+            );
+          newProjectNodePath(planned, parent, name);
+          const id = crypto.randomUUID();
+          planned.push({
+            id,
+            parentId: parent,
+            name,
+            kind: last ? "binary" : "folder",
+          });
+          steps.push({
+            id,
+            parentId: parent,
+            name,
+            file: last ? file : undefined,
+          });
+          parent = id;
+        }
+      }
+      const created = new Map<string, ProjectNode>();
+      for (const step of steps) {
+        const parentId = created.get(step.parentId)?.id ?? step.parentId;
+        const node = await files.create(
+          step.file
+            ? {
+                parentId,
+                name: step.name,
+                kind: sourceFileKind(step.file),
+                content: encodeSource(
+                  new Uint8Array(await step.file.arrayBuffer()),
+                ),
+              }
+            : { parentId, name: step.name, kind: "folder" },
+        );
+        created.set(step.id, node);
+      }
+      const uploaded = steps.filter((step) => step.file);
+      const only = uploaded.length === 1 && created.get(uploaded[0]?.id ?? "");
+      if (only) onCreated(only, true);
     } catch (error) {
       setError(
         error instanceof Error
@@ -106,7 +171,7 @@ export function UploadSource({
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
-          if (file) void upload(file);
+          if (file) void upload(Promise.resolve([{ path: [file.name], file }]));
         }}
       />
       {error &&
