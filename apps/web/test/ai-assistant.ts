@@ -49,7 +49,7 @@ const source =
   "\\documentclass{article}\n\\begin{document}\nOriginal text.\n\\end{document}\n";
 const sourceHash = await hashSource(new TextEncoder().encode(source));
 let objectKey = "";
-let mode: "tools" | "error" | "simple" | "slow" = "tools";
+let mode: "tools" | "files" | "error" | "simple" | "slow" = "tools";
 let call = 0;
 let logCalls = 0;
 const streamingTimers = new Set<ReturnType<typeof setInterval>>();
@@ -227,8 +227,9 @@ const mf = new Miniflare({
               args: {
                 path: "main.tex",
                 version: objectKey,
-                oldText: "Original text.",
-                newText: "Revised text.",
+                edits: [
+                  { oldText: "Original text.", newText: "Revised text." },
+                ],
               },
             },
             { name: "compile", args: { mainFile: "main.tex" } },
@@ -240,7 +241,42 @@ const mf = new Miniflare({
               },
             },
           ];
-          const tool = mode === "tools" ? toolCalls[call++] : undefined;
+          const fileToolCalls = [
+            { name: "search_project", args: { query: "revised TEXT" } },
+            {
+              name: "edit_file",
+              args: {
+                path: "main.tex",
+                version: objectKey,
+                // Out of order: replacements apply by position in one save.
+                edits: [
+                  { oldText: "Revised text.", newText: "Final text." },
+                  {
+                    oldText: "\\documentclass{article}",
+                    newText: "\\documentclass[11pt]{article}",
+                  },
+                ],
+              },
+            },
+            {
+              name: "create_file",
+              args: { path: "chapters/intro.tex", content: "Intro." },
+            },
+            {
+              name: "rename_file",
+              args: {
+                path: "chapters/intro.tex",
+                newPath: "sections/intro.tex",
+              },
+            },
+            { name: "delete_file", args: { path: "sections" } },
+          ];
+          const tool =
+            mode === "tools"
+              ? toolCalls[call++]
+              : mode === "files"
+                ? fileToolCalls[call++]
+                : undefined;
           const chunk = (delta: unknown, finish: string | null = null) => ({
             id: "completion-fixture",
             object: "chat.completion.chunk",
@@ -445,15 +481,19 @@ const readTools = [
   "list_files",
   "read_compile_logs",
   "read_file",
+  "search_project",
 ];
 const writeTools = [
   "compile",
+  "create_file",
+  "delete_file",
   "edit_file",
   "git_checkout",
   "git_commit",
   "git_create_branch",
   "git_pull",
   "git_push",
+  "rename_file",
 ];
 async function eventually(check: () => Promise<boolean>, label: string) {
   const deadline = Date.now() + 20_000;
@@ -664,6 +704,53 @@ try {
   assert(viewerSaved);
   assert((await viewerSaved.text()).includes("Revised text."));
   assert.equal(compileJobs.size, 1, "viewer runs never compile");
+  const fileThread = threadHistorySchema.parse(
+    await (
+      await send(`${path}?threads=1`, userId, "POST", { kind: "create" })
+    ).json(),
+  );
+  mode = "files";
+  call = 0;
+  objectKey = main.objectKey;
+  const fileCalls = inference.length;
+  const fileRun = await send(path, userId, "POST", {
+    ...chatBody(),
+    threadId: fileThread.thread.id,
+  });
+  assert.equal(fileRun.status, 200, await fileRun.clone().text());
+  const fileStream = await fileRun.text();
+  assert(!fileStream.includes("RUN_ERROR"), fileStream);
+  assert.equal(inference.length, fileCalls + 6);
+  const searched = JSON.stringify(inference[fileCalls + 1]?.body);
+  assert(
+    searched.includes("Revised text.") && searched.includes("total"),
+    "case-insensitive search results reach the next model turn",
+  );
+  const fileNodes = await db.query.projectNode.findMany({
+    where: { projectId: paidProject },
+  });
+  const edited = fileNodes.find((n) => n.id === main.id);
+  assert(edited?.objectKey);
+  assert.equal(
+    await (await bucket.get(edited.objectKey))?.text(),
+    "\\documentclass[11pt]{article}\n\\begin{document}\nFinal text.\n\\end{document}\n",
+    "edit_file applies several replacements in one save",
+  );
+  const live = (name: string) =>
+    fileNodes.filter((n) => n.name === name && n.deletedAt === null);
+  const removed = (name: string) =>
+    fileNodes.filter((n) => n.name === name && n.deletedAt !== null);
+  assert.equal(live("chapters")[0]?.kind, "folder", "create_file adds folders");
+  assert.equal(live("intro.tex").length, 0, "delete_file removes the file");
+  assert.equal(removed("sections").length, 1, "delete_file removes folders");
+  const intro = removed("intro.tex")[0];
+  assert.equal(
+    intro?.parentId,
+    removed("sections")[0]?.id,
+    "rename_file moves the file into a created folder",
+  );
+  assert(intro?.objectKey);
+  assert.equal(await (await bucket.get(intro.objectKey))?.text(), "Intro.");
   const git = new GitRepository();
   await git.init("https://github.com/fixture/project.git");
   git.overlay({ "main.tex": new TextEncoder().encode(source) });
@@ -1086,7 +1173,7 @@ try {
   assert.deepEqual(pageErrors, []);
   await context.close();
   console.info(
-    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, read-only viewer tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
+    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, search, multi-edit, file create/rename/delete, read-only viewer tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
   );
 } finally {
   for (const timer of streamingTimers) clearInterval(timer);
