@@ -14,7 +14,6 @@ import { lockProject } from "../project-access.server";
 import {
   decodeSource,
   encodeSource,
-  maxSourceFileBytes,
   type saveSourceSchema,
 } from "../project-source";
 import { invalidateSourceBuild } from "../project-source.server";
@@ -39,6 +38,7 @@ import {
   readUpdates,
   deleteUpdates,
 } from "./storage";
+import { checkUpdate, measureUsage, type Usage } from "./usage";
 
 const attachmentSchema = z.object({
   projectId: z.uuid(),
@@ -71,6 +71,8 @@ const retentionIntervalMs = 60 * 60_000;
 
 export class ProjectCollaboration extends DurableObject<Env> {
   private documents = new Map<string, Y.Doc>();
+  // Running text and history sizes, so edits are checked without re-encoding.
+  private sizes = new WeakMap<Y.Doc, Usage>();
   private queue: Promise<void> = Promise.resolve();
   // Verified access per user. Revocation paths clear it through invalidateAccess,
   // and the alarm re-verifies every connected user as a backstop.
@@ -434,51 +436,38 @@ export class ProjectCollaboration extends DurableObject<Env> {
 
   private async apply(info: Attachment, bytes: Uint8Array) {
     const doc = await this.document(info);
-    // Validate on a disposable document so a rejected update cannot poison the room.
-    const candidate = new Y.Doc();
+    const usage = checkUpdate(
+      doc,
+      this.sizes.get(doc) ?? measureUsage(doc),
+      bytes,
+    );
+    Y.applyUpdate(doc, bytes);
+    this.sizes.set(doc, usage);
     try {
-      Y.applyUpdate(candidate, Y.encodeStateAsUpdate(doc));
-      Y.applyUpdate(candidate, bytes);
-      if (
-        [...candidate.share.keys()].some((key) => key !== "source") ||
-        candidate
-          .getText("source")
-          .toDelta()
-          .some(
-            (part: { insert?: unknown; attributes?: unknown }) =>
-              typeof part.insert !== "string" || part.attributes !== undefined,
-          ) ||
-        new TextEncoder().encode(candidate.getText("source").toString())
-          .byteLength > maxSourceFileBytes ||
-        Y.encodeStateAsUpdate(candidate).byteLength > maxCollaborationBytes
-      )
-        throw new Error(
-          "Collaborative document exceeds its text or history limit",
-        );
       this.ctx.storage.transactionSync(() => {
         appendUpdate(this.ctx.storage.sql, info.nodeId, bytes);
         this.ctx.storage.sql.exec(
           "UPDATE documents SET dirty = 1 WHERE node_id = ?",
           info.nodeId,
         );
-        const usage = this.ctx.storage.sql
+        const stored = this.ctx.storage.sql
           .exec<{ count: number; bytes: number }>(
             "SELECT count(*) AS count, coalesce(sum(bytes), 0) AS bytes FROM updates WHERE node_id = ?",
             info.nodeId,
           )
           .one();
-        if (usage.count >= 64 || usage.bytes >= 256 * 1024) {
-          writeSnapshot(
-            this.ctx.storage.sql,
-            info.nodeId,
-            Y.encodeStateAsUpdate(candidate),
-          );
+        if (stored.count >= 64 || stored.bytes >= 256 * 1024) {
+          const snapshot = Y.encodeStateAsUpdate(doc);
+          writeSnapshot(this.ctx.storage.sql, info.nodeId, snapshot);
           deleteUpdates(this.ctx.storage.sql, info.nodeId);
+          usage.historyBytes = snapshot.byteLength;
         }
       });
-      Y.applyUpdate(doc, bytes);
-    } finally {
-      candidate.destroy();
+    } catch (error) {
+      // Reload from storage so the room never holds an unpersisted update.
+      this.documents.delete(info.nodeId);
+      doc.destroy();
+      throw error;
     }
     const flushAt = Date.now() + 2000;
     const alarm = await this.ctx.storage.getAlarm();
@@ -803,6 +792,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       }
     });
     const update = Y.encodeStateAsUpdate(doc, vector);
+    this.sizes.delete(doc);
     this.ctx.storage.transactionSync(() => {
       writeSnapshot(
         this.ctx.storage.sql,
