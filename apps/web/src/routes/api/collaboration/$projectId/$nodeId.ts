@@ -3,15 +3,19 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { collaborationAccess } from "#/lib/collaboration/sources.server";
+import { requestPrincipal } from "#/lib/request-principal.server";
 
 export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
   server: {
     handlers: {
       GET: async ({ request, context, params }) => {
-        const session = await context.auth.api.getSession({
-          headers: request.headers,
+        const principal = await requestPrincipal({
+          request,
+          auth: context.auth,
+          db: context.db,
+          projectId: params.projectId,
         });
-        if (!session) return new Response("Unauthorized", { status: 401 });
+        if (!principal) return new Response("Unauthorized", { status: 401 });
         if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
           return new Response("WebSocket required", { status: 426 });
         if (new URL(request.url).origin !== request.headers.get("Origin"))
@@ -33,7 +37,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
             context.db,
             params.projectId,
             params.nodeId,
-            session.user.id,
+            principal.userId,
           );
         } catch (error) {
           if (
@@ -49,8 +53,8 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
           "X-Collaboration-Session",
           JSON.stringify({
             ...parsed.data,
-            userId: session.user.id,
-            name: session.user.name.slice(0, 200),
+            userId: principal.userId,
+            name: principal.name.slice(0, 200),
             awareness: null,
           }),
         );

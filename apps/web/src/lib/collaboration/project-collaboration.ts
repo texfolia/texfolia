@@ -10,7 +10,7 @@ import { runGit } from "../git.server";
 import { formatChanges } from "../latex/format";
 import { hashSource } from "../latex/source-sync";
 import { liveProjectAccessIntervalMs } from "../live-project.server";
-import { lockProject } from "../project-access.server";
+import { lockProject, shareLinkIdOf } from "../project-access.server";
 import {
   decodeSource,
   encodeSource,
@@ -387,10 +387,12 @@ export class ProjectCollaboration extends DurableObject<Env> {
 
   private async send(ws: WebSocket, message: ServerMessage) {
     if (ws.readyState !== WebSocket.OPEN) return;
+    const info = attachmentSchema.parse(ws.deserializeAttachment());
+    // Anonymous share-link viewers never see who else is in the project.
+    if (message.type === "awareness" && shareLinkIdOf(info.userId) !== null)
+      return;
     try {
-      await this.verifyAccess(
-        attachmentSchema.parse(ws.deserializeAttachment()),
-      );
+      await this.verifyAccess(info);
     } catch {
       ws.close(1008, "Project access could not be verified");
       return;
@@ -541,6 +543,8 @@ export class ProjectCollaboration extends DurableObject<Env> {
             break;
           }
           case "awareness": {
+            // Share-link viewers are not shown to collaborators.
+            if (shareLinkIdOf(info.userId) !== null) break;
             const presence = readAwareness(
               decodeSource(data.update),
               info.clientId,

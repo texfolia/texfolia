@@ -7,6 +7,10 @@ import { createAuth } from "../../src/lib/auth";
 import { invalidateOrganizationCollaborationAccess } from "../../src/lib/collaboration/access.server";
 import { ProjectCollaboration as Room } from "../../src/lib/collaboration/project-collaboration";
 import {
+  createShareLink,
+  revokeShareLink,
+} from "../../src/lib/project-share-links.server";
+import {
   grantProjectAccess,
   revokeProjectAccess,
 } from "../../src/lib/project-sharing.server";
@@ -131,6 +135,24 @@ export default {
             db,
             userId: ownerId,
             data: { projectId, userId: body.userId ?? "" },
+            collaboration: env.COLLABORATION,
+          });
+        else if (action === "share-create")
+          return Response.json(
+            await createShareLink({
+              db,
+              userId: ownerId,
+              data: {
+                projectId,
+                scope: body.scope === "pdf" ? "pdf" : "project",
+              },
+            }),
+          );
+        else if (action === "share-revoke")
+          await revokeShareLink({
+            db,
+            userId: ownerId,
+            data: { projectId, linkId: body.linkId ?? "" },
             collaboration: env.COLLABORATION,
           });
         else if (action === "member-removed")

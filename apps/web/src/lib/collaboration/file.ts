@@ -8,6 +8,7 @@ import {
 import * as Y from "yjs";
 
 import { formatChanges } from "../latex/format";
+import { shareSearchParam } from "../project-share-links.schema";
 import { decodeSource, encodeSource } from "../project-source";
 import { collaborationCachePrefix, stopDocumentCaching } from "./cache";
 import {
@@ -60,6 +61,8 @@ export class CollaborativeFile {
       nodeId: string;
       userId: string;
       canWrite: boolean;
+      // Read-only share-link viewers authenticate with the link's token.
+      shareToken?: string;
       onChange: (value: string) => void;
       onSaved?: (saved: Saved) => void;
     },
@@ -153,6 +156,8 @@ export class CollaborativeFile {
     if (
       origin === this ||
       !this.synchronized ||
+      // Share-link viewers have no presence; the server drops it as well.
+      this.options.shareToken ||
       ![...added, ...updated, ...removed].includes(this.doc.clientID)
     )
       return;
@@ -217,6 +222,8 @@ export class CollaborativeFile {
     );
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("clientId", String(this.doc.clientID));
+    if (this.options.shareToken)
+      url.searchParams.set(shareSearchParam, this.options.shareToken);
     const socket = new WebSocket(url);
     this.socket = socket;
     socket.onopen = () => {
