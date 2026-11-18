@@ -917,23 +917,31 @@ export function ProjectWorkspace({
         throw new Error("Viewers cannot save project files");
       const nodes = files.nodes.toArray;
       await synchronizeTextFiles(nodes);
-      for (const node of nodes) {
-        if (node.kind !== "text") continue;
-        const file = collaboration.current.get(node.id);
-        if (!file)
-          throw new Error("Wait for collaboration to connect before saving.");
-        const saved = await file.save();
-        versions[node.id] = {
-          objectKey: saved.objectKey,
-          updatedAt: saved.updatedAt,
-        };
-        const value = file.text.toString();
-        drafts.current.set(node.id, { value, savedValue: saved.value });
-        if (value === saved.value) delete localDrafts.current[node.id];
-        api.current
-          ?.getPanel(node.id)
-          ?.api.setTitle(`${node.name}${value !== saved.value ? " ●" : ""}`);
-      }
+      await Promise.all(
+        nodes.map(async (node) => {
+          if (node.kind !== "text") return;
+          const file = collaboration.current.get(node.id);
+          if (!file)
+            throw new Error("Wait for collaboration to connect before saving.");
+          // Skip files the server has already persisted at the known version.
+          if (
+            file.isSaved(versions[node.id]?.objectKey) &&
+            file.text.toString() === drafts.current.get(node.id)?.savedValue
+          )
+            return;
+          const saved = await file.save();
+          versions[node.id] = {
+            objectKey: saved.objectKey,
+            updatedAt: saved.updatedAt,
+          };
+          const value = file.text.toString();
+          drafts.current.set(node.id, { value, savedValue: saved.value });
+          if (value === saved.value) delete localDrafts.current[node.id];
+          api.current
+            ?.getPanel(node.id)
+            ?.api.setTitle(`${node.name}${value !== saved.value ? " ●" : ""}`);
+        }),
+      );
       cacheDrafts();
       return true;
     } catch (error) {

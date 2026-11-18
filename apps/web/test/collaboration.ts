@@ -568,6 +568,32 @@ try {
     (chunks[0]?.count ?? 0) >= 8 &&
       (chunks[0]?.size ?? Infinity) <= 1024 * 1024,
   );
+  console.log("Checking payload-free saves of already-sent updates");
+  const beforeEdit = Y.encodeStateVector(largeDoc);
+  largeDoc.getText("source").insert(0, "sent ");
+  largeSocket.send(
+    JSON.stringify({
+      type: "update",
+      update: encodeSource(Y.encodeStateAsUpdate(largeDoc, beforeEdit)),
+    }),
+  );
+  const emptySaveId = crypto.randomUUID();
+  const emptySaved = largeMessage({ type: "saved", id: emptySaveId });
+  largeSocket.send(JSON.stringify({ type: "save", id: emptySaveId }));
+  const storedEmpty = await emptySaved;
+  assert(storedEmpty.type === "saved");
+  assert.equal(storedEmpty.value, "sent large " + largeText);
+  const cleanSync = largeMessage({ type: "sync" });
+  largeSocket.send(
+    JSON.stringify({
+      type: "sync",
+      vector: encodeSource(Y.encodeStateVector(largeDoc)),
+    }),
+  );
+  const clean = await cleanSync;
+  assert(clean.type === "sync");
+  assert.equal(clean.dirty, false);
+  assert.equal(clean.objectKey, storedEmpty.objectKey);
   console.log("Checking recovery after a project quota rejection");
   const assetBytes = new TextEncoder().encode("B".repeat(10 * 1024 * 1024));
   const assetKey = `projects/${projectId}/sources/${await hashSource(assetBytes)}`;
@@ -631,7 +657,9 @@ try {
       );
     }),
   ]);
-  assert.equal((await restored).type, "sync");
+  const restoredSync = await restored;
+  assert(restoredSync.type === "sync");
+  assert(restoredSync.dirty, "Unflushed documents must report pending saves");
   largeSource.delete(9 * 1024 * 1024, 1024 * 1024);
   const repairedSaveId = crypto.randomUUID();
   const repaired = largeMessage({ type: "saved", id: repairedSaveId });
