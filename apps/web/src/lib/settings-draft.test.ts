@@ -44,12 +44,36 @@ test("project reloads update untouched values and preserve a formatting draft", 
   ).toEqual({ ...current, width: 120 });
 });
 test("compile on save follows external changes unless the draft changed it", () => {
-  const current = { ...defaultSettings, compile: { onSave: false } };
+  const current = {
+    ...defaultSettings,
+    compile: { onSave: false, afterIdle: 0 as const },
+  };
   expect(
     rebaseUserDraft(defaultSettings, defaultSettings, current).compile,
-  ).toEqual({ onSave: false });
-  const draft = { ...current, compile: { onSave: true } };
+  ).toEqual({ onSave: false, afterIdle: 0 });
+  const draft = {
+    ...current,
+    compile: { onSave: true, afterIdle: 0 as const },
+  };
   expect(rebaseUserDraft(draft, current, current).compile).toEqual({
     onSave: true,
+    afterIdle: 0,
+  });
+});
+test("auto-compile delay rebases independently of compile on save", () => {
+  const external = {
+    ...defaultSettings,
+    compile: { onSave: false, afterIdle: 2 as const },
+  };
+  expect(
+    rebaseUserDraft(defaultSettings, defaultSettings, external).compile,
+  ).toEqual({ onSave: false, afterIdle: 2 });
+  const draft = {
+    ...defaultSettings,
+    compile: { onSave: true, afterIdle: 5 as const },
+  };
+  expect(rebaseUserDraft(draft, defaultSettings, external).compile).toEqual({
+    onSave: false,
+    afterIdle: 5,
   });
 });

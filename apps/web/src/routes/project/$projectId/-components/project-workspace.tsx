@@ -455,7 +455,9 @@ export function ProjectWorkspace({
     () => new Map(collaboration.current),
     [collaborationRevision],
   );
-  const observeChange = useRef<(id: string, value: string) => void>(() => {});
+  const observeChange = useRef<
+    (id: string, value: string, local?: boolean) => void
+  >(() => {});
   const versions = files.sourceVersions;
   const localDrafts = useRef<Record<string, SourceDraft>>({});
   const [recovery, setRecovery] = useState<Record<string, SourceDraft>>({});
@@ -535,6 +537,12 @@ export function ProjectWorkspace({
     return () => window.removeEventListener("storage", cleared);
   }, [storageKey, layoutKey]);
   const compilation = useRef<AbortController | null>(null);
+  const autoCompileTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  // Set when a usage limit rejects a build; a manual compile resumes.
+  const autoCompilePaused = useRef(false);
+  const runAutoCompile = useRef(() => {});
   const lastEditAt = useRef<number | null>(null);
   const editorId = useRef(crypto.randomUUID());
   const editSequence = useRef(0);
@@ -851,8 +859,8 @@ export function ProjectWorkspace({
                 );
             setCollaborationRevision((revision) => revision + 1);
           },
-          onChange: (value) => {
-            observeChange.current(id, value);
+          onChange: (value, local) => {
+            observeChange.current(id, value, local);
             if (!initialized) {
               initialized = true;
               setCollaborationRevision((revision) => revision + 1);
@@ -986,7 +994,11 @@ export function ProjectWorkspace({
     }
   }
 
-  async function compileProject(clean = false) {
+  async function compileProject(clean = false, auto = false) {
+    if (!auto) {
+      clearTimeout(autoCompileTimer.current);
+      autoCompilePaused.current = false;
+    }
     const snapshot = revision.current;
     const events = buildEvents.current;
     // Save first so the default save path persists even when compiling isn't possible.
@@ -1048,7 +1060,10 @@ export function ProjectWorkspace({
         }
         notifiedSequence.current = Math.max(notifiedSequence.current, sequence);
         setSourceChanged(revision.current !== snapshot);
-      } else setCompileError(result.error);
+      } else {
+        setCompileError(result.error);
+        if (result.limited) autoCompilePaused.current = true;
+      }
       const diagnostics = parseCompileLog(result.log, filenames, main);
       if (revision.current === snapshot) {
         setCompileProblems(diagnostics);
@@ -1086,6 +1101,39 @@ export function ProjectWorkspace({
 
   const save = () =>
     void (compileSettings.onSave ? compileProject() : saveSources());
+
+  function scheduleAutoCompile() {
+    clearTimeout(autoCompileTimer.current);
+    const seconds = compileSettings.afterIdle;
+    if (!seconds || !canWrite || autoCompilePaused.current) return;
+    autoCompileTimer.current = setTimeout(
+      () => runAutoCompile.current(),
+      seconds * 1000,
+    );
+  }
+  // Reassigned each render so the timer sees current settings and files.
+  runAutoCompile.current = () => {
+    if (
+      !compileSettings.afterIdle ||
+      !canWrite ||
+      !main ||
+      autoCompilePaused.current ||
+      Object.keys(recovery).length ||
+      // Path policy errors persist until files are renamed; don't repeat them.
+      invalidProjectPaths(nodes).length
+    )
+      return;
+    if (saveInProgress.current) {
+      scheduleAutoCompile();
+      return;
+    }
+    void compileProject(false, true);
+  };
+  useEffect(() => {
+    if (!compileSettings.afterIdle || !canWrite)
+      clearTimeout(autoCompileTimer.current);
+  }, [compileSettings.afterIdle, canWrite]);
+  useEffect(() => () => clearTimeout(autoCompileTimer.current), []);
   useAppShortcut("save", save, { target: container, enabled: !settingsOpen });
   useAppShortcut("saveWithoutCompiling", () => void saveSources(), {
     target: container,
@@ -1151,7 +1199,7 @@ export function ProjectWorkspace({
     if (file) file.replace(value);
   }
 
-  observeChange.current = (id, value) => {
+  observeChange.current = (id, value, local) => {
     const previous = drafts.current.get(id) ?? { value: "", savedValue: "" };
     const savedValue = previous.savedValue;
     drafts.current.set(id, { value, savedValue });
@@ -1164,6 +1212,8 @@ export function ProjectWorkspace({
       lastEditAt.current = performance.now();
       setSourceChanged(true);
       if (canWrite) notifySourceEdit();
+      // Only this tab's edits schedule a build; peers compile their own.
+      if (local) scheduleAutoCompile();
       update(path, value);
       setCompileProblems((current) => (current.length ? [] : current));
     }

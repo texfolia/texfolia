@@ -549,3 +549,25 @@ test("uncertain acceptance checks once and recovers the revision on completion",
   expect(await job.result).toMatchObject({ jobId: job.jobId, revision: 1 });
   expect(job.reads).toBe(2);
 });
+
+for (const status of [429, 503]) {
+  test(`a ${status} submission ${status === 429 ? "is" : "is not"} reported as a usage limit`, async () => {
+    const { events } = openEvents();
+    globalThis.fetch = Object.assign(
+      async () => Response.json({ error: "Compile limit reached" }, { status }),
+      { preconnect: originalFetch.preconnect },
+    );
+    const result = await requestCompilation({
+      projectId: "project",
+      events,
+      mainFile: "main.tex",
+      files: {},
+      signal: new AbortController().signal,
+    });
+    expect(result).toEqual({
+      error: "Compile limit reached",
+      log: "",
+      ...(status === 429 ? { limited: true } : {}),
+    });
+  });
+}

@@ -32,7 +32,7 @@ const status = z.discriminatedUnion("status", [
 
 type CompileResult =
   | { pdf: File; log: string; jobId: string; revision: number | undefined }
-  | { error: string; log: string };
+  | { error: string; log: string; limited?: boolean };
 
 const sourceSyncs = new WeakMap<ProjectBuildEvents, ProjectSourceSync>();
 
@@ -41,6 +41,8 @@ async function failureResult(response: Response) {
   return {
     error: result.success ? result.data.error : "Compilation failed",
     log: result.success ? (result.data.log ?? "") : "",
+    // Usage limits and fair-use caps reject the submission with 429.
+    ...(response.status === 429 ? { limited: true } : {}),
   };
 }
 

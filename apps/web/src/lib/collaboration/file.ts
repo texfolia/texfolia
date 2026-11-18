@@ -63,7 +63,8 @@ export class CollaborativeFile {
       canWrite: boolean;
       // Read-only share-link viewers authenticate with the link's token.
       shareToken?: string;
-      onChange: (value: string) => void;
+      /** `local` is true when this tab made the edit, not a peer or the cache. */
+      onChange: (value: string, local?: boolean) => void;
       onSaved?: (saved: Saved) => void;
     },
   ) {
@@ -135,13 +136,9 @@ export class CollaborativeFile {
 
   private documentChanged = (update: Uint8Array, origin: unknown) => {
     this.revision++;
-    if (this.status.ready) this.options.onChange(this.text.toString());
-    if (
-      origin !== this &&
-      origin !== this.persistence &&
-      this.synchronized &&
-      this.status.canWrite
-    )
+    const local = origin !== this && origin !== this.persistence;
+    if (this.status.ready) this.options.onChange(this.text.toString(), local);
+    if (local && this.synchronized && this.status.canWrite)
       this.send({ type: "update", update: encodeSource(update) });
   };
 

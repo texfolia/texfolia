@@ -24,6 +24,10 @@ export function rebaseUserDraft(
         draft.compile.onSave === previous.compile.onSave
           ? current.compile.onSave
           : draft.compile.onSave,
+      afterIdle:
+        draft.compile.afterIdle === previous.compile.afterIdle
+          ? current.compile.afterIdle
+          : draft.compile.afterIdle,
     },
     shortcuts: Object.fromEntries(
       shortcutIds.map((action) => [
