@@ -33,7 +33,12 @@ export default {
       const handlers = Route.options.server?.handlers;
       if (!handlers || typeof handlers === "function")
         throw new Error("Missing compile handlers");
-      const handler = request.method === "POST" ? handlers.POST : handlers.GET;
+      const handler =
+        request.method === "POST"
+          ? handlers.POST
+          : request.method === "PATCH"
+            ? handlers.PATCH
+            : handlers.GET;
       if (typeof handler !== "function")
         throw new Error("Missing compile handler");
       return await handler({

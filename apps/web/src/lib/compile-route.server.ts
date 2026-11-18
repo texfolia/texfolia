@@ -1,7 +1,16 @@
 import type { Db } from "@texfolia/db";
 import { projectJob } from "@texfolia/db/schema";
 import { env } from "cloudflare:workers";
-import { and, eq, inArray } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  notInArray,
+  sql,
+} from "drizzle-orm";
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
@@ -9,6 +18,7 @@ import { compilePlan } from "#/lib/billing.server";
 import { buildSnapshotSchema } from "#/lib/build";
 import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
+import { compileHistoryLimit } from "#/lib/latex/compile-history";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema, hashSource } from "#/lib/latex/source-sync";
 import { streamProjectResponse } from "#/lib/live-project.server";
@@ -42,6 +52,7 @@ const status = z.union([
       .min(1)
       .max(20 * 1024 * 1024),
     log: z.string(),
+    createdAt: z.string().optional(),
     timing: compilerTimingSchema.optional(),
   }),
   z.object({
@@ -49,6 +60,7 @@ const status = z.union([
     status: z.literal("failed"),
     error: z.string(),
     log: z.string(),
+    createdAt: z.string().optional(),
     timing: compilerTimingSchema.optional(),
   }),
 ]);
@@ -65,11 +77,13 @@ function submissionResponse({
   projectId,
   revision,
   sourceRevision,
+  serverMs,
 }: {
   id: string;
   projectId: string;
   revision?: number;
   sourceRevision?: number;
+  serverMs?: number;
 }) {
   const statusUrl = `/api/compile/${projectId}?job=${id}`;
   return json(
@@ -77,6 +91,9 @@ function submissionResponse({
       id,
       revision,
       sourceRevision,
+      // Lets the browser subtract route processing from its round trip when it
+      // maps its own measurements onto receivedAt.
+      serverMs,
       status: "queued",
       statusUrl,
       previewUrl: `${statusUrl}&preview=pdf`,
@@ -177,7 +194,7 @@ async function readSources(request: Request) {
 function updateJob(
   db: Db,
   id: string,
-  values: Partial<typeof projectJob.$inferInsert>,
+  values: PgUpdateSetSource<typeof projectJob>,
 ) {
   return db
     .update(projectJob)
@@ -188,6 +205,56 @@ function updateJob(
         inArray(projectJob.status, ["queued", "running"]),
       ),
     );
+}
+
+// Adds top-level keys to the job timeline without replacing other parts.
+function mergeTiming(value: Record<string, unknown>) {
+  return sql`coalesce(${projectJob.timing}, '{}'::jsonb) || ${JSON.stringify(value)}::jsonb`;
+}
+
+function compilerTimeline(result: {
+  createdAt?: string;
+  timing?: CompilerTiming;
+}) {
+  return { compiler: { ...result.timing, acceptedAt: result.createdAt } };
+}
+
+// Only the most recent compiles keep a timeline; older rows remain for
+// accounting.
+async function pruneTimelines(db: Db, projectId: string) {
+  await db
+    .update(projectJob)
+    .set({ timing: null })
+    .where(
+      and(
+        eq(projectJob.projectId, projectId),
+        isNotNull(projectJob.timing),
+        notInArray(
+          projectJob.id,
+          db
+            .select({ id: projectJob.id })
+            .from(projectJob)
+            .where(eq(projectJob.projectId, projectId))
+            .orderBy(desc(projectJob.createdAt))
+            .limit(compileHistoryLimit),
+        ),
+      ),
+    );
+}
+
+async function finishJob(
+  db: Db,
+  projectId: string,
+  id: string,
+  values: PgUpdateSetSource<typeof projectJob>,
+) {
+  const updated = await updateJob(db, id, values).returning({
+    id: projectJob.id,
+  });
+  if (updated.length)
+    await pruneTimelines(db, projectId).catch((error: unknown) => {
+      console.error("Compile timeline pruning failed", { projectId, error });
+    });
 }
 
 async function readPreviewBody(request: Request) {
@@ -267,6 +334,7 @@ type CompileArgs = {
 export const compileHandlers = {
   POST: async ({ request, params, context }: CompileArgs) => {
     const started = performance.now();
+    const receivedAt = new Date().toISOString();
     const { db } = context;
     const denied = await checkProject(request, params.projectId, context);
     if (denied instanceof Response) return denied;
@@ -302,6 +370,7 @@ export const compileHandlers = {
         requestDigest,
         status: "queued",
         sizeBytes: 0n,
+        timing: { web: { receivedAt } },
       })
       .onConflictDoNothing({ target: projectJob.id })
       .returning({ id: projectJob.id });
@@ -468,6 +537,7 @@ export const compileHandlers = {
       projectId: params.projectId,
       revision,
       sourceRevision,
+      serverMs: performance.now() - started,
     });
   },
   PATCH: async ({ request, params, context }: CompileArgs) => {
@@ -498,6 +568,19 @@ export const compileHandlers = {
     } catch {
       /* Preview reporting must not affect compilation. */
     }
+    // Persist the first report for the Logs timeline. Pruned or older jobs
+    // have no timeline to extend.
+    await context.db
+      .update(projectJob)
+      .set({ timing: mergeTiming({ client: body }) })
+      .where(
+        and(
+          eq(projectJob.id, id.data),
+          eq(projectJob.projectId, params.projectId),
+          isNotNull(projectJob.timing),
+          sql`${projectJob.timing} -> 'client' is null`,
+        ),
+      );
     console.info({
       ...timing,
       ...body,
@@ -524,6 +607,24 @@ export const compileHandlers = {
     // PDF-only links see the build stream and the latest PDF, but not job
     // logs or other generated files, which can quote the sources.
     const pdfOnly = denied.shareScope === "pdf";
+    if (url.searchParams.get("history") === "1") {
+      if (pdfOnly) return json({ error: "Not found" }, 404);
+      const jobs = await db
+        .select({
+          id: projectJob.id,
+          status: projectJob.status,
+          error: projectJob.error,
+          createdAt: projectJob.createdAt,
+          startedAt: projectJob.startedAt,
+          finishedAt: projectJob.finishedAt,
+          timing: projectJob.timing,
+        })
+        .from(projectJob)
+        .where(eq(projectJob.projectId, params.projectId))
+        .orderBy(desc(projectJob.createdAt))
+        .limit(compileHistoryLimit);
+      return json({ jobs });
+    }
     if (!url.searchParams.has("job")) {
       try {
         const file = url.searchParams.get("file");
@@ -556,6 +657,13 @@ export const compileHandlers = {
       where: { id, projectId: params.projectId },
     });
     if (!job) return json({ error: "Job not found" }, 404);
+    if (url.searchParams.get("log") === "1") {
+      const row = await db.query.projectJob.findFirst({
+        columns: { log: true },
+        where: { id, projectId: params.projectId },
+      });
+      return json({ id, status: job.status, log: row?.log ?? "" });
+    }
     const pdfPath = `/projects/${params.projectId}/compilations/${id}.pdf`;
     try {
       if (url.searchParams.get("preview") === "pdf") {
@@ -637,25 +745,28 @@ export const compileHandlers = {
             result.artifactUrl !== `/compilations/${id}.pdf`
           )
             throw new Error("Invalid compiler artifact URL");
-          await updateJob(db, id, {
+          await finishJob(db, params.projectId, id, {
             status: "succeeded",
             log: result.log,
             objectKey: pdfPath.slice(1),
             sizeBytes: BigInt(result.sizeBytes),
             finishedAt: new Date(),
+            timing: mergeTiming(compilerTimeline(result)),
           });
           return json({
             ...result,
             artifactUrl: `/api/compile/${params.projectId}?job=${id}&artifact=pdf`,
           });
-        case "failed":
-          await updateJob(db, id, {
+        case "failed": {
+          await finishJob(db, params.projectId, id, {
             status: "failed",
             error: result.error,
             log: result.log,
             finishedAt: new Date(),
+            timing: mergeTiming(compilerTimeline(result)),
           });
           return json(result);
+        }
       }
     } catch (error) {
       console.error("Compile status or artifact fetch failed", {

@@ -11,6 +11,7 @@ const submission = z.object({
   statusUrl: z.string(),
   previewUrl: z.string().optional(),
   sourceRevision: z.number().int().nonnegative().optional(),
+  serverMs: z.number().finite().nonnegative().optional(),
 });
 const status = z.discriminatedUnion("status", [
   z.object({ id: z.uuid(), status: z.literal("queued") }),
@@ -57,6 +58,7 @@ function waitForCompletion(options: {
   revision?: number;
   statusUrl: string;
   signal: AbortSignal;
+  onNotified?: () => void;
 }): Promise<TerminalStatus> {
   const { events, jobId, statusUrl, signal } = options;
   signal.throwIfAborted();
@@ -144,6 +146,7 @@ function waitForCompletion(options: {
         return;
       }
       if (matching?.status === "succeeded" || matching?.status === "failed") {
+        if (!terminalNotified) options.onNotified?.();
         terminalNotified = true;
         void check();
       }
@@ -181,6 +184,7 @@ export async function requestCompilation(options: {
   }
   const prepared = await sync.prepare(mainFile, files);
   signal.throwIfAborted();
+  const requestSentMs = performance.now() - startedAt;
   const response = await fetch(
     `/api/compile/${encodeURIComponent(projectId)}`,
     {
@@ -204,19 +208,23 @@ export async function requestCompilation(options: {
     },
   );
   if (!response.ok) return failureResult(response);
-  const { id, revision, statusUrl, previewUrl, sourceRevision } =
+  const { id, revision, statusUrl, previewUrl, sourceRevision, serverMs } =
     submission.parse(await response.json());
   if (id !== jobId) throw new Error("Invalid compiler job ID");
   signal.throwIfAborted();
   if (sourceRevision !== undefined)
     sync.accept(sourceRevision, prepared.hashes, prepared.sequence);
   const submittedAt = performance.now();
+  let notifiedAt: number | undefined;
   const completion = waitForCompletion({
     events: options.events,
     jobId,
     revision,
     statusUrl,
     signal,
+    onNotified: () => {
+      notifiedAt = performance.now();
+    },
   });
   const readPdf = async (response: Response, downloadAt: number) => {
     if (!response.ok || !response.body) return null;
@@ -249,6 +257,9 @@ export async function requestCompilation(options: {
       submissionMs: submittedAt - startedAt,
       pollingMs: downloadAt - submittedAt,
       downloadMs: performance.now() - downloadAt,
+      requestSentMs,
+      serverMs,
+      notifiedAt: () => notifiedAt,
     });
     return file;
   };

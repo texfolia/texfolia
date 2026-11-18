@@ -24,6 +24,11 @@ import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import { unknownEngineTiming } from "../../compiler/src/telemetry";
 import { buildSnapshotSchema } from "../src/lib/build";
+import {
+  compileHistoryLimit,
+  compileHistorySchema,
+  parseJobTimeline,
+} from "../src/lib/latex/compile-history";
 import { hashSource } from "../src/lib/latex/source-sync";
 import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
 import { projectMetadataVersion } from "../src/lib/project-metadata";
@@ -283,6 +288,67 @@ try {
     where: { id: original.id },
   });
   assert.equal(job?.status, "succeeded", "GET reconciles the persisted job");
+  const timeline = parseJobTimeline(job?.timing);
+  assert(timeline.web?.receivedAt, "POST records the web receipt instant");
+  assert(timeline.compiler?.acceptedAt, "GET persists the coordinator instant");
+  assert(timeline.compiler?.publishedAt, "GET persists compiler timing");
+  assert.equal(timeline.compiler?.delivery, "direct");
+  const preview = {
+    outcome: "rendered",
+    submissionMs: 40,
+    pollingMs: 300,
+    downloadMs: 5,
+    previewMs: 20,
+    actionToPdfMs: 400,
+    keystrokeToPdfMs: null,
+    requestSentMs: 10,
+    serverMs: 12,
+    notifiedMs: 350,
+  };
+  const patched = await mf.dispatchFetch(
+    `${(await mf.ready).origin}/api/compile/${original.projectId}?job=${original.id}`,
+    {
+      method: "PATCH",
+      headers: {
+        Cookie: cookies.get(original.userId) ?? "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(preview),
+    },
+  );
+  assert.equal(patched.status, 204);
+  const reported = await db.query.projectJob.findFirst({
+    where: { id: original.id },
+  });
+  assert.deepEqual(
+    parseJobTimeline(reported?.timing).client,
+    preview,
+    "PATCH persists browser preview timing on the job",
+  );
+  assert.equal(
+    parseJobTimeline(reported?.timing).compiler?.publishedAt,
+    timeline.compiler?.publishedAt,
+    "Browser timing merges without replacing compiler timing",
+  );
+  const history = compileHistorySchema.parse(
+    await (
+      await mf.dispatchFetch(
+        `${(await mf.ready).origin}/api/compile/${original.projectId}?history=1`,
+        { headers: { Cookie: cookies.get(original.userId) ?? "" } },
+      )
+    ).json(),
+  );
+  assert.equal(history.jobs[0]?.id, original.id);
+  assert.equal(history.jobs[0]?.timing.client?.notifiedMs, 350);
+  const logResponse = await mf.dispatchFetch(
+    `${(await mf.ready).origin}/api/compile/${original.projectId}?job=${original.id}&log=1`,
+    { headers: { Cookie: cookies.get(original.userId) ?? "" } },
+  );
+  assert.deepEqual(await logResponse.json(), {
+    id: original.id,
+    status: "succeeded",
+    log: "compiled",
+  });
   const conflict = { error: "Compilation ID already used" };
   for (const body of [
     { ...delta, mainFile: "other.tex" },
@@ -344,7 +410,7 @@ try {
   assert.equal(submissions.length, 1, "Conflicts never reach the compiler");
   assert.deepEqual(
     await db.query.projectJob.findFirst({ where: { id: original.id } }),
-    job,
+    reported,
   );
 
   const lost = { ...(await fixture()), id: crypto.randomUUID() };
@@ -635,6 +701,16 @@ try {
     200,
   );
   assert.equal(
+    (await anonymous(pdfLink.token, "history=1")).status,
+    404,
+    "PDF-only links cannot read compile timelines",
+  );
+  assert.equal(
+    (await anonymous(pdfLink.token, `job=${original.id}&log=1`)).status,
+    404,
+  );
+  assert.equal((await anonymous(projectLink.token, "history=1")).status, 200);
+  assert.equal(
     (
       await anonymous(projectLink.token, "", {
         method: "POST",
@@ -712,6 +788,31 @@ try {
     [projectLink.id],
   );
 
+  const pruned = await fixture();
+  await db.insert(projectJob).values(
+    Array.from({ length: compileHistoryLimit + 2 }, (_, index) => ({
+      projectId: pruned.projectId,
+      status: "failed" as const,
+      sizeBytes: 0n,
+      createdAt: new Date(Date.now() - 60_000 + index),
+      timing: { web: { receivedAt: new Date().toISOString() } },
+    })),
+  );
+  const prunedId = crypto.randomUUID();
+  assert.equal((await submit({ ...pruned, id: prunedId })).status, 202);
+  await completed(pruned.projectId, pruned.userId, prunedId);
+  const timelines = await db.query.projectJob.findMany({
+    columns: { id: true, timing: true },
+    where: { projectId: pruned.projectId },
+  });
+  assert.equal(timelines.length, compileHistoryLimit + 3);
+  assert.equal(
+    timelines.filter((row) => row.timing !== null).length,
+    compileHistoryLimit,
+    "Only the most recent compiles keep a timeline",
+  );
+  assert.notEqual(timelines.find((row) => row.id === prunedId)?.timing, null);
+
   await db.delete(session).where(eq(session.userId, original.userId));
   assert.equal(
     (await submit(original)).status,
@@ -719,7 +820,7 @@ try {
     "Retry still requires a valid session",
   );
   console.info(
-    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, share links (PDF-only limits, no writes, revocation), and Postgres reconciliation",
+    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, share links (PDF-only limits, no writes, revocation), persisted compile timelines with pruning, and Postgres reconciliation",
   );
 } finally {
   for (const id of cookies.keys()) await db.delete(user).where(eq(user.id, id));

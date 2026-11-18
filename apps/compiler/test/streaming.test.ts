@@ -140,6 +140,12 @@ for (const scenario of [
       expect(after.current!.timing!.firstPdfByteMs!).toBeLessThan(
         after.current!.timing!.engineRequestMs,
       );
+      const { startedAt, firstPdfAt, engineFinishedAt, publishedAt } =
+        after.current!.timing!;
+      const instants = [startedAt, firstPdfAt, engineFinishedAt, publishedAt];
+      expect(instants.every((value) => typeof value === "string")).toBe(true);
+      const times = instants.map((value) => Date.parse(value!));
+      expect(times).toEqual([...times].sort((a, b) => a - b));
       if (!saveFails) {
         expect(after.current?.status).toBe("succeeded");
         expect(after.latestBuild?.id).toBe(id);

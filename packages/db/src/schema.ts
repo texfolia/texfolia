@@ -193,6 +193,9 @@ export const projectJob = pgTable(
       .$onUpdate(() => new Date()),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    // User-facing compile timeline: compiler stage timing plus browser preview
+    // timing. Only the most recent jobs per project keep it.
+    timing: jsonb("timing").$type<unknown>(),
   },
   (t) => [
     index("project_job_project_id_created_at_idx").on(t.projectId, t.createdAt),

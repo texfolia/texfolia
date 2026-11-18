@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 const duration = z.number().finite().nonnegative();
+// Browser durations are measured with performance.now() from the compile
+// action. They are never converted with the browser's wall clock.
 export const previewTimingSchema = z.object({
   outcome: z.enum(["rendered", "preview_failed"]),
   submissionMs: duration,
@@ -10,6 +12,12 @@ export const previewTimingSchema = z.object({
   actionToPdfMs: duration,
   keystrokeToPdfMs: duration.nullable(),
   firstPdfByteMs: duration.nullable().optional(),
+  // Clock anchors for the Logs timeline: the submission request leaving the
+  // browser and the web route's own processing time, echoed from its response.
+  requestSentMs: duration.optional(),
+  serverMs: duration.optional(),
+  // Arrival of the terminal build event over SSE.
+  notifiedMs: duration.optional(),
 });
 export type PreviewTiming = z.infer<typeof previewTimingSchema>;
 
@@ -28,6 +36,9 @@ export function trackCompilePreview(options: {
   pollingMs: number;
   downloadMs: number;
   firstPdfByteMs?: number;
+  requestSentMs?: number;
+  serverMs?: number;
+  notifiedAt?: () => number | undefined;
   completion?: Promise<unknown>;
 }) {
   const readyAt = performance.now();
@@ -44,16 +55,22 @@ export function trackCompilePreview(options: {
       keystrokeToPdfMs:
         options.lastEditAt === null ? null : now - options.lastEditAt,
       firstPdfByteMs: options.firstPdfByteMs,
+      requestSentMs: options.requestSentMs,
+      serverMs: options.serverMs,
     };
     void (options.completion ?? Promise.resolve())
-      .then(() =>
-        fetch(options.statusUrl, {
+      .then(() => {
+        // A streamed preview can render before the completion event arrives.
+        const notifiedAt = options.notifiedAt?.();
+        if (notifiedAt !== undefined)
+          report.notifiedMs = Math.max(0, notifiedAt - options.startedAt);
+        return fetch(options.statusUrl, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(report),
           keepalive: true,
-        }),
-      )
+        });
+      })
       .catch(() => undefined);
   });
 }

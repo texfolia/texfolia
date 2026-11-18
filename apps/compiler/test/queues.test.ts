@@ -387,6 +387,10 @@ test("interactive success stays direct; X-Compile-Plan selects only the overflow
       expect(runs).toBe(1);
       expect(fixture.messages).toEqual([]);
       expect(fixture.core.snapshot().current?.status).toBe("succeeded");
+      expect(fixture.core.snapshot().current?.timing).toMatchObject({
+        delivery: "direct",
+        debounceMs: expect.any(Number),
+      });
       expect(fixture.background[0]?.delaySeconds).toBeGreaterThan(0);
     } finally {
       await fixture.core.close();
@@ -473,7 +477,7 @@ test("the one queued retry can succeed and duplicate delivery does not run TeX a
     expect(await fixture.deliver("compile-free", body, 2)).toBe(true);
     expect(fixture.core.snapshot().current).toMatchObject({
       status: "succeeded",
-      timing: { attempt: 3 },
+      timing: { attempt: 3, delivery: "overflow" },
     });
     expect(await fixture.deliver("compile-free", body, 2)).toBe(true);
     expect(runs).toBe(3);
