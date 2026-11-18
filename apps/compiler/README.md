@@ -55,7 +55,9 @@ failures for recovery. After consuming the complete result, the pool cancels any
 remaining work, wipes project sources, build files, cache, and temporary files,
 and returns the process for another project. Projects hold no container between
 builds. A healthy spare serves the next job when available. Otherwise the pool
-allocates a cold container. Each attempt restores its project's archive onto its
+allocates a cold container. After 10 minutes with no compiles and no open
+editor, the pool stops every container and runs none until the next compile.
+Each attempt restores its project's archive onto its
 leased container. See [Container pool](docs/container-pool.md).
 
 ## Run locally
@@ -247,9 +249,11 @@ the same durable message policy with independent queue lanes.
 `GET /projects/<projectId>/events` streams the same snapshot on attach and after
 every transition. It sends heartbeat comments every 15 seconds. EventSource
 reconnects with the current snapshot, so no replay cursor is needed. The editor
-attaches when the project opens. Attachment requests shared pool preparation
-without delaying the first SSE snapshot or reserving a container. Cache restore
-starts after a compile claims a lease. Prewarm failures do not break SSE.
+attaches when the project opens. The stream reports editor presence to the
+shared pool on attach and every minute while it stays open. Presence keeps an
+existing warm spare from scaling to zero but does not start a container, delay
+the first SSE snapshot, or reserve capacity. Cache restore starts after a
+compile claims a lease. Presence report failures do not break SSE.
 No container snapshots are used. See [Container pool](docs/container-pool.md).
 The local [cold-start measurements](cold-start-measurements.md) describe the
 previous dedicated-container model.
@@ -401,8 +405,9 @@ message only after the failure is recorded, so acknowledged messages are no
 longer in the queue.
 
 The separate `background` consumer batches up to 20 messages with concurrency 1.
-The scheduled event enqueues legacy
-job recovery on `background` rather than running a sweep itself.
+The five-minute scheduled event enqueues legacy
+job recovery on `background` rather than running a sweep itself. It does not
+wake the container pool, so an idle deployment keeps no compiler containers.
 The `v2` migration adds the coordinator without replacing existing
 container identities.
 

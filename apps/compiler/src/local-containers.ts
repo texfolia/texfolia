@@ -226,7 +226,7 @@ export function createLocalContainerPool(
           await transport(name).destroy();
           transports.delete(name);
         },
-        prewarm: ensure,
+        prewarm: async () => pool.touch(),
       });
     },
     async close({ removeContainers = false } = {}) {

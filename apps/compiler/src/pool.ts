@@ -10,6 +10,8 @@ export const poolClaimSchema = z.object({
 export type PoolClaim = z.infer<typeof poolClaimSchema>;
 // Covers startup, archive restore, the 300s compile, and response transfer.
 export const poolLeaseMs = 15 * 60_000;
+// With no claims and no editor presence for this long, the pool keeps no containers.
+export const poolIdleMs = 10 * 60_000;
 const stateSchema = z
   .object({
     version: z.literal(2).optional(),
@@ -20,6 +22,8 @@ const stateSchema = z
     windowMisses: z.number(),
     windowStarted: z.number(),
     lastClaim: z.number(),
+    // Last editor presence report. Presence delays scale-to-zero but starts nothing.
+    lastSeen: z.number().default(0),
     spares: z.array(
       z.object({
         name: z.string(),
@@ -75,13 +79,14 @@ export class PoolCore {
       ? stateSchema.parse(JSON.parse(options.saved))
       : {
           version: 2,
-          target: 1,
+          target: 0,
           hits: 0,
           misses: 0,
           windowHits: 0,
           windowMisses: 0,
           windowStarted: options.now(),
           lastClaim: options.now(),
+          lastSeen: 0,
           spares: [],
           leases: [],
         };
@@ -91,6 +96,21 @@ export class PoolCore {
   }
   snapshot() {
     return structuredClone(this.state);
+  }
+
+  /** True when no container exists or awaits cleanup, so maintenance can stop. */
+  idle() {
+    return (
+      this.state.target === 0 &&
+      this.state.spares.length === 0 &&
+      this.state.leases.length === 0
+    );
+  }
+
+  /** Records that an editor is open. Presence keeps a warm spare but starts none. */
+  touch() {
+    this.state.lastSeen = this.options.now();
+    this.persist();
   }
 
   async claim(
@@ -181,6 +201,8 @@ export class PoolCore {
       generation: lease.generation,
       status: "ready",
     });
+    // Keep the returned process for the next compile. Idle maintenance lowers this.
+    this.state.target = Math.max(this.state.target, 1);
     this.trim();
     this.persist();
     await this.stopSurplus();
@@ -226,11 +248,14 @@ export class PoolCore {
         this.state.windowMisses / claims >= 0.25
       )
         this.state.target = 2;
-      else if (now - this.state.lastClaim >= 5 * 60_000) this.state.target = 1;
+      else if (now - this.state.lastClaim >= 5 * 60_000)
+        this.state.target = Math.min(this.state.target, 1);
       this.state.windowHits = 0;
       this.state.windowMisses = 0;
       this.state.windowStarted = now;
     }
+    if (now - Math.max(this.state.lastClaim, this.state.lastSeen) >= poolIdleMs)
+      this.state.target = 0;
     this.trim();
     while (
       this.state.spares.filter((entry) => entry.status !== "stopping").length <
