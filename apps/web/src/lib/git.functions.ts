@@ -30,6 +30,18 @@ export const getGitAccounts = createServerFn({ method: "GET" }).handler(
   },
 );
 
+export const getGitBranch = createServerFn({ method: "GET" })
+  .validator(z.object({ projectId: z.uuid() }))
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const { gitBranch } = await import("./git.server");
+    return gitBranch({
+      db: context.db,
+      projectId: data.projectId,
+      userId: session.user.id,
+    });
+  });
+
 export const gitAction = createServerFn({ method: "POST" })
   .validator(z.object({ projectId: z.uuid(), action: gitActionSchema }))
   .handler(async ({ data }) => {
