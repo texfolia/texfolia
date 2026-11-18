@@ -40,6 +40,8 @@ const backend = Bun.serve({
             type: "sync",
             update: encodeSource(Y.encodeStateAsUpdate(source)),
             vector: encodeSource(Y.encodeStateVector(source)),
+            dirty: true,
+            objectKey: null,
             canWrite: true,
             user: { name: "Cache test", color: "#123456" },
           }),

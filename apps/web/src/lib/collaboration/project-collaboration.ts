@@ -509,13 +509,16 @@ export class ProjectCollaboration extends DurableObject<Env> {
         const access = await this.verifyAccess(info);
         const doc = await this.document(info);
         switch (data.type) {
-          case "sync":
+          case "sync": {
+            const row = this.row(info.nodeId);
             await this.send(ws, {
               type: "sync",
               update: encodeSource(
                 Y.encodeStateAsUpdate(doc, decodeSource(data.vector)),
               ),
               vector: encodeSource(Y.encodeStateVector(doc)),
+              dirty: Boolean(row?.dirty),
+              objectKey: row?.object_key ?? null,
               canWrite: access.canWrite,
               user: this.user(info),
             });
@@ -530,11 +533,12 @@ export class ProjectCollaboration extends DurableObject<Env> {
                 });
             }
             break;
+          }
           case "update":
           case "save": {
             if (!access.canWrite)
               throw new Error("Viewers cannot edit documents");
-            await this.apply(info, decodeSource(data.update));
+            if (data.update) await this.apply(info, decodeSource(data.update));
             if (data.type === "save") {
               const version = await this.flush(info.nodeId);
               if (!version) throw new Error("File not found");

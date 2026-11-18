@@ -38,6 +38,11 @@ export class CollaborativeFile {
   private pongAt = 0;
   private attempts = 0;
   private listeners = new Set<() => void>();
+  // Every document change bumps the revision; a save or clean sync records the
+  // revision and object key the server has persisted.
+  private revision = 0;
+  private savedRevision = 0;
+  private savedObjectKey: string | null | undefined;
   private status: FileStatus;
   private saves = new Map<
     string,
@@ -45,6 +50,7 @@ export class CollaborativeFile {
       resolve: (saved: Saved) => void;
       reject: (error: Error) => void;
       timer: ReturnType<typeof setTimeout>;
+      revision: number;
     }
   >();
 
@@ -125,6 +131,7 @@ export class CollaborativeFile {
   }
 
   private documentChanged = (update: Uint8Array, origin: unknown) => {
+    this.revision++;
     if (this.status.ready) this.options.onChange(this.text.toString());
     if (
       origin !== this &&
@@ -253,14 +260,19 @@ export class CollaborativeFile {
               ...this.awareness.getLocalState(),
               user: data.user,
             });
+            let dirty = data.dirty;
             if (data.canWrite) {
               const pending = Y.encodeStateAsUpdate(
                 this.doc,
                 decodeSource(data.vector),
               );
-              if (pending.length > 2)
+              if (pending.length > 2) {
                 this.send({ type: "update", update: encodeSource(pending) });
+                dirty = true;
+              }
             }
+            this.savedRevision = dirty ? -1 : this.revision;
+            this.savedObjectKey = data.objectKey;
             this.options.onChange(this.text.toString());
             if (this.persistence)
               void this.persistence.set("initialized", 1).catch(() => {
@@ -286,6 +298,8 @@ export class CollaborativeFile {
             const pending = this.saves.get(data.id);
             if (pending) {
               clearTimeout(pending.timer);
+              this.savedRevision = pending.revision;
+              this.savedObjectKey = data.objectKey;
               pending.resolve(data);
               this.saves.delete(data.id);
             }
@@ -336,6 +350,15 @@ export class CollaborativeFile {
     });
   }
 
+  /** Whether the server has persisted every change as `objectKey`. */
+  isSaved(objectKey: string | null | undefined) {
+    return (
+      this.synchronized &&
+      this.revision === this.savedRevision &&
+      this.savedObjectKey === objectKey
+    );
+  }
+
   save(): Promise<Saved> {
     if (!this.synchronized || !this.status.canWrite)
       return Promise.reject(
@@ -353,12 +376,10 @@ export class CollaborativeFile {
           ),
         );
       }, 30_000);
-      this.saves.set(id, { resolve, reject, timer });
-      this.send({
-        type: "save",
-        id,
-        update: encodeSource(Y.encodeStateAsUpdate(this.doc)),
-      });
+      this.saves.set(id, { resolve, reject, timer, revision: this.revision });
+      // While synchronized, every local update has already been sent on this
+      // ordered socket, so the server needs no payload to persist the file.
+      this.send({ type: "save", id });
     });
   }
 

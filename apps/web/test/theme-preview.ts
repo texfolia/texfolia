@@ -58,6 +58,8 @@ const backend = Bun.serve({
             type: "sync",
             update: encodeSource(Y.encodeStateAsUpdate(doc)),
             vector: encodeSource(Y.encodeStateVector(doc)),
+            dirty: true,
+            objectKey: null,
             canWrite: true,
             user: { name: "Theme test", color: "#123456" },
           }),

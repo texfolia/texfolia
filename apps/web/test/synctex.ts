@@ -69,6 +69,11 @@ const project: ProjectDetails = {
   sourceVersions: {},
 };
 const documents = new Map<string, Y.Doc>();
+const persisted = new Map<
+  string,
+  { dirty: boolean; objectKey: string | null }
+>();
+const saveRequests: { nodeId: string; update?: string }[] = [];
 for (const [id, path] of [
   [mainId, "main.tex"],
   [chapterId, "chapters/one.tex"],
@@ -81,6 +86,7 @@ for (const [id, path] of [
   const doc = new Y.Doc();
   doc.getText("source").insert(0, value);
   documents.set(id, doc);
+  persisted.set(id, { dirty: false, objectKey: null });
 }
 let buildId: string = crypto.randomUUID();
 let revision = 1;
@@ -159,24 +165,36 @@ const backend = Bun.serve({
       }
       const message = clientMessageSchema.parse(JSON.parse(String(raw)));
       const doc = documents.get(socket.data.nodeId);
-      assert(doc);
+      const state = persisted.get(socket.data.nodeId);
+      assert(doc && state);
       if (message.type === "sync")
         socket.send(
           JSON.stringify({
             type: "sync",
             update: encodeSource(Y.encodeStateAsUpdate(doc)),
             vector: encodeSource(Y.encodeStateVector(doc)),
+            ...state,
             canWrite: true,
             user: { name: "SyncTeX test", color: "#123456" },
           }),
         );
-      if (message.type === "update" || message.type === "save")
+      if (
+        (message.type === "update" || message.type === "save") &&
+        message.update
+      ) {
         Y.applyUpdate(doc, decodeSource(message.update));
+        state.dirty = true;
+      }
       if (message.type === "save") {
+        saveRequests.push({
+          nodeId: socket.data.nodeId,
+          update: message.update,
+        });
         const value = doc.getText("source").toString();
         const objectKey = `projects/${projectId}/sources/${await hashSource(new TextEncoder().encode(value))}`;
         const updatedAt = Date.now();
         project.sourceVersions[socket.data.nodeId] = { objectKey, updatedAt };
+        Object.assign(state, { dirty: false, objectKey });
         socket.send(
           JSON.stringify({
             type: "saved",
@@ -419,10 +437,16 @@ try {
   const previewResponse = page.waitForResponse((response) =>
     response.url().includes("/fixture/preview.pdf"),
   );
+  const savesBefore = saveRequests.length;
   await page
     .getByRole("button", { name: "Compile status", exact: true })
     .click();
   await previewResponse;
+  assert.deepEqual(
+    saveRequests.slice(savesBefore),
+    [{ nodeId: chapterId, update: undefined }],
+    "Saving sends one payload-free request for the one edited file",
+  );
   assert(previewRequested);
   await hint.waitFor({ state: "hidden" });
   running = false;

@@ -114,11 +114,16 @@ const backend = Bun.serve({
             type: "sync",
             update: encodeSource(Y.encodeStateAsUpdate(doc)),
             vector: encodeSource(Y.encodeStateVector(doc)),
+            dirty: true,
+            objectKey: null,
             canWrite: true,
             user: { name: "Upload test", color: "#123456" },
           }),
         );
-      if (message.type === "update" || message.type === "save")
+      if (
+        (message.type === "update" || message.type === "save") &&
+        message.update
+      )
         Y.applyUpdate(doc, decodeSource(message.update));
       if (message.type === "save") {
         const value = doc.getText("source").toString();

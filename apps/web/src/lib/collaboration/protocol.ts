@@ -12,7 +12,8 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("save"),
     id: z.uuid(),
-    update: updateSchema,
+    // Omitted when the server already has every update; otherwise a state-vector diff.
+    update: updateSchema.optional(),
   }),
 ]);
 export const serverMessageSchema = z.discriminatedUnion("type", [
@@ -20,6 +21,8 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("sync"),
     update: updateSchema,
     vector: updateSchema,
+    dirty: z.boolean(),
+    objectKey: z.string().nullable(),
     canWrite: z.boolean(),
     user: z.object({ name: z.string(), color: z.string() }),
   }),
