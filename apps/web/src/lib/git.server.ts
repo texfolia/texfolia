@@ -79,19 +79,27 @@ function nodeVersions(nodes: GitNode[]) {
   );
 }
 
+const readConcurrency = 8;
+
 async function readFiles(bucket: SourceBucket, nodes: GitNode[]) {
   const paths = projectPaths(nodes);
   const files: GitFiles = {};
-  for (const node of nodes) {
+  const queue = nodes.flatMap((node) => {
     const path = paths.get(node.id);
-    if (!path) continue;
-    const object = node.objectKey ? await bucket.get(node.objectKey) : null;
-    if (node.objectKey && !object)
-      throw new Error("Saved project source is missing.");
-    files[path] = object
-      ? new Uint8Array(await object.arrayBuffer())
-      : new Uint8Array();
+    return path ? [{ node, path }] : [];
+  });
+  async function worker() {
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      const { node, path } = next;
+      const object = node.objectKey ? await bucket.get(node.objectKey) : null;
+      if (node.objectKey && !object)
+        throw new Error("Saved project source is missing.");
+      files[path] = object
+        ? new Uint8Array(await object.arrayBuffer())
+        : new Uint8Array();
+    }
   }
+  await Promise.all(Array.from({ length: readConcurrency }, worker));
   return files;
 }
 
@@ -225,6 +233,26 @@ async function replaceFiles(
     .update(project)
     .set({ updatedAt: new Date() })
     .where(eq(project.id, projectId));
+}
+
+// Status bar branch from the cached row; the full status restores the repository.
+export async function gitBranch({
+  db,
+  projectId,
+  userId,
+}: {
+  db: Db;
+  projectId: string;
+  userId: string;
+}) {
+  return db.transaction(async (tx) => {
+    await lockProject({ tx, projectId, userId, access: "read" });
+    const [linked] = await tx
+      .select({ branch: projectGit.branch })
+      .from(projectGit)
+      .where(eq(projectGit.projectId, projectId));
+    return linked?.branch ?? null;
+  });
 }
 
 export async function runGit({
@@ -370,29 +398,35 @@ export async function runGit({
         // Written under the lock so garbage collection can't remove it first.
         const objectKey = `git/${projectId}/${crypto.randomUUID()}.json`;
         await bucket.put(objectKey, repo.serialize());
+        const values = {
+          provider: remote?.provider ?? null,
+          url: remote?.url ?? null,
+          objectKey,
+          branch: await repo.currentBranch(),
+        };
         await tx
           .insert(projectGit)
-          .values({
-            projectId,
-            provider: remote?.provider ?? null,
-            url: remote?.url ?? null,
-            objectKey,
-          })
-          .onConflictDoUpdate({
-            target: projectGit.projectId,
-            set: {
-              provider: remote?.provider ?? null,
-              url: remote?.url ?? null,
-              objectKey,
-            },
-          });
+          .values({ projectId, ...values })
+          .onConflictDoUpdate({ target: projectGit.projectId, set: values });
         await tx
           .insert(projectCollaboration)
           .values({ projectId })
           .onConflictDoNothing();
       });
+    const status = await repo.status();
+    if (readOnly && linked && linked.branch !== status.branch)
+      // Backfill rows saved before the branch was cached.
+      await db
+        .update(projectGit)
+        .set({ branch: status.branch })
+        .where(
+          and(
+            eq(projectGit.projectId, projectId),
+            eq(projectGit.objectKey, linked.objectKey),
+          ),
+        );
     return {
-      status: { remote, ...(await repo.status()) },
+      status: { remote, ...status },
       ...(action.kind === "diff" ? { diff: await repo.diff() } : {}),
     };
   } catch (error) {

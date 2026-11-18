@@ -84,6 +84,8 @@ export const projectGit = pgTable("project_git", {
   provider: text("provider"),
   url: text("url"),
   objectKey: text("object_key").notNull(),
+  // Current branch, cached so opening a project needn't restore the repository.
+  branch: text("branch"),
 });
 
 export const tag = pgTable(

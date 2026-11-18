@@ -241,6 +241,9 @@ export class GitRepository {
   private async matrix() {
     return git.statusMatrix(this.args());
   }
+  async currentBranch() {
+    return (await git.currentBranch(this.args())) ?? null;
+  }
   async status(): Promise<Omit<GitStatus, "remote">> {
     const matrix = await this.matrix();
     let commits: GitStatus["commits"] = [];
@@ -257,7 +260,7 @@ export class GitRepository {
       if (!(error instanceof git.Errors.NotFoundError)) throw error;
     }
     return {
-      branch: (await git.currentBranch(this.args())) ?? null,
+      branch: await this.currentBranch(),
       branches: [
         ...new Set([
           ...(await git.listBranches(this.args())),

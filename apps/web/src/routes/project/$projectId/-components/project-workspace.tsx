@@ -53,7 +53,7 @@ import {
 import { CollaborativeFile } from "#/lib/collaboration/file";
 import { downloadFile } from "#/lib/download-file";
 import type { EditorCommand } from "#/lib/editor-command";
-import { gitAction } from "#/lib/git.functions";
+import { getGitBranch } from "#/lib/git.functions";
 import { type LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";
@@ -386,9 +386,9 @@ export function ProjectWorkspace({
   useEffect(() => {
     let active = true;
     if (ready)
-      void gitAction({ data: { projectId, action: { kind: "status" } } })
-        .then((result) => {
-          if (active) setGitBranch(result.status.branch);
+      void getGitBranch({ data: { projectId } })
+        .then((branch) => {
+          if (active) setGitBranch(branch);
         })
         .catch(() => {});
     return () => {
