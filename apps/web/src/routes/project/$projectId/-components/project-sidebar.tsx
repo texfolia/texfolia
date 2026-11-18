@@ -147,6 +147,9 @@ export function ProjectSidebar({
               createRef.current?.start(kind, parentId)
             }
             onUpload={(parentId) => uploadRef.current?.open(parentId)}
+            onDropFiles={(parentId, entries) =>
+              uploadRef.current?.drop(parentId, entries)
+            }
             onDownload={(node) => void download(node)}
           />
         </div>

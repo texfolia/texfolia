@@ -54,6 +54,9 @@ export async function gitAction() {
     },
   };
 }
+export async function getGitBranch() {
+  return null;
+}
 export async function getGitAccounts() {
   return { github: false, gitlab: false };
 }

@@ -16,6 +16,15 @@ Files shows only folders and files, with compact square rows flush to the panel
 edges. Create, upload, export and path repair open from the File menu; row
 context menus provide the existing file and folder actions.
 
+Dragging a row onto a folder, or onto a file in that folder, moves it there
+through the same rename call as **Move**, so collaborators see it on their next
+metadata sync. Files and folders dropped from the desktop upload into the
+target folder; dropped folders merge into existing folders of the same name.
+Every path and the 10 MiB per-file limit are checked before anything is stored,
+so a rejected drop changes nothing. `out/` accepts no drops, and name conflicts
+show the usual error. The context menu's **Move** and **Upload** remain the
+keyboard alternatives.
+
 Single-clicking a source or an `out` file opens an italic preview tab. The next
 preview replaces it. Double-clicking a row or tab, editing a source, or choosing
 **Keep open** pins it. Opening an existing file focuses its tab. Tab context menus

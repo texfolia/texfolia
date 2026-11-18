@@ -20,19 +20,30 @@ import {
   IconPhoto,
   IconTex,
 } from "@tabler/icons-react";
-import { useMemo } from "react";
+import { useMemo, useRef, useState, type DragEvent } from "react";
 
+import { Button } from "#/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "#/components/ui/collapsible";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "#/components/ui/dialog";
+import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
+import { droppedEntries } from "#/lib/dropped-files";
+import { renamedProjectNodes } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
+import { useProjectFiles } from "#/providers/project-files-provider";
 
 import { ProjectNodeActions } from "./project-node-actions";
 
@@ -114,6 +125,8 @@ const fileIcons = new Map<string, Icon>(
   ),
 );
 
+const nodeDragType = "application/x-texfolia-node";
+
 function ProjectFileIcon({ name, kind }: Pick<ProjectNode, "name" | "kind">) {
   const dot = name.lastIndexOf(".");
   const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
@@ -130,10 +143,15 @@ export function ProjectFileTree({
   canManage = false,
   onCreate,
   onUpload,
+  onDropFiles,
   onDownload,
 }: {
   onCreate: (kind: "text" | "folder", parentId: string) => void;
   onUpload: (parentId: string) => void;
+  onDropFiles: (
+    parentId: string,
+    entries: Array<FileSystemEntry | File>,
+  ) => void;
   onDownload: (node: ProjectNode) => void;
   canManage?: boolean;
   nodes: ProjectNode[];
@@ -157,6 +175,107 @@ export function ProjectFileTree({
     }
     return result;
   }, [nodes]);
+  const files = useProjectFiles();
+  const dragged = useRef<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [moving, setMoving] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const root = children.get(null)?.find((node) => node.kind === "folder");
+
+  function movable(node: ProjectNode) {
+    return (
+      canManage &&
+      node.parentId !== null &&
+      node.projectId !== "out" &&
+      !isPending(node.id) &&
+      moving === null
+    );
+  }
+
+  // Folders accept drops on themselves; files forward drops to their folder.
+  function dropFolder(event: DragEvent, node: ProjectNode | undefined) {
+    const folder =
+      node?.kind === "folder" ? node : byId.get(node?.parentId ?? "");
+    if (!canManage || !folder || folder.projectId === "out" || moving) return;
+    const types = event.dataTransfer.types;
+    if (types.includes(nodeDragType)) {
+      // Reject the item's own subtree; the server repeats this check.
+      for (
+        let id: string | null = folder.id;
+        id;
+        id = byId.get(id)?.parentId ?? null
+      )
+        if (id === dragged.current) return;
+      return folder;
+    }
+    if (types.includes("Files")) return folder;
+  }
+
+  function dragOver(event: DragEvent, node: ProjectNode | undefined) {
+    const folder = dropFolder(event, node);
+    if (!folder) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = event.dataTransfer.types.includes(
+      nodeDragType,
+    )
+      ? "move"
+      : "copy";
+    setDropTarget(folder.id);
+  }
+
+  function drop(event: DragEvent, node: ProjectNode | undefined) {
+    const folder = dropFolder(event, node);
+    setDropTarget(null);
+    if (!folder) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const id = event.dataTransfer.getData(nodeDragType);
+    if (!id) {
+      onDropFiles(folder.id, droppedEntries(event.dataTransfer));
+      return;
+    }
+    const item = byId.get(id);
+    if (item && item.parentId !== folder.id) void move(item, folder.id);
+  }
+
+  async function move(node: ProjectNode, parentId: string) {
+    setError("");
+    setMoving(node.id);
+    try {
+      renamedProjectNodes(
+        nodes.filter((item) => item.projectId !== "out"),
+        node.id,
+        node.name,
+        parentId,
+      );
+      await files.rename(node.id, node.name, parentId);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "The file could not be moved. Try again.",
+      );
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  function dragProps(node: ProjectNode) {
+    return {
+      draggable: movable(node),
+      onDragStart: (event: DragEvent) => {
+        event.dataTransfer.setData(nodeDragType, node.id);
+        event.dataTransfer.effectAllowed = "move";
+        dragged.current = node.id;
+      },
+      onDragEnd: () => {
+        dragged.current = null;
+        setDropTarget(null);
+      },
+    };
+  }
 
   function branch(parentId: string | null, depth = 0) {
     return (
@@ -165,12 +284,21 @@ export function ProjectFileTree({
         aria-label={parentId === null ? "Project files" : undefined}
       >
         {children.get(parentId)?.map((node) => (
-          <SidebarMenuItem key={node.id} className="group/node relative">
+          <SidebarMenuItem
+            key={node.id}
+            className="group/node data-drop-target:bg-sidebar-accent/60 relative"
+            data-drop-target={dropTarget === node.id ? "" : undefined}
+            onDragOver={(event) => dragOver(event, node)}
+            onDrop={(event) => drop(event, node)}
+          >
             <ProjectNodeActions
               node={node}
               nodes={nodes}
               canManage={
-                canManage && node.projectId !== "out" && !isPending(node.id)
+                canManage &&
+                node.projectId !== "out" &&
+                !isPending(node.id) &&
+                moving !== node.id
               }
               onOpen={() => onOpen(node, true)}
               onDownload={() => onDownload(node)}
@@ -180,7 +308,8 @@ export function ProjectFileTree({
               {node.kind === "folder" ? (
                 <Collapsible defaultOpen className="group/folder">
                   <CollapsibleTrigger
-                    disabled={isPending(node.id)}
+                    disabled={isPending(node.id) || moving === node.id}
+                    {...dragProps(node)}
                     render={
                       <SidebarMenuButton
                         size="sm"
@@ -202,7 +331,8 @@ export function ProjectFileTree({
                 <SidebarMenuButton
                   size="sm"
                   className="h-6 rounded-none p-0"
-                  disabled={isPending(node.id)}
+                  disabled={isPending(node.id) || moving === node.id}
+                  {...dragProps(node)}
                   style={{ paddingLeft: 14 + depth * 14 }}
                   isActive={activeId === node.id}
                   aria-current={activeId === node.id ? "true" : undefined}
@@ -228,7 +358,34 @@ export function ProjectFileTree({
   }
 
   return nodes.length ? (
-    branch(null)
+    // Drops below the last item land in the project root.
+    <div
+      className="min-h-full"
+      onDragOver={(event) => dragOver(event, root)}
+      onDrop={(event) => drop(event, root)}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setDropTarget(null);
+      }}
+    >
+      {branch(null)}
+      <Dialog
+        open={!!error}
+        onOpenChange={(open) => {
+          if (!open) setError("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move failed</DialogTitle>
+            <DialogDescription role="alert">{error}</DialogDescription>
+          </DialogHeader>
+          <Button variant="ghost" onClick={() => setError("")}>
+            Close
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </div>
   ) : (
     <p className="text-muted-foreground text-xs">No files in this project.</p>
   );

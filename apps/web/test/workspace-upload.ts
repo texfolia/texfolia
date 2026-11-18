@@ -657,6 +657,81 @@ try {
     created.folder.id,
   );
   assert(!Object.hasOwn(submissions[2]?.files ?? {}, "chapter:1.tex"));
+  console.info("Checking drag and drop in the file tree");
+  const tree = page.getByRole("list", { name: "Project files" });
+  const treeItem = (name: string) =>
+    tree.getByRole("button", { name, exact: true });
+  async function waitForNode(name: string, parentId: string) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (
+        project.nodes.some(
+          (node) => node.name === name && node.parentId === parentId,
+        )
+      )
+        return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.fail(`${name} was not stored in ${parentId}`);
+  }
+  await treeItem("notes.txt").dragTo(treeItem("figures"));
+  await waitForNode("notes.txt", created.folder.id);
+  await treeItem("main.tex").dragTo(treeItem("out"));
+  assert.equal(
+    project.nodes.find((node) => node.id === mainId)?.parentId,
+    rootId,
+    "out/ must not accept moves",
+  );
+  await page.evaluate(
+    (parentId) =>
+      window.uploadTest.create({ parentId, name: "empty.tex", kind: "text" }),
+    created.folder.id,
+  );
+  await page.evaluate(() => window.uploadTest.refresh());
+  // Folders sort first, so the root copy is the last one in the tree.
+  await treeItem("empty.tex").nth(1).waitFor();
+  await treeItem("empty.tex").last().dragTo(treeItem("figures"));
+  await page
+    .getByRole("dialog", { name: "Move failed" })
+    .getByRole("alert")
+    .filter({ hasText: "already exists" })
+    .waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  async function dropFiles(
+    target: string,
+    files: Array<{ name: string; size?: number }>,
+  ) {
+    const dataTransfer = await page.evaluateHandle((files) => {
+      const data = new DataTransfer();
+      for (const { name, size } of files)
+        data.items.add(
+          new File([size ? new Uint8Array(size) : `dropped ${name}`], name, {
+            type: "text/plain",
+          }),
+        );
+      return data;
+    }, files);
+    await treeItem(target).dispatchEvent("dragover", { dataTransfer });
+    await treeItem(target).dispatchEvent("drop", { dataTransfer });
+  }
+  await dropFiles("figures", [{ name: "dropped.txt" }]);
+  await waitForNode("dropped.txt", created.folder.id);
+  await page.getByRole("tab", { name: "dropped.txt", exact: true }).waitFor();
+  await dropFiles("figures", [
+    { name: "small.txt" },
+    { name: "huge.txt", size: 10 * 1024 * 1024 + 1 },
+  ]);
+  await page
+    .getByRole("dialog", { name: "Upload failed" })
+    .getByRole("alert")
+    .filter({ hasText: "huge.txt exceeds 10 MiB" })
+    .waitFor();
+  assert(
+    !project.nodes.some((node) => node.name === "small.txt"),
+    "A rejected drop must not store any file",
+  );
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog").waitFor({ state: "detached" });
   assert.deepEqual(errors, []);
   console.info(
     "Binary upload failure → retry → compile failure → retry → real Tectonic PDF rendered without navigation; binary transport is hash-only.",
