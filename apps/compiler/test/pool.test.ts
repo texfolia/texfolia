@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   PoolCore,
   poolClaimSchema,
+  poolIdleMs,
   poolLeaseMs,
   type PoolClaim,
 } from "../src/pool";
@@ -62,6 +63,13 @@ function fixture() {
   return {
     open,
     running,
+    // Starts from a pool that is already active with the given idle target.
+    seed: (target: number) => {
+      db.run("DELETE FROM state");
+      db.run("INSERT INTO state VALUES (?)", [
+        JSON.stringify({ ...open().snapshot(), target }),
+      ]);
+    },
     advance: (ms: number) => {
       now += ms;
     },
@@ -83,6 +91,7 @@ describe("prewarmed pool", () => {
     test(`${plan} wins a scarce spare over an earlier concurrent Free claim`, async () => {
       const f = fixture();
       try {
+        f.seed(1);
         const pool = f.open();
         await pool.maintain();
         const free = pool.claim("free-project", "free", "1");
@@ -129,6 +138,7 @@ describe("prewarmed pool", () => {
   test("failed startup is not claimable and recovers with the same identity after eviction", async () => {
     const f = fixture();
     try {
+      f.seed(1);
       f.fail(true);
       const pool = f.open();
       await expect(pool.maintain()).rejects.toThrow("capacity");
@@ -175,6 +185,7 @@ describe("prewarmed pool", () => {
 test("a released container serves another project, fences old claims, and bounds idle inventory", async () => {
   const f = fixture();
   try {
+    f.seed(1);
     const pool = f.open();
     await pool.maintain();
     const first = await pool.claim("a", "pro", "1");
@@ -242,6 +253,8 @@ test("abandoned leases are reset after their deadline before being offered again
     await expect(pool.claim("a", "pro", "1")).rejects.toThrow(
       "lease has ended",
     );
+    // An open editor keeps the recovered container warm past the idle window.
+    pool.touch();
     const reset: string[] = [];
     f.onReset(async (name) => {
       reset.push(name);
@@ -257,6 +270,7 @@ test("abandoned leases are reset after their deadline before being offered again
 test("returning a container during spare startup waits before stopping the surplus", async () => {
   const f = fixture();
   try {
+    f.seed(1);
     const pool = f.open();
     await pool.maintain();
     const first = await pool.claim("a", "pro", "1");
@@ -285,6 +299,7 @@ test("upgrading retires old spares before a lease can claim an incompatible engi
       saved: JSON.stringify({
         ...saved,
         version: undefined,
+        target: 1,
         spares: [{ name: "old-image", status: "ready" }],
       }),
       save() {},
@@ -306,4 +321,101 @@ test("upgrading retires old spares before a lease can claim an incompatible engi
   } finally {
     f.close();
   }
+});
+
+describe("scale to zero", () => {
+  test("a new pool starts no container until a compile claims one", async () => {
+    const f = fixture();
+    try {
+      const pool = f.open();
+      pool.touch();
+      await pool.maintain();
+      expect(f.running.size).toBe(0);
+      expect(pool.idle()).toBe(true);
+      const first = await pool.claim("a", "free", "1");
+      expect(first.outcome).toBe("miss");
+      // The cold job does not also boot a replacement spare.
+      await pool.maintain();
+      expect(pool.snapshot().spares).toHaveLength(0);
+      await pool.release("a", "1");
+      expect(pool.snapshot()).toMatchObject({
+        target: 1,
+        spares: [{ name: first.container, status: "ready" }],
+      });
+      expect((await pool.claim("b", "pro", "2")).outcome).toBe("hit");
+    } finally {
+      f.close();
+    }
+  });
+
+  test("the idle window stops every container and later claims start one on demand", async () => {
+    const f = fixture();
+    try {
+      const pool = f.open();
+      const first = await pool.claim("a", "pro", "1");
+      await pool.release("a", "1");
+      f.running.add(first.container);
+      f.advance(poolIdleMs - 60_000);
+      await pool.maintain();
+      expect(f.running.size).toBe(1);
+      f.advance(60_000);
+      await pool.maintain();
+      expect(f.running.size).toBe(0);
+      expect(pool.snapshot()).toMatchObject({ target: 0, spares: [] });
+      expect(pool.idle()).toBe(true);
+      // Later maintenance must not restart anything.
+      f.advance(60 * 60_000);
+      await pool.maintain();
+      expect(f.running.size).toBe(0);
+      const next = await pool.claim("b", "free", "2");
+      expect(next.outcome).toBe("miss");
+      expect(next.container).not.toBe(first.container);
+      expect(pool.idle()).toBe(false);
+    } finally {
+      f.close();
+    }
+  });
+
+  test("editor presence keeps the warm spare past the idle window", async () => {
+    const f = fixture();
+    try {
+      const pool = f.open();
+      const first = await pool.claim("a", "pro", "1");
+      await pool.release("a", "1");
+      for (let minute = 0; minute < 30; minute++) {
+        f.advance(60_000);
+        pool.touch();
+        await pool.maintain();
+      }
+      expect(pool.snapshot().spares).toEqual([
+        { name: first.container, generation: 1, status: "ready" },
+      ]);
+      f.advance(poolIdleMs);
+      await pool.maintain();
+      expect(pool.snapshot().spares).toHaveLength(0);
+      expect(f.open().snapshot().target).toBe(0);
+    } finally {
+      f.close();
+    }
+  });
+
+  test("an active lease keeps the pool awake until it is recovered", async () => {
+    const f = fixture();
+    try {
+      const pool = f.open();
+      const first = await pool.claim("a", "pro", "1");
+      f.running.add(first.container);
+      f.advance(poolIdleMs);
+      await pool.maintain();
+      expect(pool.idle()).toBe(false);
+      f.advance(poolLeaseMs - poolIdleMs);
+      // Recovery resets the abandoned lease, then idle maintenance stops it.
+      await pool.maintain();
+      expect(pool.snapshot().leases).toHaveLength(0);
+      expect(f.running.has(first.container)).toBe(false);
+      expect(pool.idle()).toBe(true);
+    } finally {
+      f.close();
+    }
+  });
 });

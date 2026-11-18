@@ -968,13 +968,18 @@ export class ProjectCoordinatorCore {
   }
 
   events(signal: AbortSignal) {
-    const prewarm = this.options.engine.prewarm?.().catch((error) => {
-      console.warn("Editor container prewarm failed", {
-        projectId: this.options.projectId,
-        error,
+    // An open editor reports presence on attach and every minute, which keeps
+    // the shared pool from scaling to zero while someone is working.
+    const report = () => {
+      const prewarm = this.options.engine.prewarm?.().catch((error) => {
+        console.warn("Editor presence report failed", {
+          projectId: this.options.projectId,
+          error,
+        });
       });
-    });
-    if (prewarm) this.options.waitUntil?.(prewarm);
+      if (prewarm) this.options.waitUntil?.(prewarm);
+    };
+    report();
     const encoder = new TextEncoder();
     let dispose = () => {};
     const body = new ReadableStream<Uint8Array>(
@@ -990,8 +995,12 @@ export class ProjectCoordinatorCore {
           const send = (snapshot: CoordinatorSnapshot) =>
             enqueue(`data: ${JSON.stringify(snapshot)}\n\n`);
           const ping = setInterval(() => enqueue(": heartbeat\n\n"), 15_000);
+          const presence = this.options.engine.prewarm
+            ? setInterval(report, 60_000)
+            : undefined;
           dispose = () => {
             clearInterval(ping);
+            clearInterval(presence);
             this.listeners.delete(send);
             signal.removeEventListener("abort", close);
           };

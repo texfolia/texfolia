@@ -178,8 +178,12 @@ export class PoolManager extends DurableObject<Env> {
     jobIdSchema.parse(projectId);
     jobIdSchema.parse(claimId);
     planSchema.parse(plan);
-    await this.ensure();
-    return this.pool.claim(projectId, plan, claimId);
+    try {
+      return await this.pool.claim(projectId, plan, claimId);
+    } finally {
+      // Schedule after the lease exists so an idle alarm cannot stop before it.
+      await this.ensure();
+    }
   }
 
   async release(projectId: string, claimId: string) {
@@ -189,11 +193,17 @@ export class PoolManager extends DurableObject<Env> {
     await this.pool.release(projectId, claimId);
   }
 
+  async touch() {
+    this.pool.touch();
+  }
+
   override async alarm() {
     // Schedule first so failures cannot leave the pool permanently asleep.
     await this.ctx.storage.setAlarm(Date.now() + 60_000);
     await this.pool.maintain();
     console.info({ event: "compile_pool", ...this.pool.snapshot() });
+    // Nothing is running or owed cleanup. The next claim schedules maintenance again.
+    if (this.pool.idle()) await this.ctx.storage.deleteAlarm();
   }
 }
 
@@ -252,7 +262,7 @@ export class ProjectCoordinator extends DurableObject<Env> {
       discard: (name) => getContainer(this.env.COMPILER, name).destroy(),
       prewarm: async () => {
         await this.retireLegacyAssignment();
-        await pool.ensure();
+        await pool.touch();
       },
     });
     this.core = new ProjectCoordinatorCore({
@@ -465,11 +475,9 @@ export default {
     }
   },
   async scheduled(_event, env, ctx) {
+    // Job recovery only. Waking the pool here would keep it from scaling to zero.
     ctx.waitUntil(
-      Promise.all([
-        env.BACKGROUND.send({ kind: "recover" }, { delaySeconds: 5 }),
-        env.POOL.getByName("global").ensure(),
-      ]),
+      env.BACKGROUND.send({ kind: "recover" }, { delaySeconds: 5 }),
     );
   },
 } satisfies ExportedHandler<Env>;

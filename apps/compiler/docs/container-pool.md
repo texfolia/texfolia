@@ -44,24 +44,38 @@ job and stops surplus idle containers. A failed pool RPC uses an ephemeral cold
 container, which the client destroys after the attempt. An allocation hidden by
 an ambiguous RPC failure is recovered through lease expiry.
 
-## Existing capacity and scheduling policies
+## Capacity and scheduling policies
 
-The idle target starts at one. A one-minute window with at least two misses and
-a miss fraction of at least 25% raises it to two. Five minutes without a new
-claim lowers it to one. Shrinking stops only idle containers. The container
-application remains capped at 20 instances, including idle spares.
+The pool has no always-on container. The idle target starts at zero, so a new
+or idle pool runs no containers. The first compile allocates a cold container.
+When its lease is released, the target rises to one and the returned process
+stays as the warm spare. A one-minute window with at least two misses and a miss
+fraction of at least 25% raises the target to two. Five minutes without a new
+claim lowers it from two to one. Shrinking stops only idle containers. The
+container application remains capped at 20 instances, including idle spares.
 
-The five-minute cron bootstraps pool alarms without traffic. Claims, releases,
-and editor attachment schedule maintenance. Alarms check spare health and
-recover leases every minute. A spare is available only after startup and
-`/health` succeed. Editor attachment requests shared capacity without claiming
-a container or restoring a project's cache.
+The pool is active while a compile has claimed a container in the last 10
+minutes (`poolIdleMs`) or an editor has reported presence in that window. An
+editor reports presence when its `GET /projects/<id>/events` stream attaches and
+every minute while it stays open. When neither signal has been seen for 10
+minutes, maintenance sets the target to zero and stops every spare. Presence
+only delays this. It does not start a container, so opening an editor on an
+idle pool does not pre-warm one. The next compile is a cold start. Raising the
+target in `PoolCore.touch()` would add editor-open pre-warming.
+
+Claims, releases, and leases schedule the pool alarm. While spares or leases
+exist, the alarm runs every minute to check spare health and recover expired
+leases. A spare is available only after startup and `/health` succeed. Once the
+target is zero and no spares or leases remain, the alarm deletes itself. A
+later claim schedules it again. The five-minute cron only enqueues legacy job
+recovery and no longer wakes the pool, so neither the cron nor health checks
+keep a container running when nobody is active.
 
 Pro and Team claims run immediately. Free and unknown-plan claims wait 25 ms,
 allowing overlapping Pro or Team requests to claim scarce spares first.
 Running compiles are never preempted. The normal compile path remains direct.
 `compile-pro` and `compile-free` remain infrastructure-failure recovery queues.
-Revised pool sizing, scale-to-zero, and priority policies remain follow-up work.
+Revised pool sizing and priority policies remain follow-up work.
 
 Local Docker uses the same pool and engine client. Inventory, generations, and
 leases persist in `<COMPILER_DB_PATH>.pool.sqlite`. A one-minute timer performs
