@@ -3,15 +3,19 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { readProjectSource } from "#/lib/project-source.server";
+import { requestPrincipal } from "#/lib/request-principal.server";
 
 export const Route = createFileRoute("/api/sources/$projectId/$nodeId")({
   server: {
     handlers: {
       GET: async ({ request, context, params }) => {
-        const session = await context.auth.api.getSession({
-          headers: request.headers,
+        const principal = await requestPrincipal({
+          request,
+          auth: context.auth,
+          db: context.db,
+          projectId: params.projectId,
         });
-        if (!session) return new Response("Unauthorized", { status: 401 });
+        if (!principal) return new Response("Unauthorized", { status: 401 });
         if (
           !z.uuid().safeParse(params.projectId).success ||
           !z.uuid().safeParse(params.nodeId).success
@@ -21,7 +25,7 @@ export const Route = createFileRoute("/api/sources/$projectId/$nodeId")({
           const bytes = await readProjectSource({
             db: context.db,
             bucket: env.SOURCES,
-            userId: session.user.id,
+            userId: principal.userId,
             ...params,
           });
           return new Response(bytes, {

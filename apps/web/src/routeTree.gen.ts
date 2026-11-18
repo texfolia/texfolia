@@ -27,6 +27,7 @@ import { Route as SettingsBillingRouteRouteImport } from './routes/settings/bill
 import { Route as SettingsConnectionsRouteRouteImport } from './routes/settings/connections/route'
 import { Route as SettingsPreferencesRouteRouteImport } from './routes/settings/preferences/route'
 import { Route as SettingsUsageRouteRouteImport } from './routes/settings/usage/route'
+import { Route as ShareTokenRouteImport } from './routes/share/$token'
 import { Route as TemplateTemplateIdRouteRouteImport } from './routes/template/$templateId/route'
 import { Route as TemplatesPublishRouteRouteImport } from './routes/templates_/publish/route'
 import { Route as TemplatesReviewRouteRouteImport } from './routes/templates_/review/route'
@@ -132,6 +133,11 @@ const SettingsUsageRouteRoute = SettingsUsageRouteRouteImport.update({
   path: '/usage',
   getParentRoute: () => SettingsRouteRoute,
 } as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TemplateTemplateIdRouteRoute = TemplateTemplateIdRouteRouteImport.update({
   id: '/template/$templateId',
   path: '/template/$templateId',
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
   '/templates/publish': typeof TemplatesPublishRouteRoute
   '/templates/review': typeof TemplatesReviewRouteRoute
+  '/share/$token': typeof ShareTokenRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -244,6 +251,7 @@ export interface FileRoutesByTo {
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
   '/templates/publish': typeof TemplatesPublishRouteRoute
   '/templates/review': typeof TemplatesReviewRouteRoute
+  '/share/$token': typeof ShareTokenRoute
   '/settings': typeof SettingsIndexRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
   '/templates_/publish': typeof TemplatesPublishRouteRoute
   '/templates_/review': typeof TemplatesReviewRouteRoute
+  '/share/$token': typeof ShareTokenRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -309,6 +318,7 @@ export interface FileRouteTypes {
     | '/template/$templateId'
     | '/templates/publish'
     | '/templates/review'
+    | '/share/$token'
     | '/settings/'
     | '/api/ai/$projectId'
     | '/api/auth/$'
@@ -339,6 +349,7 @@ export interface FileRouteTypes {
     | '/template/$templateId'
     | '/templates/publish'
     | '/templates/review'
+    | '/share/$token'
     | '/settings'
     | '/api/ai/$projectId'
     | '/api/auth/$'
@@ -370,6 +381,7 @@ export interface FileRouteTypes {
     | '/template/$templateId'
     | '/templates_/publish'
     | '/templates_/review'
+    | '/share/$token'
     | '/settings/'
     | '/api/ai/$projectId'
     | '/api/auth/$'
@@ -396,6 +408,7 @@ export interface RootRouteChildren {
   TemplateTemplateIdRouteRoute: typeof TemplateTemplateIdRouteRoute
   TemplatesPublishRouteRoute: typeof TemplatesPublishRouteRoute
   TemplatesReviewRouteRoute: typeof TemplatesReviewRouteRoute
+  ShareTokenRoute: typeof ShareTokenRoute
   ApiAiProjectIdRoute: typeof ApiAiProjectIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
@@ -534,6 +547,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsUsageRouteRouteImport
       parentRoute: typeof SettingsRouteRoute
     }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/template/$templateId': {
       id: '/template/$templateId'
       path: '/template/$templateId'
@@ -654,6 +674,7 @@ const rootRouteChildren: RootRouteChildren = {
   TemplateTemplateIdRouteRoute: TemplateTemplateIdRouteRoute,
   TemplatesPublishRouteRoute: TemplatesPublishRouteRoute,
   TemplatesReviewRouteRoute: TemplatesReviewRouteRoute,
+  ShareTokenRoute: ShareTokenRoute,
   ApiAiProjectIdRoute: ApiAiProjectIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,

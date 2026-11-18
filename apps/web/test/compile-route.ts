@@ -23,9 +23,17 @@ import type { Engine } from "../../compiler/src/jobs";
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import { unknownEngineTiming } from "../../compiler/src/telemetry";
+import { buildSnapshotSchema } from "../src/lib/build";
 import { hashSource } from "../src/lib/latex/source-sync";
+import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
 import { projectMetadataVersion } from "../src/lib/project-metadata";
 import { readProjectMetadata } from "../src/lib/project-metadata.server";
+import {
+  createShareLink,
+  getSharedProject,
+  listShareLinks,
+  revokeShareLink,
+} from "../src/lib/project-share-links.server";
 import { createProject } from "../src/lib/project.server";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
@@ -559,6 +567,151 @@ try {
     "Each assistant submission reaches the engine with all saved files",
   );
 
+  // Share links: anonymous, read-only access to builds, revocable.
+  await assert.rejects(
+    createShareLink({
+      db,
+      userId: other.userId,
+      data: { projectId: original.projectId, scope: "project" },
+    }),
+    /Project not found|Only the project owner/,
+    "Only the owner creates share links",
+  );
+  const projectLink = await createShareLink({
+    db,
+    userId: original.userId,
+    data: { projectId: original.projectId, scope: "project" },
+  });
+  const pdfLink = await createShareLink({
+    db,
+    userId: original.userId,
+    data: { projectId: original.projectId, scope: "pdf" },
+  });
+  const anonymous = async (
+    token: string,
+    query: string,
+    init?: { method: string; headers: Record<string, string>; body: string },
+  ) =>
+    mf.dispatchFetch(
+      `${(await mf.ready).origin}/api/compile/${original.projectId}?${query}${query ? "&" : ""}share=${token}`,
+      init,
+    );
+  const snapshotResponse = await anonymous(pdfLink.token, "");
+  assert.equal(
+    snapshotResponse.status,
+    200,
+    await snapshotResponse.clone().text(),
+  );
+  const sharedSnapshot = buildSnapshotSchema.parse(
+    await snapshotResponse.json(),
+  );
+  const sharedPdf = sharedSnapshot.artifacts?.files.find(
+    (file) => file.path === sharedSnapshot.artifacts?.pdf,
+  );
+  assert(sharedPdf, "The latest build has a PDF");
+  for (const link of [pdfLink, projectLink]) {
+    const pdf = await anonymous(
+      link.token,
+      `file=${encodeURIComponent(sharedPdf.path)}&version=${encodeURIComponent(sharedPdf.key)}`,
+    );
+    assert.equal(pdf.status, 200, `${link.scope} link reads the latest PDF`);
+    assert.equal(pdf.headers.get("Content-Type"), "application/pdf");
+    await pdf.body?.cancel();
+  }
+  const otherFile = await anonymous(pdfLink.token, "file=main.log&version=x");
+  assert.equal(otherFile.status, 404);
+  assert.deepEqual(
+    await otherFile.json(),
+    { error: "File not found" },
+    "PDF-only links cannot read other build files",
+  );
+  assert.equal(
+    (await anonymous(pdfLink.token, `job=${original.id}`)).status,
+    404,
+    "PDF-only links cannot read job logs",
+  );
+  assert.equal(
+    (await anonymous(projectLink.token, `job=${original.id}`)).status,
+    200,
+  );
+  assert.equal(
+    (
+      await anonymous(projectLink.token, "", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(delta),
+      })
+    ).status,
+    404,
+    "Share links cannot compile",
+  );
+  const elsewhere = await createShareLink({
+    db,
+    userId: original.userId,
+    data: { projectId: otherProject.id, scope: "project" },
+  });
+  assert.equal(
+    (await anonymous(elsewhere.token, "")).status,
+    401,
+    "A link only opens its own project",
+  );
+  await db.transaction(async (tx) => {
+    const principal = sharePrincipal(pdfLink.id);
+    await assert.rejects(
+      lockProject({
+        tx,
+        projectId: original.projectId,
+        userId: principal,
+        access: "read",
+      }),
+      /Project not found/,
+      "PDF-only links cannot read sources",
+    );
+    const read = await lockProject({
+      tx,
+      projectId: original.projectId,
+      userId: sharePrincipal(projectLink.id),
+      access: "read",
+    });
+    assert.equal(read.canWrite, false);
+    await assert.rejects(
+      lockProject({
+        tx,
+        projectId: original.projectId,
+        userId: sharePrincipal(projectLink.id),
+      }),
+      /Project not found/,
+      "Share links never write",
+    );
+  });
+  const shared = await getSharedProject({ db, token: pdfLink.token });
+  assert.equal(shared.scope, "pdf");
+  assert.deepEqual(shared.nodes, [], "PDF-only links list no sources");
+  assert(
+    (await getSharedProject({ db, token: projectLink.token })).nodes.length > 0,
+  );
+  await revokeShareLink({
+    db,
+    userId: original.userId,
+    data: { projectId: original.projectId, linkId: pdfLink.id },
+  });
+  assert.equal(
+    (await anonymous(pdfLink.token, "")).status,
+    401,
+    "Revoked links stop working",
+  );
+  assert.equal((await anonymous(projectLink.token, "")).status, 200);
+  assert.deepEqual(
+    (
+      await listShareLinks({
+        db,
+        userId: original.userId,
+        projectId: original.projectId,
+      })
+    ).links.map((link) => link.id),
+    [projectLink.id],
+  );
+
   await db.delete(session).where(eq(session.userId, original.userId));
   assert.equal(
     (await submit(original)).status,
@@ -566,7 +719,7 @@ try {
     "Retry still requires a valid session",
   );
   console.info(
-    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, and Postgres reconciliation",
+    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, share links (PDF-only limits, no writes, revocation), and Postgres reconciliation",
   );
 } finally {
   for (const id of cookies.keys()) await db.delete(user).where(eq(user.id, id));

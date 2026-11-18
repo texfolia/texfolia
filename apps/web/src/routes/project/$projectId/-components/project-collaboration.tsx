@@ -21,6 +21,8 @@ import {
 import { grantProjectAccessSchema } from "#/lib/project-sharing.schema";
 import { useWorkspace } from "#/providers/workspace-provider";
 
+import { ProjectShareLinks } from "./project-share-links";
+
 export function ProjectCollaboration() {
   const { projectId } = useWorkspace();
   return <ProjectAccessPanel projectId={projectId} />;
@@ -242,6 +244,7 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
           </p>
         </form>
       )}
+      {access?.canManage && <ProjectShareLinks projectId={projectId} />}
       {access?.organization && (
         <p className="text-muted-foreground p-2">
           Every organization member can edit this project.

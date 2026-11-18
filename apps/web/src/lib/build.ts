@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { withShareToken } from "./project-share-links.schema";
+
 const buildStateSchema = z.object({
   id: z.uuid(),
   revision: z.number().int().nonnegative(),
@@ -31,6 +33,13 @@ export type BuildSnapshot = z.infer<typeof buildSnapshotSchema>;
 export type BuildFile = NonNullable<
   BuildSnapshot["artifacts"]
 >["files"][number];
-export function buildFileUrl(projectId: string, file: BuildFile) {
-  return `/api/compile/${encodeURIComponent(projectId)}?file=${encodeURIComponent(file.path)}&version=${encodeURIComponent(file.key)}`;
+export function buildFileUrl(
+  projectId: string,
+  file: BuildFile,
+  shareToken?: string,
+) {
+  return withShareToken(
+    `/api/compile/${encodeURIComponent(projectId)}?file=${encodeURIComponent(file.path)}&version=${encodeURIComponent(file.key)}`,
+    shareToken,
+  );
 }

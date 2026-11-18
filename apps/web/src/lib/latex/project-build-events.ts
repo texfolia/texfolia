@@ -1,4 +1,5 @@
 import { buildSnapshotSchema, type BuildSnapshot } from "../build";
+import { withShareToken } from "../project-share-links.schema";
 
 type BuildEvent =
   | { kind: "snapshot"; snapshot: BuildSnapshot }
@@ -13,9 +14,13 @@ export class ProjectBuildEvents {
   constructor(
     projectId: string,
     onSnapshot: (snapshot: BuildSnapshot) => void,
+    shareToken?: string,
   ) {
     this.source = new EventSource(
-      `/api/compile/${encodeURIComponent(projectId)}?events=1`,
+      withShareToken(
+        `/api/compile/${encodeURIComponent(projectId)}?events=1`,
+        shareToken,
+      ),
     );
     this.source.onmessage = (event) => {
       let snapshot: BuildSnapshot;

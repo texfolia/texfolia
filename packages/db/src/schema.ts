@@ -140,6 +140,32 @@ export const projectCollaborator = pgTable(
   ],
 );
 
+export const projectShareLinkScope = pgEnum("project_share_link_scope", [
+  "project",
+  "pdf",
+]);
+
+// Read-only links for people without an account. Only the token's SHA-256 is
+// stored; the token itself is returned once, when the link is created.
+export const projectShareLink = pgTable(
+  "project_share_link",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    scope: projectShareLinkScope("scope").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("project_share_link_project_id_idx").on(table.projectId)],
+);
+
 // Deliberately independent of project: cleanup must survive owner cascades.
 export const projectCollaboration = pgTable("project_collaboration", {
   projectId: uuid("project_id").primaryKey(),
@@ -225,6 +251,7 @@ export const relations = defineRelations(
     projectCollaborator,
     projectJob,
     projectNode,
+    projectShareLink,
     user,
   },
   (r) => ({
@@ -250,6 +277,12 @@ export const relations = defineRelations(
     projectJob: {
       project: r.one.project({
         from: r.projectJob.projectId,
+        to: r.project.id,
+      }),
+    },
+    projectShareLink: {
+      project: r.one.project({
+        from: r.projectShareLink.projectId,
         to: r.project.id,
       }),
     },

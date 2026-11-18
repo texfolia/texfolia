@@ -32,6 +32,7 @@ import { createProject } from "../src/lib/project.server";
 import type { BrowserApi } from "./collaboration/browser";
 import { checkDeletion } from "./collaboration/deletion";
 import { checkRevocation } from "./collaboration/revocation";
+import { checkShareLinks } from "./collaboration/share-links";
 
 declare global {
   interface Window {
@@ -712,8 +713,9 @@ try {
     viewerId,
     cookies,
   });
+  await checkShareLinks({ mf, db, origin, ownerId, editorId, cookies });
   console.log(
-    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, and live WebSocket/SSE/PDF revocation",
+    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, live WebSocket/SSE/PDF revocation, and share-link guests",
   );
 } finally {
   await Promise.all(contexts.map((context) => context.close()));

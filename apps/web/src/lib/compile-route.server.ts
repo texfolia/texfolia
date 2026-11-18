@@ -6,12 +6,14 @@ import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
 import { compilePlan } from "#/lib/billing.server";
+import { buildSnapshotSchema } from "#/lib/build";
 import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema, hashSource } from "#/lib/latex/source-sync";
 import { streamProjectResponse } from "#/lib/live-project.server";
 import { lockProject } from "#/lib/project-access.server";
+import { requestPrincipal } from "#/lib/request-principal.server";
 
 const compilerTimingSchema = z.looseObject({
   plan: z.enum(["free", "pro", "team", "unknown"]),
@@ -121,28 +123,33 @@ async function checkProject(
   projectId: string,
   { auth, db }: { auth: ReturnType<typeof createAuth>; db: Db },
 ) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) return json({ error: "Unauthorized" }, 401);
+  const principal = await requestPrincipal({ request, auth, db, projectId });
+  if (!principal) return json({ error: "Unauthorized" }, 401);
   if (!idSchema.safeParse(projectId).success)
     return json({ error: "Project not found" }, 404);
+  // Share links only read builds; they never submit work or report telemetry.
+  if (principal.share && request.method !== "GET")
+    return json({ error: "Project not found" }, 404);
+  let shareScope: "project" | "pdf" | null;
   try {
-    await db.transaction((tx) =>
+    ({ shareScope } = await db.transaction((tx) =>
       lockProject({
         tx,
         projectId,
-        userId: session.user.id,
+        userId: principal.userId,
         access:
           request.method === "GET" || request.method === "PATCH"
             ? "read"
             : "write",
+        content: "build",
       }),
-    );
+    ));
   } catch (error) {
     if (error instanceof Error && error.message === "Project not found")
       return json({ error: "Project not found" }, 404);
     throw error;
   }
-  return { userId: session.user.id, name: session.user.name };
+  return { userId: principal.userId, name: principal.name, shareScope };
 }
 
 async function readSources(request: Request) {
@@ -236,6 +243,19 @@ async function readPreviewTiming(request: Request) {
   } catch {
     return null;
   }
+}
+
+async function isLatestPdf(projectId: string, path: string) {
+  const response = await fetchCompiler(`/projects/${projectId}`);
+  if (!response.ok) return false;
+  const snapshot = buildSnapshotSchema.safeParse(
+    await response.json().catch(() => null),
+  );
+  return (
+    snapshot.success &&
+    snapshot.data.artifacts?.pdf != null &&
+    snapshot.data.artifacts.pdf === path
+  );
 }
 
 type CompileArgs = {
@@ -501,9 +521,18 @@ export const compileHandlers = {
         userId: denied.userId,
         signal: request.signal,
       });
+    // PDF-only links see the build stream and the latest PDF, but not job
+    // logs or other generated files, which can quote the sources.
+    const pdfOnly = denied.shareScope === "pdf";
     if (!url.searchParams.has("job")) {
       try {
         const file = url.searchParams.get("file");
+        if (
+          file !== null &&
+          pdfOnly &&
+          !(await isLatestPdf(params.projectId, file))
+        )
+          return json({ error: "File not found" }, 404);
         if (file !== null)
           return await fetchCompiler(
             `/projects/${params.projectId}/build/files?path=${encodeURIComponent(file)}&version=${encodeURIComponent(url.searchParams.get("version") ?? "")}`,
@@ -519,7 +548,8 @@ export const compileHandlers = {
       }
     }
     const parsedId = idSchema.safeParse(url.searchParams.get("job"));
-    if (!parsedId.success) return json({ error: "Job not found" }, 404);
+    if (!parsedId.success || pdfOnly)
+      return json({ error: "Job not found" }, 404);
     const id = parsedId.data;
     const job = await db.query.projectJob.findFirst({
       columns: { id: true, status: true, createdAt: true },

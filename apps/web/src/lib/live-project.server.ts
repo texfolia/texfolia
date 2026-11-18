@@ -29,7 +29,13 @@ export function streamProjectResponse({
     const db = createDb(connectionString);
     try {
       await db.transaction(async (tx) => {
-        await lockProject({ tx, projectId, userId, access: "read" });
+        await lockProject({
+          tx,
+          projectId,
+          userId,
+          access: "read",
+          content: "build",
+        });
         if (!stopped) deliver?.();
       });
     } finally {
