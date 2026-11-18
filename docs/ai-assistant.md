@@ -68,6 +68,12 @@ otherwise their personal Pro subscription, otherwise an eligible membership's
 subscription. The original customer and subscription are saved with each run,
 so later membership or subscription changes do not move existing charges.
 
+File tools can list, search, and read saved sources. Editors' runs can also
+apply several exact replacements to a file in one versioned `edit_file` call,
+and create, rename, move, or delete files and folders through the same node
+functions and path rules as the Files sidebar. `search_project` matches literal
+text, returns at most 200 lines, and skips files over 1 MiB.
+
 Git tools can inspect status and diffs, commit, push, pull, create branches, and
 switch branches. The assistant instructions require an explicit user request before
 git mutations. The **Generate message** button in the Git panel uses the same
@@ -75,8 +81,9 @@ subscription, Gateway, spending cap, and usage meter. It suggests an editable
 message and creates no commit. See [Git integration](git-integration.md).
 
 Project viewers can use the assistant for read-only questions. Their runs
-receive only `list_files`, `read_file`, `git_status`, `git_diff`, and
-`read_compile_logs`; file edits, compiles, and git mutations are not offered.
+receive only `list_files`, `search_project`, `read_file`, `git_status`,
+`git_diff`, and `read_compile_logs`; file edits, file creation, renames,
+deletions, compiles, and git mutations are not offered.
 The server write checks still apply to editors' tool calls. A run stops if the
 user's role changes while it is in progress.
 
