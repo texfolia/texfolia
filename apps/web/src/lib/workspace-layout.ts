@@ -6,6 +6,7 @@ export const sidebarViewSchema = z.enum([
   "outline",
   "search",
   "git",
+  "comments",
   "collaboration",
 ]);
 export type SidebarView = z.infer<typeof sidebarViewSchema>;

@@ -36,17 +36,20 @@ export function createProjectFilesStore({
     canWrite: boolean | undefined;
     error: string;
     deleted: ReadonlySet<string>;
+    commentsVersion: string | undefined;
   } = {
     canWrite: undefined,
     error: "",
     deleted: new Set(),
+    commentsVersion: undefined,
   };
   const listeners = new Set<() => void>();
   function setStatus(next: typeof status) {
     if (
       next.canWrite === status.canWrite &&
       next.error === status.error &&
-      next.deleted === status.deleted
+      next.deleted === status.deleted &&
+      next.commentsVersion === status.commentsVersion
     )
       return;
     status = next;
@@ -139,7 +142,12 @@ export function createProjectFilesStore({
             if (sourceVersions[id] === versionsAtStart[id])
               sourceVersions[id] = version;
           nodes.utils.replace(metadata.nodes);
-          setStatus({ ...status, canWrite: metadata.canWrite, error: "" });
+          setStatus({
+            ...status,
+            canWrite: metadata.canWrite,
+            error: "",
+            commentsVersion: metadata.commentsVersion,
+          });
           return metadata;
         }
       };

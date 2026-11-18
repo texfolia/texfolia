@@ -176,6 +176,7 @@ export function WorkspaceMenu({
                   ["outline", "Outline"],
                   ["search", "Search"],
                   ["git", "Git"],
+                  ["comments", "Comments"],
                   ["collaboration", "Collaboration"],
                 ] satisfies [SidebarView, string][]
               ).map(([rightView, title]) => (

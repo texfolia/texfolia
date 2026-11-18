@@ -27,7 +27,7 @@ Postgres suite and production-assets.
 
 | Suite                       | Test inputs under `apps/web/test`                                                      | Additional inputs                                                                     | Production build | Chromium |
 | --------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------- | -------- |
-| database                    | `postgres.ts`                                                                          | Runtime web inputs                                                                    | No               | No       |
+| database                    | `postgres.ts`, `postgres/`                                                             | Runtime web inputs                                                                    | No               | No       |
 | compile-route               | `compile-route.ts`, `compile-route/`                                                   | Runtime web inputs, compiler runtime and fixtures                                     | No               | No       |
 | ai-billing                  | `ai-billing.ts`                                                                        | Runtime web inputs                                                                    | No               | No       |
 | assistant                   | `ai-assistant.ts`                                                                      | Runtime web inputs                                                                    | Yes              | Yes      |

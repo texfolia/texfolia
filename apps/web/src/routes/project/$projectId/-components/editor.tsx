@@ -19,6 +19,7 @@ import {
   IconSearch,
   IconDots,
   IconMathSymbols,
+  IconMessagePlus,
 } from "@tabler/icons-react";
 import CodeMirror, {
   EditorState,
@@ -58,6 +59,16 @@ import {
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { documentCachingStopped } from "#/lib/collaboration/cache";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
+import {
+  type CommentAnchor,
+  createCommentAnchor,
+  resolveCommentAnchor,
+} from "#/lib/comments/anchor";
+import {
+  commentRanges,
+  type CommentRange,
+  setCommentRanges,
+} from "#/lib/comments/editor";
 import { downloadFile } from "#/lib/download-file";
 import type { EditorCommand } from "#/lib/editor-command";
 import type { LatexProblem } from "#/lib/latex/analysis";
@@ -69,6 +80,7 @@ import {
 import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
 import { addLatexPackage, insertLatexSymbol } from "#/lib/latex/symbols";
+import { commentQuote } from "#/lib/project-comments.schema";
 import { useSettings } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";
@@ -91,9 +103,23 @@ type EditorProps = {
   completion?: CompletionSource;
   problems?: LatexProblem[];
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
-  jump?: { line: number; column?: number; length?: number };
+  jump?: {
+    line: number;
+    column?: number;
+    length?: number;
+    // Scrolls to this range without moving the selection or focus.
+    range?: { from: number; to: number };
+  };
   formatSettings?: FormatSettings;
   preamble?: SymbolPreamble;
+  comments?: EditorComments;
+};
+
+export type EditorComments = {
+  threads: (CommentAnchor & { id: string })[];
+  activeId: string | undefined;
+  onSelect: (id: string) => void;
+  onAdd: (draft: CommentAnchor & { quote: string }) => void;
 };
 
 export function Editor({
@@ -115,6 +141,7 @@ export function Editor({
   jump,
   formatSettings = defaultFormatSettings,
   preamble,
+  comments,
 }: EditorProps) {
   const { theme } = useTheme();
   const editor = useRef<ReactCodeMirrorRef>(null);
@@ -230,6 +257,13 @@ export function Editor({
   useEffect(() => {
     const view = editor.current?.view;
     if (!jump || !view) return;
+    if (jump.range) {
+      const from = Math.min(jump.range.from, view.state.doc.length);
+      view.dispatch({
+        effects: EditorView.scrollIntoView(from, { y: "center" }),
+      });
+      return;
+    }
     const line = view.state.doc.line(Math.min(jump.line, view.state.doc.lines));
     const anchor = line.from + Math.min((jump.column ?? 1) - 1, line.length);
     view.dispatch({
@@ -250,6 +284,70 @@ export function Editor({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [modified]);
+
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const commenting = !!comments && !!collaboration;
+  const commentExtension = useMemo(
+    () =>
+      commenting
+        ? commentRanges((id) => commentsRef.current?.onSelect(id))
+        : [],
+    [commenting],
+  );
+  const commentThreads = comments?.threads;
+  const activeCommentId = comments?.activeId;
+  // Resolves anchors against the shared document. An anchor stays unresolved
+  // until its author's edits arrive, so retry on document updates until all
+  // resolve.
+  useEffect(() => {
+    if (!collaboration || !commentThreads) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const apply = () => {
+      const view = editor.current?.view;
+      if (!view) return true;
+      const ranges: CommentRange[] = [];
+      let unresolved = false;
+      for (const thread of commentThreads) {
+        const range = resolveCommentAnchor(collaboration.text, thread);
+        if (range) ranges.push({ id: thread.id, ...range });
+        else unresolved = true;
+      }
+      view.dispatch({
+        effects: setCommentRanges.of({ ranges, activeId: activeCommentId }),
+      });
+      return unresolved;
+    };
+    if (!apply()) return;
+    const retry = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!apply()) collaboration.doc.off("update", retry);
+      }, 250);
+    };
+    collaboration.doc.on("update", retry);
+    return () => {
+      clearTimeout(timer);
+      collaboration.doc.off("update", retry);
+    };
+  }, [collaboration, commentThreads, activeCommentId, commentExtension]);
+
+  function addComment() {
+    const view = editor.current?.view;
+    if (!view || !collaboration || !comments) return;
+    let { from, to } = view.state.selection.main;
+    // Without a selection, comment on the cursor's line.
+    if (from === to) ({ from, to } = view.state.doc.lineAt(from));
+    if (from === to) {
+      setError("Select the text you want to comment on.");
+      return;
+    }
+    setError("");
+    comments.onAdd({
+      ...createCommentAnchor(collaboration.text, from, to),
+      quote: commentQuote(view.state.sliceDoc(from, to)),
+    });
+  }
 
   const language = useMemo(
     () =>
@@ -290,6 +388,7 @@ export function Editor({
           return true;
         },
       }),
+      commentExtension,
       language,
       ...(isMarkdown ? [markdown()] : []),
       EditorView.theme({
@@ -327,6 +426,7 @@ export function Editor({
       language,
       canFormat,
       format,
+      commentExtension,
     ],
   );
 
@@ -459,6 +559,11 @@ export function Editor({
                 onClick={() => fileInput.current?.click()}
               >
                 <IconFolderOpen />
+              </PanelAction>
+            )}
+            {commenting && (
+              <PanelAction label="Add comment" onClick={addComment}>
+                <IconMessagePlus />
               </PanelAction>
             )}
             <PanelAction
@@ -641,6 +746,9 @@ export function Editor({
         />
       </ContextMenuTrigger>
       <ContextMenuContent>
+        {commenting && (
+          <ContextMenuItem onClick={addComment}>Add comment</ContextMenuItem>
+        )}
         {(
           [
             ["cut", "Cut"],

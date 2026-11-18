@@ -1,6 +1,11 @@
 import type { Db } from "@texfolia/db";
 
-import { lockProject, type ProjectTransaction } from "./project-access.server";
+import {
+  lockProject,
+  shareLinkIdOf,
+  type ProjectTransaction,
+} from "./project-access.server";
+import { commentsVersion } from "./project-comments.server";
 
 export async function readProjectMetadata({
   tx,
@@ -48,5 +53,15 @@ export function getProjectMetadata({
   projectId: string;
   userId: string;
 }) {
-  return db.transaction((tx) => readProjectMetadata({ tx, ...options }));
+  return db.transaction(async (tx) => {
+    const metadata = await readProjectMetadata({ tx, ...options });
+    return {
+      ...metadata,
+      // Share-link guests cannot see comments.
+      commentsVersion:
+        shareLinkIdOf(options.userId) === null
+          ? await commentsVersion(tx, options.projectId)
+          : undefined,
+    };
+  });
 }
