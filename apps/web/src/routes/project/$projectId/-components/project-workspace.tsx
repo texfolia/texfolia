@@ -11,6 +11,7 @@ import {
   IconLoader2,
   IconCircleCheck,
   IconMessage,
+  IconTimeline,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { ClientOnly } from "@tanstack/react-router";
@@ -86,6 +87,7 @@ import {
   restoreWorkspaceDock,
   workspaceLayoutKey,
   writeWorkspaceLayout,
+  type PanelView,
   type WorkspaceChrome,
 } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
@@ -114,8 +116,8 @@ import { SidebarResize } from "./sidebar-resize";
 import { SourcePdf } from "./source-pdf";
 import type { UploadSourceHandle } from "./upload-source";
 import { WorkspaceMenu } from "./workspace-menu";
+import { WorkspacePanel } from "./workspace-panel";
 import { WorkspacePresence } from "./workspace-presence";
-import { WorkspaceProblems } from "./workspace-problems";
 
 type FilePanelParams = {
   node: ProjectNode;
@@ -320,7 +322,8 @@ const components = {
   editor: FileEditor,
   generated: GeneratedFile,
   markdown: MarkdownPreview,
-  problems: WorkspaceProblems,
+  // Restores layouts saved while Problems was a dock tab; the tab is removed.
+  problems: () => null,
 };
 const tabComponents = { file: FileTab };
 
@@ -1066,8 +1069,8 @@ export function ProjectWorkspace({
       }
       const diagnostics = parseCompileLog(result.log, filenames, main);
       if (revision.current === snapshot) {
+        // The panel stays closed unless the user opens it.
         setCompileProblems(diagnostics);
-        if (diagnostics.length) openProblems();
       }
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -1164,6 +1167,10 @@ export function ProjectWorkspace({
     () => updateChrome({ rightOpen: !chrome.rightOpen }),
     { target: container, enabled: !settingsOpen },
   );
+  useAppShortcut("panel", () => togglePanel(), {
+    target: container,
+    enabled: !settingsOpen,
+  });
 
   useEffect(
     () => () => {
@@ -1369,24 +1376,13 @@ export function ProjectWorkspace({
       dock.removePanel(target);
     }
   }
-  function openProblems() {
-    const dock = api.current;
-    if (!dock) return;
-    const existing = dock.getPanel("problems");
-    if (existing) {
-      existing.api.setActive();
-      return;
-    }
-    const reference = dock.activePanel ?? dock.panels[0];
-    dock.addPanel({
-      id: "problems",
-      component: "problems",
-      title: "Problems",
-      initialHeight: 180,
-      position: reference
-        ? { referencePanel: reference.id, direction: "below" }
-        : undefined,
-    });
+  // Status-bar buttons toggle their own view; the menu always shows it.
+  function togglePanel(view?: PanelView) {
+    const current = chromeRef.current;
+    if (!view) updateChrome({ panelOpen: !current.panelOpen });
+    else if (current.panelOpen && current.panelView === view)
+      updateChrome({ panelOpen: false });
+    else updateChrome({ panelOpen: true, panelView: view });
   }
 
   async function onReady({ api: dock }: DockviewReadyEvent) {
@@ -1574,7 +1570,7 @@ export function ProjectWorkspace({
           onSearch={openSearch}
           chrome={chrome}
           onChrome={updateChrome}
-          onProblems={openProblems}
+          onPanel={(view) => updateChrome({ panelOpen: true, panelView: view })}
         />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div
@@ -1721,6 +1717,16 @@ export function ProjectWorkspace({
                 />
               </ClientOnly>
             </div>
+            {chrome.panelOpen && (
+              <WorkspacePanel
+                view={chrome.panelView}
+                height={chrome.panelHeight}
+                problemCount={allProblems.length}
+                onView={(panelView) => updateChrome({ panelView })}
+                onResize={(panelHeight) => updateChrome({ panelHeight })}
+                onClose={() => updateChrome({ panelOpen: false })}
+              />
+            )}
           </main>
           {chrome.rightOpen && (
             <SidebarResize
@@ -1789,12 +1795,27 @@ export function ProjectWorkspace({
           <Button
             variant="ghost"
             size="xs"
+            className="aria-pressed:bg-muted"
             aria-label={`Problems (${allProblems.length})`}
-            onClick={openProblems}
+            aria-controls="workspace-panel"
+            aria-pressed={chrome.panelOpen && chrome.panelView === "problems"}
+            onClick={() => togglePanel("problems")}
           >
             <IconAlertCircle />
             <span className="max-sm:hidden">Problems</span> (
             {allProblems.length})
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="aria-pressed:bg-muted"
+            aria-label="Compile logs"
+            title="Compile logs"
+            aria-controls="workspace-panel"
+            aria-pressed={chrome.panelOpen && chrome.panelView === "logs"}
+            onClick={() => togglePanel("logs")}
+          >
+            <IconTimeline />
           </Button>
           <Button
             variant="ghost"

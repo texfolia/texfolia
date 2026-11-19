@@ -45,6 +45,32 @@ for boot, prewarm, and archive timing fields and the limits of the historical
 local measurements. [Container pool](../apps/compiler/docs/container-pool.md)
 defines pool hit-rate accounting.
 
+## Persisted timelines
+
+The workspace Logs tab reads a per-job timeline from `project_job.timing`
+(jsonb). Each part is optional and merged independently:
+
+| Key        | Written by                                   | Contents                                                                              |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `web`      | Web POST at reservation                      | `receivedAt`, the web route’s receipt instant.                                        |
+| `compiler` | Web GET when it reconciles a terminal status | Compiler result timing plus `acceptedAt` (coordinator `createdAt`).                   |
+| `client`   | Browser preview PATCH, first report only     | The `compile_preview` fields, including `requestSentMs`, `serverMs` and `notifiedMs`. |
+
+Compiler timing adds compiler-clock instants: `startedAt` (attempt start),
+`firstPdfAt` (first streamed PDF), `engineFinishedAt` and `publishedAt`, plus
+`debounceMs` and `delivery` (`direct` or `overflow`). `requestSentMs` and
+`notifiedMs` are browser durations from the compile action to the submission
+request leaving the browser and to the terminal SSE event. `serverMs` is the web
+route’s own POST duration, returned in the submission response. The browser
+maps its durations onto server time as
+`receivedAt + (t - requestSentMs - (submissionMs - requestSentMs - serverMs) / 2)`;
+it never sends or uses its wall clock.
+
+Only the `compileHistoryLimit` most recent jobs per project keep a timeline. Each
+terminal reconciliation sets `timing` to null on older rows, which remain for
+accounting. History and log reads (`?history=1`, `?job=<id>&log=1`) use the job
+log ACL: PDF-only share links receive 404.
+
 ## Query preview percentiles
 
 Export decoded event objects as newline-delimited JSON to `compile-events.jsonl`.

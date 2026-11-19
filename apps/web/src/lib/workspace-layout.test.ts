@@ -37,3 +37,24 @@ test("layout memory restores chrome and the opaque dock; corrupt or invalid chro
   ])
     expect(readWorkspaceLayout(raw).chrome).toEqual(defaultWorkspaceChrome);
 });
+
+test("the bottom panel is closed by default, including for layouts saved before it existed", () => {
+  expect(defaultWorkspaceChrome.panelOpen).toBe(false);
+  const {
+    panelOpen: _open,
+    panelHeight: _height,
+    panelView: _view,
+    ...legacy
+  } = defaultWorkspaceChrome;
+  expect(
+    readWorkspaceLayout(JSON.stringify({ chrome: legacy })).chrome,
+  ).toEqual(defaultWorkspaceChrome);
+  const open = {
+    ...defaultWorkspaceChrome,
+    panelOpen: true,
+    panelView: "logs",
+  } satisfies WorkspaceChrome;
+  expect(readWorkspaceLayout(JSON.stringify({ chrome: open })).chrome).toEqual(
+    open,
+  );
+});

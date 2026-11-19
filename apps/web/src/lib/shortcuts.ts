@@ -40,6 +40,7 @@ export const shortcutActions = {
     typing: true,
   },
   sidebar: { label: "Toggle sidebar", binding: "Mod+Alt+B", typing: false },
+  panel: { label: "Toggle panel", binding: "Mod+J", typing: true },
   search: { label: "Search projects", binding: "Mod+P", typing: true },
   projectSearch: {
     label: "Search in project",

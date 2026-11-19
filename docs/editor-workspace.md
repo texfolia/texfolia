@@ -6,11 +6,34 @@ bottom-right icons or View menu to switch Files, Outline, Search, Git, Comments
 or Collaboration.
 Git actions stay in the Git view. Settings opens as a dialog with User and Project tabs. Changes use Apply, Save, and Cancel. Closing a dirty draft prompts before discarding. See [Settings](settings.md).
 
-The status bar shows compile state, Problems, live collaborators, the git branch
-when a repository exists, and the active editor’s line and column. Compile state
-also starts a build. Problems opens as a dock panel. PDF files open as ordinary
-preview tabs when selected in the Files tree; no empty PDF viewer opens with the
-workspace. Selecting a problem pins its file and jumps to the reported line.
+The status bar shows compile state, Problems, compile logs, live collaborators,
+the git branch when a repository exists, and the active editor’s line and column.
+Compile state also starts a build. PDF files open as ordinary preview tabs when
+selected in the Files tree; no empty PDF viewer opens with the workspace.
+
+## Bottom panel
+
+Problems and Logs share a bottom panel below the dock. It is closed by default
+and opens only when you choose it: View > Panel, Problems or Logs, the status-bar
+Problems and logs buttons, or Mod+J. A failed compile does not open it. Drag the
+divider or use its arrow keys to resize it.
+
+Problems lists browser diagnostics and parsed compile-log diagnostics. Selecting
+a problem pins its file and jumps to the reported line.
+
+Logs lists the `compileHistoryLimit` (10) most recent compiles of the project and
+shows the selected compile’s timeline and raw TeX log. Times are shown in your
+local time with the time zone labeled. Received, accepted, started, first PDF
+byte, LaTeX finished and published are server instants. Sent, first browser
+byte, notified and rendered are measured in the browser with `performance.now()`
+and placed on server time from the submission round trip, marked with ≈. The
+browser’s wall clock is never used. The timeline shows the coordinator’s 300 ms
+debounce as a debounce, and names the overflow queue only when that path ran.
+The container row distinguishes a cold start, with or without a restored cache,
+from a warm or editor-prewarmed container. LaTeX run duration is positioned from
+engine durations, so it has no clock time of its own. Logs never shows usage or
+fair-use limits. Project members and full-project share links can read logs and
+timelines; PDF-only links cannot. A Terminal tab is not planned in this panel.
 
 Files shows only folders and files, with compact square rows flush to the panel
 edges. Create, upload, export and path repair open from the File menu; row
@@ -72,7 +95,8 @@ Chat history is a separate sidebar to the left of Agents, hidden by default.
 The bottom-left history button opens it without embedding a thread list above
 the conversation. History and Agents can be resized independently.
 
-Sidebar visibility, widths, the right view and Dockview’s serialized layout are
+Sidebar visibility, widths, the right view, the bottom panel’s state and
+Dockview’s serialized layout are
 stored under `texfolia.workspace.layout.v1:<userId>:<projectId>` in localStorage.
 Drag the dividers or use their arrow keys to resize. On narrow screens only one
 sidebar opens at a time, and PDFs follow the same tab placement as other files.

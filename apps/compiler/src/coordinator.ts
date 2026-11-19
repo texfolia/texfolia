@@ -96,6 +96,11 @@ const savedSchema = coordinatorSnapshotSchema.extend({
 });
 
 const retentionMs = 30 * 24 * 60 * 60_000;
+type RunContext = {
+  attempt: number;
+  delivery: "direct" | "overflow";
+  debounceMs: number;
+};
 
 // All state transitions use this implementation in both SQLite and Durable Objects.
 // Engine I/O runs outside the writer so a newer edit can cancel it immediately.
@@ -683,7 +688,16 @@ export class ProjectCoordinatorCore {
       const done = this.execute(
         structuredClone(current),
         pending.project,
-        pending.attempt,
+        {
+          attempt: pending.attempt,
+          // Only a queue consumer runs the overflow path. The direct path's
+          // debounce is a coordinator alarm, not a queue.
+          delivery: revision === undefined ? "direct" : "overflow",
+          debounceMs: Math.max(
+            0,
+            Math.min(pending.due, Date.now()) - Date.parse(current.createdAt),
+          ),
+        },
         controller.signal,
       );
       this.active = {
@@ -700,11 +714,11 @@ export class ProjectCoordinatorCore {
   private async execute(
     build: Build,
     project: Project | SyncedProject,
-    attempt: number,
+    run: RunContext,
     signal: AbortSignal,
   ) {
     try {
-      return await this.runEngine(build, project, attempt, signal);
+      return await this.runEngine(build, project, run, signal);
     } finally {
       this.active = null;
       if (this.state.pending?.delivery === "direct")
@@ -718,10 +732,12 @@ export class ProjectCoordinatorCore {
   private async runEngine(
     build: Build,
     project: Project | SyncedProject,
-    attempt: number,
+    { attempt, delivery, debounceMs }: RunContext,
     signal: AbortSignal,
   ) {
     const started = performance.now();
+    const startedAt = new Date().toISOString();
+    let firstPdfAt: string | undefined;
     const queueWaitMs = Math.max(0, Date.now() - Date.parse(build.createdAt));
     let engineTiming = unknownEngineTiming;
     let result: Build;
@@ -747,6 +763,7 @@ export class ProjectCoordinatorCore {
         readSource: (file: SyncedProject["files"][string]) =>
           readSource(this.options.store, this.options.projectId, file),
         onPdf: (body: ReadableStream<Uint8Array>) => {
+          firstPdfAt ??= new Date().toISOString();
           const preview =
             !signal.aborted && this.state.current?.id === build.id
               ? this.previews.get(build.id)
@@ -830,6 +847,7 @@ export class ProjectCoordinatorCore {
       }
     }
     const engineRequestMs = performance.now() - started;
+    const engineFinishedAt = new Date().toISOString();
     await this.exclusive(async () => {
       if (
         signal.aborted ||
@@ -917,6 +935,12 @@ export class ProjectCoordinatorCore {
         engineRequestMs,
         publishMs: performance.now() - publishStarted,
         backendMs: Date.now() - Date.parse(build.createdAt),
+        debounceMs,
+        delivery,
+        startedAt,
+        ...(firstPdfAt ? { firstPdfAt } : {}),
+        engineFinishedAt,
+        publishedAt: new Date().toISOString(),
       };
       try {
         await this.options.store.write(

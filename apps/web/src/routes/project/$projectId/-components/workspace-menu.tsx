@@ -11,7 +11,11 @@ import {
   MenubarCheckboxItem,
 } from "#/components/ui/menubar";
 import type { EditorCommand } from "#/lib/editor-command";
-import type { SidebarView, WorkspaceChrome } from "#/lib/workspace-layout";
+import type {
+  PanelView,
+  SidebarView,
+  WorkspaceChrome,
+} from "#/lib/workspace-layout";
 
 export function WorkspaceMenu({
   name,
@@ -34,7 +38,7 @@ export function WorkspaceMenu({
   onSearch,
   chrome,
   onChrome,
-  onProblems,
+  onPanel,
 }: {
   name: string;
   canWrite: boolean;
@@ -56,7 +60,7 @@ export function WorkspaceMenu({
   onSearch: () => void;
   chrome: WorkspaceChrome;
   onChrome: (patch: Partial<WorkspaceChrome>) => void;
-  onProblems: () => void;
+  onPanel: (view: PanelView) => void;
 }) {
   return (
     <header className="flex h-10 shrink-0 items-center gap-3 border-b bg-(--activity-background) px-2 text-(--activity-foreground)">
@@ -168,7 +172,16 @@ export function WorkspaceMenu({
                 Right sidebar
               </MenubarCheckboxItem>
               <MenubarSeparator />
-              <MenubarItem onClick={onProblems}>Problems</MenubarItem>
+              <MenubarCheckboxItem
+                checked={chrome.panelOpen}
+                onCheckedChange={(panelOpen) => onChrome({ panelOpen })}
+              >
+                Panel
+              </MenubarCheckboxItem>
+              <MenubarItem onClick={() => onPanel("problems")}>
+                Problems
+              </MenubarItem>
+              <MenubarItem onClick={() => onPanel("logs")}>Logs</MenubarItem>
               <MenubarSeparator />
               {(
                 [

@@ -10,6 +10,9 @@ export const sidebarViewSchema = z.enum([
   "collaboration",
 ]);
 export type SidebarView = z.infer<typeof sidebarViewSchema>;
+export const panelViewSchema = z.enum(["problems", "logs"]);
+export type PanelView = z.infer<typeof panelViewSchema>;
+export const panelHeightBounds = { min: 120, max: 640 };
 const chromeSchema = z.object({
   historyOpen: z.boolean().default(false),
   historyWidth: z.number().min(240).max(600).default(240),
@@ -18,6 +21,14 @@ const chromeSchema = z.object({
   rightOpen: z.boolean(),
   rightWidth: z.number().min(240).max(600),
   rightView: sidebarViewSchema,
+  // The bottom panel stays closed until the user opens it.
+  panelOpen: z.boolean().default(false),
+  panelHeight: z
+    .number()
+    .min(panelHeightBounds.min)
+    .max(panelHeightBounds.max)
+    .default(240),
+  panelView: panelViewSchema.default("problems"),
 });
 export type WorkspaceChrome = z.infer<typeof chromeSchema>;
 export const defaultWorkspaceChrome: WorkspaceChrome = {
@@ -28,6 +39,9 @@ export const defaultWorkspaceChrome: WorkspaceChrome = {
   rightOpen: true,
   rightWidth: 288,
   rightView: "files",
+  panelOpen: false,
+  panelHeight: 240,
+  panelView: "problems",
 };
 export const workspaceLayoutKey = (userId: string, projectId: string) =>
   `texfolia.workspace.layout.v1:${userId}:${projectId}`;
@@ -130,6 +144,9 @@ export function restoreWorkspaceDock(
   try {
     // Dockview owns and validates the opaque grid format; panel inputs above belong to us.
     dock.fromJSON(value as SerializedDockview);
+    // Problems moved from a dock tab to the bottom panel.
+    const legacy = dock.getPanel("problems");
+    if (legacy) dock.removePanel(legacy);
     return true;
   } catch {
     dock.clear();

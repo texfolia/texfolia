@@ -54,6 +54,14 @@ export const jobTimingSchema = engineTimingSchema.extend({
   engineRequestMs: duration,
   publishMs: duration,
   backendMs: duration,
+  // Compiler-clock instants (ISO 8601) for the user-facing timeline. The
+  // durations above remain the monotonic measurements.
+  debounceMs: duration.optional(),
+  delivery: z.enum(["direct", "overflow"]).optional(),
+  startedAt: z.string().optional(),
+  firstPdfAt: z.string().optional(),
+  engineFinishedAt: z.string().optional(),
+  publishedAt: z.string().optional(),
 });
 export const previewTimingSchema = z.object({
   outcome: z.enum(["rendered", "preview_failed"]),
