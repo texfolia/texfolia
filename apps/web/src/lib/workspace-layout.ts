@@ -110,6 +110,9 @@ export function restoreWorkspaceDock(
       );
       if (!node) return false;
       panel.params = { node, preview: panel.params?.preview === true };
+      // Layouts saved before editors used the default renderer kept every
+      // editor tab rendered.
+      delete panel.renderer;
     }
     if (panel.contentComponent === "generated") {
       if (

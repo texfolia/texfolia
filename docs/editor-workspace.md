@@ -11,6 +11,10 @@ the git branch when a repository exists, and the active editor’s line and colu
 Compile state also starts a build. PDF files open as ordinary preview tabs when
 selected in the Files tree; no empty PDF viewer opens with the workspace.
 
+Only visible editor tabs keep a live editor. A hidden tab unmounts its editor
+and keeps its selection, scroll position and undo history, so switching back
+restores them. Edits made by collaborators while the tab is hidden still merge.
+
 ## Bottom panel
 
 Problems and Logs share a bottom panel below the dock. It is closed by default

@@ -29,6 +29,9 @@ export class CollaborativeFile {
   readonly doc = new Y.Doc();
   readonly text = this.doc.getText("source");
   readonly awareness = new Awareness(this.doc);
+  // Lives with the file rather than the editor so undo history survives the
+  // editor unmounting while its tab is hidden.
+  readonly undoManager = new Y.UndoManager(this.text);
   private persistence: IndexeddbPersistence | undefined;
   private socket: WebSocket | undefined;
   private stopped = false;
@@ -432,6 +435,7 @@ export class CollaborativeFile {
     }
     this.saves.clear();
     this.awareness.destroy();
+    this.undoManager.destroy();
     this.doc.off("update", this.documentChanged);
     void this.persistence?.destroy();
     this.listeners.clear();

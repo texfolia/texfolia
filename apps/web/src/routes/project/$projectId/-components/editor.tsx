@@ -34,7 +34,6 @@ import {
   ySyncAnnotation,
   yUndoManagerKeymap,
 } from "y-codemirror.next";
-import * as Y from "yjs";
 
 import {
   PanelAction,
@@ -113,6 +112,18 @@ type EditorProps = {
   formatSettings?: FormatSettings;
   preamble?: SymbolPreamble;
   comments?: EditorComments;
+  // Restored once when the view is created.
+  initialSnapshot?: EditorSnapshot;
+  // Called when the view is destroyed.
+  onSnapshot?: (snapshot: EditorSnapshot) => void;
+};
+
+// Selection and scroll position, as document offsets. The scroll anchor is the
+// first visible line and how far its top sits above the viewport.
+export type EditorSnapshot = {
+  anchor: number;
+  head: number;
+  scroll?: { pos: number; margin: number };
 };
 
 export type EditorComments = {
@@ -142,6 +153,8 @@ export function Editor({
   formatSettings = defaultFormatSettings,
   preamble,
   comments,
+  initialSnapshot,
+  onSnapshot,
 }: EditorProps) {
   const { theme } = useTheme();
   const editor = useRef<ReactCodeMirrorRef>(null);
@@ -164,11 +177,23 @@ export function Editor({
     undo: false,
     redo: false,
   });
-  const undoManager = useMemo(
-    () => (collaboration ? new Y.UndoManager(collaboration.text) : undefined),
-    [collaboration],
+  const undoManager = collaboration?.undoManager;
+  const createdView = useRef<EditorView | null>(null);
+  const scrollAnchor = useRef(initialSnapshot?.scroll);
+  const snapshotCallback = useRef(onSnapshot);
+  snapshotCallback.current = onSnapshot;
+  useEffect(
+    () => () => {
+      const state = createdView.current?.state;
+      if (!state) return;
+      snapshotCallback.current?.({
+        anchor: state.selection.main.anchor,
+        head: state.selection.main.head,
+        scroll: scrollAnchor.current,
+      });
+    },
+    [],
   );
-  useEffect(() => () => undoManager?.destroy(), [undoManager]);
   const runUndo = (view: EditorView) =>
     undoManager ? undoManager.undo() : undo(view);
   const runRedo = (view: EditorView) =>
@@ -371,6 +396,14 @@ export function Editor({
           ]
         : []),
       EditorView.domEventHandlers({
+        // Read while attached: a detached scroller reports a scrollTop of 0.
+        scroll(_event, view) {
+          if (!view.dom.isConnected) return false;
+          const top = view.scrollDOM.scrollTop - view.documentPadding.top;
+          const block = view.lineBlockAtHeight(Math.max(0, top));
+          scrollAnchor.current = { pos: block.from, margin: block.top - top };
+          return false;
+        },
         mousedown(event, view) {
           if (
             event.button !== 0 ||
@@ -701,6 +734,25 @@ export function Editor({
           editable={!readOnly}
           ref={editor}
           onCreateEditor={(view) => {
+            createdView.current = view;
+            if (initialSnapshot) {
+              const clamp = (position: number) =>
+                Math.min(Math.max(position, 0), view.state.doc.length);
+              const { scroll } = initialSnapshot;
+              view.dispatch({
+                selection: {
+                  anchor: clamp(initialSnapshot.anchor),
+                  head: clamp(initialSnapshot.head),
+                },
+                effects: scroll
+                  ? EditorView.scrollIntoView(clamp(scroll.pos), {
+                      y: "start",
+                      yMargin: scroll.margin,
+                    })
+                  : undefined,
+                scrollIntoView: !scroll,
+              });
+            }
             onCreateEditor?.(view);
             const line = view.state.doc.lineAt(view.state.selection.main.head);
             onCursorPosition?.({
@@ -713,7 +765,12 @@ export function Editor({
             setValue(text);
             onChange?.(text);
           }}
-          onUpdate={({ state, selectionSet, docChanged }) => {
+          onUpdate={({ state, selectionSet, docChanged, changes }) => {
+            if (docChanged && scrollAnchor.current)
+              scrollAnchor.current = {
+                ...scrollAnchor.current,
+                pos: changes.mapPos(scrollAnchor.current.pos, -1),
+              };
             if (selectionSet || docChanged) {
               const line = state.doc.lineAt(state.selection.main.head);
               onCursorPosition?.({
