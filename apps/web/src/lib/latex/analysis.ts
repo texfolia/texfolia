@@ -1,3 +1,5 @@
+import type { WordCount } from "./word-count";
+
 export type LatexProblem = {
   path: string;
   line: number;
@@ -208,6 +210,12 @@ export function analyzeProject(
 export type AnalyzeRequest = {
   revision: number;
   paths: string[];
+  /** Root file for the word count. */
+  main?: string;
   updates: Array<[path: string, text: string]>;
 };
-export type AnalyzeResponse = { revision: number; analysis: LatexAnalysis };
+export type AnalyzeResponse = {
+  revision: number;
+  analysis: LatexAnalysis;
+  words: WordCount;
+};
