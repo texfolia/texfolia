@@ -4,15 +4,18 @@ import {
   type AnalyzeResponse,
   scanFile,
 } from "./analysis";
+import { countWords, type WordEvent, wordEvents } from "./word-count";
 
 const files = new Map<string, ReturnType<typeof scanFile>>();
+const words = new Map<string, WordEvent[]>();
 let latest: AnalyzeRequest | undefined;
 let packages: Record<string, string[]> = {};
 
-function publish({ paths, revision }: AnalyzeRequest) {
+function publish({ paths, revision, main }: AnalyzeRequest) {
   const response: AnalyzeResponse = {
     revision,
     analysis: analyzeProject(files, paths, packages),
+    words: countWords(words, main),
   };
   self.postMessage(response);
 }
@@ -28,8 +31,10 @@ void fetch(`${import.meta.env.BASE_URL}latex-packages.json`)
   .catch(() => {});
 
 self.onmessage = ({ data }: MessageEvent<AnalyzeRequest>) => {
-  for (const [path, text] of data.updates)
+  for (const [path, text] of data.updates) {
     files.set(path, scanFile(path, text));
+    if (/\.(?:tex|ltx)$/i.test(path)) words.set(path, wordEvents(text));
+  }
   latest = data;
   publish(data);
 };

@@ -115,6 +115,7 @@ import type { RepairSourcePathsHandle } from "./repair-source-paths";
 import { SidebarResize } from "./sidebar-resize";
 import { SourcePdf } from "./source-pdf";
 import type { UploadSourceHandle } from "./upload-source";
+import { WordCountStatus } from "./word-count-status";
 import { WorkspaceMenu } from "./workspace-menu";
 import { WorkspacePanel } from "./workspace-panel";
 import { WorkspacePresence } from "./workspace-presence";
@@ -470,7 +471,10 @@ export function ProjectWorkspace({
   const paths = useMemo(() => projectPaths(nodes), [nodes]);
   const previousPaths = useRef(paths);
   const filenames = useMemo(() => [...paths.values()], [paths]);
-  const { result, update, revision } = useLatexAnalysis(filenames);
+  const main =
+    filenames.find((path) => path === "main.tex") ??
+    filenames.find((path) => path.endsWith(".tex"));
+  const { result, update, revision } = useLatexAnalysis(filenames, main);
   const currentAnalysis = useRef(result.analysis);
   currentAnalysis.current = result.analysis;
   const completion = useMemo(
@@ -733,9 +737,6 @@ export function ProjectWorkspace({
     return byPath;
   }, [result, compileProblems]);
 
-  const main =
-    [...paths.values()].find((path) => path === "main.tex") ??
-    [...paths.values()].find((path) => path.endsWith(".tex"));
   const mainId = [...paths].find(([, path]) => path === main)?.[0];
   const mainDraft = mainId ? drafts.current.get(mainId) : undefined;
 
@@ -1842,6 +1843,12 @@ export function ProjectWorkspace({
             )}
             <span className="max-sm:hidden">{compileStatus}</span>
           </Button>
+          {main && (
+            <WordCountStatus
+              words={result.words}
+              onReveal={(path, line) => reveal(path, line)}
+            />
+          )}
           <WorkspacePresence
             onClick={() =>
               updateChrome({ rightOpen: true, rightView: "collaboration" })

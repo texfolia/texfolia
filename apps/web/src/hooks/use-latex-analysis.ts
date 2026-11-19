@@ -5,8 +5,9 @@ import {
   type AnalyzeResponse,
   emptyAnalysis,
 } from "#/lib/latex/analysis";
+import { emptyWordCount } from "#/lib/latex/word-count";
 
-export function useLatexAnalysis(paths: string[]) {
+export function useLatexAnalysis(paths: string[], main?: string) {
   const worker = useRef<Worker | null>(null);
   const contents = useRef(new Map<string, string>());
   const pending = useRef(new Set<string>());
@@ -15,6 +16,7 @@ export function useLatexAnalysis(paths: string[]) {
   const [result, setResult] = useState<AnalyzeResponse>({
     revision: 0,
     analysis: emptyAnalysis,
+    words: emptyWordCount,
   });
 
   const flush = useCallback(() => {
@@ -22,6 +24,7 @@ export function useLatexAnalysis(paths: string[]) {
     const request: AnalyzeRequest = {
       revision: revision.current,
       paths,
+      main,
       updates: [...pending.current].map((path) => [
         path,
         contents.current.get(path) ?? "",
@@ -29,7 +32,7 @@ export function useLatexAnalysis(paths: string[]) {
     };
     worker.current.postMessage(request);
     pending.current.clear();
-  }, [paths]);
+  }, [paths, main]);
 
   useEffect(() => {
     const instance = new Worker(
