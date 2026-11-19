@@ -97,9 +97,25 @@ export function createProjectFilesStore({
       }),
   });
 
+  type SourceVersion = (typeof sourceVersions)[string];
   return {
     nodes,
-    sourceVersions,
+    sourceVersions: sourceVersions as Readonly<typeof sourceVersions>,
+    /** Copies the known versions so a long operation reads a consistent set. */
+    snapshotSourceVersions: () => ({ ...sourceVersions }),
+    /**
+     * Records a version the server acknowledged. An acknowledgement that
+     * arrives out of order is ignored so it cannot roll the version back.
+     */
+    recordSourceVersion(id: string, version: SourceVersion) {
+      const previous = sourceVersions[id];
+      if (previous && previous.updatedAt > version.updatedAt) return false;
+      sourceVersions[id] = {
+        objectKey: version.objectKey,
+        updatedAt: version.updatedAt,
+      };
+      return true;
+    },
     createdTextSources,
     getStatus: () => status,
     subscribe: (listener: () => void) => {
