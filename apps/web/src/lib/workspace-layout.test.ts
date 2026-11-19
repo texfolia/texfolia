@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 
+import type { DockviewApi } from "dockview-react";
+
 import {
   defaultWorkspaceChrome,
   readWorkspaceLayout,
+  restoreWorkspaceDock,
   workspaceLayoutKey,
   type WorkspaceChrome,
 } from "./workspace-layout";
@@ -57,4 +60,33 @@ test("the bottom panel is closed by default, including for layouts saved before 
   expect(readWorkspaceLayout(JSON.stringify({ chrome: open })).chrome).toEqual(
     open,
   );
+});
+
+test("restored editor tabs use the default renderer, even if saved with another", () => {
+  let restored: { panels: Record<string, { renderer?: unknown }> } | undefined;
+  const dock = {
+    fromJSON: (value: typeof restored) => {
+      restored = value;
+    },
+    getPanel: () => undefined,
+    clear: () => {},
+  } as unknown as DockviewApi;
+  const node = { id: "n1", kind: "text", name: "main.tex" };
+  const ok = restoreWorkspaceDock(
+    dock,
+    {
+      grid: { root: {}, height: 1, width: 1, orientation: "HORIZONTAL" },
+      panels: {
+        n1: {
+          id: "n1",
+          contentComponent: "editor",
+          renderer: "always",
+          params: { node },
+        },
+      },
+    },
+    [node],
+  );
+  expect(ok).toBe(true);
+  expect(restored?.panels.n1).not.toHaveProperty("renderer");
 });

@@ -35,6 +35,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import * as Y from "yjs";
 
 import { SettingsDialog } from "#/components/settings-dialog";
 import { Button } from "#/components/ui/button";
@@ -102,7 +103,7 @@ import {
 
 import { AssistantSidebar } from "./assistant-sidebar";
 import type { CreateNodeHandle } from "./create-node-form";
-import { Editor, type EditorComments } from "./editor";
+import { Editor, type EditorComments, type EditorSnapshot } from "./editor";
 import { GeneratedFile } from "./generated-file";
 import {
   MarkdownPreview,
@@ -141,6 +142,27 @@ function FileEditor({
     if (editor.current) registerEditor(params.node.id, editor.current);
     return () => registerEditor(params.node.id, null);
   }, [params.node.id, registerEditor]);
+  // Hidden tabs unmount their editor; dockview keeps the panel itself mounted.
+  const subscribeVisibility = useCallback(
+    (notify: () => void) => {
+      const subscription = panelApi.onDidVisibilityChange(notify);
+      return () => subscription.dispose();
+    },
+    [panelApi],
+  );
+  const visible = useSyncExternalStore(
+    subscribeVisibility,
+    () => panelApi.isVisible,
+  );
+  // Selection and scroll kept as relative positions so edits made while the
+  // tab is hidden don't shift them.
+  const snapshot = useRef<{
+    anchor: Y.RelativePosition;
+    head: Y.RelativePosition;
+    scroll?: { pos: Y.RelativePosition; margin: number };
+  }>(null);
+  // The jump the last editor already applied, so a remount doesn't repeat it.
+  const appliedJump = useRef<Workspace["jump"]>(undefined);
   useEffect(() => {
     let frame = 0;
     const subscription = panelApi.onDidActiveChange(({ isActive }) => {
@@ -158,6 +180,26 @@ function FileEditor({
     collaboration?.subscribe ?? emptySubscribe,
     collaboration?.getStatus ?? noCollaborationStatus,
   );
+  const initialSnapshot = useMemo<EditorSnapshot | undefined>(() => {
+    const saved = snapshot.current;
+    if (!visible || !saved || !collaboration) return undefined;
+    const absolute = (position: Y.RelativePosition) =>
+      Y.createAbsolutePositionFromRelativePosition(position, collaboration.doc)
+        ?.index ?? 0;
+    return {
+      anchor: absolute(saved.anchor),
+      head: absolute(saved.head),
+      scroll: saved.scroll && {
+        pos: absolute(saved.scroll.pos),
+        margin: saved.scroll.margin,
+      },
+    };
+  }, [visible, collaboration]);
+  const jump =
+    workspace.jump?.id === params.node.id &&
+    workspace.jump !== appliedJump.current
+      ? workspace.jump
+      : undefined;
   const draft = workspace.drafts.get(params.node.id);
   const path = workspace.paths.get(params.node.id) ?? params.node.name;
   const { comments } = workspace;
@@ -226,6 +268,7 @@ function FileEditor({
         {status?.error || "Connecting to collaboration…"}
       </p>
     );
+  if (!visible) return null;
   return (
     <div className="flex h-full min-h-0 flex-col">
       {(!status.connected || status.error) && (
@@ -253,9 +296,23 @@ function FileEditor({
         completion={workspace.completion}
         problems={workspace.problems.get(path) ?? noProblems}
         onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
-        jump={
-          workspace.jump?.id === params.node.id ? workspace.jump : undefined
-        }
+        jump={jump}
+        initialSnapshot={initialSnapshot}
+        onSnapshot={({ anchor, head, scroll }) => {
+          const relative = (index: number) =>
+            Y.createRelativePositionFromTypeIndex(collaboration.text, index);
+          snapshot.current = {
+            anchor: relative(anchor),
+            head: relative(head),
+            scroll: scroll && {
+              pos: relative(scroll.pos),
+              margin: scroll.margin,
+            },
+          };
+          if (jump) appliedJump.current = jump;
+          editor.current = null;
+          registerEditor(params.node.id, null);
+        }}
         formatSettings={workspace.formatSettings}
         preamble={
           workspace.symbolPreamble && {
@@ -1298,7 +1355,6 @@ export function ProjectWorkspace({
         node,
         preview: !permanent,
       },
-      renderer: "always",
       position: reference
         ? { referencePanel: reference.id, direction: "within" }
         : previewPanel
