@@ -2,8 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 import { encodeBase64 } from "../src/artifacts";
 import { createEngineClient } from "../src/engine";
-import type { Engine } from "../src/jobs";
 import { HttpError } from "../src/project";
+import type { Engine } from "../src/types";
 
 const engine = createEngineClient(
   (request) => fetch(request),

@@ -6,7 +6,6 @@ import {
   storeArtifacts,
   type ArtifactManifest,
 } from "./artifacts";
-import type { Engine, ObjectStore } from "./jobs";
 import { compilePolicy, compileUserSchema } from "./limits";
 import {
   EngineError,
@@ -36,6 +35,7 @@ import {
   planSchema,
   unknownEngineTiming,
 } from "./telemetry";
+import type { Engine, ObjectStore } from "./types";
 
 const common = {
   id: jobIdSchema,
@@ -82,6 +82,8 @@ const savedSchema = coordinatorSnapshotSchema.extend({
   sources: syncedProjectSchema.nullable().default(null),
   maintenanceAt: z.number().nullable().default(null),
   maintenanceSent: z.boolean().default(false),
+  // Template preview projects are temporary and expire a day after last use.
+  preview: z.boolean().default(false),
   pending: z
     .object({
       project: z.union([
@@ -96,6 +98,7 @@ const savedSchema = coordinatorSnapshotSchema.extend({
 });
 
 const retentionMs = 30 * 24 * 60 * 60_000;
+export const previewRetentionMs = 24 * 60 * 60_000;
 type RunContext = {
   attempt: number;
   delivery: "direct" | "overflow";
@@ -165,6 +168,7 @@ export class ProjectCoordinatorCore {
           sources: null,
           maintenanceAt: null,
           maintenanceSent: false,
+          preview: false,
         };
   }
 
@@ -301,6 +305,7 @@ export class ProjectCoordinatorCore {
           delivery: "direct",
         },
         sources: "kind" in project ? project : this.state.sources,
+        preview: "preview" in project && project.preview === true,
       };
       this.persist();
       this.active?.controller.abort();
@@ -439,11 +444,11 @@ export class ProjectCoordinatorCore {
     }
     const before = Date.now();
     const revision = this.state.revision;
-    if (before - this.state.lastActivity >= retentionMs) {
+    if (before - this.state.lastActivity >= this.retention()) {
       await this.exclusive(async () => {
         if (
           this.state.pending ||
-          Date.now() - this.state.lastActivity < retentionMs
+          Date.now() - this.state.lastActivity < this.retention()
         )
           return;
         this.state.artifacts = null;
@@ -471,7 +476,7 @@ export class ProjectCoordinatorCore {
     this.state.maintenanceAt = null;
     this.persist();
     if (this.state.current || this.state.sources || this.state.artifacts)
-      await this.requestMaintenance(this.state.lastActivity + retentionMs);
+      await this.requestMaintenance(this.state.lastActivity + this.retention());
   }
 
   async fail(revision: number) {
@@ -510,12 +515,26 @@ export class ProjectCoordinatorCore {
   private pdfKey(id: string) {
     return `projects/${this.options.projectId}/compilations/${id}.pdf`;
   }
+  // Pruning skips previews; retention and clear() remove them.
+  private pngKey(id: string) {
+    return `projects/${this.options.projectId}/previews/${id}.png`;
+  }
+  private retention() {
+    return this.state.preview ? previewRetentionMs : retentionMs;
+  }
 
   async get(id: string): Promise<Build | null> {
     if (this.state.current?.id === id)
       return structuredClone(this.state.current);
     const body = await this.options.store.read(this.resultKey(id));
     return body ? buildSchema.parse(await new Response(body).json()) : null;
+  }
+
+  async previewImage(id: string) {
+    const build = await this.get(id);
+    return build?.status === "succeeded"
+      ? this.options.store.read(this.pngKey(id))
+      : null;
   }
 
   async artifact(id: string) {
@@ -871,6 +890,12 @@ export class ProjectCoordinatorCore {
             },
             output,
           });
+          // The engine client rejects preview builds without an image.
+          if (output.preview)
+            await this.options.store.write(
+              this.pngKey(build.id),
+              output.preview,
+            );
           if (output.cacheArchive)
             await this.options.store.write(
               `projects/${this.options.projectId}/cache.tar.zst`,

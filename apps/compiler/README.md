@@ -11,32 +11,40 @@ proposed backend contracts, image options, and unresolved product decisions.
 
 ## Template previews
 
-Legacy snapshot jobs accept an opt-in `preview: true` in `POST /compile` alongside
-`mainFile` and `files`. The request uses a preview-attempt compilation ID, separate preview usage
-identity, queue, and status lifecycle. Normal project compilations do not
-render previews. After `GET /jobs/{id}` reports success,
-`GET /compilations/{id}.png` returns the persisted first-page image; the existing
-PDF endpoint remains available. Retrying the same compilation ID reuses the PNG
-and PDF rather than running TeX again.
+Template previews are ordinary project builds. The web service compiles each
+template in a temporary project named by the template ID. It sends a
+full-snapshot `POST /projects/<templateId>/compile` with `preview: true`
+alongside `mainFile` and `files`. Each attempt uses its own compilation ID,
+the Pro plan, and the separate usage identity `template-preview:<templateId>`.
+Previews do not draw on the publisher's interactive compile allowance.
+Retries, the overflow queue, and the DLQ behave as they do for any other
+revision. Normal project compilations do not render previews.
 
-The web service uses Pro policy for template previews and a separate usage
-identity per snapshot. Compiler recovery sweeps all legacy source, result,
-artifact, transcript, dispatch, and attempt objects after 24 hours. This includes
-terminal jobs and artifacts without job records. Project coordinator objects
-under `projects/` have separate retention. See [Template lifecycle](../../docs/templates.md)
+After `GET /projects/<templateId>/jobs/<id>` reports success,
+`GET /projects/<templateId>/compilations/<id>.png` returns the first-page image.
+The PDF and build files remain available through the usual project endpoints.
+The web service copies the PNG into permanent template storage. It then calls
+`DELETE /projects/<templateId>/build`, after promotion or a terminal failure.
+A project whose latest submission requested a preview is temporary.
+Maintenance removes its state and objects one day after last activity, so a
+failed cleanup still expires. Other projects keep the 30-day retention. Pruning
+after each build skips preview images. See [Template lifecycle](../../docs/templates.md)
 for publication, retry, permanent image storage, and deletion behavior.
 
 The compile image installs `poppler-utils`. After an opted-in compile, the engine
 runs `pdftoppm` with a 15-second cancellation-aware timeout, first-page-only,
 1200-pixel maximum dimension, and a 4 MiB output limit. The PNG is passed through
-the multipart engine response and stored before the PDF commit marker. Local
-SQLite and production R2 use the same job path. Rebuild the engine image before
-using this feature in an existing local stack.
+the multipart engine response. The engine client rejects a preview build without
+it as an infrastructure failure, which takes the normal retry path. The PNG is
+stored when the build publishes. Local SQLite and production R2 use the same
+coordinator path. Rebuild the engine image before using this feature in an
+existing local stack.
 
 Run `ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts`
 from the repository root to compile the original article, journal, and thesis
-starters with a real container and check both persisted artifacts. Go's
-`TestRenderPreview` also runs against real Poppler when it is installed.
+starters with a real container and check both persisted artifacts. Start a
+standalone engine on that port first, as shown in [Run locally](#run-locally).
+Go's `TestRenderPreview` also runs against real Poppler when it is installed.
 
 ## Project builds
 
@@ -89,9 +97,10 @@ API restarts. Local maintenance checks the pool every minute.
 `ENGINE_IMAGE` overrides the image used for project engines. The build command
 tags the default `texfolia-latex-engine:local` image.
 
-Legacy `/compile` jobs, including template previews, use `ENGINE_URL`, which
-defaults to `http://127.0.0.1:8081`. After building the engine image, start an engine
-for these jobs in a separate terminal:
+Template previews and project builds use the shared pool. Only the standalone
+verification scripts and integration tests use `ENGINE_URL`, which defaults to
+`http://127.0.0.1:8081`. After building the engine image, start a standalone
+engine for them in a separate terminal:
 
 ```sh
 docker run --rm --name texfolia-snapshot-engine --platform linux/amd64 -p 127.0.0.1:8081:8080 texfolia-latex-engine:local
@@ -141,8 +150,8 @@ compile and report edits. Viewer collaborators have read access.
 Changed entries contain a SHA-256 hash and optional `content` (text or
 `{ "base64": "..." }`). Unchanged paths are omitted. A hash-only entry must
 already exist in the project's durable source store, or a resync is required.
-Legacy full-snapshot requests remain supported; they default to `main.tex` and
-are not used by the interactive editor.
+Full-snapshot requests remain supported; they default to `main.tex`. Template
+previews use them, and the interactive editor does not.
 
 A successful submission returns `202 Accepted` with `id`, `status`, and
 `statusUrl`, and `sourceRevision` for delta requests. To retry the
@@ -299,8 +308,9 @@ superseded error. Cancellation waits for the Go engine to stop the old TeX
 process. Late responses cannot publish a build for an older revision. The
 coordinator keeps one pending source manifest, replacing it on each submission.
 
-The legacy `/compile`, `/jobs/<id>`, and `/compilations/<id>.pdf` endpoints remain
-available for existing jobs. They retain their queue and rate limit.
+The compiler has no top-level `/compile`, `/jobs/<id>`, or `/compilations/<id>`
+endpoints. Every build, including template previews, goes through a project
+coordinator.
 
 Limits: 10 MiB of source JSON, 200 source files, a 20 MiB PDF, and 32 MiB of
 generated files per build. TeX runs have a 15-second timeout for Free and a
@@ -389,12 +399,10 @@ respectively, and process one message per batch. A queued compile gets one
 delivery and one retry, then moves to `compile-dlq`; alarms do not independently
 retry a handed-off revision. TeX input errors fail directly, without a queue retry.
 
-Compile messages contain only `{ projectId, revision }`. Revisions start at 1;
-revision 0 identifies a legacy `/compile` job by its job UUID. Source snapshots
-stay in coordinator storage or R2. Legacy jobs use a container named by their
-job UUID, rather than sharing a single container across both priority lanes.
-Their per-job coordinator coalesces concurrent redeliveries, so queue concurrency
-does not start the same legacy compile twice or let a DLQ delivery beat a running success.
+Compile messages contain only `{ projectId, revision }`. Revisions start at 1.
+Consumers log and acknowledge any other message, including revision 0 messages
+left by the retired snapshot job system. Source snapshots stay in coordinator
+storage or R2.
 A stale queue or DLQ delivery cannot change
 a newer build. The DLQ consumer logs `Compile dead-letter message` with the
 project/job UUID, revision, and failure reason, then persists a terminal failure
@@ -405,9 +413,9 @@ message only after the failure is recorded, so acknowledged messages are no
 longer in the queue.
 
 The separate `background` consumer batches up to 20 messages with concurrency 1.
-The five-minute scheduled event enqueues legacy
-job recovery on `background` rather than running a sweep itself. It does not
-wake the container pool, so an idle deployment keeps no compiler containers.
+It carries only coordinator maintenance. The compiler has no scheduled event and
+nothing wakes the container pool on a timer, so an idle deployment keeps no
+compiler containers.
 The `v2` migration adds the coordinator without replacing existing
 container identities.
 
@@ -426,8 +434,8 @@ full generated log in `logFile` when available.
 `DELETE /lease` cancels active work, waits for it to exit, removes the lease
 workdir, and clears project state. Stale lease tokens and requests for another
 project return `409`. Overlapping compiles return `503` with `Retry-After: 1`.
-Standalone engines used by legacy jobs retain their first-project binding until
-restart. The engine has no job API or persistent job data. Its image warms the
+Standalone engines used by verification scripts retain their first-project
+binding until restart. The engine has no job API or persistent job data. Its image warms the
 base LaTeX format during build and runs as uid 10001. Tectonic keeps both
 `--untrusted` and `TECTONIC_UNTRUSTED_MODE=1`. Each invocation gets a temporary
 directory inside its build workdir.

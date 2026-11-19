@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 import { createEngineClient } from "./engine";
-import type { Engine, ObjectStore } from "./jobs";
 import type { EngineTiming } from "./telemetry";
+import type { Engine, ObjectStore } from "./types";
 
 const healthSchema = z.object({
   bootId: z.string(),

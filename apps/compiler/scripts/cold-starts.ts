@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { coordinatorSnapshotSchema } from "../src/coordinator";
-import { createEngineClient } from "../src/engine";
 import { createLocalRuntime } from "../src/local";
 import { localProjectEngine } from "../src/local-containers";
 import { sourceHash } from "../src/source-sync";
@@ -48,7 +47,6 @@ async function sample(
   let prewarm: Promise<void> | undefined;
   const runtime = createLocalRuntime({
     path: join(directory, "compiler.sqlite"),
-    engine: createEngineClient((request) => fetch(request)),
     projectEngine: (id, store) => {
       const read = store.read;
       store.read = async (key) => {

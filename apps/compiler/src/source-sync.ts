@@ -1,13 +1,13 @@
 import { z } from "zod";
 
 import { decodeBase64, encodeBase64 } from "./artifacts";
-import type { ObjectStore } from "./jobs";
 import {
   artifactContentSchema,
   HttpError,
   maxProjectBytes,
   sourcePathSchema,
 } from "./project";
+import type { ObjectStore } from "./types";
 
 const sourceHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
 export const maxSourceSyncBytes = 64 * 1024 * 1024;

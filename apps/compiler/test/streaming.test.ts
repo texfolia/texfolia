@@ -6,9 +6,9 @@ import { join } from "node:path";
 
 import { coordinatorSnapshotSchema } from "../src/coordinator";
 import { createEngineClient } from "../src/engine";
-import type { Engine } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import { parseProject } from "../src/project";
+import type { Engine } from "../src/types";
 
 for (const scenario of [
   "none",
@@ -70,7 +70,6 @@ for (const scenario of [
       });
     const runtime = createLocalRuntime({
       path,
-      engine,
       projectEngine: () => engine,
     });
     const request = (suffix: string, init?: RequestInit) =>

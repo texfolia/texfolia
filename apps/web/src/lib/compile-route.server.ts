@@ -692,9 +692,7 @@ export const compileHandlers = {
       if (url.searchParams.get("artifact") === "pdf") {
         if (job.status !== "succeeded")
           return json({ error: "PDF not found" }, 404);
-        let pdf = await fetchCompiler(pdfPath);
-        if (pdf.status === 404)
-          pdf = await fetchCompiler(`/compilations/${id}.pdf`);
+        const pdf = await fetchCompiler(pdfPath);
         if (pdf.status === 404) return json({ error: "PDF not found" }, 404);
         if (!pdf.ok || pdf.headers.get("Content-Type") !== "application/pdf")
           throw new Error("Invalid compiler PDF response");
@@ -703,12 +701,9 @@ export const compileHandlers = {
         });
       }
 
-      let response = await fetchCompiler(
+      const response = await fetchCompiler(
         `/projects/${params.projectId}/jobs/${id}`,
       );
-      // Retain access to jobs submitted before project coordination shipped.
-      if (response.status === 404)
-        response = await fetchCompiler(`/jobs/${id}`);
       if (response.status === 404) {
         if (Date.now() - job.createdAt.getTime() < 30_000)
           return json({ id, status: "queued" }, 200, {
@@ -740,10 +735,7 @@ export const compileHandlers = {
           }
           return json(result, 200, { ...noStore, "Retry-After": "1" });
         case "succeeded":
-          if (
-            result.artifactUrl !== pdfPath &&
-            result.artifactUrl !== `/compilations/${id}.pdf`
-          )
+          if (result.artifactUrl !== pdfPath)
             throw new Error("Invalid compiler artifact URL");
           await finishJob(db, params.projectId, id, {
             status: "succeeded",

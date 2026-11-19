@@ -49,7 +49,6 @@ try {
   }, url);
   runtime = createLocalRuntime({
     path: join(directory, "state.sqlite"),
-    engine,
     projectEngine: () => engine,
   });
   const text = async (content: string) => ({

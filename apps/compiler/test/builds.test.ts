@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { coordinatorSnapshotSchema } from "../src/coordinator";
-import type { Engine } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import { HttpError } from "../src/project";
 import { unknownEngineTiming } from "../src/telemetry";
+import type { Engine } from "../src/types";
 
 const timing = {
   ...unknownEngineTiming,
@@ -47,7 +47,6 @@ async function createBuildFixture() {
   };
   let runtime = createLocalRuntime({
     path,
-    engine,
     projectEngine: () => engine,
   });
   const request = (suffix: string, init?: RequestInit) =>
@@ -100,7 +99,6 @@ async function createBuildFixture() {
       await runtime.close();
       runtime = createLocalRuntime({
         path,
-        engine,
         projectEngine: () => engine,
       });
     },
@@ -240,7 +238,6 @@ test("collaborator edits before and during a build mark it stale; older notifica
   };
   const runtime = createLocalRuntime({
     path: join(root, "state.sqlite"),
-    engine,
     projectEngine: () => engine,
   });
   const projectId = crypto.randomUUID();
@@ -312,7 +309,7 @@ test("publication stays atomic through a storage failure; retention removes aban
   const release = Promise.withResolvers<void>();
   let writes = 0;
   let fail = true;
-  const store: import("../src/jobs").ObjectStore = {
+  const store: import("../src/types").ObjectStore = {
     async read(key) {
       const data = objects.get(key);
       return data ? new Response(data).body : null;
@@ -424,7 +421,6 @@ test("the first failed compile exposes its full log without inventing a PDF", as
   };
   const runtime = createLocalRuntime({
     path: join(root, "state.sqlite"),
-    engine,
     projectEngine: () => engine,
   });
   const projectId = crypto.randomUUID();

@@ -50,7 +50,8 @@ prevent concurrent starter previews from exhausting a shared reservation budget.
 Publication retains the three-per-hour and ten-per-day limits. Retrying an attempt consumes
 the same snapshot's preview budget.
 
-The compiler stores a temporary PDF and PNG. After success, the web service
+Each template compiles in a temporary compiler project named by its template ID.
+The compiler stores the build and PNG there. After success, the web service
 copies the PNG into `templates/{id}/previews/{jobId}.png` and atomically records its
 key and ready state. The sources and metadata remain immutable.
 
@@ -62,13 +63,12 @@ lock with publication, seeding, and preview promotion. Account cascades,
 organization cascades, removed templates, partial uploads, and superseded preview
 objects all use this path.
 
-Compiler recovery runs every five minutes in both runtimes. It removes legacy
-objects older than 24 hours from `sources/`, `results/`, `compilations/`,
-`transcripts/`, `sent/`, `running/`, and `attempts/`. This includes results for
-removed publishers and templates, interrupted writes, and PDFs from before job
-records existed. Expired pending sources cannot start another compile.
-Project coordinator objects under `projects/` retain their separate lifecycle.
-The permanent template PNG remains available after the compiler's copy expires.
+After the web service records a ready or failed attempt, it deletes the temporary
+compiler project. A project whose latest build requested a preview also expires
+one day after its last activity, so a failed delete, an abandoned attempt, or a
+removed template still leaves nothing behind. Other compiler projects keep their
+30-day retention. The permanent template PNG remains available after the
+compiler's copy is gone.
 
 ## Seed original templates
 
@@ -125,12 +125,12 @@ DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:pu
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run packages/db/test/template-seed-cli.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/templates.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:template-lifecycle
-bun test apps/compiler/test/jobs.test.ts
+bun test apps/compiler/test/queues.test.ts
 ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts
 ```
 
 The storage suite runs real Postgres and local R2 with a compiler fixture. The
-browser suite runs the production build and the real local compiler queue with a
+browser suite runs the production build and the real local compiler coordinator with a
 fixture engine. It verifies automatic previews without cron, failure, source
 access, permissions, and reviewer retries. The final command compiles all three
 original starters through a real LaTeX container and checks the PDF and PNG.

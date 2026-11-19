@@ -1,7 +1,7 @@
-import type { Engine, ObjectStore } from "./jobs";
 import { poolLeaseMs, type PoolClaim } from "./pool";
 import { createProjectEngineClient } from "./project-engine";
 import { emitCompileEvent } from "./telemetry";
+import type { Engine, ObjectStore } from "./types";
 
 export function createPooledEngine(options: {
   projectId: string;

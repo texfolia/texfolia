@@ -41,7 +41,7 @@ The [coordinator API](../apps/compiler/src/coordinator-api.ts) accepts either a
 snapshot or a source delta. [ProjectCoordinatorCore](../apps/compiler/src/coordinator.ts)
 persists the build, serializes revisions, cancels superseded work, and recovers
 pending attempts after a restart. Neither the saved build nor the `Engine`
-context in [jobs.ts](../apps/compiler/src/jobs.ts) identifies a selected engine.
+context in [types.ts](../apps/compiler/src/types.ts) identifies a selected engine.
 The source schemas in [project.ts](../apps/compiler/src/project.ts) and
 [source-sync.ts](../apps/compiler/src/source-sync.ts) also have no engine field.
 Adding an unchecked field to a source body would not carry a selection through
@@ -80,8 +80,7 @@ The [Worker](../apps/compiler/worker.ts) uses `POOL.getByName("global")` and one
 maps `TectonicContainer` to the Dockerfile, with `basic` instances and a cap of 20.
 The [local pool](../apps/compiler/src/local-containers.ts) also uses one image,
 configured through `ENGINE_IMAGE` in [index.ts](../apps/compiler/src/index.ts).
-Legacy snapshot jobs, including template previews, use a separate engine client
-and local `ENGINE_URL`.
+Template previews are project builds and use the same pool and image.
 
 ## Proposed engine contract
 
@@ -167,9 +166,8 @@ must never take that fallback. Record the chosen default for new requests in the
 selection decision. If selection becomes a project setting, also define its
 membership checks, copy and import behavior, and how changes mark output stale.
 
-Route legacy snapshot and template-preview jobs through the same target contract.
-They continue using the legacy Tectonic default until their selection policy is
-decided. No extra picker or database column is implied by this backend contract.
+Template-preview builds follow the same target contract. They use the
+Tectonic default until their selection policy is decided. No extra picker or database column is implied by this backend contract.
 
 ## Proposed cache isolation and migration
 
@@ -230,7 +228,7 @@ separately. Never fill actual timing from the requested target merely because it
 was requested. Reject a response whose actual target differs from the saved
 target, and publish neither its artifacts nor its cache.
 
-Carry these fields through successful and failed job results, legacy jobs, and
+Carry these fields through successful and failed job results and
 browser preview reports. Emit selected image and target on pool claims to
 diagnose routing failures. If one process serves several modes, track warmness
 per mode. Extend [compile telemetry documentation](compile-telemetry.md) so
@@ -263,7 +261,7 @@ For Cloudflare, this requires image bindings, container configuration, and any
 additive Durable Object class migration for the new image. Preserve the existing
 `TectonicContainer` identity during that migration. For local development, replace
 the single `ENGINE_IMAGE` assumption with explicit image mappings and build
-commands, and cover the legacy `ENGINE_URL` path too. Regenerate binding types
+commands, and cover the standalone `ENGINE_URL` verification path too. Regenerate binding types
 after the configuration changes.
 
 Keep the current `basic` instance size. Do not multiply the current 20-instance
@@ -287,14 +285,14 @@ Each stage needs the preceding decisions or contracts before it starts. Backend
 work can land with Tectonic as the only enabled target. Additional engines remain
 unavailable to callers until their images and verification are ready.
 
-| Stage                              | Reviewable change                                                                                                                                                                        | Required evidence                                                                                                                                                                                              |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Record decisions                | Resolve the engine set, selection scope, UI, and image budget in NAT-316. Confirm this plan's proposed contracts.                                                                        | A supported-engine list, defaults, selection rules, package coverage, and an image decision with measurements.                                                                                                 |
-| 2. Carry target identity           | Add the registry and protocol fixtures. Persist targets, update request identities, and propagate them through coordinator, transport, legacy jobs, and Go. Extract the Tectonic driver. | Existing Tectonic behavior passes. Unknown targets fail before allocation. Different-engine retries conflict. Saved targets survive recovery and source resync.                                                |
-| 3. Isolate caches                  | Add versioned, tagged cache archives, per-identity state, immutable publication, and cold migration.                                                                                     | Tests prove isolation between modes, toolchain versions, main files, and projects. Clean retry, failed publication, and cancellation preserve the correct references.                                          |
-| 4. Add approved engines and images | Implement the approved drivers, image recipes, health capabilities, and local and Worker routing.                                                                                        | Real-image compiles produce valid PDFs, logs, auxiliaries, SyncTeX, and opt-in previews. Timeouts reap helper processes. Every pool lifecycle path uses the intended image.                                    |
-| 5. Expose selection                | Implement the agreed persistence and UI, including defaults, unsupported selections, and project access checks.                                                                          | A user can select each supported mode and compile. Selection survives exactly the scope agreed in stage 1. Existing projects keep their migration default.                                                     |
-| 6. Roll out and document           | Deploy matching images and Worker protocol, drain incompatible inventory, then enable the approved choices. Update compiler setup, API, cache, pool, telemetry, and user docs.           | Deployed attempts report actual modes, separate caches, and correct images under existing instance limits. Disable new selection during rollback. Never substitute Tectonic for an unavailable requested mode. |
+| Stage                              | Reviewable change                                                                                                                                                              | Required evidence                                                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Record decisions                | Resolve the engine set, selection scope, UI, and image budget in NAT-316. Confirm this plan's proposed contracts.                                                              | A supported-engine list, defaults, selection rules, package coverage, and an image decision with measurements.                                                                                                 |
+| 2. Carry target identity           | Add the registry and protocol fixtures. Persist targets, update request identities, and propagate them through coordinator, transport, and Go. Extract the Tectonic driver.    | Existing Tectonic behavior passes. Unknown targets fail before allocation. Different-engine retries conflict. Saved targets survive recovery and source resync.                                                |
+| 3. Isolate caches                  | Add versioned, tagged cache archives, per-identity state, immutable publication, and cold migration.                                                                           | Tests prove isolation between modes, toolchain versions, main files, and projects. Clean retry, failed publication, and cancellation preserve the correct references.                                          |
+| 4. Add approved engines and images | Implement the approved drivers, image recipes, health capabilities, and local and Worker routing.                                                                              | Real-image compiles produce valid PDFs, logs, auxiliaries, SyncTeX, and opt-in previews. Timeouts reap helper processes. Every pool lifecycle path uses the intended image.                                    |
+| 5. Expose selection                | Implement the agreed persistence and UI, including defaults, unsupported selections, and project access checks.                                                                | A user can select each supported mode and compile. Selection survives exactly the scope agreed in stage 1. Existing projects keep their migration default.                                                     |
+| 6. Roll out and document           | Deploy matching images and Worker protocol, drain incompatible inventory, then enable the approved choices. Update compiler setup, API, cache, pool, telemetry, and user docs. | Deployed attempts report actual modes, separate caches, and correct images under existing instance limits. Disable new selection during rollback. Never substitute Tectonic for an unavailable requested mode. |
 
 Extend the existing suites rather than testing only registry lookups:
 

@@ -19,10 +19,10 @@ import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { z } from "zod";
 
-import type { Engine } from "../../compiler/src/jobs";
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import { unknownEngineTiming } from "../../compiler/src/telemetry";
+import type { Engine } from "../../compiler/src/types";
 import { buildSnapshotSchema } from "../src/lib/build";
 import {
   compileHistoryLimit,
@@ -86,7 +86,6 @@ const engine: Engine = async (project, context) => {
 };
 const compiler = createLocalRuntime({
   path: join(directory, "compiler.sqlite"),
-  engine,
   projectEngine: () => engine,
 });
 let loseResponse = false;

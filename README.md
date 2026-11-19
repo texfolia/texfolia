@@ -94,8 +94,8 @@ Run these in separate terminals when you need both apps. `dev:web` starts
 Postgres and the web app. `dev:compiler` builds the engine image and starts only
 the compiler API at `http://localhost:8080`. The equivalent Turbo filters are
 `bunx turbo run dev --filter=web` and `bunx turbo run dev --filter=compiler`.
-For template previews and other legacy snapshot jobs, follow the
-[compiler's local engine setup](apps/compiler/README.md#run-locally).
+Template previews run as project builds on the same compiler. See the
+[compiler guide](apps/compiler/README.md#template-previews).
 
 Cloudflare simulates the email binding locally and logs the file containing
 each sign-in code or invitation. You can also inspect sent messages in
@@ -191,7 +191,7 @@ container assignment from PoolManager. Each assigned container serves only that
 project. Locally, Bun runs the same coordinator logic with SQLite and creates
 dedicated Docker containers. Both runtimes use the
 same Go engine image. R2 stores production artifacts; SQLite stores them locally.
-Queues handle infrastructure retries, legacy jobs, and background maintenance.
+Queues handle infrastructure retries and background maintenance.
 See the [compiler guide](apps/compiler/README.md) for the shared contract test.
 
 ## Repository layout

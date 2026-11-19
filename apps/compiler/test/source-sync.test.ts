@@ -8,13 +8,13 @@ import { z } from "zod";
 
 import { coordinatorSnapshotSchema } from "../src/coordinator";
 import { createEngineClient } from "../src/engine";
-import type { Engine } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import {
   sourceDeltaSchema,
   sourceHash,
   type SourceDelta,
 } from "../src/source-sync";
+import type { Engine } from "../src/types";
 
 const text = async (content: string) => ({
   hash: await sourceHash(new TextEncoder().encode(content)),
@@ -85,7 +85,7 @@ test("delta submissions persist only changed objects, compose debounced edits, a
         return context.readSource(file);
       },
     });
-  const options = { path, engine, projectEngine: () => measuredEngine };
+  const options = { path, projectEngine: () => measuredEngine };
   let runtime = createLocalRuntime(options);
   const submit = (delta: SourceDelta, id = crypto.randomUUID()) =>
     runtime.fetch(
@@ -324,7 +324,6 @@ test("the total source quota applies across deltas without persisting rejected c
   const engine = createEngineClient(async () => result(1));
   const runtime = createLocalRuntime({
     path,
-    engine,
     projectEngine: () => engine,
   });
   const submit = (delta: SourceDelta) =>

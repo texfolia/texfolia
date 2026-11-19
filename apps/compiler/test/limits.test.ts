@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 
-import type { Engine } from "../src/jobs";
 import {
   CompileUsageCore,
   compilePolicy,
@@ -11,6 +10,7 @@ import {
 import type { CompileUsage } from "../src/limits";
 import { HttpError } from "../src/project";
 import { unknownEngineTiming } from "../src/telemetry";
+import type { Engine } from "../src/types";
 
 function fixture() {
   const db = new Database(":memory:");

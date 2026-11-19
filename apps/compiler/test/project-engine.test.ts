@@ -3,10 +3,10 @@ import { expect, test } from "bun:test";
 import { z } from "zod";
 
 import { ProjectCoordinatorCore } from "../src/coordinator";
-import type { ObjectStore } from "../src/jobs";
 import { createProjectEngineClient } from "../src/project-engine";
 import { sourceHash, type SyncedProject } from "../src/source-sync";
 import { unknownEngineTiming } from "../src/telemetry";
+import type { ObjectStore } from "../src/types";
 
 function fixture() {
   const projectId = crypto.randomUUID();

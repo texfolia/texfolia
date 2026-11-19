@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
-import type { Engine, ObjectStore } from "../src/jobs";
 import { PoolCore, type PoolClaim } from "../src/pool";
 import { createPooledEngine } from "../src/pooled-engine";
+import type { Engine, ObjectStore } from "../src/types";
 
 function fixture() {
   const claims = new Map<string, PoolClaim>();

@@ -4,11 +4,11 @@ import { dirname } from "node:path";
 
 import { z } from "zod";
 
-import type { Engine, ObjectStore } from "./jobs";
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./pool";
 import { createPooledEngine } from "./pooled-engine";
 import { jobIdSchema } from "./project";
 import { createProjectEngineClient } from "./project-engine";
+import type { Engine, ObjectStore } from "./types";
 
 const inspection = z.object({
   State: z.object({ Running: z.boolean() }),

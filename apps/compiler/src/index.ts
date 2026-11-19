@@ -1,5 +1,4 @@
 import { assertLocalEnvironment } from "../../../scripts/local-environment.mts";
-import { createEngineClient } from "./engine";
 import { createLocalRuntime } from "./local";
 import { createLocalContainerPool } from "./local-containers";
 import { maxSourceSyncBytes } from "./source-sync";
@@ -15,10 +14,6 @@ const pool = createLocalContainerPool({
 });
 const runtime = createLocalRuntime({
   path,
-  engine: createEngineClient(
-    (request) => fetch(request),
-    process.env.ENGINE_URL ?? "http://127.0.0.1:8081",
-  ),
   projectEngine: pool.projectEngine,
 });
 

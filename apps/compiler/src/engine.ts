@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import type { Engine } from "./jobs";
 import { compilePolicy } from "./limits";
 import { firstPdfPart } from "./pdf-stream";
 import {
@@ -16,6 +15,7 @@ import {
   emitCompileEvent,
 } from "./telemetry";
 import type { EngineTiming } from "./telemetry";
+import type { Engine } from "./types";
 
 const failure = z.object({
   error: z.string(),

@@ -88,7 +88,8 @@
       "simple": { "limit": 2, "period": 10 },
     },
   ],
-  "triggers": { "crons": ["*/5 * * * *"] },
+  // Explicitly empty so deploys remove the retired legacy recovery cron.
+  "triggers": { "crons": [] },
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 },

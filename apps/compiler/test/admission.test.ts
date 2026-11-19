@@ -48,7 +48,7 @@ async function completed(
   throw new Error("Compilation did not complete");
 }
 
-test("Free rate limits follow user IDs across projects and legacy submissions; paid users bypass them", async () => {
+test("Free rate limits follow user IDs across projects; paid users bypass them", async () => {
   const root = await mkdtemp(join(tmpdir(), "compile-admission-"));
   const engine = async () => ({
     ...output,
@@ -56,14 +56,14 @@ test("Free rate limits follow user IDs across projects and legacy submissions; p
   });
   const runtime = createLocalRuntime({
     path: join(root, "state.sqlite"),
-    engine,
     projectEngine: () => engine,
   });
   try {
     const a = `/projects/${crypto.randomUUID()}/compile`,
-      b = `/projects/${crypto.randomUUID()}/compile`;
+      b = `/projects/${crypto.randomUUID()}/compile`,
+      c = `/projects/${crypto.randomUUID()}/compile`;
     expect((await runtime.fetch(submit(a, "alice"))).status).toBe(202);
-    expect((await runtime.fetch(submit("/compile", "alice"))).status).toBe(202);
+    expect((await runtime.fetch(submit(c, "alice"))).status).toBe(202);
     const denied = await runtime.fetch(submit(b, "alice"));
     expect(denied.status).toBe(429);
     expect(denied.headers.get("Retry-After")).toBe("10");
@@ -81,15 +81,16 @@ test("Free rate limits follow user IDs across projects and legacy submissions; p
   }
 });
 
-test("fair use is shared across project and queue paths, logged, and survives runtime restart", async () => {
+test("fair use is shared across projects, logged, and survives runtime restart", async () => {
   const root = await mkdtemp(join(tmpdir(), "compile-fair-use-"));
   const path = join(root, "state.sqlite");
   const engine = async () => output;
-  const options = { path, engine, projectEngine: () => engine };
+  const options = { path, projectEngine: () => engine };
   let runtime = createLocalRuntime(options);
   const log = spyOn(console, "info");
   try {
     const project = `/projects/${crypto.randomUUID()}`,
+      other = `/projects/${crypto.randomUUID()}`,
       first = crypto.randomUUID(),
       second = crypto.randomUUID();
     expect(
@@ -98,9 +99,10 @@ test("fair use is shared across project and queue paths, logged, and survives ru
     ).toBe(202);
     await completed(runtime, `${project}/jobs/${first}`);
     expect(
-      (await runtime.fetch(submit("/compile", "alice", "pro", second))).status,
+      (await runtime.fetch(submit(`${other}/compile`, "alice", "pro", second)))
+        .status,
     ).toBe(202);
-    await completed(runtime, `/jobs/${second}`);
+    await completed(runtime, `${other}/jobs/${second}`);
     await runtime.close();
     runtime = createLocalRuntime(options);
     const denied = await runtime.fetch(
