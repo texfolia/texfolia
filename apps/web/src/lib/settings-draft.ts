@@ -29,6 +29,10 @@ export function rebaseUserDraft(
           ? current.compile.afterIdle
           : draft.compile.afterIdle,
     },
+    spelling:
+      JSON.stringify(draft.spelling) === JSON.stringify(previous.spelling)
+        ? current.spelling
+        : draft.spelling,
     shortcuts: Object.fromEntries(
       shortcutIds.map((action) => [
         action,

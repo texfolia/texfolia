@@ -1,4 +1,10 @@
-import { IconCode, IconKeyboard, IconPalette } from "@tabler/icons-react";
+import {
+  IconCode,
+  IconKeyboard,
+  IconPalette,
+  IconTextSpellcheck,
+  IconX,
+} from "@tabler/icons-react";
 import { useId, useState } from "react";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
@@ -33,7 +39,12 @@ import {
   NativeSelectOption,
 } from "#/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
-import { autoCompileDelays } from "#/lib/settings.schema";
+import {
+  addPersonalWord,
+  autoCompileDelays,
+  maxPersonalWords,
+  personalWord,
+} from "#/lib/settings.schema";
 import {
   defaultShortcuts,
   eventChord,
@@ -44,6 +55,11 @@ import {
   type ShortcutAction,
 } from "#/lib/shortcuts";
 import {
+  spellingDictionaries,
+  spellingLanguages,
+  spellingLanguageSchema,
+} from "#/lib/spelling/languages";
+import {
   type SettingsSection,
   useSettings,
 } from "#/providers/settings-provider";
@@ -51,6 +67,7 @@ import {
 const sections = [
   { title: "Appearance", icon: IconPalette },
   { title: "Editor", icon: IconCode },
+  { title: "Spelling", icon: IconTextSpellcheck },
   { title: "Keyboard shortcuts", icon: IconKeyboard },
 ] satisfies { title: SettingsSection; icon: typeof IconCode }[];
 
@@ -111,6 +128,7 @@ export function SettingsDialog() {
                       </fieldset>
                     </ItemContent>
                   </Item>
+                  <ProjectSpellingFields />
                 </div>
               </TabsContent>
             </Tabs>
@@ -158,6 +176,11 @@ export function UserSettingsSections() {
         {section === "Editor" && (
           <fieldset disabled={!userReady}>
             <EditorSettingsFields />
+          </fieldset>
+        )}
+        {section === "Spelling" && (
+          <fieldset disabled={!userReady}>
+            <PersonalDictionaryFields />
           </fieldset>
         )}
         {section === "Keyboard shortcuts" && (
@@ -268,6 +291,141 @@ function EditorSettingsFields() {
           plan’s usage limits, and pause if a limit is reached until you compile
           manually.
         </p>
+      </ItemContent>
+    </Item>
+  );
+}
+
+function ProjectSpellingFields() {
+  const settings = useSettings();
+  const id = useId();
+  if (!settings.draftSpelling) return null;
+  return (
+    <Item variant="outline" className="mt-4 items-start">
+      <ItemContent>
+        <ItemTitle>Spelling</ItemTitle>
+        <ItemDescription>
+          Checks prose in LaTeX files, skipping commands, math, comments and
+          label, reference and citation keys. Shared by everyone in this
+          project.
+        </ItemDescription>
+        <fieldset disabled={!settings.project?.canWrite} className="mt-5">
+          <Field>
+            <FieldLabel htmlFor={`${id}-language`}>
+              Spell-check language
+            </FieldLabel>
+            <NativeSelect
+              id={`${id}-language`}
+              value={settings.draftSpelling}
+              onChange={(event) => {
+                const language = spellingLanguageSchema.safeParse(
+                  event.target.value,
+                );
+                if (language.success) settings.setDraftSpelling(language.data);
+              }}
+            >
+              {spellingLanguages.map((language) => (
+                <NativeSelectOption key={language} value={language}>
+                  {language === "off"
+                    ? "Off"
+                    : spellingDictionaries[language].label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+        </fieldset>
+      </ItemContent>
+    </Item>
+  );
+}
+
+function PersonalDictionaryFields() {
+  const { draft, setDraft } = useSettings();
+  const id = useId();
+  const [word, setWord] = useState("");
+  const words = draft.spelling.words;
+  const next = personalWord(word);
+  const full = words.length >= maxPersonalWords;
+  const setWords = (words: string[]) =>
+    setDraft({ ...draft, spelling: { words } });
+  return (
+    <Item variant="outline">
+      <ItemContent className="gap-5">
+        <div>
+          <ItemTitle>Personal dictionary</ItemTitle>
+          <ItemDescription>
+            Words here are never flagged in any project or language. They are
+            stored in this browser. Lowercase words also match capitalized
+            forms. Add to dictionary in the editor saves immediately.
+          </ItemDescription>
+        </div>
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!next || full) return;
+            setWords(addPersonalWord(words, next));
+            setWord("");
+          }}
+        >
+          <Field className="flex-1">
+            <FieldLabel htmlFor={`${id}-word`} className="sr-only">
+              Word
+            </FieldLabel>
+            <Input
+              id={`${id}-word`}
+              value={word}
+              placeholder="Add a word"
+              maxLength={64}
+              aria-invalid={!!word.trim() && !next}
+              onChange={(event) => setWord(event.target.value)}
+            />
+          </Field>
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={!next || full || words.includes(next)}
+          >
+            Add
+          </Button>
+        </form>
+        {word.trim() && !next && (
+          <p role="alert" className="text-destructive text-xs">
+            Enter one word of up to 64 characters, without spaces or LaTeX.
+          </p>
+        )}
+        {full && (
+          <p className="text-muted-foreground text-xs">
+            Your dictionary holds the maximum of {maxPersonalWords} words.
+          </p>
+        )}
+        {words.length ? (
+          <ul
+            aria-label="Personal dictionary words"
+            className="flex flex-wrap gap-2"
+          >
+            {words.map((entry) => (
+              <li
+                key={entry}
+                className="bg-muted flex items-center gap-1 rounded-sm py-0.5 pr-0.5 pl-2 text-sm"
+              >
+                {entry}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Remove ${entry}`}
+                  onClick={() =>
+                    setWords(words.filter((existing) => existing !== entry))
+                  }
+                >
+                  <IconX />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground text-sm">No words yet.</p>
+        )}
       </ItemContent>
     </Item>
   );

@@ -2,6 +2,10 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { getProject } from "#/lib/project.functions";
 import {
+  defaultSpellingLanguage,
+  spellingLanguageSchema,
+} from "#/lib/spelling/languages";
+import {
   createProjectFilesStore,
   ProjectFilesProvider,
 } from "#/providers/project-files-provider";
@@ -70,6 +74,9 @@ function ThemedWorkspace() {
             wrap: project.formatWrap,
             width: project.formatWidth,
           },
+          spelling: spellingLanguageSchema
+            .catch(defaultSpellingLanguage)
+            .parse(project.spellcheckLanguage),
         }}
       >
         <WorkspacePage />

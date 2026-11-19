@@ -11,7 +11,10 @@ import {
 } from "react";
 
 import { type FormatSettings } from "#/lib/latex/format";
-import { updateProjectFormatting } from "#/lib/project.functions";
+import {
+  updateProjectFormatting,
+  updateProjectSpelling,
+} from "#/lib/project.functions";
 import { rebaseUserDraft, rebaseFormattingDraft } from "#/lib/settings-draft";
 import { createBrowserSettingsStore } from "#/lib/settings.functions";
 import {
@@ -20,16 +23,22 @@ import {
   type Settings,
 } from "#/lib/settings.schema";
 import { shortcutConflicts } from "#/lib/shortcuts";
+import type { SpellingLanguage } from "#/lib/spelling/languages";
 import {
   ShortcutsProvider,
   useAppShortcut,
 } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";
-export type SettingsSection = "Appearance" | "Editor" | "Keyboard shortcuts";
+export type SettingsSection =
+  | "Appearance"
+  | "Editor"
+  | "Spelling"
+  | "Keyboard shortcuts";
 type SettingsProject = {
   id: string;
   canWrite: boolean;
   formatting: FormatSettings;
+  spelling: SpellingLanguage;
 };
 
 function useSettingsState(userId: string, project?: SettingsProject) {
@@ -51,6 +60,8 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     project?.formatting,
   );
   const [draftFormatting, setDraftFormatting] = useState(project?.formatting);
+  const [committedSpelling, setCommittedSpelling] = useState(project?.spelling);
+  const [draftSpelling, setDraftSpelling] = useState(project?.spelling);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpenState] = useState(false);
   const [closeGuard, setCloseGuard] = useState(false);
@@ -62,11 +73,13 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     draft !== null && JSON.stringify(draft) !== JSON.stringify(preferences);
   const projectDirty =
     JSON.stringify(draftFormatting) !== JSON.stringify(committedFormatting);
-  const dirty = userDirty || projectDirty || theme.dirty;
+  const spellingDirty = draftSpelling !== committedSpelling;
+  const dirty = userDirty || projectDirty || spellingDirty || theme.dirty;
   function begin() {
     if (open) return;
     setDraft(preferences);
     setDraftFormatting(committedFormatting);
+    setDraftSpelling(committedSpelling);
     theme.beginDraft();
     setError(null);
     setOpenState(true);
@@ -76,6 +89,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     theme.discardDraft();
     setDraft(null);
     setDraftFormatting(committedFormatting);
+    setDraftSpelling(committedSpelling);
     setCloseGuard(false);
     setOpenState(false);
   }
@@ -110,6 +124,24 @@ function useSettingsState(userId: string, project?: SettingsProject) {
           } catch (cause) {
             failures.push(
               `Project formatting: ${cause instanceof Error ? cause.message : "could not be saved. Try Apply again."}`,
+            );
+          }
+        }
+      }
+      if (spellingDirty && project && draftSpelling) {
+        if (!project.canWrite)
+          failures.push(
+            "Project spelling: you have view access. Ask a project editor to save these changes.",
+          );
+        else {
+          try {
+            const next = await updateProjectSpelling({
+              data: { projectId: project.id, language: draftSpelling },
+            });
+            setCommittedSpelling(next);
+          } catch (cause) {
+            failures.push(
+              `Project spelling: ${cause instanceof Error ? cause.message : "could not be saved. Try Apply again."}`,
             );
           }
         }
@@ -169,6 +201,14 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     project?.formatting.wrap,
     project?.formatting.width,
   ]);
+  useEffect(() => {
+    const next = project?.spelling;
+    if (!next) return;
+    setDraftSpelling((current) =>
+      current && current !== committedSpelling ? current : next,
+    );
+    setCommittedSpelling(next);
+  }, [project?.id, project?.spelling]);
 
   useEffect(() => {
     let active = true;
@@ -193,6 +233,20 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       void store.preferences.cleanup({ dependents: true });
     };
   }, [store]);
+  async function addWord(word: string) {
+    if (!userReady) {
+      setError("Browser preferences could not be loaded. Reload to try again.");
+      return;
+    }
+    setError(null);
+    try {
+      await store.addWord(word);
+    } catch {
+      setError(
+        "The word could not be added to your dictionary. Check browser storage and try again.",
+      );
+    }
+  }
   async function updateEditor(editor: Settings["editor"]) {
     if (!userReady) {
       setError("Browser preferences could not be loaded. Reload to try again.");
@@ -211,6 +265,8 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     editor: preferences.editor,
     compile: preferences.compile,
     shortcuts: preferences.shortcuts,
+    spelling: preferences.spelling,
+    addWord,
     updateEditor,
     draft: draft ?? preferences,
     setDraft,
@@ -219,6 +275,11 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     draftFormatting,
     setDraftFormatting: (next: FormatSettings) => {
       if (project?.canWrite) setDraftFormatting(next);
+    },
+    spellingLanguage: committedSpelling,
+    draftSpelling,
+    setDraftSpelling: (next: SpellingLanguage) => {
+      if (project?.canWrite) setDraftSpelling(next);
     },
     dirty,
     error: error ?? userLoadError ?? store.warning,

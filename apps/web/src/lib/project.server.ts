@@ -23,6 +23,7 @@ import type {
   renameProjectSchema,
   projectTagsSchema,
   updateProjectFormattingSchema,
+  updateProjectSpellingSchema,
 } from "./project.schema";
 
 type ProjectOwner = { db: Db; ownerId: string };
@@ -48,6 +49,26 @@ export async function updateProjectFormatting({
       })
       .where(eq(project.id, data.projectId));
     return data.formatting;
+  });
+}
+
+export async function updateProjectSpelling({
+  db,
+  ownerId,
+  data,
+}: ProjectOwner & { data: z.infer<typeof updateProjectSpellingSchema> }) {
+  return db.transaction(async (tx) => {
+    await lockProject({
+      tx,
+      projectId: data.projectId,
+      userId: ownerId,
+      access: "write",
+    });
+    await tx
+      .update(project)
+      .set({ spellcheckLanguage: data.language })
+      .where(eq(project.id, data.projectId));
+    return data.language;
   });
 }
 

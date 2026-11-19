@@ -38,6 +38,7 @@ const route = createRootRoute({
             wrap: project.formatWrap,
             width: project.formatWidth,
           },
+          spelling: "off",
         }}
       >
         <ProjectFilesProvider store={files}>

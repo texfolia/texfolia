@@ -8,7 +8,7 @@ and preserves the selected plan and organization.
 ## User preferences
 
 The dialog's User tab and the Preferences page share the Appearance, Editor,
-and Keyboard shortcuts sections. Appearance previews across the app. Font size,
+Spelling, and Keyboard shortcuts sections. Appearance previews across the app. Font size,
 line wrapping, compile on save, and shortcut changes take effect after saving.
 
 Compile after saving is on by default. With it on, Save and Mod+S save sources
@@ -23,8 +23,8 @@ Apply in that prompt saves changes and keeps Settings open. Discard leaves
 without saving. Keep editing returns to the draft. Browser reloads and tab
 closure use the browser's unsaved-changes prompt on Preferences.
 
-Appearance uses `texfolia.appearance.v2:<userId>`. Editor and compile preferences
-and the shortcut map use `texfolia.settings.v2:<userId>`. These are browser-local values,
+Appearance uses `texfolia.appearance.v2:<userId>`. Editor and compile preferences,
+the personal dictionary, and the shortcut map use `texfolia.settings.v2:<userId>`. These are browser-local values,
 with no account sync. The old browser editor preference migrates on first use.
 The editor toolbar's Wrap lines control and the PDF viewer's match-theme control
 continue to save immediately.
@@ -42,8 +42,9 @@ and editor collaborators can save. Viewers can read the settings. The project
 loader returns the committed formatting, which the editor uses for indentation
 and Format document. Collaborators see changes when they reload the project.
 
-Apply tries each changed storage owner in order: project formatting, browser
-editor preferences and shortcuts, then appearance. A failed write does not block
+Apply tries each changed storage owner in order: project formatting, project
+spelling, browser editor preferences, personal dictionary and shortcuts, then
+appearance. A failed write does not block
 the others. Successful writes remain committed, errors name the failed owner,
 and the remaining draft can be retried. A failed Save never closes the form.
 Browser preference load failures disable only the editor and shortcut fields.
@@ -53,6 +54,19 @@ When committed preferences or project formatting change outside Settings,
 untouched draft fields follow the new values. Fields edited in the draft keep
 their values. An immediate toolbar Wrap change cannot erase an unapplied font
 size edit.
+
+## Spelling
+
+The Project tab's Spelling field sets the project's spell-check language. The
+`project` table stores it in `spellcheck_language`, which defaults to `en-US`;
+`off` turns checking off. `updateProjectSpelling` uses the same write-access
+check as `updateProjectFormatting`, and Apply saves it as its own storage owner
+after project formatting.
+
+The User tab's Spelling section edits the personal dictionary, stored as
+`spelling.words` in `texfolia.settings.v2:<userId>`. Changes there take effect
+on Apply or Save. The editor's **Add to dictionary** saves immediately. See
+[Spelling](editor-workspace.md#spelling).
 
 ## Keyboard shortcuts
 
