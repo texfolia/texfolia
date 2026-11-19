@@ -2,6 +2,7 @@ import {
   type RefObject,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -18,6 +19,20 @@ import type { ProjectNode } from "#/lib/project.functions";
 import { InvalidSourcePathError } from "#/lib/source-path.schema";
 
 import { useSharedPdf } from "./use-shared-pdf";
+
+/**
+ * Identifies the tree's ids, names, parents and kinds, so edits that leave
+ * them alone (such as new source versions) don't count as structure changes.
+ */
+function structureKey(nodes: readonly ProjectNode[]) {
+  return nodes
+    .map(
+      ({ id, name, parentId, kind }) =>
+        `${id}\u0000${name}\u0000${parentId ?? ""}\u0000${kind}`,
+    )
+    .sort()
+    .join("\u0001");
+}
 
 export type CompileStatus =
   | "Compiling…"
@@ -157,11 +172,8 @@ export function useCompilation({
     };
   }, [projectId]);
 
-  const structure = JSON.stringify(
-    nodes
-      .map(({ id, name, parentId, kind }) => ({ id, name, parentId, kind }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  );
+  // A cheap key for the file tree's shape, recomputed only when nodes change.
+  const structure = useMemo(() => structureKey(nodes), [nodes]);
   const previousStructure = useRef(structure);
   const structureChanged = useEffectEvent(() => {
     setSourceChanged(true);

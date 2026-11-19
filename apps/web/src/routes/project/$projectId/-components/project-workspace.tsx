@@ -95,10 +95,15 @@ export function ProjectWorkspace({
 
   const paths = useMemo(() => projectPaths(nodes), [nodes]);
   const filenames = useMemo(() => [...paths.values()], [paths]);
-  const main =
-    filenames.find((path) => path === "main.tex") ??
-    filenames.find((path) => path.endsWith(".tex"));
-  const mainId = [...paths].find(([, path]) => path === main)?.[0];
+  const { main, mainId } = useMemo(() => {
+    let main: string | undefined;
+    let mainId: string | undefined;
+    for (const [id, path] of paths) {
+      if (path === "main.tex") return { main: path, mainId: id };
+      if (!main && path.endsWith(".tex")) [main, mainId] = [path, id];
+    }
+    return { main, mainId };
+  }, [paths]);
   const { result, update, revision } = useLatexAnalysis(filenames, main);
   const readAnalysis = useEffectEvent(() => result.analysis);
   const completion = useMemo(
