@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 
 import { encodeBase64 } from "../src/artifacts";
 import { createEngineClient } from "../src/engine";
-import type { Engine } from "../src/jobs";
 import type { Project } from "../src/project";
+import type { Engine } from "../src/types";
 
 const engine = createEngineClient(
   (request) => fetch(request),

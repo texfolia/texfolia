@@ -2,10 +2,8 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { type ApiBindings, createApp } from "./api";
 import { ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
-import { createJobs, type Engine, type ObjectStore } from "./jobs";
 import {
   CompileUsageCore,
   checkCompileAdmission,
@@ -13,15 +11,11 @@ import {
   type CompileUsage,
 } from "./limits";
 import { jobIdSchema } from "./project";
-import {
-  compileQueue,
-  createLegacyConsumer,
-  processQueueMessage,
-} from "./queues";
+import { compileQueue, processQueueMessage } from "./queues";
+import type { Engine, ObjectStore } from "./types";
 
 export function createLocalRuntime(options: {
   path: string;
-  engine: Engine;
   projectEngine: (projectId: string, store: ObjectStore) => Engine;
 }) {
   mkdirSync(dirname(options.path), { recursive: true });
@@ -29,9 +23,6 @@ export function createLocalRuntime(options: {
   db.exec(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS objects (key TEXT PRIMARY KEY, body BLOB NOT NULL, metadata TEXT);
-    CREATE TABLE IF NOT EXISTS queue (
-      id TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS compile_usage (userId TEXT PRIMARY KEY, state TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS coordinators (projectId TEXT PRIMARY KEY, state TEXT NOT NULL, alarm INTEGER);
     CREATE TABLE IF NOT EXISTS deliveries (
@@ -118,20 +109,6 @@ export function createLocalRuntime(options: {
       0,
     );
   };
-  for (const row of db
-    .query<{ id: string; attempts: number; due: number }, []>(
-      "SELECT * FROM queue",
-    )
-    .all()) {
-    enqueue.run(
-      row.id,
-      "compile-free",
-      JSON.stringify({ projectId: row.id, revision: 0 }),
-      row.due,
-      Math.min(row.attempts, 1),
-    );
-    db.query("DELETE FROM queue WHERE id = ?").run(row.id);
-  }
   const next = db.query<
     { id: string; body: string; attempts: number },
     [string, number, number]
@@ -178,35 +155,11 @@ export function createLocalRuntime(options: {
       return { success: ++window.count <= 2 };
     },
   };
-  let anonymousCount = 0;
-  let anonymousResetsAt = 0;
-  const admit = async (request: Request) => {
-    if (request.headers.has("X-Compile-User"))
-      return checkCompileAdmission(request, limiter, usageFor);
-    // Local scripts predate authenticated compilation. Production always requires identity.
-    if (new URL(request.url).pathname !== "/compile") return null;
-    if (Date.now() >= anonymousResetsAt) {
-      anonymousCount = 0;
-      anonymousResetsAt = Date.now() + 60_000;
-    }
-    return ++anonymousCount <= 10
-      ? null
-      : Response.json(
-          { error: "Too many compile requests" },
-          { status: 429, headers: { "Retry-After": "60" } },
-        );
-  };
-  const jobs = createJobs({
-    store,
-    engine: withCompileUsage(options.engine, usageFor),
-    queue: {
-      async send({ id }, plan) {
-        await send(compileQueue(plan), { projectId: id, revision: 0 });
-      },
-    },
-  });
-  const app = createApp();
-  const legacy = createLegacyConsumer(jobs);
+  // Local scripts may omit identity; production always sends X-Compile-User.
+  const admit = async (request: Request) =>
+    request.headers.has("X-Compile-User")
+      ? checkCompileAdmission(request, limiter, usageFor)
+      : null;
   let closed = false;
   const loadCoordinator = db.query<
     { state: string; alarm: number | null },
@@ -276,8 +229,6 @@ export function createLocalRuntime(options: {
     .query<{ projectId: string }, []>("SELECT projectId FROM coordinators")
     .all())
     coordinatorFor(row.projectId);
-  const bindings: ApiBindings = { jobs, admit };
-  let recoverAt = 0;
   async function drain(lane: string, concurrency: number) {
     await Promise.all(
       next.all(lane, Date.now(), concurrency).map(async (row) => {
@@ -287,8 +238,6 @@ export function createLocalRuntime(options: {
             queue: lane,
             body: JSON.parse(row.body),
             attempts: row.attempts + 1,
-            jobs,
-            legacy,
             coordinator: (projectId) => coordinatorFor(projectId).core,
           });
         } catch (error) {
@@ -310,10 +259,6 @@ export function createLocalRuntime(options: {
   }
   const active = new Map<string, Promise<void>>();
   const timer = setInterval(() => {
-    if (Date.now() >= recoverAt) {
-      void send("background", { kind: "recover" });
-      recoverAt = Date.now() + 5 * 60_000;
-    }
     for (const [lane, concurrency] of [
       ["compile-pro", 4],
       ["compile-free", 1],
@@ -342,7 +287,14 @@ export function createLocalRuntime(options: {
           );
         return coordinatorFor(id.data).app.fetch(request);
       }
-      return app.fetch(request, bindings);
+      return Promise.resolve(
+        path === "/health"
+          ? Response.json(
+              { status: "ready" },
+              { headers: { "Cache-Control": "no-store" } },
+            )
+          : Response.json({ error: "Not found" }, { status: 404 }),
+      );
     },
     async close() {
       closed = true;

@@ -75,6 +75,8 @@ export default {
     );
     const submissions = new Map<string, unknown>();
     const failedJobs = new Set<string>();
+    const submittedTo = new Map<string, string>();
+    const cleared: string[] = [];
     let seededIds: string[] = [];
     let serviceDown = false;
     const compiler = {
@@ -82,33 +84,53 @@ export default {
         const request = new Request(input, init);
         if (serviceDown)
           return new Response("Temporarily unavailable", { status: 503 });
-        const path = new URL(request.url).pathname;
-        if (path === "/compile") {
+        // Previews compile in a temporary project named by the template ID.
+        const match = new URL(request.url).pathname.match(
+          /^\/projects\/([^/]+)(\/.*)$/,
+        );
+        if (!match) throw new Error(`Unexpected compiler path ${request.url}`);
+        const [, projectId, path] = match as unknown as [
+          string,
+          string,
+          string,
+        ];
+        if (path === "/compile" && request.method === "POST") {
           const id = request.headers.get("X-Compilation-Id");
           assert(
             id && !submissions.has(id),
             "An attempt should compile only once",
           );
           assert.equal(request.headers.get("X-Compile-Plan"), "pro");
-          assert(
-            request.headers
-              .get("X-Compile-User")
-              ?.startsWith("template-preview:"),
+          assert.equal(
+            request.headers.get("X-Compile-User"),
+            `template-preview:${projectId}`,
           );
           submissions.set(id, await request.json());
+          submittedTo.set(id, projectId);
           return Response.json({ status: "queued" }, { status: 202 });
         }
-        if (path.startsWith("/jobs/"))
-          return submissions.has(path.slice(6))
+        if (path === "/build" && request.method === "DELETE") {
+          cleared.push(projectId);
+          return new Response(null, { status: 204 });
+        }
+        if (path.startsWith("/jobs/")) {
+          const id = path.slice(6);
+          return submittedTo.get(id) === projectId
             ? Response.json({
-                status: failedJobs.has(path.slice(6)) ? "failed" : "succeeded",
+                status: failedJobs.has(id) ? "failed" : "succeeded",
               })
             : new Response(null, { status: 404 });
-        if (path.endsWith(".png"))
+        }
+        if (path.startsWith("/compilations/") && path.endsWith(".png")) {
+          assert.equal(
+            submittedTo.get(path.slice("/compilations/".length, -4)),
+            projectId,
+          );
           return new Response(png, {
             headers: { "Content-Type": "image/png" },
           });
-        throw new Error(`Unexpected compiler path ${path}`);
+        }
+        throw new Error(`Unexpected compiler path ${request.url}`);
       },
     } satisfies Pick<Fetcher, "fetch">;
     const refresh = async (templateId: string) => {
@@ -694,6 +716,11 @@ export default {
         )?.previewStatus,
         "failed",
       );
+      assert.equal(
+        cleared.filter((id) => id === republished.id).length,
+        1,
+        "A failed attempt clears its temporary compiler project",
+      );
       await assert.rejects(
         retryTemplatePreview({ db, templateId: republished.id }),
         /Wait a minute/,
@@ -738,6 +765,11 @@ export default {
       assert.equal(
         (await getTemplate({ db, templateId: republished.id }))?.previewStatus,
         "ready",
+      );
+      assert.equal(
+        cleared.filter((id) => id === republished.id).length,
+        2,
+        "A ready attempt clears its temporary compiler project",
       );
       assert.equal(
         (await getTemplate({ db, templateId: republished.id }))?.status,

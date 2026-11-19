@@ -76,12 +76,7 @@ export const previewTimingSchema = z.object({
 
 export function emitCompileEvent(
   event: {
-    event:
-      | "compile_submission"
-      | "compile_pool_claim"
-      | "compile_engine_request"
-      | "compile_retry"
-      | "compile_backend";
+    event: "compile_pool_claim" | "compile_engine_request" | "compile_backend";
     jobId: string;
   } & Record<string, unknown>,
 ) {

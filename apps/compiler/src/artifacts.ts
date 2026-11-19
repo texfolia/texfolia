@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import type { Engine, ObjectStore } from "./jobs";
 import { artifactPathSchema } from "./project";
+import type { Engine, ObjectStore } from "./types";
 
 export const artifactManifestSchema = z.object({
   id: z.string(),

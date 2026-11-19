@@ -9,13 +9,11 @@ import { z } from "zod";
 
 import { ProjectCoordinatorCore } from "../src/coordinator";
 import { createCoordinatorApp } from "../src/coordinator-api";
-import { createJobs, type Engine, type ObjectStore } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import { HttpError } from "../src/project";
 import {
   backgroundDelay,
   compileQueue,
-  createLegacyConsumer,
   deadLetterError,
   processQueueMessage,
   type BackgroundMessage,
@@ -23,6 +21,7 @@ import {
 } from "../src/queues";
 import { sourceHash, sourceObjectKey } from "../src/source-sync";
 import { planSchema, unknownEngineTiming } from "../src/telemetry";
+import type { Engine, ObjectStore } from "../src/types";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "source" } };
 const output = {
@@ -125,19 +124,6 @@ function harness(engine: Engine) {
     },
   };
   let core = new ProjectCoordinatorCore(options);
-  const jobs = createJobs({
-    store,
-    engine,
-    queue: {
-      async send({ id }, plan) {
-        messages.push({
-          queue: compileQueue(plan),
-          body: { projectId: id, revision: 0 },
-        });
-      },
-    },
-  });
-  const legacy = createLegacyConsumer(jobs);
   return {
     get core() {
       return core;
@@ -146,7 +132,6 @@ function harness(engine: Engine) {
     objects,
     messages,
     background,
-    jobs,
     state,
     alarms,
     projectId: options.projectId,
@@ -160,7 +145,7 @@ function harness(engine: Engine) {
         saved: state.saved,
       });
     },
-    async submit(plan = "free") {
+    async submit(plan = "free", body: object = project) {
       const response = await createCoordinatorApp(core).fetch(
         new Request(`http://local/projects/${options.projectId}/compile`, {
           method: "POST",
@@ -168,7 +153,7 @@ function harness(engine: Engine) {
             "Content-Type": "application/json",
             "X-Compile-Plan": plan,
           },
-          body: JSON.stringify(project),
+          body: JSON.stringify(body),
         }),
       );
       expect(response.status).toBe(202);
@@ -181,8 +166,6 @@ function harness(engine: Engine) {
         queue,
         body,
         attempts,
-        jobs,
-        legacy,
         coordinator: () => core,
       });
     },
@@ -220,6 +203,7 @@ test.each([
           }),
         ),
         migrations: z.array(z.object({ tag: z.string() })),
+        triggers: z.object({ crons: z.array(z.string()) }),
         ratelimits: z.array(
           z.object({
             name: z.string(),
@@ -286,6 +270,7 @@ test.each([
         simple: { limit: 2, period: 10 },
       },
     ]);
+    expect(config.triggers.crons).toEqual([]);
     expect(config.workers_dev).toBe(false);
     expect(config.preview_urls).toBe(false);
     expect(config.routes).toEqual([]);
@@ -337,40 +322,38 @@ test.each([
 test.each(["", "-local"])(
   "queue delivery routes compile, DLQ, and background messages with suffix '%s'",
   async (suffix) => {
-    const fixture = harness(async () => output);
-    try {
-      for (const lane of ["compile-pro", "compile-free"]) {
-        const id = crypto.randomUUID();
-        await fixture.jobs.submit(id, project);
-        expect(
-          await fixture.deliver(`${lane}${suffix}`, {
-            projectId: id,
-            revision: 0,
-          }),
-        ).toBe(true);
-        expect((await fixture.jobs.get(id))?.status).toBe("succeeded");
-      }
-      const id = crypto.randomUUID();
-      await fixture.jobs.submit(id, project);
-      expect(
-        await fixture.deliver(`compile-dlq${suffix}`, {
-          projectId: id,
-          revision: 0,
+    const calls: unknown[][] = [];
+    const deliver = (queue: string, body: unknown) =>
+      processQueueMessage({
+        queue: `${queue}${suffix}`,
+        body,
+        attempts: 1,
+        coordinator: (projectId) => ({
+          async consume(revision) {
+            calls.push(["consume", projectId, revision]);
+            return true;
+          },
+          async fail(revision) {
+            calls.push(["fail", projectId, revision]);
+          },
+          async maintain(at) {
+            calls.push(["maintain", projectId, at]);
+          },
         }),
-      ).toBe(true);
-      expect((await fixture.jobs.get(id))?.status).toBe("failed");
-      const expiredArtifact = "compilations/expired.pdf";
-      fixture.objects.set(expiredArtifact, {
-        bytes: new TextEncoder().encode("%PDF-expired"),
-        uploaded: 0,
       });
-      expect(
-        await fixture.deliver(`background${suffix}`, { kind: "recover" }),
-      ).toBe(true);
-      expect(fixture.objects.has(expiredArtifact)).toBe(false);
-    } finally {
-      await fixture.core.close();
-    }
+    const projectId = crypto.randomUUID();
+    for (const lane of ["compile-pro", "compile-free"])
+      expect(await deliver(lane, { projectId, revision: 2 })).toBe(true);
+    expect(await deliver("compile-dlq", { projectId, revision: 3 })).toBe(true);
+    expect(
+      await deliver("background", { kind: "maintenance", projectId, at: 5 }),
+    ).toBe(true);
+    expect(calls).toEqual([
+      ["consume", projectId, 2],
+      ["consume", projectId, 2],
+      ["fail", projectId, 3],
+      ["maintain", projectId, 5],
+    ]);
   },
 );
 
@@ -510,7 +493,7 @@ test("queue delivery during direct handoff waits for the direct run without wast
   }
 });
 
-test("only malformed message envelopes are acknowledged; corrupt stored jobs remain retryable", async () => {
+test("malformed and retired message envelopes are acknowledged without touching a coordinator", async () => {
   const fixture = harness(async () => output);
   try {
     expect(
@@ -518,14 +501,14 @@ test("only malformed message envelopes are acknowledged; corrupt stored jobs rem
     ).toBe(true);
     expect(await fixture.deliver("compile-dlq", {})).toBe(true);
     expect(await fixture.deliver("background", { kind: "invalid" })).toBe(true);
-    const id = crypto.randomUUID();
-    await fixture.jobs.submit(id, project);
-    const source = fixture.objects.get(`sources/${id}.json`);
-    if (!source) throw new Error("Missing persisted source");
-    source.metadata = "{}";
-    await expect(
-      fixture.deliver("compile-free", { projectId: id, revision: 0 }),
-    ).rejects.toBeInstanceOf(z.ZodError);
+    // Snapshot jobs used revision 0 and a recovery sweep before NAT-380.
+    const projectId = crypto.randomUUID();
+    for (const lane of ["compile-pro", "compile-dlq"])
+      expect(await fixture.deliver(lane, { projectId, revision: 0 })).toBe(
+        true,
+      );
+    expect(await fixture.deliver("background", { kind: "recover" })).toBe(true);
+    expect(fixture.state.saved).toBeNull();
   } finally {
     await fixture.core.close();
   }
@@ -622,67 +605,6 @@ test("TeX errors are terminal without pointless infrastructure retries", async (
       log: "error log",
     });
   } finally {
-    await fixture.core.close();
-  }
-});
-
-test("legacy jobs use compact plan-routed messages and DLQ failure cannot be resurrected by recovery", async () => {
-  let runs = 0;
-  const fixture = harness(async () => {
-    runs++;
-    throw new Error("Engine unavailable");
-  });
-  try {
-    const id = crypto.randomUUID();
-    await fixture.jobs.submit(id, project, "pro");
-    const body = { projectId: id, revision: 0 };
-    expect(fixture.messages).toEqual([{ queue: "compile-pro", body }]);
-    expect(await fixture.deliver("compile-pro", body, 1)).toBe(false);
-    expect(await fixture.deliver("compile-pro", body, 2)).toBe(false);
-    expect(await fixture.deliver("compile-pro", body, 1)).toBe(false);
-    expect(runs).toBe(2);
-    expect(await fixture.deliver("compile-dlq", body)).toBe(true);
-    expect(await fixture.jobs.get(id)).toMatchObject({
-      status: "failed",
-      error: deadLetterError,
-    });
-    await fixture.jobs.recover();
-    expect(await fixture.deliver("compile-pro", body)).toBe(true);
-    expect(runs).toBe(2);
-    expect(
-      [...fixture.objects.keys()].some((key) => key.startsWith("attempts/")),
-    ).toBe(false);
-  } finally {
-    await fixture.core.close();
-  }
-});
-
-test("concurrent legacy redeliveries share one compile and DLQ cannot beat a successful active compile", async () => {
-  let runs = 0;
-  const started = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const fixture = harness(async () => {
-    runs++;
-    started.resolve();
-    await release.promise;
-    return output;
-  });
-  try {
-    const id = crypto.randomUUID();
-    await fixture.jobs.submit(id, project, "pro");
-    const body = { projectId: id, revision: 0 };
-    const first = fixture.deliver("compile-pro", body);
-    await started.promise;
-    const duplicate = fixture.deliver("compile-pro", body);
-    const deadLetter = fixture.deliver("compile-dlq", body);
-    release.resolve();
-    expect(await first).toBe(true);
-    expect(await duplicate).toBe(true);
-    expect(await deadLetter).toBe(true);
-    expect(runs).toBe(1);
-    expect(await fixture.jobs.get(id)).toMatchObject({ status: "succeeded" });
-  } finally {
-    release.resolve();
     await fixture.core.close();
   }
 });
@@ -842,23 +764,22 @@ for (const reuse of [false, true])
     },
   );
 
-test("local Pro queue and interactive path progress while a Free consumer is blocked", async () => {
+test("local Pro builds progress while a Free build is blocked", async () => {
   const root = await mkdtemp(join(tmpdir(), "priority-queues-"));
   const started = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const runtime = createLocalRuntime({
     path: join(root, "state.sqlite"),
-    engine: async (_project, context) => {
+    projectEngine: () => async (_project, context) => {
       if (context.plan === "free") {
         started.resolve();
         await release.promise;
       }
       return output;
     },
-    projectEngine: () => async () => output,
   });
-  const request = (path: string, plan: string, id: string) =>
-    new Request(`http://local${path}`, {
+  const request = (projectId: string, plan: string, id: string) =>
+    new Request(`http://local/projects/${projectId}/compile`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -868,31 +789,16 @@ test("local Pro queue and interactive path progress while a Free consumer is blo
       body: JSON.stringify(project),
     });
   try {
-    await runtime.fetch(request("/compile", "free", crypto.randomUUID()));
+    const freeProject = crypto.randomUUID();
+    await runtime.fetch(request(freeProject, "free", crypto.randomUUID()));
     await started.promise;
-    const proId = crypto.randomUUID();
-    await runtime.fetch(request("/compile", "pro", proId));
     const projectId = crypto.randomUUID();
     const interactiveId = crypto.randomUUID();
-    await runtime.fetch(
-      request(`/projects/${projectId}/compile`, "pro", interactiveId),
-    );
+    await runtime.fetch(request(projectId, "pro", interactiveId));
     const database = new Database(join(root, "state.sqlite"), {
       readonly: true,
     });
     try {
-      await waitUntil(() =>
-        Boolean(
-          database
-            .query("SELECT key FROM objects WHERE key = ?")
-            .get(`results/${proId}.json`),
-        ),
-      );
-      expect(
-        await (
-          await runtime.fetch(new Request(`http://local/jobs/${proId}`))
-        ).json(),
-      ).toMatchObject({ status: "succeeded" });
       await waitUntil(() =>
         Boolean(
           database
@@ -905,6 +811,13 @@ test("local Pro queue and interactive path progress while a Free consumer is blo
           await runtime.fetch(new Request(`http://local/projects/${projectId}`))
         ).json(),
       ).toMatchObject({ current: { status: "succeeded" } });
+      expect(
+        await (
+          await runtime.fetch(
+            new Request(`http://local/projects/${freeProject}`),
+          )
+        ).json(),
+      ).toMatchObject({ current: { status: "running" } });
     } finally {
       database.close();
     }
@@ -921,7 +834,6 @@ test("SQLite delivery retries once and routes the failed interactive job through
   let runs = 0;
   const runtime = createLocalRuntime({
     path,
-    engine: async () => output,
     projectEngine: () => async () => {
       runs++;
       throw new Error("Container unavailable");
@@ -1054,6 +966,102 @@ test("an overdue maintenance alarm only re-enqueues background work; empty coord
     expect(fixture.background.at(-1)?.delaySeconds).toBeGreaterThan(0);
     expect(fixture.objects.size).toBe(count);
     expect(fixture.core.snapshot().current?.status).toBe("succeeded");
+  } finally {
+    await fixture.core.close();
+  }
+});
+
+test("template preview builds serve a PNG, survive pruning, expire after a day, and clear with the build", async () => {
+  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+  const fixture = harness(async () => ({ ...output, preview: png }));
+  const app = () => createCoordinatorApp(fixture.core);
+  const prefix = `projects/${fixture.projectId}/`;
+  const image = (id: string) =>
+    app().fetch(
+      new Request(
+        `http://local/projects/${fixture.projectId}/compilations/${id}.png`,
+      ),
+    );
+  const maintain = async (lastActivity?: number) => {
+    const at = Date.now() - 1;
+    await fixture.restart((saved) => {
+      saved.maintenanceAt = at;
+      if (lastActivity !== undefined) saved.lastActivity = lastActivity;
+    });
+    await fixture.deliver("background", {
+      kind: "maintenance",
+      projectId: fixture.projectId,
+      at,
+    });
+  };
+  try {
+    await fixture.submit("pro", { ...project, preview: true });
+    await fixture.core.wake();
+    const build = fixture.core.snapshot().current;
+    expect(build?.status).toBe("succeeded");
+    const id = build!.id;
+    const response = await image(id);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(png);
+    expect((await image(crypto.randomUUID())).status).toBe(404);
+
+    await maintain();
+    expect((await image(id)).status).toBe(200);
+    const { lastActivity } = persistedSchema.parse(
+      JSON.parse(fixture.state.saved ?? "null"),
+    );
+    expect(fixture.background.at(-1)?.body).toMatchObject({
+      at: lastActivity + 24 * 60 * 60_000,
+    });
+
+    await maintain(Date.now() - 24 * 60 * 60_000 - 1000);
+    expect(
+      [...fixture.objects.keys()].some((key) => key.startsWith(prefix)),
+    ).toBe(false);
+    expect(fixture.core.snapshot().current).toBeNull();
+
+    await fixture.submit("pro", { ...project, preview: true });
+    await fixture.core.wake();
+    const next = fixture.core.snapshot().current!.id;
+    expect((await image(next)).status).toBe(200);
+    const cleared = await app().fetch(
+      new Request(`http://local/projects/${fixture.projectId}/build`, {
+        method: "DELETE",
+      }),
+    );
+    expect(cleared.status).toBe(204);
+    expect((await image(next)).status).toBe(404);
+    expect(
+      [...fixture.objects.keys()].some((key) => key.startsWith(prefix)),
+    ).toBe(false);
+  } finally {
+    await fixture.core.close();
+  }
+});
+
+test("ordinary project builds keep the 30-day retention", async () => {
+  const fixture = harness(async () => output);
+  try {
+    await fixture.submit();
+    await fixture.core.wake();
+    const at = Date.now() - 1;
+    await fixture.restart((saved) => {
+      saved.maintenanceAt = at;
+      saved.lastActivity = Date.now() - 24 * 60 * 60_000 - 1000;
+    });
+    await fixture.deliver("background", {
+      kind: "maintenance",
+      projectId: fixture.projectId,
+      at,
+    });
+    expect(fixture.core.snapshot().current?.status).toBe("succeeded");
+    const { lastActivity } = persistedSchema.parse(
+      JSON.parse(fixture.state.saved ?? "null"),
+    );
+    expect(fixture.background.at(-1)?.body).toMatchObject({
+      at: lastActivity + 30 * 24 * 60 * 60_000,
+    });
   } finally {
     await fixture.core.close();
   }

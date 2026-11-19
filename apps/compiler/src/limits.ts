@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import type { Engine } from "./jobs";
 import { EngineError, HttpError } from "./project";
 import { planSchema } from "./telemetry";
+import type { Engine } from "./types";
 
 type Plan = z.infer<typeof planSchema>;
 export const compileUserSchema = z.string().min(1).max(256);

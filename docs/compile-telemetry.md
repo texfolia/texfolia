@@ -12,10 +12,8 @@ compilation, so a successful backend job can have no preview event.
 | Event                    | Boundary                                                                                                                                          |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `compile_web_submission` | Authenticated web POST through compiler acceptance or rejection. `submissionMs` includes web-side source reconciliation and the compiler request. |
-| `compile_submission`     | Legacy compiler API submission. Interactive project revisions use the coordinator API.                                                            |
 | `compile_pool_claim`     | Cloudflare container assignment, with `hit`, `miss`, `reused`, or `error`. A hit describes spare readiness, not the project's auxiliary cache.    |
 | `compile_engine_request` | Engine transport and engine timing for an attempt.                                                                                                |
-| `compile_retry`          | Infrastructure retry of a legacy job.                                                                                                             |
 | `compile_backend`        | Completed compiler attempt, including failures. `attempt` distinguishes retries.                                                                  |
 | `compile_preview`        | Browser render result plus available backend timing. `outcome` is `rendered` or `preview_failed`.                                                 |
 
@@ -27,7 +25,7 @@ fields mean unmeasured, not zero.
 | Field                                     | Meaning                                                                                                                                                 |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `queueWaitMs`                             | Time from job creation to the attempt starting. For project revisions this includes debounce and scheduling, even though the normal path uses no queue. |
-| `inputReadMs`                             | Legacy job source-object read. Project revisions report zero here because their engine client owns source loading.                                      |
+| `inputReadMs`                             | Always zero for project revisions, because their engine client owns source loading. Kept for timeline compatibility.                                    |
 | `engineRequestMs`                         | Engine client call, including readiness, source synchronization, cache restoration when needed, and the engine response.                                |
 | `inputPrepMs`, `compileMs`, `outputMs`    | Engine source preparation, TeX execution, and output processing. These are portions of engine work, not additional backend stages to sum.               |
 | `publishMs`                               | Artifact and cache publication phase.                                                                                                                   |

@@ -49,7 +49,6 @@ const engine = async () => {
 };
 const compiler = createLocalRuntime({
   path: join(directory, "compiler.sqlite"),
-  engine,
   projectEngine: () => engine,
 });
 const mf = new Miniflare({

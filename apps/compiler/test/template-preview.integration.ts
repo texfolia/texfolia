@@ -19,14 +19,14 @@ const directory = await mkdtemp(
 const engine = createEngineClient((request) => fetch(request), engineUrl);
 const runtime = createLocalRuntime({
   path: join(directory, "jobs.sqlite"),
-  engine,
   projectEngine: () => engine,
 });
 try {
   for (const starter of templateStarters) {
     const id = crypto.randomUUID();
+    const project = `http://local/projects/${crypto.randomUUID()}`;
     const submitted = await runtime.fetch(
-      new Request("http://local/compile", {
+      new Request(`${project}/compile`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -44,7 +44,7 @@ try {
     const deadline = Date.now() + 60_000;
     while (true) {
       const status = await (
-        await runtime.fetch(new Request(`http://local/jobs/${id}`))
+        await runtime.fetch(new Request(`${project}/jobs/${id}`))
       ).json();
       assert(status && typeof status === "object" && "status" in status);
       assert.notEqual(status.status, "failed", JSON.stringify(status));
@@ -53,7 +53,7 @@ try {
       await Bun.sleep(250);
     }
     const response = await runtime.fetch(
-      new Request(`http://local/compilations/${id}.png`),
+      new Request(`${project}/compilations/${id}.png`),
     );
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("Content-Type"), "image/png");
@@ -68,7 +68,7 @@ try {
       1200,
     );
     assert(
-      (await runtime.fetch(new Request(`http://local/compilations/${id}.pdf`)))
+      (await runtime.fetch(new Request(`${project}/compilations/${id}.pdf`)))
         .ok,
     );
     console.log(

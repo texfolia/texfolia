@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { coordinatorSnapshotSchema } from "../src/coordinator";
-import { createEngineClient } from "../src/engine";
 import { createLocalRuntime } from "../src/local";
 import { createLocalContainerPool } from "../src/local-containers";
 import type { EngineTiming } from "../src/telemetry";
@@ -20,7 +19,6 @@ let pool = createLocalContainerPool(options);
 const open = () =>
   createLocalRuntime({
     path: join(directory, "compiler.sqlite"),
-    engine: createEngineClient((request) => fetch(request)),
     projectEngine: pool.projectEngine,
   });
 let runtime = open();

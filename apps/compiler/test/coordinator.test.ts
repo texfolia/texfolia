@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { coordinatorSnapshotSchema } from "../src/coordinator";
-import type { Engine } from "../src/jobs";
 import { createLocalRuntime } from "../src/local";
 import { unknownEngineTiming } from "../src/telemetry";
+import type { Engine } from "../src/types";
 
 const output = (source: string) => ({
   pdf: new TextEncoder().encode(`%PDF-${source}`),
@@ -77,7 +77,6 @@ test("rapid revisions debounce; cancelled engines settle before replacement; lat
   };
   const runtime = createLocalRuntime({
     path: join(root, "state.sqlite"),
-    engine,
     projectEngine: () => engine,
   });
   const projectId = crypto.randomUUID();
@@ -168,15 +167,12 @@ test("project engines run independently and durable snapshots resume after a res
       await together.promise;
       return output(String(project.files["main.tex"]));
     };
-  const engine: Engine = async () => {
-    throw new Error("Project used the shared legacy engine");
-  };
-  const first = createLocalRuntime({ path, engine, projectEngine });
+  const first = createLocalRuntime({ path, projectEngine });
   await submit(first, a, jobA, "a");
   await submit(first, b, jobB, "b");
   // Shutdown before the debounce fires. Reopening must recover both pending snapshots.
   await first.close();
-  const restarted = createLocalRuntime({ path, engine, projectEngine });
+  const restarted = createLocalRuntime({ path, projectEngine });
   try {
     await eventually(
       async () =>
@@ -211,7 +207,7 @@ test("project engines run independently and durable snapshots resume after a res
     together.resolve();
     await restarted.close();
   }
-  const reopened = createLocalRuntime({ path, engine, projectEngine });
+  const reopened = createLocalRuntime({ path, projectEngine });
   expect(
     coordinatorSnapshotSchema.parse(
       await (await reopened.fetch(request(`/projects/${a}`))).json(),
@@ -245,7 +241,6 @@ test("out-of-order editor requests cannot replace a newer source revision", asyn
     );
   const first = createLocalRuntime({
     path,
-    engine,
     projectEngine: () => engine,
   });
   expect((await submitVersion(first, 2)).status).toBe(202);
@@ -253,7 +248,6 @@ test("out-of-order editor requests cannot replace a newer source revision", asyn
   await first.close();
   const restarted = createLocalRuntime({
     path,
-    engine,
     projectEngine: () => engine,
   });
   try {

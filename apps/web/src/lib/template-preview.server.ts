@@ -114,19 +114,22 @@ export async function refreshTemplatePreviews({
       eq(template.previewStatus, "queued"),
       eq(template.previewNextAttemptAt, found.previewNextAttemptAt),
     );
+    // Each template renders in a temporary compiler project named by its ID.
+    const previewProject = `/projects/${found.id}`;
+    let settled = false;
     try {
       if (Date.now() - found.previewStartedAt.getTime() > 60 * 60_000)
         throw new TemplatePreviewError(
           "Preview generation expired. Retry this snapshot's preview.",
         );
       let response = await fetchCompiler(
-        `/jobs/${found.previewJobId}`,
+        `${previewProject}/jobs/${found.previewJobId}`,
         undefined,
         compiler,
       );
       if (response.status === 404) {
         response = await fetchCompiler(
-          "/compile",
+          `${previewProject}/compile`,
           {
             method: "POST",
             headers: {
@@ -158,7 +161,7 @@ export async function refreshTemplatePreviews({
         );
       if (result.status !== "succeeded") continue;
       const png = await fetchCompiler(
-        `/compilations/${found.previewJobId}.png`,
+        `${previewProject}/compilations/${found.previewJobId}.png`,
         undefined,
         compiler,
       );
@@ -173,7 +176,7 @@ export async function refreshTemplatePreviews({
         throw new TemplatePreviewError("Invalid preview image");
       const previewKey = `templates/${found.id}/previews/${found.previewJobId}.png`;
       // Use the same lock as collection and seeding while promoting R2 objects.
-      await db.transaction(async (tx) => {
+      settled = await db.transaction(async (tx) => {
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${found.id}, 0))`,
         );
@@ -182,7 +185,7 @@ export async function refreshTemplatePreviews({
           .from(template)
           .where(currentAttempt)
           .for("update");
-        if (!live) return;
+        if (!live) return false;
         await bucket.put(previewKey, bytes, {
           httpMetadata: { contentType: "image/png" },
         });
@@ -190,6 +193,7 @@ export async function refreshTemplatePreviews({
           .update(template)
           .set({ previewKey, previewStatus: "ready", error: null })
           .where(currentAttempt);
+        return true;
       });
     } catch (error) {
       console.error("Template preview failed", { templateId: found.id, error });
@@ -197,15 +201,34 @@ export async function refreshTemplatePreviews({
         error instanceof TemplatePreviewError ||
         error instanceof InvalidSourcePathError
       )
-        await db
-          .update(template)
-          .set({ previewStatus: "failed", error: error.message })
-          .where(currentAttempt);
+        settled =
+          (
+            await db
+              .update(template)
+              .set({ previewStatus: "failed", error: error.message })
+              .where(currentAttempt)
+              .returning({ id: template.id })
+          ).length > 0;
     } finally {
       await db
         .update(template)
         .set({ previewNextAttemptAt: new Date(Date.now() + 2000) })
         .where(currentAttempt);
+      // The PNG is promoted or the attempt is over. Compiler retention removes
+      // the temporary project a day later if this cleanup fails.
+      if (settled)
+        await fetchCompiler(
+          `${previewProject}/build`,
+          { method: "DELETE" },
+          compiler,
+        )
+          .then((response) => response.body?.cancel())
+          .catch((error) => {
+            console.error("Template preview cleanup failed", {
+              templateId: found.id,
+              error,
+            });
+          });
     }
   }
 }

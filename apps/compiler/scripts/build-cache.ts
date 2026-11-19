@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 import { encodeBase64 } from "../src/artifacts";
 import { createEngineClient } from "../src/engine";
-import type { Engine } from "../src/jobs";
+import type { Engine } from "../src/types";
 
 // Alternate clean and restored-cache requests on one warm engine. Input preparation,
 // TeX work, artifact serialization and transport all stay inside the timed region.

@@ -130,16 +130,22 @@ export function createCoordinatorApp(
       : c.json({ error: "Job not found" }, 404);
   });
   app.get("/projects/:projectId/compilations/:file", async (c) => {
-    const id = jobIdSchema.safeParse(c.req.param("file").replace(/\.pdf$/, ""));
-    const pdf = id.success ? await coordinator.artifact(id.data) : null;
-    return pdf
-      ? new Response(pdf, {
+    const file = c.req.param("file");
+    const png = file.endsWith(".png");
+    const id = jobIdSchema.safeParse(file.replace(/\.(pdf|png)$/, ""));
+    const body = !id.success
+      ? null
+      : png
+        ? await coordinator.previewImage(id.data)
+        : await coordinator.artifact(id.data);
+    return body
+      ? new Response(body, {
           headers: {
-            "Content-Type": "application/pdf",
+            "Content-Type": png ? "image/png" : "application/pdf",
             "Cache-Control": "no-store",
           },
         })
-      : c.json({ error: "PDF not found" }, 404);
+      : c.json({ error: `${png ? "PNG" : "PDF"} not found` }, 404);
   });
   app.onError((error, c) => {
     if (error instanceof SourceResyncError)

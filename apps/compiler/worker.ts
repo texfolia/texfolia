@@ -2,11 +2,8 @@ import { Container, getContainer } from "@cloudflare/containers";
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
-import { createApp } from "./src/api";
 import { ProjectCoordinatorCore } from "./src/coordinator";
 import { createCoordinatorApp } from "./src/coordinator-api";
-import { createEngineClient } from "./src/engine";
-import { createJobs, type ObjectStore } from "./src/jobs";
 import {
   CompileUsageCore,
   checkCompileAdmission,
@@ -16,12 +13,9 @@ import {
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
 import { createPooledEngine } from "./src/pooled-engine";
 import { jobIdSchema } from "./src/project";
-import {
-  compileQueue,
-  createLegacyConsumer,
-  processQueueMessage,
-} from "./src/queues";
+import { compileQueue, processQueueMessage } from "./src/queues";
 import { planSchema } from "./src/telemetry";
+import type { ObjectStore } from "./src/types";
 
 export class TectonicContainer extends Container<Env> {
   override defaultPort = 8080;
@@ -209,7 +203,6 @@ export class PoolManager extends DurableObject<Env> {
 
 export class ProjectCoordinator extends DurableObject<Env> {
   private core: ProjectCoordinatorCore | undefined;
-  private legacy: ReturnType<typeof createLegacyConsumer> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -343,16 +336,6 @@ export class ProjectCoordinator extends DurableObject<Env> {
   async maintain(at: number) {
     await this.project().maintain(at);
   }
-
-  async consumeLegacy(id: string, attempt: number) {
-    this.legacy ??= createLegacyConsumer(jobsFor(this.env));
-    return this.legacy.consume(id, attempt);
-  }
-
-  async failLegacy(id: string) {
-    this.legacy ??= createLegacyConsumer(jobsFor(this.env));
-    await this.legacy.fail(id);
-  }
 }
 
 function r2Store(bucket: R2Bucket): ObjectStore {
@@ -399,30 +382,8 @@ function r2Store(bucket: R2Bucket): ObjectStore {
   };
 }
 
-const app = createApp();
-const jobsFor = (env: Env) =>
-  createJobs({
-    store: r2Store(env.PDFS),
-    queue: {
-      async send({ id }, plan) {
-        await (
-          compileQueue(plan) === "compile-pro"
-            ? env.COMPILE_PRO
-            : env.COMPILE_FREE
-        ).send({ projectId: id, revision: 0 });
-      },
-    },
-    engine: withCompileUsage(
-      (project, context) =>
-        createEngineClient((request) =>
-          getContainer(env.COMPILER, `legacy:${context.jobId}`).fetch(request),
-        )(project, { ...context, projectId: context.jobId }),
-      usageFor(env),
-    ),
-  });
-
 export default {
-  fetch(request, env, ctx) {
+  fetch(request, env) {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/projects/")) {
       const id = jobIdSchema.safeParse(path.split("/")[2]);
@@ -430,17 +391,14 @@ export default {
         return Response.json({ error: "Invalid project ID" }, { status: 400 });
       return env.PROJECTS.getByName(id.data).fetch(request);
     }
-    return app.fetch(
-      request,
-      {
-        jobs: jobsFor(env),
-        admit: admit(env),
-      },
-      ctx,
-    );
+    return path === "/health"
+      ? Response.json(
+          { status: "ready" },
+          { headers: { "Cache-Control": "no-store" } },
+        )
+      : Response.json({ error: "Not found" }, { status: 404 });
   },
   async queue(batch, env) {
-    const jobs = jobsFor(env);
     for (const message of batch.messages) {
       try {
         if (
@@ -448,16 +406,6 @@ export default {
             queue: batch.queue,
             body: message.body,
             attempts: message.attempts,
-            jobs,
-            legacy: {
-              consume: (id, attempt) =>
-                env.PROJECTS.getByName(`legacy:${id}`).consumeLegacy(
-                  id,
-                  attempt,
-                ),
-              fail: (id) =>
-                env.PROJECTS.getByName(`legacy:${id}`).failLegacy(id),
-            },
             coordinator: (projectId) => env.PROJECTS.getByName(projectId),
           })
         )
@@ -473,11 +421,5 @@ export default {
         message.retry({ delaySeconds: 5 });
       }
     }
-  },
-  async scheduled(_event, env, ctx) {
-    // Job recovery only. Waking the pool here would keep it from scaling to zero.
-    ctx.waitUntil(
-      env.BACKGROUND.send({ kind: "recover" }, { delaySeconds: 5 }),
-    );
   },
 } satisfies ExportedHandler<Env>;
