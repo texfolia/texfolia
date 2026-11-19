@@ -80,6 +80,9 @@ import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
 import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
 import { addLatexPackage, insertLatexSymbol } from "#/lib/latex/symbols";
 import { commentQuote } from "#/lib/project-comments.schema";
+import { personalDictionaryHas } from "#/lib/settings.schema";
+import { browserSpellChecker } from "#/lib/spelling/checker";
+import { personalDictionaryChanged, spellcheck } from "#/lib/spelling/editor";
 import { useSettings } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";
@@ -170,8 +173,15 @@ export function Editor({
   const [value, setValue] = useState(defaultValue);
   const [name, setName] = useState(filename);
   const [downloadedValue, setDownloadedValue] = useState(defaultValue);
-  const { editor: preferences, updateEditor } = useSettings();
+  const {
+    editor: preferences,
+    updateEditor,
+    spelling,
+    addWord,
+    spellingLanguage,
+  } = useSettings();
   const [error, setError] = useState("");
+  const [spellingError, setSpellingError] = useState("");
   const [showSymbols, setShowSymbols] = useState(false);
   const [status, setStatus] = useState({
     undo: false,
@@ -201,6 +211,11 @@ export function Editor({
   const modified = value !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
   const isMarkdown = /\.(?:md|markdown)$/i.test(name);
+  // Packages and classes are code, so only documents are spell checked.
+  const checksSpelling =
+    /\.(?:tex|ltx)$/i.test(name) &&
+    !!spellingLanguage &&
+    spellingLanguage !== "off";
   const canFormat = isLatex || /\.bib$/i.test(name);
   const { format, formatting, formatError } = useLatexFormatter(formatSettings);
 
@@ -374,6 +389,38 @@ export function Editor({
     });
   }
 
+  const personalWords = useMemo(
+    () => new Set(spelling.words),
+    [spelling.words],
+  );
+  const personalWordsRef = useRef(personalWords);
+  personalWordsRef.current = personalWords;
+  const addWordRef = useRef(addWord);
+  addWordRef.current = addWord;
+  const spellingExtension = useMemo(
+    () =>
+      checksSpelling && spellingLanguage
+        ? spellcheck({
+            language: spellingLanguage,
+            checker: browserSpellChecker(),
+            isKnown: (word) =>
+              personalDictionaryHas(personalWordsRef.current, word),
+            // The personal dictionary belongs to the user, so viewers can add.
+            addWord: (word) => void addWordRef.current(word),
+            onError: setSpellingError,
+          })
+        : [],
+    [checksSpelling, spellingLanguage],
+  );
+  useEffect(() => {
+    setSpellingError("");
+  }, [spellingExtension]);
+  useEffect(() => {
+    editor.current?.view?.dispatch({
+      effects: personalDictionaryChanged.of(),
+    });
+  }, [personalWords]);
+
   const language = useMemo(
     () =>
       editorLanguage({
@@ -423,6 +470,7 @@ export function Editor({
       }),
       commentExtension,
       language,
+      spellingExtension,
       ...(isMarkdown ? [markdown()] : []),
       EditorView.theme({
         ".cm-content, .cm-gutters": {
@@ -457,6 +505,7 @@ export function Editor({
       isLatex,
       isMarkdown,
       language,
+      spellingExtension,
       canFormat,
       format,
       commentExtension,
@@ -720,12 +769,12 @@ export function Editor({
             if (file) void openFile(file);
           }}
         />
-        {(error || formatError) && (
+        {(error || formatError || spellingError) && (
           <p
             role="alert"
             className="text-destructive border-b px-3 py-2 text-xs"
           >
-            {error || formatError}
+            {error || formatError || spellingError}
           </p>
         )}
         <CodeMirror

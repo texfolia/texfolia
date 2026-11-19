@@ -7,6 +7,7 @@ Texfolia is a browser-based LaTeX workspace. Edit project files, check LaTeX err
 ## Features
 
 - Write LaTeX with syntax highlighting, folding, and completions for project labels, citations, and file paths.
+- Spell check LaTeX prose in each project's language, with a personal dictionary. See [Spelling](docs/editor-workspace.md#spelling).
 - Format LaTeX with TexFmt and see editor, project, and compiler diagnostics in the Problems panel.
 - Preview Markdown and compiled PDFs alongside your source.
 - Preview and choose UIW themes across the workspace in Settings → Appearance. See [theme behavior](docs/themes.md).

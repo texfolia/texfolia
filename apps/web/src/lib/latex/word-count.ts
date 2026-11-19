@@ -38,7 +38,17 @@ export type WordEvent =
   | { type: "include"; target: string }
   | { type: "document"; open: boolean };
 
-type Mode = keyof WordCounts | "ignore";
+// `uncounted` words are prose that texcount leaves out, such as table cells.
+export type WordMode = keyof WordCounts | "ignore" | "uncounted";
+type Mode = WordMode;
+
+/** A word's source range, reported by `wordEvents` for spell checking. */
+export type WordSpan = {
+  from: number;
+  to: number;
+  mode: WordMode;
+  preamble: boolean;
+};
 
 const sectionLevels = [
   "part",
@@ -62,6 +72,19 @@ const uncountedBodies =
 const environmentArguments: Record<string, number> = {
   minipage: 1,
   multicols: 1,
+};
+// Column specifications and widths that open uncounted bodies.
+const bodyArguments: Record<string, number> = {
+  tabular: 1,
+  "tabular*": 2,
+  tabularx: 2,
+  tabulary: 2,
+  array: 1,
+  longtable: 1,
+  supertabular: 1,
+  xtabular: 1,
+  wrapfigure: 2,
+  wraptable: 2,
 };
 // Macros whose required arguments are not text, by number of arguments.
 const ignoredMacros: Record<string, number> = {
@@ -145,8 +168,18 @@ function group(source: string, start: number, open = "{", close = "}") {
   return { text: source.slice(start + 1), end: source.length };
 }
 
+export type WordEventOptions = {
+  /** Called with each word's range, including words that are not counted. */
+  onWord?: (span: WordSpan) => void;
+  /** More macros whose arguments are not text, by number of arguments. */
+  ignoredMacros?: Readonly<Record<string, number>>;
+};
+
 /** Converts a file into word-count events that can be stitched across includes. */
-export function wordEvents(text: string): WordEvent[] {
+export function wordEvents(
+  text: string,
+  { onWord, ignoredMacros: extraMacros = {} }: WordEventOptions = {},
+): WordEvent[] {
   const source = maskLatexSource(text);
   const events: WordEvent[] = [];
   const lineStarts = [0];
@@ -160,6 +193,8 @@ export function wordEvents(text: string): WordEvent[] {
 
   let inWord = false;
   let wordMode: Mode = "text";
+  let wordStart = 0;
+  let wordEnd = 0;
   let preamble = false;
   function add(mode: keyof WordCounts) {
     const last = events.at(-1);
@@ -177,10 +212,16 @@ export function wordEvents(text: string): WordEvent[] {
   function endWord() {
     if (!inWord) return;
     inWord = false;
-    if (wordMode !== "ignore") add(wordMode);
+    onWord?.({ from: wordStart, to: wordEnd, mode: wordMode, preamble });
+    if (wordMode !== "ignore" && wordMode !== "uncounted") add(wordMode);
   }
-  function letter(mode: Mode) {
-    if (!inWord) wordMode = mode;
+  /** Adds `from`..`to` to the current word. */
+  function letter(mode: Mode, from: number, to: number) {
+    if (!inWord) {
+      wordMode = mode;
+      wordStart = from;
+    }
+    wordEnd = to;
     inWord = true;
   }
 
@@ -216,7 +257,7 @@ export function wordEvents(text: string): WordEvent[] {
     while (index < end) {
       const char = source[index] ?? "";
       if (wordCharacter.test(char)) {
-        letter(mode);
+        letter(mode, index, index + 1);
         index++;
         continue;
       }
@@ -256,9 +297,10 @@ export function wordEvents(text: string): WordEvent[] {
         // \'e and \"{o} are part of the surrounding word.
         const after = source[index + 2] ?? "";
         if (after === "{" || wordCharacter.test(after)) {
-          letter(mode);
+          const start = index;
           index =
             after === "{" ? (group(source, index + 2)?.end ?? end) : index + 3;
+          letter(mode, start, index);
           continue;
         }
       }
@@ -318,7 +360,12 @@ export function wordEvents(text: string): WordEvent[] {
       if (uncountedBodies.test(environment)) {
         const close = source.indexOf(`\\end{${environment}}`, value.end);
         const bodyEnd = close === -1 ? end : Math.min(close, end);
-        run(skipOptional(value.end), "ignore", false, bodyEnd);
+        run(
+          skipArguments(value.end, bodyArguments[environment] ?? 0),
+          mode === "ignore" ? mode : "uncounted",
+          false,
+          bodyEnd,
+        );
         return bodyEnd;
       }
       // texcount counts the abstract's implicit heading as one header word.
@@ -342,7 +389,11 @@ export function wordEvents(text: string): WordEvent[] {
             .replace(/\s+/g, " ")
             .trim() || name,
       });
-      return nestedRun(start + 1, mode === "ignore" ? mode : "headers", end);
+      return nestedRun(
+        start + 1,
+        mode === "ignore" || mode === "uncounted" ? mode : "headers",
+        end,
+      );
     }
     if (name === "input" || name === "include" || name === "subfile") {
       const start = skipSpace(source, index);
@@ -374,6 +425,8 @@ export function wordEvents(text: string): WordEvent[] {
       const body = source.indexOf("{", index);
       return body === -1 ? end : (group(source, body)?.end ?? end);
     }
+    if (Object.hasOwn(extraMacros, name))
+      return skipArguments(index, extraMacros[name] ?? 0);
     if (Object.hasOwn(ignoredMacros, name))
       return skipArguments(index, ignoredMacros[name] ?? 0);
     // Unknown macros: drop the name and count their arguments as text.

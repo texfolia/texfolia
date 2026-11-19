@@ -15,6 +15,37 @@ Only visible editor tabs keep a live editor. A hidden tab unmounts its editor
 and keeps its selection, scroll position and undo history, so switching back
 restores them. Edits made by collaborators while the tab is hidden still merge.
 
+## Spelling
+
+LaTeX documents (`.tex` and `.ltx`) are spell checked as you type. Misspelled
+words get a wavy underline. Hover one for up to five suggestions and **Add to
+dictionary**. Spelling stays in the editor and is not listed in Problems.
+
+Only prose is checked. Commands, environment names, math, comments, verbatim
+material, `\label`, `\ref` and `\cite` keys, file, unit and glossary arguments,
+and the preamble (except `\title`) are skipped. The checker reuses the word
+counter's parser; see `apps/web/src/lib/spelling/prose.ts`. Hyphenated words are
+checked part by part, accent commands such as `caf\'e` are read as the letters
+they typeset, and acronyms, numbers and single letters are skipped. Package and
+class files are not checked.
+
+Each project picks its language in Settings → Project → Spelling: English (US),
+the default, English (UK), French, German, Spanish, or Off. Checking runs in a
+Web Worker with [nspell](https://github.com/wooorm/nspell), a Hunspell-compatible
+checker, and the `dictionary-*` Hunspell dictionaries. `bun run spelling:assets`
+copies them into `public/dictionaries` before dev and build (0.5–1.4 MB each).
+A dictionary is fetched only when a project uses it and stays loaded for the
+tab. nspell does not support Hunspell compound rules, so some German compounds
+are flagged.
+
+The personal dictionary is in Settings → User → Spelling, where you can add or
+remove words. It applies to every project and language and is stored with the
+other browser-local preferences. Lowercase entries also accept capitalized
+forms. **Add to dictionary** saves immediately, including for viewers.
+
+`bun run --cwd apps/web test:spelling` checks the worker, dictionary loading,
+suggestions and the personal dictionary in Chromium.
+
 ## Bottom panel
 
 Problems and Logs share a bottom panel below the dock. It is closed by default

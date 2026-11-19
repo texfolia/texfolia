@@ -100,7 +100,12 @@
     },
     "web#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".wrangler/deploy/**", "public/core/**"],
+      "outputs": [
+        "dist/**",
+        ".wrangler/deploy/**",
+        "public/core/**",
+        "public/dictionaries/**"
+      ],
       "env": ["CLOUDFLARE_ENV", "VITE_*"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },

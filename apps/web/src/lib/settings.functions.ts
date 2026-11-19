@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 
 import {
+  addPersonalWord,
   defaultSettings,
   editorSettingsSchema,
   settingsSchema,
@@ -103,6 +104,16 @@ export function createSettingsStore({
         })
         .when("settled");
     },
+    /** Adds a word to the personal dictionary immediately. */
+    async addWord(word: string) {
+      await preferences
+        .update("preferences", (draft) => {
+          draft.spelling = {
+            words: addPersonalWord(draft.spelling?.words ?? [], word),
+          };
+        })
+        .when("settled");
+    },
     async save(settings: typeof defaultSettings) {
       const next = settingsSchema.parse(settings);
       await preferences
@@ -110,6 +121,7 @@ export function createSettingsStore({
           draft.editor = next.editor;
           draft.compile = next.compile;
           draft.shortcuts = next.shortcuts;
+          draft.spelling = next.spelling;
         })
         .when("settled");
     },

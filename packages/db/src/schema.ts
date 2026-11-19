@@ -54,6 +54,8 @@ export const project = pgTable(
     formatIndent: integer("format_indent").notNull().default(2),
     formatWrap: boolean("format_wrap").notNull().default(true),
     formatWidth: integer("format_width").notNull().default(80),
+    // A BCP 47 tag from the web app's bundled dictionaries, or "off".
+    spellcheckLanguage: text("spellcheck_language").notNull().default("en-US"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

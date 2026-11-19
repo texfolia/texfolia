@@ -43,6 +43,7 @@ export function createProjectsStore({
           formatIndent: 2,
           formatWrap: true,
           formatWidth: 80,
+          spellcheckLanguage: "en-US",
           collaborators: [],
           owner: null,
           people: [],

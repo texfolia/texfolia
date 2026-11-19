@@ -6,6 +6,7 @@ import { ensureSession } from "./auth.functions";
 import {
   createProjectSchema,
   updateProjectFormattingSchema,
+  updateProjectSpellingSchema,
   renameProjectSchema,
   projectTagsSchema,
   importProjectFilesSchema,
@@ -93,6 +94,18 @@ export const importProjectFiles = createServerFn({ method: "POST" })
     return server.importProjectFiles({
       db: context.db,
       bucket: env.SOURCES,
+      ownerId: session.user.id,
+      data,
+    });
+  });
+
+export const updateProjectSpelling = createServerFn({ method: "POST" })
+  .validator(updateProjectSpellingSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.updateProjectSpelling({
+      db: context.db,
       ownerId: session.user.id,
       data,
     });

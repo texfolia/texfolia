@@ -71,6 +71,7 @@ test("existing editor preferences migrate without local formatting and survive a
     editor: { fontSize: 20, wrapLines: true },
     compile: { onSave: true, afterIdle: 0 },
     shortcuts: defaultShortcuts,
+    spelling: { words: [] },
   });
 });
 
@@ -100,6 +101,7 @@ test("active settings consumers see each other's updates", async () => {
     editor: { fontSize: 13, wrapLines: true },
     compile: { onSave: true, afterIdle: 0 },
     shortcuts: { ...defaultShortcuts, save: "Mod+Shift+S" },
+    spelling: { words: [] },
   });
   expect(second.preferences.get("preferences")?.shortcuts.save).toBe(
     "Mod+Shift+S",
@@ -165,6 +167,7 @@ test("user preferences and shortcuts are isolated by account", async () => {
     editor: { fontSize: 24, wrapLines: false },
     compile: { onSave: false, afterIdle: 5 },
     shortcuts: { ...defaultShortcuts, newProject: "G P" },
+    spelling: { words: [] },
   });
   expect(second.preferences.get("preferences")?.editor.fontSize).toBe(13);
   expect(second.preferences.get("preferences")?.compile.onSave).toBe(true);

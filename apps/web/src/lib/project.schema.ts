@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { sourceContentSchema } from "./project-source";
 import { sourcePathSchema } from "./source-path.schema";
+import { spellingLanguageSchema } from "./spelling/languages";
 
 export const projectNameSchema = z.string().trim().min(1, {
   message: "Please enter a project name.",
@@ -51,4 +52,9 @@ export const projectFormattingSchema = z.object({
 export const updateProjectFormattingSchema = z.object({
   projectId: z.uuid(),
   formatting: projectFormattingSchema,
+});
+
+export const updateProjectSpellingSchema = z.object({
+  projectId: z.uuid(),
+  language: spellingLanguageSchema,
 });
