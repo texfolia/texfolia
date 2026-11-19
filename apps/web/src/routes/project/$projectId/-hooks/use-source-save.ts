@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { documentCachingStopped } from "#/lib/collaboration/cache";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import type { CompileSources } from "#/lib/latex/source-sync";
+import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import {
   reconcileSourceDrafts,
   serializeSourceDrafts,
@@ -167,21 +168,24 @@ export function useSourceSave({
           : ""
         : (collaboration.get(node.id)?.text.toString() ?? "");
     }
-    for (const node of nodes) {
+    const binaries = nodes.flatMap((node) => {
       const path = paths.get(node.id);
-      if (node.kind !== "binary" || !path) continue;
-      if (saved) {
-        const hash = versions[node.id]?.objectKey?.split("/").at(-1);
+      return node.kind === "binary" && path ? [{ id: node.id, path }] : [];
+    });
+    if (saved)
+      for (const { id, path } of binaries) {
+        const hash = versions[id]?.objectKey?.split("/").at(-1);
         if (!hash) throw new Error(`Save ${path} before compiling`);
         sources[path] = { hash };
-      } else {
-        const response = await fetch(`/api/sources/${projectId}/${node.id}`);
+      }
+    else
+      await mapLimit(binaries, binaryFetchLimit, async ({ id, path }) => {
+        const response = await fetch(`/api/sources/${projectId}/${id}`);
         if (!response.ok) throw new Error(`Could not load ${path}`);
         sources[path] = {
           base64: encodeSource(new Uint8Array(await response.arrayBuffer())),
         };
-      }
-    }
+      });
     if (saved) return { sources, metadataVersion };
     const current = await files.refresh();
     if (

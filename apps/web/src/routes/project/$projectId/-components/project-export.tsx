@@ -12,6 +12,7 @@ import {
 } from "#/components/ui/dialog";
 import { buildFileUrl } from "#/lib/build";
 import { downloadFile } from "#/lib/download-file";
+import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import { decodeSource, type SourceFiles } from "#/lib/project-source";
 import { createZip } from "#/lib/zip";
 import { useWorkspace } from "#/providers/workspace-provider";
@@ -44,14 +45,20 @@ export function ProjectExport({
         ]),
       }));
       if (includeBuild)
-        for (const file of build?.artifacts?.files ?? []) {
-          const response = await fetch(buildFileUrl(projectId, file));
-          if (!response.ok)
-            throw new Error(
-              "Build changed during export. Try downloading again.",
-            );
-          files.push({ path: `out/${file.path}`, blob: await response.blob() });
-        }
+        files.push(
+          ...(await mapLimit(
+            build?.artifacts?.files ?? [],
+            binaryFetchLimit,
+            async (file) => {
+              const response = await fetch(buildFileUrl(projectId, file));
+              if (!response.ok)
+                throw new Error(
+                  "Build changed during export. Try downloading again.",
+                );
+              return { path: `out/${file.path}`, blob: await response.blob() };
+            },
+          )),
+        );
       downloadFile(await createZip(files), `${name}.zip`);
     } catch (error) {
       setError(

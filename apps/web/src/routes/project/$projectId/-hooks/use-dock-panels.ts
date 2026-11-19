@@ -1,6 +1,6 @@
 import type { EditorView } from "@uiw/react-codemirror";
 import type { DockviewApi } from "dockview-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { EditorCommand } from "#/lib/editor-command";
 import { projectPaths } from "#/lib/project-paths";
@@ -49,6 +49,14 @@ export function useDockPanels({
     column: number;
   }>();
   const [jump, setJump] = useState<Workspace["jump"]>();
+  const nodesById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node])),
+    [nodes],
+  );
+  const idsByPath = useMemo(
+    () => new Map([...paths].map(([id, path]) => [path, id])),
+    [paths],
+  );
 
   const registerEditor = useCallback((id: string, view: EditorView | null) => {
     if (view) editors.current.set(id, view);
@@ -123,7 +131,7 @@ export function useDockPanels({
 
   function openMarkdownPreview(id: string) {
     const dock = api.current;
-    const node = nodes.find((node) => node.id === id);
+    const node = nodesById.get(id);
     if (!dock || !node || !/\.(?:md|markdown)$/i.test(node.name)) return;
     keepOpen(id);
     const existing = dock.getPanel(markdownId(id));
@@ -229,13 +237,14 @@ export function useDockPanels({
   }
 
   function reveal(path: string, line = 1, column?: number, length?: number) {
-    const node = nodes.find((node) => paths.get(node.id) === path);
+    const id = idsByPath.get(path);
+    const node = id === undefined ? undefined : nodesById.get(id);
     if (!node) return;
     openFile(node, true);
     setJump({ id: node.id, line, column, length });
   }
   function revealRange(nodeId: string, range: { from: number; to: number }) {
-    const node = nodes.find((node) => node.id === nodeId);
+    const node = nodesById.get(nodeId);
     if (!node) return;
     openFile(node, true);
     setJump({ id: node.id, line: 1, range });
