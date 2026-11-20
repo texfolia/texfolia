@@ -8,13 +8,19 @@ export const compileHistoryLimit = 10;
 
 const duration = z.number().finite().nonnegative();
 const instant = z.iso.datetime({ offset: true });
+// Only Tectonic is installed. Stored jobs may still say "texlive"; read those
+// as "unknown" so the app never reports TeX Live as the engine.
+export const compileEngineSchema = z.preprocess(
+  (value) => (value === "texlive" ? "unknown" : value),
+  z.enum(["tectonic", "unknown"]),
+);
 
 // Persisted on project_job.timing. Each part is optional because jobs can fail
 // before the compiler runs, and browser reporting is best effort.
 export const compilerTimelineSchema = z.looseObject({
   // Coordinator acceptance; the debounce starts here.
   acceptedAt: instant.optional(),
-  engine: z.enum(["tectonic", "texlive", "unknown"]).optional(),
+  engine: compileEngineSchema.optional(),
   temperature: z.enum(["cold", "warm", "unknown"]).optional(),
   attempt: z.number().int().positive().optional(),
   debounceMs: duration.optional(),

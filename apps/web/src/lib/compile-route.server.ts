@@ -18,7 +18,10 @@ import { compilePlan } from "#/lib/billing.server";
 import { buildSnapshotSchema } from "#/lib/build";
 import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
-import { compileHistoryLimit } from "#/lib/latex/compile-history";
+import {
+  compileEngineSchema,
+  compileHistoryLimit,
+} from "#/lib/latex/compile-history";
 import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
 import { compileDeltaSchema, hashSource } from "#/lib/latex/source-sync";
 import { streamProjectResponse } from "#/lib/live-project.server";
@@ -27,7 +30,7 @@ import { requestPrincipal } from "#/lib/request-principal.server";
 
 const compilerTimingSchema = z.looseObject({
   plan: z.enum(["free", "pro", "team", "unknown"]),
-  engine: z.enum(["tectonic", "texlive", "unknown"]),
+  engine: compileEngineSchema,
   temperature: z.enum(["cold", "warm", "unknown"]),
 });
 type CompilerTiming = z.infer<typeof compilerTimingSchema>;

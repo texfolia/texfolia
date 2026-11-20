@@ -3,8 +3,8 @@
 ## Supported engines
 
 The compiler currently runs only patched Tectonic. TeX Live and latexmk are not
-installed, and the app has no engine picker. The existing `texlive` telemetry
-value does not indicate runtime support.
+installed, and the app has no engine picker. Telemetry reports `tectonic` or
+`unknown`; older records that say `texlive` parse as `unknown`.
 
 See the [multiple compile engine plan](../../docs/compile-engines.md) for NAT-316's
 proposed backend contracts, image options, and unresolved product decisions.

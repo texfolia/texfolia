@@ -2,8 +2,14 @@ import { z } from "zod";
 
 const duration = z.number().finite().nonnegative();
 export const planSchema = z.enum(["free", "pro", "team", "unknown"]);
+// Only Tectonic is installed. Older records may still say "texlive"; read
+// those as "unknown" so nothing can report TeX Live as the engine.
+export const engineSchema = z.preprocess(
+  (value) => (value === "texlive" ? "unknown" : value),
+  z.enum(["tectonic", "unknown"]),
+);
 const engineTimingSchema = z.object({
-  engine: z.enum(["tectonic", "texlive", "unknown"]),
+  engine: engineSchema,
   temperature: z.enum(["cold", "warm", "unknown"]),
   inputPrepMs: duration.nullable(),
   compileMs: duration.nullable(),
