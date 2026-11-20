@@ -3,7 +3,7 @@
 Use this guide at the first production deploy. Cloud provisioning and baseline
 migration generation remain deferred under
 [NAT-198](https://linear.app/nbaby/issue/NAT-198).
-For daily development, follow the [local setup](../README.md#local-development).
+For daily development, follow the [local setup](local-development.md).
 Local development and CI continue to use plain Postgres and `db:push`.
 
 ## Prepare the baseline at launch
