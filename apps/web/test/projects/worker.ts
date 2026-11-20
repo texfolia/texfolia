@@ -73,11 +73,11 @@ export default {
         ownerId: viewerId,
         data: { projectId: created.id, tags: ["research", "private"] },
       });
-      assert.deepEqual((await getProjects({ db, ownerId }))[0]?.tags, [
-        "draft",
-        "research",
-      ]);
-      const viewer = (await getProjects({ db, ownerId: viewerId }))[0];
+      assert.deepEqual(
+        (await getProjects({ db, userId: ownerId })).projects[0]?.tags,
+        ["draft", "research"],
+      );
+      const viewer = (await getProjects({ db, userId: viewerId })).projects[0];
       assert(viewer);
       assert.deepEqual(viewer.tags, ["private", "research"]);
       assert.equal(viewer.canWrite, false);
@@ -95,11 +95,13 @@ export default {
         data: { projectId: created.id, tags: [] },
       });
       assert.deepEqual(
-        (await getProjects({ db, ownerId: viewerId }))[0]?.tags,
+        (await getProjects({ db, userId: viewerId })).projects[0]?.tags,
         ["private", "research"],
       );
       assert.equal(
-        (await getProjects({ db, ownerId: viewerId }))[0]?.updatedAt.getTime(),
+        (
+          await getProjects({ db, userId: viewerId })
+        ).projects[0]?.updatedAt.getTime(),
         beforeLabels.getTime(),
         "Private tags do not alter project recency",
       );
@@ -125,7 +127,7 @@ export default {
         data: { projectId: created.id, name: "Editor rename" },
       });
       assert.equal(
-        (await getProjects({ db, ownerId }))[0]?.name,
+        (await getProjects({ db, userId: ownerId })).projects[0]?.name,
         "Editor rename",
       );
       await db
@@ -144,7 +146,10 @@ export default {
         }),
         /Project not found/,
       );
-      assert.equal((await getProjects({ db, ownerId: viewerId })).length, 0);
+      assert.equal(
+        (await getProjects({ db, userId: viewerId })).projects.length,
+        0,
+      );
 
       await db.insert(organization).values({
         id: organizationId,
@@ -174,16 +179,38 @@ export default {
         .returning();
       assert(orgProject);
       assert.equal(
-        (await getProjects({ db, ownerId })).find(
+        (await getProjects({ db, userId: ownerId })).projects.find(
           (item) => item.id === orgProject.id,
         )?.canDelete,
         true,
       );
-      const orgMember = (await getProjects({ db, ownerId: editorId })).find(
-        (item) => item.id === orgProject.id,
-      );
+      const orgMember = (
+        await getProjects({ db, userId: editorId })
+      ).projects.find((item) => item.id === orgProject.id);
       assert(orgMember?.canWrite && !orgMember.canDelete);
       assert.equal(orgMember.people.length, 2);
+
+      const everything = await getProjects({ db, userId: ownerId });
+      assert(everything.projects.length >= 2);
+      assert.equal(everything.nextCursor, null);
+      const paged: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await getProjects({
+          db,
+          userId: ownerId,
+          limit: 1,
+          cursor,
+        });
+        assert(page.projects.length <= 1);
+        paged.push(...page.projects.map((item) => item.id));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor);
+      assert.deepEqual(
+        paged,
+        everything.projects.map((item) => item.id),
+        "Cursor pages walk the full list in recency order without gaps",
+      );
 
       const imported = await importProjectFiles({
         db,

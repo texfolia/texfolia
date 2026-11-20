@@ -30,10 +30,11 @@ export const Route = createFileRoute("/templates_/publish")({
   },
   loader: async () => {
     const [projects, templates] = await Promise.all([
-      getProjects(),
+      // A select can only list so much; offer the most recent page.
+      getProjects({ data: { limit: 200 } }),
       listMyTemplates(),
     ]);
-    return { projects, templates };
+    return { projects: projects.projects, templates };
   },
   head: () => ({
     meta: [

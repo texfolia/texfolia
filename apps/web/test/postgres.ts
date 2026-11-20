@@ -41,7 +41,7 @@ async function assertInaccessible({
   projectId: string;
 }) {
   assert(
-    !(await getProjects({ db, ownerId: userId })).some(
+    !(await getProjects({ db, userId })).projects.some(
       (item) => item.id === projectId,
     ),
   );
@@ -72,7 +72,9 @@ try {
   assert(folder);
   assert(loaded.nodes.some((node) => node.name === "main.tex"));
   assert(
-    (await getProjects({ db, ownerId })).some((item) => item.id === created.id),
+    (await getProjects({ db, userId: ownerId })).projects.some(
+      (item) => item.id === created.id,
+    ),
   );
 
   await db.insert(user).values({
@@ -85,7 +87,7 @@ try {
   await db
     .insert(projectCollaborator)
     .values({ projectId: created.id, userId: teammateId, role: "editor" });
-  const projects = await getProjects({ db, ownerId });
+  const projects = (await getProjects({ db, userId: ownerId })).projects;
   assert.equal(
     projects.find((item) => item.id === created.id)?.collaborators[0]?.user?.id,
     teammateId,
@@ -102,9 +104,9 @@ try {
     });
     assert.equal(shared.id, created.id);
     assert.equal(shared.canWrite, role === "editor");
-    const listed = (await getProjects({ db, ownerId: teammateId })).filter(
-      (item) => item.id === created.id,
-    );
+    const listed = (
+      await getProjects({ db, userId: teammateId })
+    ).projects.filter((item) => item.id === created.id);
     assert.equal(listed.length, 1, `${role} can discover the shared project`);
     assert.equal(listed[0]?.ownerId, ownerId);
     assert.equal(listed[0]?.organizationId, null);
@@ -166,7 +168,7 @@ try {
     role: "viewer",
   });
   assert.equal(
-    (await getProjects({ db, ownerId })).filter(
+    (await getProjects({ db, userId: ownerId })).projects.filter(
       (item) => item.id === created.id,
     ).length,
     1,
@@ -225,8 +227,8 @@ try {
     createdAt: new Date(),
   });
   const organizationProjects = (
-    await getProjects({ db, ownerId: teammateId })
-  ).filter((item) => item.id === organizationProjectId);
+    await getProjects({ db, userId: teammateId })
+  ).projects.filter((item) => item.id === organizationProjectId);
   assert.equal(organizationProjects.length, 1);
   assert.equal(organizationProjects[0]?.ownerId, null);
   assert.equal(organizationProjects[0]?.organizationId, organizationId);
@@ -270,7 +272,7 @@ try {
   assert.equal(deleted.name, created.name);
   assert.equal(deleted.nodes.length, loaded.nodes.length + 1);
   assert.equal(
-    (await getProjects({ db, ownerId })).filter(
+    (await getProjects({ db, userId: ownerId })).projects.filter(
       (item) => item.name === created.name,
     ).length,
     1,

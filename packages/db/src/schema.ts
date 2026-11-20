@@ -321,6 +321,9 @@ export const relations = defineRelations(
     projectJob,
     projectNode,
     projectShareLink,
+    projectTag,
+    tag,
+    organization,
     user,
   },
   (r) => ({
@@ -331,6 +334,16 @@ export const relations = defineRelations(
       owner: r.one.user({
         from: r.project.ownerId,
         to: r.user.id,
+      }),
+      // Members come from authRelations once the parts merge in createDb.
+      organization: r.one.organization({
+        from: r.project.organizationId,
+        to: r.organization.id,
+      }),
+      // Every user's labels; filter by tag.userId when reading.
+      tags: r.many.tag({
+        from: r.project.id.through(r.projectTag.projectId),
+        to: r.tag.id.through(r.projectTag.tagId),
       }),
     },
     projectCollaborator: {

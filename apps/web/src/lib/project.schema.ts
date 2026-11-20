@@ -13,6 +13,14 @@ export const createProjectSchema = z.object({
   name: projectNameSchema,
 });
 
+// Bounds mirror maxProjectPageSize in project.server.ts.
+export const projectsPageSchema = z
+  .object({
+    cursor: z.uuid().optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  })
+  .optional();
+
 export const renameProjectSchema = z.object({
   projectId: z.uuid(),
   name: projectNameSchema,

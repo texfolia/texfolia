@@ -1,4 +1,9 @@
-import { createContext, type ReactNode, useContext } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useSyncExternalStore,
+} from "react";
 
 import {
   createProject,
@@ -9,24 +14,72 @@ import {
 import { projectNameSchema } from "#/lib/project.schema";
 import { createRpcCollection } from "#/lib/rpc-collection";
 
+type ProjectsPage = { projects: Project[]; nextCursor: string | null };
+
 export function createProjectsStore({
   initial,
   ownerId,
 }: {
-  initial: Project[];
+  initial: ProjectsPage;
   ownerId: string;
 }) {
   const projects = createRpcCollection({
-    initial,
+    initial: initial.projects,
     insert: (row) => createProject({ data: { id: row.id, name: row.name } }),
     remove: (row) => deleteProject({ data: { projectId: row.id } }),
   });
+  // Pagination state lives outside the collection, so components subscribe to
+  // it separately through useProjectsPagination. A failed page stops infinite
+  // scrolling until the viewer retries, so a broken request cannot loop.
+  let pagination = {
+    nextCursor: initial.nextCursor,
+    loading: false,
+    failed: false,
+  };
+  let pages = 1;
+  const listeners = new Set<() => void>();
+  const setPagination = (next: Partial<typeof pagination>) => {
+    pagination = { ...pagination, ...next };
+    for (const listener of listeners) listener();
+  };
 
   return {
     ownerId,
     projects,
+    pagination: {
+      get: () => pagination,
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    async loadMore() {
+      const cursor = pagination.nextCursor;
+      if (!cursor || pagination.loading) return;
+      setPagination({ loading: true, failed: false });
+      try {
+        const page = await getProjects({ data: { cursor } });
+        projects.utils.append(page.projects);
+        pages += 1;
+        setPagination({ nextCursor: page.nextCursor, loading: false });
+      } catch {
+        setPagination({ loading: false, failed: true });
+      }
+    },
+    // Reload as many pages as the viewer has already loaded.
     async refresh() {
-      projects.utils.replace(await getProjects());
+      const rows: Project[] = [];
+      let cursor: string | null | undefined;
+      for (let loaded = 0; loaded < pages; loaded += 1) {
+        const page = await getProjects({
+          data: cursor ? { cursor } : undefined,
+        });
+        rows.push(...page.projects);
+        cursor = page.nextCursor;
+        if (!cursor) break;
+      }
+      projects.utils.replace(rows);
+      setPagination({ nextCursor: cursor ?? null, failed: false });
     },
     async create(name: string) {
       const id = crypto.randomUUID();
@@ -78,4 +131,13 @@ export function useProjects() {
   const store = useContext(ProjectsContext);
   if (!store) throw new Error("Missing projects provider");
   return store;
+}
+
+export function useProjectsPagination() {
+  const { pagination } = useProjects();
+  return useSyncExternalStore(
+    pagination.subscribe,
+    pagination.get,
+    pagination.get,
+  );
 }
