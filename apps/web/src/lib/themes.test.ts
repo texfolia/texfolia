@@ -5,6 +5,10 @@ import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
 import * as uiw from "@uiw/codemirror-themes-all";
 import { EditorState, EditorView, type Extension } from "@uiw/react-codemirror";
 
+import {
+  catalogPath,
+  renderThemeCatalog,
+} from "../../scripts/generate-theme-catalog";
 import { bibtexLanguage, themedLatex } from "./latex/highlight";
 import { latexTags } from "./latex/tags";
 import {
@@ -17,6 +21,8 @@ import {
   appearanceSchema,
   appearanceStorageKey,
   legacyAppearanceStorageKey,
+  loadedThemeExtension,
+  loadThemeExtension,
   themeCatalog,
   catalogTheme,
   migrateAppearance,
@@ -25,7 +31,11 @@ import {
   selectedTheme,
 } from "./themes";
 
-test("catalog includes exactly every exported UIW theme with its native settings and mode", () => {
+test("generated theme catalog is current", async () => {
+  expect(await Bun.file(catalogPath).text()).toBe(await renderThemeCatalog());
+});
+
+test("catalog includes exactly every exported UIW theme with its native settings and mode", async () => {
   const ids = Object.keys(uiw)
     .filter((key) => key.endsWith("Init"))
     .map((key) => key.slice(0, -4))
@@ -34,14 +44,16 @@ test("catalog includes exactly every exported UIW theme with its native settings
   expect(new Set(themeCatalog.map((theme) => theme.id)).size).toBe(ids.length);
   for (const definition of themeCatalog) {
     const resolved = resolveTheme(definition);
-    const extension = editorTheme(resolved);
+    const loaded = await loadThemeExtension(definition.id);
+    expect(loaded).toBe(uiw[definition.id]);
+    expect(loadedThemeExtension(definition.id)).toBe(loaded);
+    const extension = editorTheme(resolved, loaded);
     expect(resolved.variables["--background"]).toBe(
       definition.settings.background,
     );
     expect(resolved.variables["--foreground"]).toBe(
       definition.settings.foreground,
     );
-    expect(definition.extension).toBe(uiw[definition.id]);
     expect(
       EditorState.create({ extensions: extension }).facet(EditorView.darkTheme),
     ).toBe(definition.mode === "dark");
@@ -63,9 +75,12 @@ test("catalog includes exactly every exported UIW theme with its native settings
   ).not.toBe("none");
 });
 
-test("native UIW highlighting handles the inherited LaTeX tags", () => {
+test("native UIW highlighting handles the inherited LaTeX tags", async () => {
   const state = EditorState.create({
-    extensions: editorTheme(resolveTheme(catalogTheme("dracula"))),
+    extensions: editorTheme(
+      resolveTheme(catalogTheme("dracula")),
+      await loadThemeExtension("dracula"),
+    ),
   });
   expect(highlightingFor(state, [latexTags.command])).toBe(
     highlightingFor(state, [tags.keyword]),
