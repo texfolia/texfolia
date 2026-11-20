@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import type { BuildSnapshot } from "../build";
+import { type BuildSnapshot } from "@texfolia/contracts";
+
 import {
   type BuildRef,
   initialSharedPdf,

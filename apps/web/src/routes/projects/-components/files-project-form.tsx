@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { sourcePathSchema } from "@texfolia/contracts";
 import { useId, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -11,7 +12,6 @@ import {
   maxSourceProjectBytes,
 } from "#/lib/project-source";
 import { importProjectFiles } from "#/lib/project.functions";
-import { sourcePathSchema } from "#/lib/source-path.schema";
 
 export function FilesProjectForm({
   onPendingChange,

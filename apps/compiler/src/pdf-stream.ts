@@ -1,3 +1,4 @@
+import { maxPdfBytes } from "@texfolia/contracts";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -91,7 +92,7 @@ export async function firstPdfPart(
               onFirstByte();
             }
             size += length;
-            if (size > 20 * 1024 * 1024)
+            if (size > maxPdfBytes)
               throw new Error("Engine PDF exceeds 20 MiB");
             controller.enqueue(buffer.slice(0, length));
             buffer = buffer.subarray(length);

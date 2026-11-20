@@ -1,25 +1,4 @@
-import { z } from "zod";
-
-const duration = z.number().finite().nonnegative();
-// Browser durations are measured with performance.now() from the compile
-// action. They are never converted with the browser's wall clock.
-export const previewTimingSchema = z.object({
-  outcome: z.enum(["rendered", "preview_failed"]),
-  submissionMs: duration,
-  pollingMs: duration,
-  downloadMs: duration,
-  previewMs: duration,
-  actionToPdfMs: duration,
-  keystrokeToPdfMs: duration.nullable(),
-  firstPdfByteMs: duration.nullable().optional(),
-  // Clock anchors for the Logs timeline: the submission request leaving the
-  // browser and the web route's own processing time, echoed from its response.
-  requestSentMs: duration.optional(),
-  serverMs: duration.optional(),
-  // Arrival of the terminal build event over SSE.
-  notifiedMs: duration.optional(),
-});
-export type PreviewTiming = z.infer<typeof previewTimingSchema>;
+import type { PreviewTiming } from "@texfolia/contracts";
 
 // The File identity keeps renders of older PDFs attached to their own job.
 const previews = new WeakMap<

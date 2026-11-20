@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 
-import { artifactPathSchema, HttpError, parseProject } from "../src/project";
-import pathFixtures from "./fixtures/path-policy.json";
+import { artifactPathSchema } from "@texfolia/contracts";
+import pathFixtures from "@texfolia/contracts/path-policy.json";
+
+import { HttpError, parseProject } from "../src/project";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "hello" } };
 test("accepts nested projects and binary assets", () => {
@@ -30,7 +32,7 @@ test("rejects traversal, absolute paths, missing inputs and file collisions", ()
   ).toThrow(HttpError);
 });
 
-// The Go engine consumes the same fixtures, including the UTF-8 byte boundaries.
+// packages/contracts and the Go engine check the same fixtures, including the UTF-8 byte boundaries.
 
 for (const fixture of pathFixtures)
   test(`compiler source path: ${JSON.stringify(fixture.path)}`, () => {

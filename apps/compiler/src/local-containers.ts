@@ -2,11 +2,11 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { jobIdSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./pool";
 import { createPooledEngine } from "./pooled-engine";
-import { jobIdSchema } from "./project";
 import { createProjectEngineClient } from "./project-engine";
 import type { Engine, ObjectStore } from "./types";
 

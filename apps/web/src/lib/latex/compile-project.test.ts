@@ -1,12 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 
-import type { BuildSnapshot } from "../build";
+import { type BuildSnapshot, previewTimingSchema } from "@texfolia/contracts";
+
 import { requestCompilation } from "./compile-project";
-import {
-  previewTimingSchema,
-  reportCompilePreview,
-  trackCompilePreview,
-} from "./compile-telemetry";
+import { reportCompilePreview, trackCompilePreview } from "./compile-telemetry";
 import { ProjectBuildEvents } from "./project-build-events";
 
 const originalEventSource = Object.getOwnPropertyDescriptor(

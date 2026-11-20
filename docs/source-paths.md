@@ -1,11 +1,10 @@
 # Project path policy
 
-The web app defines source validation in
-[`source-path.schema.ts`](../apps/web/src/lib/source-path.schema.ts). The compiler
-API defines its source and artifact schemas in
-[`project.ts`](../apps/compiler/src/project.ts), and the Go engine implements the
-same policy. All three implementations run against the cases in
-[`path-policy.json`](../apps/compiler/test/fixtures/path-policy.json).
+The web app and the compiler API share one TypeScript definition of the source,
+artifact and node name schemas in
+[`packages/contracts`](../packages/contracts/src/paths.ts). The Go engine
+implements the same policy. Both implementations run against the cases in
+[`path-policy.json`](../packages/contracts/fixtures/path-policy.json).
 
 A source path is relative to the project root. The root node's display name is
 not part of the path. Names and paths preserve spaces, Unicode, and Unicode

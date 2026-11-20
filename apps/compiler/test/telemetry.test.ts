@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { jobTimingSchema, parseEngineTiming } from "../src/telemetry";
+import { jobTimingSchema } from "@texfolia/contracts";
+
+import { parseEngineTiming } from "../src/telemetry";
 
 const timing = {
   temperature: "cold",

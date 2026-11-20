@@ -1,8 +1,7 @@
+import { jobIdSchema, type planSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
 import type { ProjectCoordinatorCore } from "./coordinator";
-import { jobIdSchema } from "./project";
-import type { planSchema } from "./telemetry";
 
 const compileMessageSchema = z.object({
   projectId: jobIdSchema,

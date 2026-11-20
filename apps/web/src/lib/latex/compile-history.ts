@@ -1,48 +1,22 @@
+import {
+  buildStatusSchema,
+  jobTimingSchema,
+  previewTimingSchema,
+} from "@texfolia/contracts";
 import { z } from "zod";
-
-import { previewTimingSchema } from "./compile-telemetry";
 
 // The Logs tab lists this many recent compiles. Older jobs keep their status
 // row for accounting, but their timeline is pruned.
 export const compileHistoryLimit = 10;
 
-const duration = z.number().finite().nonnegative();
 const instant = z.iso.datetime({ offset: true });
-// Only Tectonic is installed. Stored jobs may still say "texlive"; read those
-// as "unknown" so the app never reports TeX Live as the engine.
-export const compileEngineSchema = z.preprocess(
-  (value) => (value === "texlive" ? "unknown" : value),
-  z.enum(["tectonic", "unknown"]),
-);
 
 // Persisted on project_job.timing. Each part is optional because jobs can fail
 // before the compiler runs, and browser reporting is best effort.
 export const compilerTimelineSchema = z.looseObject({
+  ...jobTimingSchema.partial().shape,
   // Coordinator acceptance; the debounce starts here.
   acceptedAt: instant.optional(),
-  engine: compileEngineSchema.optional(),
-  temperature: z.enum(["cold", "warm", "unknown"]).optional(),
-  attempt: z.number().int().positive().optional(),
-  debounceMs: duration.optional(),
-  delivery: z.enum(["direct", "overflow"]).optional(),
-  queueWaitMs: duration.nullable().optional(),
-  engineRequestMs: duration.optional(),
-  compileMs: duration.nullable().optional(),
-  outputMs: duration.nullable().optional(),
-  publishMs: duration.optional(),
-  cacheUsed: z.boolean().optional(),
-  containerStartMs: duration.optional(),
-  bootMs: duration.nullable().optional(),
-  archiveFetchMs: duration.optional(),
-  archiveUnpackMs: duration.optional(),
-  archiveStatus: z
-    .enum(["restored", "missing", "invalid", "warm", "unavailable"])
-    .optional(),
-  prewarmed: z.boolean().optional(),
-  startedAt: instant.optional(),
-  firstPdfAt: instant.optional(),
-  engineFinishedAt: instant.optional(),
-  publishedAt: instant.optional(),
 });
 export const jobTimelineSchema = z.object({
   web: z.object({ receivedAt: instant }).optional(),
@@ -72,7 +46,7 @@ export function parseJobTimeline(value: unknown): JobTimeline {
 
 export const compileHistoryEntrySchema = z.object({
   id: z.uuid(),
-  status: z.enum(["queued", "running", "succeeded", "failed"]),
+  status: buildStatusSchema,
   error: z.string().nullable(),
   createdAt: instant,
   startedAt: instant.nullable(),

@@ -102,5 +102,5 @@ Do not infer end-to-end latency from backend events alone or add overlapping
 timings. Compare equivalent projects, plans, cache states, and runtime locations.
 The query describes reporting, not a production latency claim.
 
-The authoritative schemas are [compiler telemetry](../apps/compiler/src/telemetry.ts)
-and [browser preview timing](../apps/web/src/lib/latex/compile-telemetry.ts).
+The authoritative schemas for compiler and browser preview timing are in
+[`packages/contracts`](../packages/contracts/src/telemetry.ts).

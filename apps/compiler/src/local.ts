@@ -2,6 +2,8 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { jobIdSchema } from "@texfolia/contracts";
+
 import { ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
 import {
@@ -10,7 +12,6 @@ import {
   withCompileUsage,
   type CompileUsage,
 } from "./limits";
-import { jobIdSchema } from "./project";
 import { compileQueue, processQueueMessage } from "./queues";
 import type { Engine, ObjectStore } from "./types";
 

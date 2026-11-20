@@ -1,4 +1,5 @@
-import { buildSnapshotSchema, type BuildSnapshot } from "../build";
+import { buildSnapshotSchema, type BuildSnapshot } from "@texfolia/contracts";
+
 import { withShareToken } from "../project-share-links.schema";
 
 type BuildEvent =

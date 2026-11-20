@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { unknownEngineTiming } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import { session, template, user } from "@texfolia/db/schema";
 import { seedTemplates } from "@texfolia/db/seed-templates";
@@ -13,7 +14,6 @@ import { chromium } from "playwright";
 
 import { createLocalRuntime } from "../../compiler/src/local";
 import { HttpError } from "../../compiler/src/project";
-import { unknownEngineTiming } from "../../compiler/src/telemetry";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(

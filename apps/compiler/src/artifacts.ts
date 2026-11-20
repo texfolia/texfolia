@@ -1,25 +1,6 @@
-import { z } from "zod";
+import type { ArtifactManifest } from "@texfolia/contracts";
 
-import { artifactPathSchema } from "./project";
 import type { Engine, ObjectStore } from "./types";
-
-export const artifactManifestSchema = z.object({
-  id: z.string(),
-  revision: z.number(),
-  digest: z.string(),
-  builtAt: z.string(),
-  builtBy: z.string(),
-  engine: z.string(),
-  pdf: artifactPathSchema.nullable(),
-  files: z.array(
-    z.object({
-      path: artifactPathSchema,
-      key: z.string(),
-      sizeBytes: z.number(),
-    }),
-  ),
-});
-export type ArtifactManifest = z.infer<typeof artifactManifestSchema>;
 
 export function encodeBase64(bytes: Uint8Array) {
   let binary = "";

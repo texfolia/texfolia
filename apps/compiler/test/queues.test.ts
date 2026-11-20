@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { planSchema, unknownEngineTiming } from "@texfolia/contracts";
 import { unstable_readConfig } from "wrangler";
 import { z } from "zod";
 
@@ -20,7 +21,6 @@ import {
   type CompileMessage,
 } from "../src/queues";
 import { sourceHash, sourceObjectKey } from "../src/source-sync";
-import { planSchema, unknownEngineTiming } from "../src/telemetry";
 import type { Engine, ObjectStore } from "../src/types";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "source" } };

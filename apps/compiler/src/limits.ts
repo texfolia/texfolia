@@ -1,7 +1,7 @@
+import { planSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
 import { EngineError, HttpError } from "./project";
-import { planSchema } from "./telemetry";
 import type { Engine } from "./types";
 
 type Plan = z.infer<typeof planSchema>;

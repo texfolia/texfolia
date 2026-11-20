@@ -1,5 +1,3 @@
-import type { BuildSnapshot } from "../build";
-
 /** A compile job this tab ran, and the project revision it compiled. */
 export type BuildRef = { id: string; revision: number | undefined };
 
@@ -168,3 +166,4 @@ export function sharedPdfFile(build: BuildSnapshot | null) {
     (file) => file.path === build.artifacts?.pdf,
   );
 }
+import { type BuildSnapshot } from "@texfolia/contracts";

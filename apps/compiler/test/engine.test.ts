@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 
+import { unknownEngineTiming } from "@texfolia/contracts";
+
 import { createEngineClient } from "../src/engine";
 import { EngineError, HttpError } from "../src/project";
-import { unknownEngineTiming } from "../src/telemetry";
 
 const context = {
   jobId: crypto.randomUUID(),

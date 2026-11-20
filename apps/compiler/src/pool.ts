@@ -1,6 +1,5 @@
+import { planSchema } from "@texfolia/contracts";
 import { z } from "zod";
-
-import { planSchema } from "./telemetry";
 
 export const poolClaimSchema = z.object({
   container: z.string(),

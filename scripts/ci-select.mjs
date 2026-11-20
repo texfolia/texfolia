@@ -84,9 +84,7 @@ export function selectChecks(paths, { fallback = false } = {}) {
       (path) => path.startsWith("apps/compiler/") && !documentation(path),
     );
   const crossPackage = paths.some((path) =>
-    ["apps/compiler/src/", "apps/compiler/test/fixtures/"].some((input) =>
-      path.startsWith(input),
-    ),
+    path.startsWith("apps/compiler/src/"),
   );
   const runtime = paths.some(
     (path) =>

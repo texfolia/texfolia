@@ -1,0 +1,23 @@
+{
+  "name": "@texfolia/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./path-policy.json": "./fixtures/path-policy.json"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@texfolia/typescript-config": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "typescript": "^6.0.2",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "zod": "^4.6.7"
+  }
+}
