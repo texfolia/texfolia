@@ -1,8 +1,9 @@
 import { createInterface } from "node:readline";
 
+import { previewTimingSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
-import { decodeTelemetry, previewTimingSchema } from "../src/telemetry";
+import { decodeTelemetry } from "../src/telemetry";
 
 const sampleSchema = previewTimingSchema.extend({
   event: z.literal("compile_preview"),

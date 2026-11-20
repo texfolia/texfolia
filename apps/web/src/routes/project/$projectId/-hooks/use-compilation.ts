@@ -1,3 +1,4 @@
+import { type BuildSnapshot } from "@texfolia/contracts";
 import {
   type RefObject,
   useEffect,
@@ -7,7 +8,6 @@ import {
   useState,
 } from "react";
 
-import type { BuildSnapshot } from "#/lib/build";
 import type { LatexProblem } from "#/lib/latex/analysis";
 import { parseCompileLog } from "#/lib/latex/compile-log";
 import { requestCompilation } from "#/lib/latex/compile-project";

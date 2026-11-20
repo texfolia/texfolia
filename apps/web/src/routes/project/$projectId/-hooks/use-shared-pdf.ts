@@ -1,6 +1,7 @@
+import { type BuildSnapshot } from "@texfolia/contracts";
 import { useCallback, useEffect, useEffectEvent, useReducer } from "react";
 
-import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
+import { buildFileUrl } from "#/lib/build";
 import {
   type BuildRef,
   initialSharedPdf,

@@ -52,13 +52,11 @@ test("compiler runtime changes also exercise its web consumers", () => {
   assert.equal(plan["postgres-build"], true);
 });
 
-test("cross-package fixtures select web tests", () => {
-  assert.equal(
-    selectChecks(["apps/compiler/test/fixtures/path-policy.json"])[
-      "web-checks"
-    ],
-    true,
-  );
+test("shared contract fixtures run every check", () => {
+  const plan = selectChecks(["packages/contracts/fixtures/path-policy.json"]);
+  assert.equal(plan.full, true);
+  assert.equal(plan.compiler, true);
+  assert.equal(plan["web-checks"], true);
 });
 
 test("web unit-only changes skip integration and production assets", () => {
@@ -237,6 +235,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       ".gitignore",
       "apps/web/package.json",
       "apps/compiler/package.json",
+      "packages/contracts/package.json",
       "packages/db/package.json",
       "packages/typescript-config/package.json",
       "packages/typescript-config/base.json",
@@ -246,7 +245,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
     }
     for (const path of [
       "apps/compiler/src/local.ts",
-      "apps/compiler/test/fixtures/path-policy.json",
+      "packages/contracts/fixtures/path-policy.json",
       "apps/compiler/engine/compile.go",
       "apps/web/src/lib/shortcuts.test.ts",
       "packages/db/src/index.ts",
@@ -265,32 +264,32 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       ["docs/ci.md", [], []],
       [
         "apps/compiler/engine/compile.go",
-        ["@texfolia/db", "compiler"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler"],
         ["compiler#test", "compiler#lint"],
       ],
       [
         "apps/web/src/lib/shortcuts.test.ts",
-        ["@texfolia/db", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "web"],
         ["web#test"],
       ],
       [
         "apps/compiler/src/local.ts",
-        ["@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
         ["web#typecheck"],
       ],
       [
-        "apps/compiler/test/fixtures/path-policy.json",
-        ["@texfolia/db", "compiler", "web"],
-        ["web#test", "web#typecheck"],
+        "packages/contracts/fixtures/path-policy.json",
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts#test", "compiler#test", "web#typecheck"],
       ],
       [
         "packages/db/src/index.ts",
-        ["@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
         ["web#test", "compiler#test", "web#typecheck"],
       ],
       [
         ".github/workflows/ci.yml",
-        ["@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
         ["web#test", "compiler#test"],
       ],
     ]) {

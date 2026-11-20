@@ -4,10 +4,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { type EngineTiming } from "@texfolia/contracts";
+
 import { coordinatorSnapshotSchema } from "../src/coordinator";
 import { createLocalRuntime } from "../src/local";
 import { createLocalContainerPool } from "../src/local-containers";
-import type { EngineTiming } from "../src/telemetry";
 
 const directory = await mkdtemp(join(tmpdir(), "texfolia-pool-check-"));
 const options = {

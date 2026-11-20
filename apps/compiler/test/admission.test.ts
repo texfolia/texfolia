@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { unknownEngineTiming } from "@texfolia/contracts";
 import { z } from "zod";
 
 import { createLocalRuntime } from "../src/local";
-import { unknownEngineTiming } from "../src/telemetry";
 
 const source = { mainFile: "main.tex", files: { "main.tex": "hello" } };
 const output = {

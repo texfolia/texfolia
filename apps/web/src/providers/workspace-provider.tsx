@@ -1,8 +1,8 @@
+import { type BuildSnapshot } from "@texfolia/contracts";
 import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
 import type { Comments } from "#/hooks/use-comments";
-import type { BuildSnapshot } from "#/lib/build";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import type { EditorCommand } from "#/lib/editor-command";
 import type { LatexProblem } from "#/lib/latex/analysis";

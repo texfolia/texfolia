@@ -1,0 +1,3 @@
+{
+  "extends": "@texfolia/typescript-config/base.json"
+}

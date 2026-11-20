@@ -1,7 +1,7 @@
+import { type EngineTiming } from "@texfolia/contracts";
 import { z } from "zod";
 
 import { createEngineClient } from "./engine";
-import type { EngineTiming } from "./telemetry";
 import type { Engine, ObjectStore } from "./types";
 
 const healthSchema = z.object({

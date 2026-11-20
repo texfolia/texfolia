@@ -1,3 +1,10 @@
+import {
+  acceptedJobSchema,
+  buildSnapshotSchema,
+  compileJobSchema,
+  previewTimingSchema,
+  type JobTiming,
+} from "@texfolia/contracts";
 import type { Db } from "@texfolia/db";
 import { projectJob } from "@texfolia/db/schema";
 import { env } from "cloudflare:workers";
@@ -15,58 +22,15 @@ import { z } from "zod";
 
 import type { createAuth } from "#/lib/auth";
 import { compilePlan } from "#/lib/billing.server";
-import { buildSnapshotSchema } from "#/lib/build";
 import { withCompileSources } from "#/lib/compile-source.server";
 import { fetchCompiler } from "#/lib/compiler.server";
-import {
-  compileEngineSchema,
-  compileHistoryLimit,
-} from "#/lib/latex/compile-history";
-import { previewTimingSchema } from "#/lib/latex/compile-telemetry";
+import { compileHistoryLimit } from "#/lib/latex/compile-history";
 import { compileDeltaSchema, hashSource } from "#/lib/latex/source-sync";
 import { streamProjectResponse } from "#/lib/live-project.server";
 import { lockProject } from "#/lib/project-access.server";
 import { requestPrincipal } from "#/lib/request-principal.server";
 
-const compilerTimingSchema = z.looseObject({
-  plan: z.enum(["free", "pro", "team", "unknown"]),
-  engine: compileEngineSchema,
-  temperature: z.enum(["cold", "warm", "unknown"]),
-});
-type CompilerTiming = z.infer<typeof compilerTimingSchema>;
-
 const idSchema = z.uuid();
-const pending = z.object({
-  id: idSchema,
-  status: z.enum(["queued", "running"]),
-  supersededId: idSchema.optional(),
-  revision: z.number().int().nonnegative().optional(),
-  sourceRevision: z.number().int().nonnegative().optional(),
-});
-const status = z.union([
-  pending,
-  z.object({
-    id: idSchema,
-    status: z.literal("succeeded"),
-    artifactUrl: z.string(),
-    sizeBytes: z
-      .number()
-      .int()
-      .min(1)
-      .max(20 * 1024 * 1024),
-    log: z.string(),
-    createdAt: z.string().optional(),
-    timing: compilerTimingSchema.optional(),
-  }),
-  z.object({
-    id: idSchema,
-    status: z.literal("failed"),
-    error: z.string(),
-    log: z.string(),
-    createdAt: z.string().optional(),
-    timing: compilerTimingSchema.optional(),
-  }),
-]);
 const failure = z.object({ error: z.string(), log: z.string().optional() });
 const maxBytes = 10 * 1024 * 1024;
 const noStore = { "Cache-Control": "no-store" };
@@ -215,10 +179,7 @@ function mergeTiming(value: Record<string, unknown>) {
   return sql`coalesce(${projectJob.timing}, '{}'::jsonb) || ${JSON.stringify(value)}::jsonb`;
 }
 
-function compilerTimeline(result: {
-  createdAt?: string;
-  timing?: CompilerTiming;
-}) {
+function compilerTimeline(result: { createdAt?: string; timing?: JobTiming }) {
   return { compiler: { ...result.timing, acceptedAt: result.createdAt } };
 }
 
@@ -459,7 +420,7 @@ export const compileHandlers = {
         }
       }
       if (response.status === 202) {
-        const accepted = pending.parse(await response.json());
+        const accepted = acceptedJobSchema.parse(await response.json());
         if (accepted.id !== id) throw new Error("Invalid compiler job ID");
         revision = accepted.revision;
         sourceRevision = accepted.sourceRevision;
@@ -556,12 +517,12 @@ export const compileHandlers = {
       return json({ error: "Job not found" }, 404);
     const body = await readPreviewTiming(request);
     if (!body) return json({ error: "Invalid preview timing" }, 400);
-    let timing: CompilerTiming | undefined;
+    let timing: JobTiming | undefined;
     try {
       const response = await fetchCompiler(
         `/projects/${params.projectId}/jobs/${id.data}`,
       );
-      const result = status.safeParse(await response.json());
+      const result = compileJobSchema.safeParse(await response.json());
       if (
         result.success &&
         result.data.id === id.data &&
@@ -723,7 +684,7 @@ export const compileHandlers = {
       }
       if (!response.ok)
         throw new Error(`Compiler status returned ${response.status}`);
-      const result = status.parse(await response.json());
+      const result = compileJobSchema.parse(await response.json());
       if (result.id !== id) throw new Error("Invalid compiler job ID");
       switch (result.status) {
         case "queued":

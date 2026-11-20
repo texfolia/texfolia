@@ -3,9 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { unknownEngineTiming } from "@texfolia/contracts";
+
 import { coordinatorSnapshotSchema } from "../src/coordinator";
 import { createLocalRuntime } from "../src/local";
-import { unknownEngineTiming } from "../src/telemetry";
 import type { Engine } from "../src/types";
 
 const output = (source: string) => ({

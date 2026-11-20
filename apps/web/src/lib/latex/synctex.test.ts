@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildSnapshotSchema } from "../build";
+import { buildSnapshotSchema } from "@texfolia/contracts";
+
 import {
   parseSyncTex,
   pdfToSource,

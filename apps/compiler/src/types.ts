@@ -1,8 +1,8 @@
+import { type EngineTiming, type planSchema } from "@texfolia/contracts";
 import type { z } from "zod";
 
 import type { artifactFilesSchema, Project } from "./project";
 import type { SourceContent, SyncedProject } from "./source-sync";
-import type { EngineTiming, planSchema } from "./telemetry";
 
 export interface ObjectStore {
   read(key: string): Promise<ReadableStream<Uint8Array> | null>;

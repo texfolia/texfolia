@@ -1,3 +1,4 @@
+import { jobIdSchema, planSchema } from "@texfolia/contracts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -7,13 +8,12 @@ import {
   type ProjectCoordinatorCore,
 } from "./coordinator";
 import { compileUserSchema } from "./limits";
-import { HttpError, jobIdSchema, parseProject } from "./project";
+import { HttpError, parseProject } from "./project";
 import {
   maxSourceSyncBytes,
   sourceDeltaSchema,
   SourceResyncError,
 } from "./source-sync";
-import { planSchema } from "./telemetry";
 
 export function createCoordinatorApp(
   coordinator: ProjectCoordinatorCore,

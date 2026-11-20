@@ -1,5 +1,3 @@
-import type { BuildSnapshot } from "../build";
-
 export type SyncTexLocation = {
   path: string;
   line: number;
@@ -260,3 +258,4 @@ export function rotatePdfPoint(x: number, y: number, rotation: number) {
       return { x, y };
   }
 }
+import { type BuildSnapshot } from "@texfolia/contracts";

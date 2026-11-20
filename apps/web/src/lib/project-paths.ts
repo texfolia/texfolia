@@ -1,11 +1,14 @@
+import {
+  maxSourcePathBytes,
+  nodeNameSchema,
+  pathBytes,
+} from "@texfolia/contracts";
+
 import type { ProjectNode } from "#/lib/project.functions";
 
 import {
   InvalidSourcePathError,
   assertSourcePath,
-  maxSourcePathBytes,
-  nodeNameSchema,
-  pathBytes,
   sourcePathError,
 } from "./source-path.schema";
 

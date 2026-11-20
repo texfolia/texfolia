@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 
+import { unknownEngineTiming } from "@texfolia/contracts";
+
 import {
   CompileUsageCore,
   compilePolicy,
@@ -9,7 +11,6 @@ import {
 } from "../src/limits";
 import type { CompileUsage } from "../src/limits";
 import { HttpError } from "../src/project";
-import { unknownEngineTiming } from "../src/telemetry";
 import type { Engine } from "../src/types";
 
 function fixture() {

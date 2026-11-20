@@ -5,6 +5,8 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { unknownEngineTiming } from "@texfolia/contracts";
+import { buildSnapshotSchema } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import {
   projectCollaborator,
@@ -21,9 +23,7 @@ import { z } from "zod";
 
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
-import { unknownEngineTiming } from "../../compiler/src/telemetry";
 import type { Engine } from "../../compiler/src/types";
-import { buildSnapshotSchema } from "../src/lib/build";
 import {
   compileHistoryLimit,
   compileHistorySchema,

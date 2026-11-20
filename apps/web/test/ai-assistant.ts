@@ -375,13 +375,21 @@ const mf = new Miniflare({
           assert(id);
           compileJobs.set(id, path);
           return Response.json(
-            { id, status: "queued", revision: 1, sourceRevision: 1 },
+            {
+              id,
+              status: "queued",
+              revision: 1,
+              sourceRevision: 1,
+              createdAt: new Date().toISOString(),
+            },
             { status: 202 },
           );
         }
         if (path.includes("/jobs/"))
           return Response.json({
             id: path.split("/").at(-1),
+            revision: 1,
+            createdAt: new Date().toISOString(),
             status: "failed",
             error: "Fixture diagnostic",
             log: "main.tex:3: Undefined control sequence.",

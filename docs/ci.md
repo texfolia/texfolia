@@ -37,7 +37,7 @@ Postgres suite and production-assets.
 | Suite                       | Test inputs under `apps/web/test`                                                      | Additional inputs                                                                     | Production build | Chromium |
 | --------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------- | -------- |
 | database                    | `postgres.ts`, `postgres/`                                                             | Runtime web inputs                                                                    | No               | No       |
-| compile-route               | `compile-route.ts`, `compile-route/`                                                   | Runtime web inputs, compiler runtime and fixtures                                     | No               | No       |
+| compile-route               | `compile-route.ts`, `compile-route/`                                                   | Runtime web inputs, compiler runtime                                                  | No               | No       |
 | ai-billing                  | `ai-billing.ts`                                                                        | Runtime web inputs                                                                    | No               | No       |
 | assistant                   | `ai-assistant.ts`                                                                      | Runtime web inputs                                                                    | Yes              | Yes      |
 | collaboration               | `collaboration.ts`, `collaboration/`, `collaboration-cache.ts`, `collaboration-cache/` | Runtime web inputs                                                                    | No               | Yes      |
@@ -48,13 +48,15 @@ Postgres suite and production-assets.
 | projects                    | `projects.ts`, `projects/`, `worker-integration.ts`                                    | Runtime web inputs                                                                    | No               | No       |
 | templates                   | `templates.ts`, `templates/`, `worker-integration.ts`                                  | Runtime web inputs                                                                    | No               | No       |
 | template-seed               | None                                                                                   | Runtime web inputs, shared packages including `packages/db/test/template-seed-cli.ts` | No               | No       |
-| template-lifecycle          | `template-lifecycle.ts`, `template-pages.ts`                                           | Runtime web inputs, compiler runtime and fixtures                                     | Yes              | Yes      |
+| template-lifecycle          | `template-lifecycle.ts`, `template-pages.ts`                                           | Runtime web inputs, compiler runtime                                                  | Yes              | Yes      |
 | production-assets in Checks | `production-assets.ts`                                                                 | Runtime web inputs                                                                    | Yes              | Yes      |
 
 The browser rows are the existing end-to-end coverage. There is no separate
 `e2e` package script in the current workflow. Compiler-only Go changes run the
 compiler checks and skip web production assets and Postgres suites. Compiler
-runtime and fixture changes also run compile-route and template-lifecycle.
+runtime changes also run compile-route and template-lifecycle. Shared package
+changes, including the path-policy fixture in `packages/contracts`, run every
+check.
 
 Both jobs publish their selection in the step log. The selector regression cases
 run with `node --test scripts/ci-select.test.mjs` in Checks.
@@ -73,8 +75,9 @@ restoration. No remote cache service or credentials are required. GitHub's cache
 scope rules still apply, so a new PR may start cold if no accessible cache exists.
 
 Turbo hashes the default package inputs plus shared TypeScript, lint, format, CI,
-and environment configuration. Web unit tests hash the compiler fixtures they
-import. Web typecheck hashes compiler runtime files and fixtures. Go tests and
+and environment configuration. Web typecheck hashes compiler runtime files.
+Shared packages such as `packages/contracts` are workspace dependencies, so
+their changes invalidate the tasks of the apps that import them. Go tests and
 lint hash the Go version, Go flags, target architecture, and CGO setting. Go cache
 locations pass through without affecting task hashes. Setup-go restores both
 module and build caches using `apps/compiler/engine/go.sum`.

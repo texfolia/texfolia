@@ -1,7 +1,7 @@
+import { sourcePathSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
 import { sourceContentSchema } from "./project-source";
-import { sourcePathSchema } from "./source-path.schema";
 import { spellingLanguageSchema } from "./spelling/languages";
 
 export const projectNameSchema = z.string().trim().min(1, {

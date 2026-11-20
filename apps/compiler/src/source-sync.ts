@@ -1,12 +1,8 @@
+import { sourcePathSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
 import { decodeBase64, encodeBase64 } from "./artifacts";
-import {
-  artifactContentSchema,
-  HttpError,
-  maxProjectBytes,
-  sourcePathSchema,
-} from "./project";
+import { artifactContentSchema, HttpError, maxProjectBytes } from "./project";
 import type { ObjectStore } from "./types";
 
 const sourceHashSchema = z.string().regex(/^[0-9a-f]{64}$/);

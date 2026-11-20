@@ -1,4 +1,5 @@
 import { Container, getContainer } from "@cloudflare/containers";
+import { jobIdSchema, planSchema } from "@texfolia/contracts";
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
@@ -12,9 +13,7 @@ import {
 } from "./src/limits";
 import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
 import { createPooledEngine } from "./src/pooled-engine";
-import { jobIdSchema } from "./src/project";
 import { compileQueue, processQueueMessage } from "./src/queues";
-import { planSchema } from "./src/telemetry";
 import type { ObjectStore } from "./src/types";
 
 export class TectonicContainer extends Container<Env> {

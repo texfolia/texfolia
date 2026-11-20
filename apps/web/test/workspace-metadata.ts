@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { type BuildSnapshot } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import {
   member,
@@ -21,7 +22,6 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
-import type { BuildSnapshot } from "../src/lib/build";
 import { compileDeltaSchema, hashSource } from "../src/lib/latex/source-sync";
 import {
   projectMetadataSchema,
@@ -150,6 +150,7 @@ const mf = new Miniflare({
               id,
               revision,
               sourceRevision: submissions.length,
+              createdAt: new Date().toISOString(),
               status: "running",
             },
             { status: 202 },
@@ -161,6 +162,8 @@ const mf = new Miniflare({
           const id = url.pathname.split("/").at(-1);
           return Response.json({
             id,
+            revision: snapshot.current?.revision ?? snapshot.revision,
+            createdAt: new Date().toISOString(),
             status: snapshot.current?.status ?? "running",
             error: "Fixture compile finished",
             log: "",

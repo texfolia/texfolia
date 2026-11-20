@@ -1,5 +1,6 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
+import { type BuildSnapshot } from "@texfolia/contracts";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
 import {
   lazy,
@@ -11,7 +12,7 @@ import {
 } from "react";
 
 import { PanelHeader } from "#/components/panel-header";
-import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
+import { buildFileUrl } from "#/lib/build";
 import { CollaborativeFile } from "#/lib/collaboration/file";
 import { bibtexLanguage, themedLatex } from "#/lib/latex/highlight";
 import { ProjectBuildEvents } from "#/lib/latex/project-build-events";

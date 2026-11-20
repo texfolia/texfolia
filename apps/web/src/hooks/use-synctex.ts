@@ -1,6 +1,7 @@
+import { type BuildSnapshot } from "@texfolia/contracts";
 import { useEffect, useState } from "react";
 
-import { buildFileUrl, type BuildSnapshot } from "#/lib/build";
+import { buildFileUrl } from "#/lib/build";
 import {
   parseSyncTex,
   readSyncTex,

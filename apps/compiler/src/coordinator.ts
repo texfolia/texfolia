@@ -1,19 +1,19 @@
+import {
+  buildSnapshotSchema,
+  failedJobSchema,
+  jobIdSchema,
+  planSchema,
+  queuedJobSchema,
+  runningJobSchema,
+  succeededJobSchema,
+  unknownEngineTiming,
+  type ArtifactManifest,
+} from "@texfolia/contracts";
 import { z } from "zod";
 
-import {
-  artifactManifestSchema,
-  decodeBase64,
-  storeArtifacts,
-  type ArtifactManifest,
-} from "./artifacts";
+import { decodeBase64, storeArtifacts } from "./artifacts";
 import { compilePolicy, compileUserSchema } from "./limits";
-import {
-  EngineError,
-  HttpError,
-  jobIdSchema,
-  parseProject,
-  type Project,
-} from "./project";
+import { EngineError, HttpError, parseProject, type Project } from "./project";
 import {
   backgroundDelay,
   deadLetterError,
@@ -29,43 +29,25 @@ import {
   type SourceDelta,
   type SyncedProject,
 } from "./source-sync";
-import {
-  emitCompileEvent,
-  jobTimingSchema,
-  planSchema,
-  unknownEngineTiming,
-} from "./telemetry";
+import { emitCompileEvent } from "./telemetry";
 import type { Engine, ObjectStore } from "./types";
 
-const common = {
-  id: jobIdSchema,
-  revision: z.number().int().nonnegative(),
+// The compiler stores these fields on each job beyond the shared contract.
+const stored = {
   digest: z.string(),
-  createdAt: z.string(),
   plan: planSchema,
   userId: compileUserSchema.optional(),
-  log: z.string().default(""),
   builtBy: z.string().default("Unknown"),
   clean: z.boolean().default(false),
-  timing: jobTimingSchema.optional(),
-  sourceRevision: z.number().int().nonnegative().optional(),
   submissionDigest: z.string().optional(),
 };
 const buildSchema = z.discriminatedUnion("status", [
-  z.object({ ...common, status: z.literal("queued") }),
-  z.object({ ...common, status: z.literal("running") }),
-  z.object({
-    ...common,
-    status: z.literal("succeeded"),
-    artifactUrl: z.string(),
-    sizeBytes: z.number().int().nonnegative(),
-  }),
-  z.object({ ...common, status: z.literal("failed"), error: z.string() }),
+  queuedJobSchema.extend(stored),
+  runningJobSchema.extend(stored),
+  succeededJobSchema.extend(stored),
+  failedJobSchema.extend(stored),
 ]);
-export const coordinatorSnapshotSchema = z.object({
-  revision: z.number().int().nonnegative(),
-  artifacts: artifactManifestSchema.nullable().default(null),
-  stale: z.boolean().default(false),
+export const coordinatorSnapshotSchema = buildSnapshotSchema.extend({
   current: buildSchema.nullable(),
   latestBuild: buildSchema.nullable(),
 });
