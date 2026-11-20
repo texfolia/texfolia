@@ -485,9 +485,9 @@ try {
     .click();
   await owner.waitForURL(/\/project\//);
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
-  const templateCopy = (await getProjects({ db, ownerId })).find(
-    (item) => item.name === "Dialog template",
-  );
+  const templateCopy = (
+    await getProjects({ db, userId: ownerId })
+  ).projects.find((item) => item.name === "Dialog template");
   assert(templateCopy, "Template created with the in-dialog name");
   await owner.goto(`${origin}/projects`);
   await owner.getByRole("button", { name: "New project", exact: true }).click();
@@ -1016,7 +1016,7 @@ try {
   await sharedRow.waitFor();
   assert.equal(await sharedRow.locator("[data-slot=avatar]").count(), 2);
   assert.deepEqual(
-    (await getProjects({ db, ownerId: readerId })).find(
+    (await getProjects({ db, userId: readerId })).projects.find(
       (item) => item.id === project.id,
     )?.tags,
     [],
@@ -1027,8 +1027,9 @@ try {
     data: { projectId: project.id, tags: ["private-reader-tag"] },
   });
   assert.deepEqual(
-    (await getProjects({ db, ownerId })).find((item) => item.id === project.id)
-      ?.tags,
+    (await getProjects({ db, userId: ownerId })).projects.find(
+      (item) => item.id === project.id,
+    )?.tags,
     ["draft", "research"],
   );
   await setProjectTags({
@@ -1037,7 +1038,7 @@ try {
     data: { projectId: project.id, tags: [] },
   });
   assert.deepEqual(
-    (await getProjects({ db, ownerId: readerId })).find(
+    (await getProjects({ db, userId: readerId })).projects.find(
       (item) => item.id === project.id,
     )?.tags,
     ["private-reader-tag"],

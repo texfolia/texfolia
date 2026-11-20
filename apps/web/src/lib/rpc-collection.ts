@@ -17,6 +17,14 @@ export function createRpcCollection<T extends { id: string }>({
       for (const row of rows) sync.write({ type: "insert", value: row });
       sync.commit();
     },
+    // Add a further server page without disturbing rows already synced.
+    append(rows: T[]) {
+      const fresh = rows.filter((row) => !collection.has(row.id));
+      if (!fresh.length) return;
+      sync.begin();
+      for (const row of fresh) sync.write({ type: "insert", value: row });
+      sync.commit();
+    },
   };
   const collection = createCollection<T, string, typeof utils>({
     utils,

@@ -412,8 +412,8 @@ export default {
         .set({ snapshot: invalidSnapshot })
         .where(eq(template.id, published.id));
       const projectsBeforeInvalid = (
-        await getProjects({ db, ownerId: editorId })
-      ).length;
+        await getProjects({ db, userId: editorId })
+      ).projects.length;
       await assert.rejects(
         openTemplate({
           db,
@@ -424,7 +424,7 @@ export default {
         /Repair source paths/,
       );
       assert.equal(
-        (await getProjects({ db, ownerId: editorId })).length,
+        (await getProjects({ db, userId: editorId })).projects.length,
         projectsBeforeInvalid,
       );
       await db
@@ -433,8 +433,8 @@ export default {
         .where(eq(template.id, published.id));
       const binarySnapshot = snapshot.find((node) => node.name === "data.bin");
       assert(binarySnapshot?.objectKey);
-      const beforeFailure = (await getProjects({ db, ownerId: editorId }))
-        .length;
+      const beforeFailure = (await getProjects({ db, userId: editorId }))
+        .projects.length;
       await bucket.delete(binarySnapshot.objectKey);
       await assert.rejects(
         openTemplate({
@@ -446,7 +446,7 @@ export default {
         /Snapshot source is missing/,
       );
       assert.equal(
-        (await getProjects({ db, ownerId: editorId })).length,
+        (await getProjects({ db, userId: editorId })).projects.length,
         beforeFailure,
       );
       await bucket.put(
@@ -617,7 +617,7 @@ export default {
         organizationId,
       );
       assert(
-        (await getProjects({ db, ownerId: editorId })).some(
+        (await getProjects({ db, userId: editorId })).projects.some(
           (item) => item.id === team.id,
         ),
       );
@@ -676,7 +676,7 @@ export default {
         /Project not found/,
       );
       assert(
-        !(await getProjects({ db, ownerId: viewerId })).some(
+        !(await getProjects({ db, userId: viewerId })).projects.some(
           (item) => item.id === team.id,
         ),
       );

@@ -5,7 +5,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getAiSettings, aiSpend } from "./ai/billing.server";
 import { aiConfig, gatewayModels } from "./ai/gateway.server";
 import { nanoDollars, type AiModel } from "./ai/schema";
-import { getProjects } from "./project.server";
+import { accessibleProjects } from "./project.server";
 
 export async function getAccountAiSettings(db: Db, userId: string) {
   const settings = await getAiSettings(db, userId);
@@ -52,7 +52,11 @@ export async function saveAccountAiSettings(
 }
 export async function getAccountUsage(db: Db, userId: string) {
   const [projects, settings, spend] = await Promise.all([
-    getProjects({ db, ownerId: userId }),
+    // Usage covers every accessible project, not one dashboard page.
+    db.query.project.findMany({
+      columns: { id: true },
+      where: accessibleProjects(userId),
+    }),
     getAiSettings(db, userId),
     aiSpend(db, userId),
   ]);

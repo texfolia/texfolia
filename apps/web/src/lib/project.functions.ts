@@ -10,6 +10,7 @@ import {
   renameProjectSchema,
   projectTagsSchema,
   importProjectFilesSchema,
+  projectsPageSchema,
 } from "./project.schema";
 
 export const createProject = createServerFn({ method: "POST" })
@@ -24,13 +25,18 @@ export const createProject = createServerFn({ method: "POST" })
     });
   });
 
-export const getProjects = createServerFn({ method: "GET" }).handler(
-  async ({ context }) => {
+export const getProjects = createServerFn({ method: "GET" })
+  .validator(projectsPageSchema)
+  .handler(async ({ data, context }) => {
     const session = await ensureSession();
     const server = await import("./project.server");
-    return server.getProjects({ db: context.db, ownerId: session.user.id });
-  },
-);
+    return server.getProjects({
+      db: context.db,
+      userId: session.user.id,
+      limit: data?.limit,
+      cursor: data?.cursor,
+    });
+  });
 
 export const deleteProject = createServerFn({ method: "POST" })
   .validator(z.object({ projectId: z.uuid() }))
@@ -58,7 +64,9 @@ export const getProject = createServerFn({ method: "GET" })
     });
   });
 
-export type Project = Awaited<ReturnType<typeof getProjects>>[number];
+export type Project = Awaited<
+  ReturnType<typeof getProjects>
+>["projects"][number];
 export type ProjectDetails = Awaited<ReturnType<typeof getProject>>;
 export type ProjectNode = ProjectDetails["nodes"][number];
 

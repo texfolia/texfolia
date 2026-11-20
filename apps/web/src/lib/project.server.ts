@@ -2,13 +2,12 @@ import type { Db } from "@texfolia/db";
 import {
   member,
   project,
-  projectCollaborator,
   projectNode,
   projectTag,
   tag,
   user,
 } from "@texfolia/db/schema";
-import { and, eq, isNull, or, inArray } from "drizzle-orm";
+import { and, eq, isNull, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
@@ -131,41 +130,49 @@ export async function createProject({
   });
 }
 
-export async function getProjects({ db, ownerId }: ProjectOwner) {
-  const memberships = await db
-    .select({ id: member.organizationId, role: member.role })
-    .from(member)
-    .where(eq(member.userId, ownerId));
-  const accessible = await db
-    .select({ id: project.id })
-    .from(project)
-    .where(
-      and(
-        isNull(project.deletedAt),
-        or(
-          and(
-            isNull(project.organizationId),
-            or(
-              eq(project.ownerId, ownerId),
-              inArray(
-                project.id,
-                db
-                  .select({ id: projectCollaborator.projectId })
-                  .from(projectCollaborator)
-                  .where(eq(projectCollaborator.userId, ownerId)),
-              ),
-            ),
-          ),
-          memberships.length
-            ? inArray(
-                project.organizationId,
-                memberships.map((item) => item.id),
-              )
-            : undefined,
-        ),
-      ),
-    );
-  if (!accessible.length) return [];
+export const projectPageSize = 100;
+export const maxProjectPageSize = 200;
+
+// Projects the viewer may open: live personal projects they own or collaborate
+// on, plus every live project in an organization they belong to. Relation
+// filters compile to EXISTS subqueries, so access costs no extra round trip.
+type ProjectFilter = Extract<
+  NonNullable<Parameters<Db["query"]["project"]["findMany"]>[0]>["where"],
+  object
+>;
+
+export function accessibleProjects(userId: string): ProjectFilter {
+  return {
+    deletedAt: { isNull: true },
+    OR: [
+      {
+        organizationId: { isNull: true },
+        OR: [{ ownerId: userId }, { collaborators: { userId } }],
+      },
+      { organization: { members: { userId } } },
+    ],
+  };
+}
+
+const isManager = (role: string) =>
+  role.split(",").some((item) => item === "owner" || item === "admin");
+
+// One relational query: access, tags, people, and the viewer's organization
+// role all load together. Most recently updated first. The cursor is the last
+// project ID of the previous page; comparing against that row's stored
+// timestamp keeps the microsecond precision a JS Date would lose.
+export async function getProjects({
+  db,
+  userId,
+  limit = projectPageSize,
+  cursor,
+}: {
+  db: Db;
+  userId: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  const take = Math.min(Math.max(Math.trunc(limit), 1), maxProjectPageSize);
   const rows = await db.query.project.findMany({
     with: {
       owner: { columns: { id: true, name: true, image: true } },
@@ -174,75 +181,65 @@ export async function getProjects({ db, ownerId }: ProjectOwner) {
           user: { columns: { id: true, name: true, image: true } },
         },
       },
+      // Tags are private to each user, so only the viewer's catalog applies.
+      tags: { columns: { name: true }, where: { userId } },
+      organization: {
+        columns: { id: true },
+        with: {
+          members: {
+            columns: { userId: true, role: true },
+            with: { user: { columns: { id: true, name: true, image: true } } },
+          },
+        },
+      },
     },
     where: {
-      id: { in: accessible.map((item) => item.id) },
-      deletedAt: { isNull: true },
+      AND: [
+        accessibleProjects(userId),
+        cursor
+          ? {
+              RAW: (table) => sql`(${table.updatedAt}, ${table.id}) < (
+          select ${project.updatedAt}, ${project.id}
+          from ${project}
+          where ${project.id} = ${cursor}
+        )`,
+            }
+          : {},
+      ],
     },
+    orderBy: { updatedAt: "desc", id: "desc" },
+    limit: take + 1,
   });
-  const labels = await db
-    .select({ projectId: projectTag.projectId, name: tag.name })
-    .from(projectTag)
-    .innerJoin(tag, eq(tag.id, projectTag.tagId))
-    .where(
-      and(
-        eq(tag.userId, ownerId),
-        inArray(
-          projectTag.projectId,
-          accessible.map((item) => item.id),
-        ),
-      ),
-    );
-  const organizationPeople = memberships.length
-    ? await db
-        .select({
-          organizationId: member.organizationId,
-          id: user.id,
-          name: user.name,
-          image: user.image,
-          role: member.role,
-        })
-        .from(member)
-        .innerJoin(user, eq(member.userId, user.id))
-        .where(
-          inArray(
-            member.organizationId,
-            memberships.map((item) => item.id),
-          ),
-        )
-    : [];
-  return rows.map((row) => ({
-    ...row,
-    tags: labels
-      .filter((label) => label.projectId === row.id)
-      .map((label) => label.name)
-      .sort(),
-    people: row.organizationId
-      ? organizationPeople
-          .filter((person) => person.organizationId === row.organizationId)
-          .map(({ organizationId: _organizationId, ...person }) => person)
-      : [
-          ...(row.owner ? [{ ...row.owner, role: "owner" }] : []),
-          ...row.collaborators.flatMap((person) =>
+
+  const page = rows.slice(0, take);
+  return {
+    projects: page.map(({ tags, organization, ...row }) => ({
+      ...row,
+      tags: tags.map((item) => item.name).sort(),
+      people: organization
+        ? organization.members.flatMap((person) =>
             person.user ? [{ ...person.user, role: person.role }] : [],
-          ),
-        ],
-    canWrite:
-      !!row.organizationId ||
-      row.ownerId === ownerId ||
-      row.collaborators.some(
-        (person) => person.userId === ownerId && person.role === "editor",
-      ),
-    canDelete:
-      row.ownerId === ownerId ||
-      memberships.some(
-        (membership) =>
-          membership.id === row.organizationId &&
-          membership.role
-            .split(",")
-            .some((role) => role === "owner" || role === "admin"),
-      ),
-  }));
+          )
+        : [
+            ...(row.owner ? [{ ...row.owner, role: "owner" }] : []),
+            ...row.collaborators.flatMap((person) =>
+              person.user ? [{ ...person.user, role: person.role }] : [],
+            ),
+          ],
+      canWrite:
+        !!organization ||
+        row.ownerId === userId ||
+        row.collaborators.some(
+          (person) => person.userId === userId && person.role === "editor",
+        ),
+      canDelete:
+        row.ownerId === userId ||
+        !!organization?.members.some(
+          (person) => person.userId === userId && isManager(person.role),
+        ),
+    })),
+    nextCursor: rows.length > take ? (page.at(-1)?.id ?? null) : null,
+  };
 }
 
 export async function renameProject({

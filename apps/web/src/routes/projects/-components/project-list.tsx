@@ -60,7 +60,10 @@ import {
   TooltipTrigger,
 } from "#/components/ui/tooltip";
 import { features } from "#/lib/features";
-import { useProjects } from "#/providers/projects-provider";
+import {
+  useProjects,
+  useProjectsPagination,
+} from "#/providers/projects-provider";
 import { useSettings } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 
@@ -76,6 +79,7 @@ export function ProjectList({
   const [creating, setCreating] = useState(false);
   const store = useProjects();
   const { data: projects } = useLiveQuery(store.projects);
+  const pagination = useProjectsPagination();
   const { shortcuts } = useSettings();
   const search = useRef<HTMLInputElement>(null);
   useAppShortcut("search", () => {
@@ -274,8 +278,8 @@ export function ProjectList({
                   className="text-muted-foreground ml-auto text-xs tabular-nums"
                   role="status"
                 >
-                  {table.getRowModel().rows.length} of {projects.length}{" "}
-                  projects
+                  {table.getRowModel().rows.length} of {projects.length}
+                  {pagination.nextCursor ? "+" : ""} projects
                 </span>
               </div>
               <div className="overflow-hidden rounded-xl border">
@@ -359,11 +363,57 @@ export function ProjectList({
                   </TableBody>
                 </Table>
               </div>
+              {pagination.nextCursor && <LoadMoreSentinel />}
             </>
           )}
         </div>
       </SidebarInset>
       {creating && <NewProjectDialog open onOpenChange={setCreating} />}
     </>
+  );
+}
+
+// Loads the next page as the end of the list nears the viewport. The observer
+// is rebuilt after each page, and a new observer reports the current
+// intersection at once, so a short (or filtered) list keeps filling until the
+// sentinel scrolls out of view or the pages run out.
+function LoadMoreSentinel() {
+  const store = useProjects();
+  const { loading, failed } = useProjectsPagination();
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = sentinel.current;
+    if (!element || loading || failed) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting))
+          void store.loadMore();
+      },
+      { rootMargin: "400px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [store, loading, failed]);
+  return (
+    <div
+      ref={sentinel}
+      className="text-muted-foreground flex min-h-10 items-center justify-center gap-2 text-sm"
+      role="status"
+    >
+      {failed ? (
+        <>
+          Couldn’t load more projects.
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void store.loadMore()}
+          >
+            Try again
+          </Button>
+        </>
+      ) : (
+        loading && "Loading more projects…"
+      )}
+    </div>
   );
 }
