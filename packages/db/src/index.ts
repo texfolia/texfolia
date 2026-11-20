@@ -11,10 +11,13 @@ const standaloneAuthRelations = defineRelationsPart(
   () => ({ subscription: {}, verification: {} }),
 );
 
+// Each db serves one request or operation, and Hyperdrive pools connections
+// upstream, so one connection is enough. A pool (rather than a bare Client)
+// still connects lazily and keeps transactions isolated from other queries.
 export function createDb(connectionString: string) {
   const client = new Pool({
     connectionString,
-    max: 5,
+    max: 1,
     connectionTimeoutMillis: 10_000,
     idleTimeoutMillis: 10_000,
   });

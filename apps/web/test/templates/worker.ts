@@ -500,15 +500,21 @@ export default {
         data: { templateId: published.id, organizationId: null },
       });
       await uploaded.promise;
+      // The copy holds this request's only connection. Collection runs in the
+      // cron handler with its own db, and the lock check needs a third.
+      const collectorDb = createDb(env.HYPERDRIVE.connectionString);
+      const observerDb = createDb(env.HYPERDRIVE.connectionString);
       const collecting = collectProjectSources({
-        db,
+        db: collectorDb,
         bucket,
         collaboration: env.COLLABORATION,
-      });
+      }).finally(() => collectorDb.$client.end());
       try {
         const deadline = Date.now() + 5000;
         while (true) {
-          const { rows } = await db.$client.query<{ waiting: boolean }>(
+          const { rows } = await observerDb.$client.query<{
+            waiting: boolean;
+          }>(
             "select exists(select 1 from pg_locks where locktype = 'advisory' and not granted) as waiting",
           );
           if (rows[0]?.waiting) break;
@@ -520,6 +526,7 @@ export default {
         }
       } finally {
         releaseCopy.resolve();
+        await observerDb.$client.end();
       }
       const racedCopy = await copying;
       await collecting;

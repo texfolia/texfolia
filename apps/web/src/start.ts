@@ -3,11 +3,12 @@ import { createDb } from "@texfolia/db";
 import { env } from "cloudflare:workers";
 
 import { createAuth } from "./lib/auth";
+import { lazy } from "./lib/lazy";
 
 const requestContext = createMiddleware().server(async ({ next }) => {
   const db = createDb(env.HYPERDRIVE.connectionString);
   try {
-    const auth = createAuth(db, env.COLLABORATION);
+    const auth = lazy(() => createAuth(db, env.COLLABORATION));
     return await next({ context: { auth, db } });
   } finally {
     await db.$client.end();
