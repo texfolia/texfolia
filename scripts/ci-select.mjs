@@ -158,6 +158,9 @@ if (
   let plan;
   let filter = "";
   try {
+    // Pushes to main check the merged result in full, not only the pushed diff.
+    if (process.env.CI_FULL_RUN === "true")
+      throw new Error("Full run requested for a push to main");
     if (!base || !/^[a-f0-9]{40}$/.test(base))
       throw new Error("Missing PR base SHA");
     plan = selectChecks(changedPaths(base));

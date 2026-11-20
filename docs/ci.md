@@ -1,9 +1,18 @@
 # CI selection and caches
 
-The pull request workflow keeps two jobs, `Checks` and `App database with plain
-Postgres`. Each job runs `scripts/ci-select.mjs` against the pull request base SHA
-with full Git history. Selection uses the merge-base diff, including deleted paths
-and both sides of renames. Missing history selects every check.
+The CI workflow runs on pull requests and on every push to `main`. It keeps two
+jobs, `Checks` and `App database with plain Postgres`. Each job runs
+`scripts/ci-select.mjs` with full Git history.
+
+On pull requests, the selector diffs against the pull request base SHA. Selection
+uses the merge-base diff, including deleted paths and both sides of renames.
+Missing history selects every check.
+
+On pushes to `main`, the workflow sets `CI_FULL_RUN=true` and every check runs
+without a Turbo filter. Each commit on `main` is checked as merged, which catches
+breakage from merge order or direct pushes that a pull request diff would miss.
+These runs also save Turbo caches in the `main` scope, which pull requests can
+restore.
 
 ## Check inputs
 
@@ -80,6 +89,5 @@ production app. Build outputs include `dist`, `.wrangler/deploy`, and the genera
 `public/core` assets. Workspace metadata and template lifecycle use their
 `:prebuilt` commands in CI. Their regular local commands still build first.
 
-The workflow remains pull-request-only. Job splitting, concurrency cancellation,
-main-branch behavior, a wall-time target, and compiler Docker builds remain outside
-this change.
+Job splitting, concurrency cancellation, a wall-time target, and compiler Docker
+builds remain outside the current workflow.
