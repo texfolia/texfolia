@@ -42,7 +42,7 @@ async function createBuildFixture() {
     if (text === "cache fails" && !context.clean)
       throw new HttpError(422, "Bad cache", "bad cache", timing);
     return text === "foreign engine"
-      ? { ...output(text), timing: { ...timing, engine: "texlive" } }
+      ? { ...output(text), timing: { ...timing, engine: "unknown" } }
       : output(text);
   };
   let runtime = createLocalRuntime({

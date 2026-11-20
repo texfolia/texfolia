@@ -175,3 +175,9 @@ test("container start distinguishes cold, warm, and prewarmed", () => {
   ).toBe("warm");
   expect(containerStart(undefined).kind).toBe("unknown");
 });
+
+test("stored texlive engine values parse as unknown", () => {
+  expect(
+    parseJobTimeline({ compiler: { engine: "texlive" } }).compiler?.engine,
+  ).toBe("unknown");
+});

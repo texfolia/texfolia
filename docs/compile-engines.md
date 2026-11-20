@@ -214,9 +214,10 @@ deployment has moved to the new protocol.
 
 ## Proposed telemetry
 
-Preserve `engine: "tectonic" | "texlive" | "unknown"` in
+Telemetry currently records `engine: "tectonic" | "unknown"` in
 [compiler telemetry](../apps/compiler/src/telemetry.ts) and the web timing parser.
-The existing `texlive` value remains valid historical data. Add `engineId` and
+Older records that say `texlive` parse as `unknown` (NAT-381). Restore a
+`texlive` value only when a TeX Live mode actually ships. Add `engineId` and
 `cacheVersion` to distinguish actual compile modes and toolchains. Old timing
 records can omit those fields.
 
