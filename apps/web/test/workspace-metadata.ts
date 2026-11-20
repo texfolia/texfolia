@@ -150,6 +150,7 @@ const mf = new Miniflare({
               id,
               revision,
               sourceRevision: submissions.length,
+              createdAt: new Date().toISOString(),
               status: "running",
             },
             { status: 202 },
@@ -161,6 +162,8 @@ const mf = new Miniflare({
           const id = url.pathname.split("/").at(-1);
           return Response.json({
             id,
+            revision: snapshot.current?.revision ?? snapshot.revision,
+            createdAt: new Date().toISOString(),
             status: snapshot.current?.status ?? "running",
             error: "Fixture compile finished",
             log: "",
