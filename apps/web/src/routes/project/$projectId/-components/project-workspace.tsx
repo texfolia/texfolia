@@ -85,7 +85,7 @@ export function ProjectWorkspace({
   const [ready, setReady] = useState(false);
   const layoutKey = workspaceLayoutKey(userId, projectId);
   useExitWhenStorageCleared([sourceDraftsKey(projectId), layoutKey]);
-  const [gitBranch, setGitBranch] = useGitBranch(projectId, ready);
+  const git = useGitBranch(projectId, ready);
   const {
     formatting,
     compile: compileSettings,
@@ -301,7 +301,8 @@ export function ProjectWorkspace({
         revealRange: panels.revealRange,
         comments,
         closeTabs: panels.closeTabs,
-        reportGitBranch: setGitBranch,
+        reportGitBranch: git.reportBranch,
+        reportGitFailure: git.reportFailure,
         registerCommands: panels.registerCommands,
         reportCursor: panels.reportCursor,
         reportSyntax,
@@ -473,7 +474,7 @@ export function ProjectWorkspace({
           onCompile={() => compile()}
           words={main ? result.words : undefined}
           onRevealWords={(path, line) => panels.reveal(path, line)}
-          gitBranch={gitBranch}
+          git={git.state}
           location={
             activeId?.startsWith("out:")
               ? `out/${activeId.slice(4)}`

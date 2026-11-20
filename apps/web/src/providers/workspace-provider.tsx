@@ -30,6 +30,8 @@ export type Workspace = {
   ) => void;
   closeTabs: (id: string, mode: "one" | "others" | "all" | "right") => void;
   reportGitBranch: (branch: string | null) => void;
+  /** Logs the failure and shows "Git unavailable" in the status bar. */
+  reportGitFailure: (error: unknown) => void;
   registerCommands: (
     id: string,
     run: ((command: EditorCommand) => void) | null,

@@ -18,8 +18,14 @@ import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export function GitPanel() {
-  const { projectId, canWrite, collaboration, reveal, reportGitBranch } =
-    useWorkspace();
+  const {
+    projectId,
+    canWrite,
+    collaboration,
+    reveal,
+    reportGitBranch,
+    reportGitFailure,
+  } = useWorkspace();
   const files = useProjectFiles();
   const [result, setResult] = useState<GitResult | null>(null);
   const [busy, setBusy] = useState("");
@@ -63,10 +69,11 @@ export function GitPanel() {
     [projectId],
   );
   useEffect(() => {
-    void load().catch((error: unknown) =>
-      setError(error instanceof Error ? error.message : "Could not load git."),
-    );
-  }, [load]);
+    void load().catch((error: unknown) => {
+      reportGitFailure(error);
+      setError(error instanceof Error ? error.message : "Could not load git.");
+    });
+  }, [load, reportGitFailure]);
   async function save() {
     await files.refresh();
     for (const file of collaboration.values()) {

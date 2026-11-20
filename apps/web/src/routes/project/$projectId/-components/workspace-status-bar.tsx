@@ -19,6 +19,7 @@ import type { WordCount } from "#/lib/latex/word-count";
 import type { PanelView, WorkspaceChrome } from "#/lib/workspace-layout";
 
 import type { CompileStatus } from "../-hooks/use-compilation";
+import type { GitBranchState } from "../-hooks/use-workspace-session";
 import { WordCountStatus } from "./word-count-status";
 import { WorkspacePresence } from "./workspace-presence";
 
@@ -45,7 +46,7 @@ export function WorkspaceStatusBar({
   onCompile,
   words,
   onRevealWords,
-  gitBranch,
+  git,
   location,
   cursor,
 }: {
@@ -59,7 +60,7 @@ export function WorkspaceStatusBar({
   /** Omitted when the project has no main file. */
   words: WordCount | undefined;
   onRevealWords: (path: string, line: number) => void;
-  gitBranch: string | null;
+  git: GitBranchState;
   /** The active tab's path. */
   location: string;
   cursor: { line: number; column: number } | undefined;
@@ -139,15 +140,25 @@ export function WorkspaceStatusBar({
           onChrome({ rightOpen: true, rightView: "collaboration" })
         }
       />
-      {gitBranch && (
+      {(git.kind === "unavailable" || git.name) && (
         <Button
           variant="ghost"
           size="xs"
           className="max-sm:hidden"
+          title={git.kind === "unavailable" ? git.message : undefined}
           onClick={() => onChrome({ rightOpen: true, rightView: "git" })}
         >
-          <IconGitBranch />
-          {gitBranch}
+          {git.kind === "unavailable" ? (
+            <>
+              <IconAlertCircle />
+              Git unavailable
+            </>
+          ) : (
+            <>
+              <IconGitBranch />
+              {git.name}
+            </>
+          )}
         </Button>
       )}
       <span className="min-w-0 flex-1 truncate px-2 text-right max-sm:hidden">
