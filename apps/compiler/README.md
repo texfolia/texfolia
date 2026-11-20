@@ -71,7 +71,7 @@ leased container. See [Container pool](docs/container-pool.md).
 ## Run locally
 
 From the repository root, configure the environment files described in the
-[root setup guide](../../README.md#local-development), start Docker, and run:
+[root setup guide](../../docs/local-development.md), start Docker, and run:
 
 ```sh
 bun run dev:compiler

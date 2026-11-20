@@ -1,7 +1,7 @@
 # Web app
 
 TanStack Start runs the React workspace and authenticated API on Cloudflare Workers.
-Follow the [root setup guide](../../README.md#local-development) to start the full local stack.
+Follow the [root setup guide](../../docs/local-development.md) to start the full local stack.
 From the repository root, `bun run --cwd apps/web build` builds the web app alone.
 
 ## Authentication
