@@ -69,3 +69,30 @@ export const threadActionSchema = z.discriminatedUnion("kind", [
     model: z.string().min(1).max(200).nullable(),
   }),
 ]);
+
+/**
+ * The server keeps each thread's history, so the browser sends only the
+ * newest message instead of resending the whole thread every turn.
+ */
+function latestMessageFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (typeof init?.body !== "string") return fetch(input, init);
+  const body = JSON.parse(init.body) as unknown;
+  if (
+    body &&
+    typeof body === "object" &&
+    "messages" in body &&
+    Array.isArray(body.messages)
+  )
+    return fetch(input, {
+      ...init,
+      body: JSON.stringify({ ...body, messages: body.messages.slice(-1) }),
+    });
+  return fetch(input, init);
+}
+export const sendLatestMessage: typeof fetch = Object.assign(
+  latestMessageFetch,
+  { preconnect: fetch.preconnect },
+);

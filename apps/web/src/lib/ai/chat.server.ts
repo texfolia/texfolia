@@ -30,6 +30,7 @@ import {
   reconcileAiUsage,
   reserveAiRequest,
 } from "./billing.server";
+import { compactHistory } from "./context";
 import { aiConfig, gatewayModels, type AiFetch } from "./gateway.server";
 import {
   AiError,
@@ -43,6 +44,7 @@ import { storedMessageSchema, type StoredMessage } from "./threads";
 import { threadOwner } from "./threads.server";
 import { projectTools } from "./tools.server";
 
+const maxThreadMessages = 1000;
 const noStore = { "Cache-Control": "no-store" };
 export function aiErrorResponse(error: unknown) {
   if (error instanceof AiError)
@@ -447,7 +449,9 @@ export async function startAssistant({
             message: userMessage.data,
           });
         }
-        if (history.length > 200)
+        // Each request sends a compacted, token-budgeted view of the history,
+        // so this only bounds how much a single thread stores.
+        if (history.length > maxThreadMessages)
           throw new AiError("This chat is full. Start a new chat.", 413);
         const title =
           thread.title === "New chat"
@@ -510,6 +514,10 @@ export async function startAssistant({
     let outcome: typeof run.status = "aborted";
     const middleware: ChatMiddleware = {
       name: "texfolia-usage",
+      // Runs before every model call, including each tool-loop iteration.
+      onConfig: (_ctx, config) => ({
+        providerMessages: compactHistory(config.messages),
+      }),
       onUsage: async (_ctx, usage) => {
         await db
           .update(aiRun)
@@ -538,6 +546,8 @@ export async function startAssistant({
       defaultHeaders: {
         "cf-aig-max-attempts": "1",
         "cf-aig-collect-log-payload": "false",
+        // Routes a thread's requests to one model instance for prefix cache hits.
+        "x-session-affinity": params.threadId,
       },
       fetch: meteredGatewayFetch({
         db,

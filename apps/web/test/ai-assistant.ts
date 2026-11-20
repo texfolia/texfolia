@@ -646,6 +646,12 @@ try {
     "Saved conversation",
   );
   assert.equal(inference.length, 6);
+  assert(
+    inference.every(
+      (request) => request.headers.get("x-session-affinity") === body.threadId,
+    ),
+    "a thread's requests share one prefix-cache session",
+  );
   assert.equal(meterEvents.length, 6);
   assert.equal(
     logCalls,

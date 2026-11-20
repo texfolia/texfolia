@@ -34,7 +34,11 @@ import {
   MessageScrollerButton,
 } from "#/components/ui/message-scroller";
 import { aiConfigurationSchema, type AiConfiguration } from "#/lib/ai/schema";
-import { type AssistantThread, type StoredMessage } from "#/lib/ai/threads";
+import {
+  sendLatestMessage,
+  type AssistantThread,
+  type StoredMessage,
+} from "#/lib/ai/threads";
 
 import { AssistantHistory, assistantJson } from "./assistant-history";
 
@@ -236,7 +240,10 @@ function AssistantChat({
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
   const connection = useMemo(
-    () => fetchServerSentEvents(`/api/ai/${projectId}`),
+    () =>
+      fetchServerSentEvents(`/api/ai/${projectId}`, {
+        fetchClient: sendLatestMessage,
+      }),
     [projectId],
   );
   const { messages, sendMessage, isLoading, error, stop, reload } = useChat({
