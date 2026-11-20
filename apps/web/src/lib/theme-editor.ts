@@ -1,10 +1,13 @@
-import { EditorView } from "@uiw/react-codemirror";
+import { EditorView, type Extension } from "@uiw/react-codemirror";
 
 import type { resolveTheme } from "./themes";
 
-export function editorTheme(theme: ReturnType<typeof resolveTheme>) {
+export function editorTheme(
+  theme: ReturnType<typeof resolveTheme>,
+  extension: Extension,
+) {
   return [
-    theme.extension,
+    extension,
     EditorView.theme({
       "&.cm-focused": { outline: "none" },
       ".cm-panels, .cm-tooltip": {

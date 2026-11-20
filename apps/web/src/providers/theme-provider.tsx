@@ -15,6 +15,8 @@ import {
   appearanceStorageKey,
   defaultAppearance,
   legacyAppearanceStorageKey,
+  loadedThemeExtension,
+  loadThemeExtension,
   migrateAppearance,
   resolveTheme,
   selectedTheme,
@@ -54,12 +56,56 @@ function useAppearance(userId: string) {
   const [dark, setDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
   );
-  const theme = useMemo(
-    () => resolveTheme(selectedTheme(effective, dark)),
+  const requested = useMemo(
+    () => selectedTheme(effective, dark),
     [effective.selection, dark],
   );
-
-  const extension = useMemo(() => editorTheme(theme), [theme]);
+  const requestedExtension = loadedThemeExtension(requested.id);
+  // The last theme whose extension had loaded. A newly requested theme is shown
+  // only once its extension arrives, so app colors and the editor switch
+  // together. The first theme is shown at once to match the bootstrap colors.
+  const [ready, setReady] = useState(() => ({
+    definition: requested,
+    extension: requestedExtension,
+  }));
+  const [, setLoaded] = useState(0);
+  const shown = requestedExtension
+    ? { definition: requested, extension: requestedExtension }
+    : ready;
+  useEffect(() => {
+    if (requestedExtension) {
+      setReady((current) =>
+        current.definition === requested &&
+        current.extension === requestedExtension
+          ? current
+          : { definition: requested, extension: requestedExtension },
+      );
+      return;
+    }
+    let live = true;
+    loadThemeExtension(requested.id).then(
+      () => {
+        if (live) setLoaded((count) => count + 1);
+      },
+      () => {
+        if (live)
+          setError(
+            `${requested.name} could not be loaded. Check your connection and choose it again.`,
+          );
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [requested, requestedExtension]);
+  const theme = useMemo(
+    () => resolveTheme(shown.definition),
+    [shown.definition],
+  );
+  const extension = useMemo(
+    () => editorTheme(theme, shown.extension ?? []),
+    [theme, shown.extension],
+  );
 
   function persist(
     next: Appearance,
