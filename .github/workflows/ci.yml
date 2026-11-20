@@ -1,6 +1,9 @@
 name: CI
 
-on: pull_request
+on:
+  pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -35,6 +38,7 @@ jobs:
         id: select
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_FULL_RUN: ${{ github.event_name == 'push' }}
         run: node scripts/ci-select.mjs
       - uses: ./.github/actions/setup-ci
         if: steps.select.outputs.postgres == 'true'
@@ -98,6 +102,7 @@ jobs:
         id: select
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_FULL_RUN: ${{ github.event_name == 'push' }}
         run: node scripts/ci-select.mjs
       - uses: ./.github/actions/setup-ci
         with:

@@ -302,7 +302,12 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       const outputs = join(cwd, "outputs");
       execFileSync(process.execPath, [join(root, "scripts/ci-select.mjs")], {
         cwd,
-        env: { ...process.env, CI_BASE_SHA: base, GITHUB_OUTPUT: outputs },
+        env: {
+          ...process.env,
+          CI_BASE_SHA: base,
+          CI_FULL_RUN: "false",
+          GITHUB_OUTPUT: outputs,
+        },
       });
       const filter = readFileSync(outputs, "utf8")
         .split("\n")
@@ -342,6 +347,53 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       before,
       "source environment files must invalidate the build",
     );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("pushes to main run every check without a Turbo filter", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const cwd = mkdtempSync(join(tmpdir(), "texfolia-ci-push-"));
+  const git = (...args) =>
+    execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  try {
+    git("init", "-b", "main");
+    git("config", "user.email", "ci@example.invalid");
+    git("config", "user.name", "CI selector test");
+    writeFileSync(join(cwd, "README.md"), "base");
+    git("add", ".");
+    git("commit", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    writeFileSync(join(cwd, "README.md"), "documentation only");
+    git("commit", "-am", "docs");
+    const outputs = join(cwd, "outputs");
+    execFileSync(process.execPath, [join(root, "scripts/ci-select.mjs")], {
+      cwd,
+      env: {
+        ...process.env,
+        CI_BASE_SHA: base,
+        CI_FULL_RUN: "true",
+        GITHUB_OUTPUT: outputs,
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const plan = Object.fromEntries(
+      readFileSync(outputs, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.split(/=(.*)/s).slice(0, 2)),
+    );
+    assert.equal(plan["turbo-filter"], "");
+    for (const key of [
+      "full",
+      "compiler",
+      "package-checks",
+      "production-assets",
+      "postgres",
+      ...Object.keys(suites),
+    ])
+      assert.equal(plan[key], "true", key);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
