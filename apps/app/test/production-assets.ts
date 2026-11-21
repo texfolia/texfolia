@@ -127,6 +127,14 @@ try {
     );
     assert(!nonces.has(nonce), "Each response must have a fresh nonce");
     nonces.add(nonce);
+    if (path === "/") {
+      assert.equal(response.status, 307, path);
+      assert.equal(
+        new URL(response.headers.get("Location") ?? "", origin).pathname,
+        "/projects",
+      );
+      continue;
+    }
     assert.equal(response.status, 200, path);
     const body = await response.text();
     if (response.headers.get("Content-Type")?.includes("text/html")) {
