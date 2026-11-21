@@ -1,0 +1,30 @@
+---
+import "@/styles/global.css";
+
+interface Props {
+  title: string;
+  description?: string;
+  robots?: string;
+}
+
+const {
+  title,
+  description = "Write LaTeX, work together in real time, and turn your source into a finished PDF in one browser workspace.",
+  robots,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {robots && <meta name="robots" content={robots} />}
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="min-h-svh antialiased">
+    <slot />
+  </body>
+</html>

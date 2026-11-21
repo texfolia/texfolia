@@ -44,7 +44,7 @@ user’s default model for new chats and the existing monthly spending cap.
    ($0.000000001). Keep the base Pro price unchanged. The server validates the
    price and meter and attaches the usage price to the existing payer's
    subscription on the first AI run, using an idempotency key.
-5. Set the following server variables in `apps/web/.env` locally, and as Worker
+5. Set the following server variables in `apps/app/.env` locally, and as Worker
    secrets or variables in each deployed environment:
 
    ```dotenv
@@ -150,9 +150,9 @@ Use an isolated Postgres database whose name contains `test`:
 
 ```sh
 DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:push
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:ai-billing
-bun run --cwd apps/web build
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:ai-assistant
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:ai-billing
+bun run --cwd apps/app build
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:ai-assistant
 ```
 
 The billing check uses real Postgres transactions and substitutes only external

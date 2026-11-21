@@ -1,6 +1,7 @@
 # Public auth abuse protection
 
-The auth configuration is in `apps/web/src/lib/auth.ts`. The login page supports
+Shared auth lives in `@texfolia/auth`; the product app wires it in
+`apps/app/src/lib/auth.ts`. The login page supports
 email OTP and GitHub, Google, GitLab, and Microsoft OAuth. Password sign-in and
 OTP password reset remain available for existing credentials. Password signup
 is disabled because the product does not use it, and creating an unverified
@@ -55,7 +56,7 @@ schemes, ports, paths, or wildcards. Whitespace is trimmed and names are lowerca
 If the variable is absent, the hostname of `BETTER_AUTH_URL` is used. Empty or
 malformed lists fail during auth configuration. Local development allows
 `localhost`. The production value is configured under `env.production` in
-`apps/web/wrangler.jsonc`.
+`apps/app/wrangler.jsonc`.
 
 Every token must report an allowed hostname and action `auth-email`. The login
 widget and server share the action constant in `auth-captcha.ts`. Missing tokens,
@@ -75,7 +76,7 @@ These are response-body guarantees; local tests do not establish constant timing
 From the repository root:
 
 ```sh
-bun test apps/web/src/lib/auth-abuse.test.ts
+bun test apps/app/src/lib/auth-abuse.test.ts
 ```
 
 The suite uses the production auth options, Better Auth's HTTP handler, a memory
@@ -89,5 +90,5 @@ Existing OTP and organization tests cover code consumption, password reset,
 expiry, invitation permissions, and billing authorization:
 
 ```sh
-bun test apps/web/src/lib/auth-otp.test.ts apps/web/src/lib/auth.test.ts
+bun test apps/app/src/lib/auth-otp.test.ts apps/app/src/lib/auth.test.ts
 ```

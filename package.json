@@ -18,6 +18,7 @@
     "db:start": "turbo run db:start",
     "deploy": "turbo run deploy",
     "dev": "turbo run dev",
+    "dev:app": "turbo run dev --filter=app",
     "dev:compiler": "turbo run dev --filter=compiler",
     "dev:web": "turbo run dev --filter=web",
     "format": "oxfmt && turbo run format",
@@ -28,7 +29,7 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
-    "@texfolia/typescript-config": "workspace:*",
+    "@texfolia/config": "workspace:*",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "postcss": "8.5.33",

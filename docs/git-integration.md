@@ -89,7 +89,7 @@ and metering as chat, with no mutation tools. The suggested message remains edit
 
 ## Verification
 
-`bun test apps/web/src/lib/git-repository.test.ts` runs real git HTTP transport
+`bun test apps/app/src/lib/git-repository.test.ts` runs real git HTTP transport
 against the installed `git-http-backend`, including authentication, binary imports,
 ignore rules, commits, push/pull, branches, conflicts, and persisted repository data.
 
@@ -97,7 +97,7 @@ Use an isolated PostgreSQL database for the Worker, R2, and collaboration tests:
 
 ```sh
 DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_git_test bun run --cwd packages/db db:push
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_git_test bun run --cwd apps/web test:git
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_git_test bun run --cwd apps/app test:git
 ```
 
 The Worker integration uses real PostgreSQL, R2, Yjs rooms, and git HTTP transport.

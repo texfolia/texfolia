@@ -70,7 +70,7 @@ on Apply or Save. The editor's **Add to dictionary** saves immediately. See
 
 ## Keyboard shortcuts
 
-`apps/web/src/lib/shortcuts.ts` owns the action catalog, default bindings,
+`apps/app/src/lib/shortcuts.ts` owns the action catalog, default bindings,
 validation, and conflict checks. Defaults copy VS Code unless that would take
 over an important browser or editor function. The recorder accepts one chord or
 up to four chords separated by spaces. Enter finishes recording. Escape cancels
@@ -124,9 +124,9 @@ estimate physical R2 usage or compile CPU time.
 
 ## Verification
 
-`bun run --cwd apps/web test:settings` checks the project access gate and Usage
+`bun run --cwd apps/app test:settings` checks the project access gate and Usage
 queries against an isolated database named by `INTEGRATION_DATABASE_URL`.
-`bun run --cwd apps/web test:themes` checks drafts, theme preview, shortcut
+`bun run --cwd apps/app test:themes` checks drafts, theme preview, shortcut
 recording, remapped editor actions, close guards, and responsive dialog layout.
 The UI overhaul suite checks settings routes, Preferences navigation blocking,
 billing redirects, and key sequences in the projects list.

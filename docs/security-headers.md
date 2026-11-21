@@ -1,11 +1,11 @@
 # Web security headers
 
-The [web Worker](../apps/web/src/worker.ts) applies security headers to every
+The [web Worker](../apps/app/src/worker.ts) applies security headers to every
 TanStack Start HTTP response, including HTML, APIs, redirects, and errors.
 It passes response bodies through as streams and leaves WebSocket upgrades intact.
 Static assets served directly by Cloudflare do not pass through this wrapper.
 
-The [policy](../apps/web/src/lib/security-headers.ts) enforces CSP in production.
+The [policy](../apps/app/src/lib/security-headers.ts) enforces CSP in production.
 It sets `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`,
 `Referrer-Policy: strict-origin-when-cross-origin`, and
 `X-Content-Type-Options: nosniff`. Development retains the baseline headers but
@@ -33,8 +33,8 @@ use top-level redirects. They do not require third-party script, frame, or
 connection allowlists in the app document. Embedded Stripe would require a
 policy review.
 
-Run `bun run --cwd apps/web build` followed by
-`bun run --cwd apps/web test:production-assets` to verify real production HTML
+Run `bun run --cwd apps/app build` followed by
+`bun run --cwd apps/app test:production-assets` to verify real production HTML
 and API headers, matching nonces, blocked script injection, fonts, formatter
 WebAssembly, PDF rendering, and the login flow with external-service fixtures.
 This check runs in CI without a database. The authenticated UI and pricing

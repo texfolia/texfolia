@@ -34,7 +34,7 @@ dependencies can be proven. Changes confined to a mapped integration test select
 only its owners in the table below. Unknown web test helpers select every
 Postgres suite and production-assets.
 
-| Suite                       | Test inputs under `apps/web/test`                                                      | Additional inputs                                                                     | Production build | Chromium |
+| Suite                       | Test inputs under `apps/app/test`                                                      | Additional inputs                                                                     | Production build | Chromium |
 | --------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------- | -------- |
 | database                    | `postgres.ts`, `postgres/`                                                             | Runtime web inputs                                                                    | No               | No       |
 | compile-route               | `compile-route.ts`, `compile-route/`                                                   | Runtime web inputs, compiler runtime                                                  | No               | No       |

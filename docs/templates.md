@@ -90,7 +90,7 @@ bun run db:seed
 ```
 
 Local seeding reads `DATABASE_URL` from `packages/db/.env` or the shell and uses
-the web app's default Wrangler R2 persistence in `apps/web/.wrangler/state/v3`.
+the web app's default Wrangler R2 persistence in `apps/app/.wrangler/state/v3`.
 It also accepts `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` when
 `DATABASE_URL` is unset. It does not start Postgres or apply the schema.
 To use an isolated R2 directory, run
@@ -123,8 +123,8 @@ with `DATABASE_URL` pointed at that database, then run from the repository root:
 ```sh
 DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:push
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run packages/db/test/template-seed-cli.ts
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/templates.ts
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:template-lifecycle
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/templates.ts
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:template-lifecycle
 bun test apps/compiler/test/queues.test.ts
 ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts
 ```

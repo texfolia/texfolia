@@ -4,7 +4,7 @@ The app uses Drizzle and `pg` against PostgreSQL. Workers receive their connecti
 
 ## Run locally
 
-Configure `packages/db/.env` and `apps/web/.env` as described in the root README.
+Configure `packages/db/.env` and `apps/app/.env` as described in the root README.
 The default database is `db` on `localhost:5432`. Run commands in this guide
 from the repository root. Start Postgres and apply the schema before the first
 app run:
@@ -81,7 +81,7 @@ Source storage deliberately uploads immutable R2 objects while holding the
 project row lock. This serializes byte quotas, source versions, deletion, and
 garbage collection. Metadata commits only after the upload succeeds; the source
 sweep removes objects left by rolled-back SQL transactions. See
-[the web reference](../../apps/web/README.md#project-source-storage) for storage
+[the web reference](../../apps/app/README.md#project-source-storage) for storage
 behavior and verification. For an existing database,
 prepare and review an upgrade against its actual schema before deploying.
 For a new database at launch, use the baseline described in the deployment guide.
@@ -91,7 +91,7 @@ For a new database at launch, use the baseline described in the deployment guide
 Create an isolated database with `test` in its name, apply the schema to it with `DATABASE_URL` set using `bun run db:push`, and run this command from the repository root:
 
 ```sh
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/postgres.ts
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/postgres.ts
 ```
 
 This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, constraint rollback, ownership checks, create/delete/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
