@@ -274,22 +274,22 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       ],
       [
         "apps/compiler/src/local.ts",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["@texfolia/contracts", "@texfolia/db", "app", "compiler"],
         ["app#typecheck"],
       ],
       [
         "packages/contracts/fixtures/path-policy.json",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["@texfolia/contracts", "@texfolia/db", "app", "compiler"],
         ["@texfolia/contracts#test", "compiler#test", "app#typecheck"],
       ],
       [
         "packages/db/src/index.ts",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["@texfolia/contracts", "@texfolia/db", "app", "compiler"],
         ["app#test", "compiler#test", "app#typecheck"],
       ],
       [
         ".github/workflows/ci.yml",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["@texfolia/contracts", "@texfolia/db", "app", "compiler"],
         ["app#test", "compiler#test"],
       ],
     ]) {
