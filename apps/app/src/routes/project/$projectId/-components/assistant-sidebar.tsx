@@ -33,12 +33,12 @@ import {
   MessageScrollerButton,
 } from "#/components/ui/message-scroller";
 import { aiConfigurationSchema, type AiConfiguration } from "#/lib/ai/schema";
-import { webPath } from "#/lib/origins";
 import {
   sendLatestMessage,
   type AssistantThread,
   type StoredMessage,
 } from "#/lib/ai/threads";
+import { webPath } from "#/lib/origins";
 
 import { AssistantHistory, assistantJson } from "./assistant-history";
 

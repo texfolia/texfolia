@@ -40,8 +40,7 @@ function productionOptions(
     // Construct the production config without opening a Postgres connection.
     return createAuth(createDb("postgres://unused:unused@localhost/unused"), {
       sendEmail: async () => {},
-    })
-      .options;
+    }).options;
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];

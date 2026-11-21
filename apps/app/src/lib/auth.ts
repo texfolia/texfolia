@@ -1,7 +1,4 @@
-import {
-  createAuth as createSharedAuth,
-  type Auth,
-} from "@texfolia/auth";
+import { createAuth as createSharedAuth, type Auth } from "@texfolia/auth";
 import type { Db } from "@texfolia/db";
 
 import {

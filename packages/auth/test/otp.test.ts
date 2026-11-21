@@ -34,10 +34,7 @@ function createTestAuth(deliver?: SendEmail) {
   return { auth, emails };
 }
 
-function deliveredCode(
-  emails: EmailMessage[],
-  purpose: string,
-) {
+function deliveredCode(emails: EmailMessage[], purpose: string) {
   expect(emails).toHaveLength(1);
   const email = emails[0];
   assert(email);

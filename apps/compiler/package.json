@@ -23,8 +23,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
-    "@texfolia/db": "workspace:*",
     "@texfolia/config": "workspace:*",
+    "@texfolia/db": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^6.0.2",
     "wrangler": "^4.70.0"

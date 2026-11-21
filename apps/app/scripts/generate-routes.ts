@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const routeTreePath = new URL("../src/routeTree.gen.ts", import.meta.url);
 const registerBlock = `

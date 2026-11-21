@@ -5,7 +5,10 @@ export function Footer() {
     <footer className="mt-auto border-t">
       <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-6 py-10 text-sm sm:flex-row sm:items-center sm:px-8">
         <div>
-          <a href={webPath("/")} className="text-foreground font-serif text-2xl">
+          <a
+            href={webPath("/")}
+            className="text-foreground font-serif text-2xl"
+          >
             Texfolia.
           </a>
           <p className="text-muted-foreground mt-2">

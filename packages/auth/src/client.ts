@@ -1,10 +1,10 @@
 import { stripeClient } from "@better-auth/stripe/client";
+import { createAuthClient } from "better-auth/client";
 import {
   emailOTPClient,
   lastLoginMethodClient,
   organizationClient,
 } from "better-auth/client/plugins";
-import { createAuthClient } from "better-auth/client";
 
 export const AUTH_EMAIL_CAPTCHA_ACTION = "auth-email";
 
