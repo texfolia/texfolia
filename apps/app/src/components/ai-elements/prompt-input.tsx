@@ -1,6 +1,5 @@
+import { InputGroup, InputGroupTextarea } from "@texfolia/ui/input-group";
 import type { ComponentProps } from "react";
-
-import { InputGroup, InputGroupTextarea } from "#/components/ui/input-group";
 
 export function PromptInput(props: ComponentProps<typeof InputGroupTextarea>) {
   return (

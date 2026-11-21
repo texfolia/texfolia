@@ -1,7 +1,6 @@
 import { Toolbar } from "@base-ui/react/toolbar";
+import { Button } from "@texfolia/ui/button";
 import type { ComponentProps, ReactNode } from "react";
-
-import { Button } from "#/components/ui/button";
 
 export function PanelHeader({
   title,

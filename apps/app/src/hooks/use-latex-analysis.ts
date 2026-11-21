@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
 import {
   type AnalyzeRequest,
   type AnalyzeResponse,
   emptyAnalysis,
-} from "#/lib/latex/analysis";
-import { emptyWordCount } from "#/lib/latex/word-count";
+} from "@texfolia/editor/latex/analysis";
+import { emptyWordCount } from "@texfolia/editor/latex/word-count";
+import { createAnalysisWorker } from "@texfolia/editor/latex/workers";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function useLatexAnalysis(paths: string[], main?: string) {
   const worker = useRef<Worker | null>(null);
@@ -35,12 +35,7 @@ export function useLatexAnalysis(paths: string[], main?: string) {
   }, [paths, main]);
 
   useEffect(() => {
-    const instance = new Worker(
-      new URL("../lib/latex/analysis.worker.ts", import.meta.url),
-      {
-        type: "module",
-      },
-    );
+    const instance = createAnalysisWorker();
     worker.current = instance;
     pending.current = new Set(
       paths.filter((path) => contents.current.has(path)),

@@ -78,7 +78,7 @@ bun run dev:compiler
 ```
 
 Run these in separate terminals when you need them. `dev:app` starts Postgres
-and the product app. `dev:web` starts the Astro marketing site at
+and the product app. `dev:web` starts the TanStack Start marketing site at
 [localhost:4321](http://localhost:4321). `dev:compiler` builds the engine image
 and starts only the compiler API at `http://localhost:8080`.
 Template previews run as project builds on the same compiler. See the

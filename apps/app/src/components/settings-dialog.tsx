@@ -5,40 +5,42 @@ import {
   IconTextSpellcheck,
   IconX,
 } from "@tabler/icons-react";
-import { useId, useState } from "react";
-
-import { AppearanceSettings } from "#/components/appearance-settings";
-import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
+import {
+  spellingDictionaries,
+  spellingLanguages,
+  spellingLanguageSchema,
+} from "@texfolia/editor/spelling/languages";
 import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-} from "#/components/ui/alert-dialog";
-import { Button } from "#/components/ui/button";
-import { Checkbox } from "#/components/ui/checkbox";
+} from "@texfolia/ui/alert-dialog";
+import { Button } from "@texfolia/ui/button";
+import { Checkbox } from "@texfolia/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
-import { Field, FieldLabel } from "#/components/ui/field";
-import { Input } from "#/components/ui/input";
+} from "@texfolia/ui/dialog";
+import { Field, FieldLabel } from "@texfolia/ui/field";
+import { Input } from "@texfolia/ui/input";
 import {
   Item,
   ItemContent,
   ItemTitle,
   ItemDescription,
-} from "#/components/ui/item";
-import { Kbd } from "#/components/ui/kbd";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "#/components/ui/native-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
+} from "@texfolia/ui/item";
+import { Kbd } from "@texfolia/ui/kbd";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
+import { useId, useState } from "react";
+
+import { AppearanceSettings } from "#/components/appearance-settings";
+import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
 import {
   addPersonalWord,
   autoCompileDelays,
@@ -54,11 +56,6 @@ import {
   shortcutIds,
   type ShortcutAction,
 } from "#/lib/shortcuts";
-import {
-  spellingDictionaries,
-  spellingLanguages,
-  spellingLanguageSchema,
-} from "#/lib/spelling/languages";
 import {
   type SettingsSection,
   useSettings,

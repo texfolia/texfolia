@@ -28,8 +28,8 @@ import {
   compileHistoryLimit,
   compileHistorySchema,
   parseJobTimeline,
-} from "../src/lib/latex/compile-history";
-import { hashSource } from "../src/lib/latex/source-sync";
+} from "../src/lib/compile/compile-history";
+import { hashSource } from "../src/lib/compile/source-sync";
 import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
 import { projectMetadataVersion } from "../src/lib/project-metadata";
 import { readProjectMetadata } from "../src/lib/project-metadata.server";

@@ -1,14 +1,17 @@
 import { type BuildSnapshot } from "@texfolia/contracts";
+import type { LatexProblem } from "@texfolia/editor/latex/analysis";
+import type { latexCompletion } from "@texfolia/editor/latex/completion";
+import type { FormatSettings } from "@texfolia/editor/latex/format";
+import type {
+  SyncTexIndex,
+  SyncTexLocation,
+} from "@texfolia/editor/latex/synctex";
 import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
 import type { Comments } from "#/hooks/use-comments";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
 import type { EditorCommand } from "#/lib/editor-command";
-import type { LatexProblem } from "#/lib/latex/analysis";
-import type { latexCompletion } from "#/lib/latex/completion";
-import type { FormatSettings } from "#/lib/latex/format";
-import type { SyncTexIndex, SyncTexLocation } from "#/lib/latex/synctex";
 
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {

@@ -8,7 +8,7 @@ import {
   dictionaryPath,
   spellingDictionaries,
   type SpellingDictionary,
-} from "../src/lib/spelling/languages";
+} from "@texfolia/editor/spelling/languages";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const target = join(root, "public");

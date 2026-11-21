@@ -7,11 +7,14 @@ import { createServer } from "vite";
 import * as Y from "yjs";
 
 import { clientMessageSchema } from "../src/lib/collaboration/protocol";
-import { hashSource } from "../src/lib/latex/source-sync";
+import { hashSource } from "../src/lib/compile/source-sync";
 import { encodeSource, decodeSource } from "../src/lib/project-source";
 import type { ProjectDetails } from "../src/lib/project.functions";
 
-const fixture = new URL("./fixtures/synctex/", import.meta.url);
+const fixture = new URL(
+  "../../../packages/editor/test/fixtures/synctex/",
+  import.meta.url,
+);
 const pdf = await Bun.file(new URL("main.pdf", fixture)).arrayBuffer();
 const map = await Bun.file(new URL("main.synctex", fixture)).text();
 const projectId = crypto.randomUUID();

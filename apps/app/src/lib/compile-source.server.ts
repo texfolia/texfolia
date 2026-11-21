@@ -1,7 +1,7 @@
 import type { Db } from "@texfolia/db";
 import type { z } from "zod";
 
-import { compileDeltaSchema, hashSource } from "./latex/source-sync";
+import { compileDeltaSchema, hashSource } from "./compile/source-sync";
 import { lockProject } from "./project-access.server";
 import { projectMetadataVersion } from "./project-metadata";
 import { readProjectMetadata } from "./project-metadata.server";

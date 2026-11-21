@@ -143,7 +143,7 @@ Real-image checks must exercise these behaviors, including any approved Lua mode
 
 Keep existing source, output, PDF, log, and timeout limits. Preserve PDF-first
 streaming, optional Poppler previews, failure logs, and generation-bound SyncTeX
-artifacts. The recently added [SyncTeX reader](../apps/app/src/lib/latex/synctex.ts)
+artifacts. The recently added [SyncTeX reader](../packages/editor/src/latex/synctex.ts)
 needs fixtures from every supported mode, including nested main files.
 
 ### Freeze selection for each build

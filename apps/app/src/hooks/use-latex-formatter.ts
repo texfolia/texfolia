@@ -1,8 +1,11 @@
 import { isolateHistory } from "@codemirror/commands";
+import type {
+  FormatResponse,
+  FormatSettings,
+} from "@texfolia/editor/latex/format";
+import { createFormatWorker } from "@texfolia/editor/latex/workers";
 import type { EditorView } from "@uiw/react-codemirror";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-import type { FormatResponse, FormatSettings } from "#/lib/latex/format";
 
 export function useLatexFormatter(settings: FormatSettings) {
   const worker = useRef<Worker | null>(null);
@@ -22,11 +25,7 @@ export function useLatexFormatter(settings: FormatSettings) {
   const format = useCallback(
     (view: EditorView) => {
       if (pending.current) return true;
-      const instance =
-        worker.current ??
-        new Worker(new URL("../lib/latex/format.worker.ts", import.meta.url), {
-          type: "module",
-        });
+      const instance = worker.current ?? createFormatWorker();
       worker.current = instance;
       const document = view.state.doc;
       pending.current = true;

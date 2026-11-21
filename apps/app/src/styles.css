@@ -3,6 +3,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
+/* @texfolia/ui renders Tailwind classes from outside this app. */
+@source "../../../packages/ui/src";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

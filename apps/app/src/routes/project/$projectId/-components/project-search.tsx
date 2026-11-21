@@ -1,8 +1,8 @@
 import { IconLetterCase } from "@tabler/icons-react";
+import { Button } from "@texfolia/ui/button";
+import { Input } from "@texfolia/ui/input";
 import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
 import { searchProject } from "#/lib/project-search";
 import { useWorkspace } from "#/providers/workspace-provider";
 

@@ -1,3 +1,15 @@
+import { editorTheme } from "@texfolia/editor/theme-editor";
+import {
+  type Appearance,
+  appearanceStorageKey,
+  defaultAppearance,
+  legacyAppearanceStorageKey,
+  loadedThemeExtension,
+  loadThemeExtension,
+  migrateAppearance,
+  resolveTheme,
+  selectedTheme,
+} from "@texfolia/editor/themes";
 import {
   createContext,
   type ReactNode,
@@ -9,18 +21,6 @@ import {
 } from "react";
 
 import { appearanceSnapshot } from "#/lib/theme-bootstrap";
-import { editorTheme } from "#/lib/theme-editor";
-import {
-  type Appearance,
-  appearanceStorageKey,
-  defaultAppearance,
-  legacyAppearanceStorageKey,
-  loadedThemeExtension,
-  loadThemeExtension,
-  migrateAppearance,
-  resolveTheme,
-  selectedTheme,
-} from "#/lib/themes";
 
 function readAppearance(userId: string): {
   appearance: Appearance;

@@ -20,26 +20,26 @@ import {
   IconPhoto,
   IconTex,
 } from "@tabler/icons-react";
-import { useMemo, useRef, useState, type DragEvent } from "react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "#/components/ui/collapsible";
+} from "@texfolia/ui/collapsible";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
+} from "@texfolia/ui/dialog";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "#/components/ui/sidebar";
+} from "@texfolia/ui/sidebar";
+import { useMemo, useRef, useState, type DragEvent } from "react";
+
 import { droppedEntries } from "#/lib/dropped-files";
 import { renamedProjectNodes } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";

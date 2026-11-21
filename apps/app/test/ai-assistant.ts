@@ -24,8 +24,8 @@ import { chromium } from "playwright";
 import { z } from "zod";
 
 import { threadHistorySchema, threadSchema } from "../src/lib/ai/threads";
+import { hashSource } from "../src/lib/compile/source-sync";
 import { GitRepository } from "../src/lib/git-repository.server";
-import { hashSource } from "../src/lib/latex/source-sync";
 import { createProject } from "../src/lib/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;

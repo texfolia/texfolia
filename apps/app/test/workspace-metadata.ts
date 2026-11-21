@@ -22,7 +22,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
-import { compileDeltaSchema, hashSource } from "../src/lib/latex/source-sync";
+import { compileDeltaSchema, hashSource } from "../src/lib/compile/source-sync";
 import {
   projectMetadataSchema,
   projectMetadataVersion,

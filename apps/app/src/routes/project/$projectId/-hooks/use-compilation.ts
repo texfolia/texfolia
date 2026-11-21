@@ -1,4 +1,5 @@
 import { type BuildSnapshot } from "@texfolia/contracts";
+import type { LatexProblem } from "@texfolia/editor/latex/analysis";
 import {
   type RefObject,
   useEffect,
@@ -8,12 +9,11 @@ import {
   useState,
 } from "react";
 
-import type { LatexProblem } from "#/lib/latex/analysis";
-import { parseCompileLog } from "#/lib/latex/compile-log";
-import { requestCompilation } from "#/lib/latex/compile-project";
-import { ProjectBuildEvents } from "#/lib/latex/project-build-events";
-import { isCurrentBuild } from "#/lib/latex/shared-pdf";
-import type { CompileSources } from "#/lib/latex/source-sync";
+import { parseCompileLog } from "#/lib/compile/compile-log";
+import { requestCompilation } from "#/lib/compile/compile-project";
+import { ProjectBuildEvents } from "#/lib/compile/project-build-events";
+import { isCurrentBuild } from "#/lib/compile/shared-pdf";
+import type { CompileSources } from "#/lib/compile/source-sync";
 import { invalidProjectPaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 import { InvalidSourcePathError } from "#/lib/source-path.schema";

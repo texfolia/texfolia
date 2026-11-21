@@ -1,9 +1,9 @@
 import { IconRefresh } from "@tabler/icons-react";
+import { Button } from "@texfolia/ui/button";
 import { cn } from "cn";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
-import { Button } from "#/components/ui/button";
 import {
   type CompileHistoryEntry,
   compileHistorySchema,
@@ -12,7 +12,7 @@ import {
   containerStart,
   formatDuration,
   type TimelineEvent,
-} from "#/lib/latex/compile-history";
+} from "#/lib/compile/compile-history";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 const logSchema = z.object({ log: z.string() });

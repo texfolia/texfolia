@@ -1,26 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "texfolia-web-local",
-  "main": "./dist/_worker.js/index.js",
+  "main": "@tanstack/react-start/server-entry",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
-  "assets": {
-    "binding": "ASSETS",
-    "directory": "./dist",
-  },
   "observability": {
     "enabled": true,
-  },
-  "vars": {
-    "PUBLIC_APP_URL": "http://localhost:3000",
   },
   "env": {
     "production": {
       "name": "texfolia-web",
-      "vars": {
-        "PUBLIC_APP_URL": "https://app.texfolia.com",
-      },
     },
   },
 }

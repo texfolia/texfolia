@@ -21,6 +21,44 @@ import {
   IconMathSymbols,
   IconMessagePlus,
 } from "@tabler/icons-react";
+import type { LatexProblem } from "@texfolia/editor/latex/analysis";
+import {
+  applyLatexHeading,
+  headingCommands,
+  toggleLatexCommand,
+} from "@texfolia/editor/latex/editor-commands";
+import {
+  defaultFormatSettings,
+  type FormatSettings,
+} from "@texfolia/editor/latex/format";
+import {
+  editorLanguage,
+  projectProblemsChanged,
+} from "@texfolia/editor/latex/language";
+import {
+  addLatexPackage,
+  insertLatexSymbol,
+} from "@texfolia/editor/latex/symbols";
+import { browserSpellChecker } from "@texfolia/editor/spelling/checker";
+import {
+  personalDictionaryChanged,
+  spellcheck,
+} from "@texfolia/editor/spelling/editor";
+import { Button } from "@texfolia/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "@texfolia/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@texfolia/ui/dropdown-menu";
 import CodeMirror, {
   EditorState,
   EditorView,
@@ -40,21 +78,6 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
-import { Button } from "#/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-} from "#/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuCheckboxItem,
-  DropdownMenuSeparator,
-} from "#/components/ui/dropdown-menu";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { documentCachingStopped } from "#/lib/collaboration/cache";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
@@ -70,19 +93,8 @@ import {
 } from "#/lib/comments/editor";
 import { downloadFile } from "#/lib/download-file";
 import type { EditorCommand } from "#/lib/editor-command";
-import type { LatexProblem } from "#/lib/latex/analysis";
-import {
-  applyLatexHeading,
-  headingCommands,
-  toggleLatexCommand,
-} from "#/lib/latex/editor-commands";
-import { defaultFormatSettings, type FormatSettings } from "#/lib/latex/format";
-import { editorLanguage, projectProblemsChanged } from "#/lib/latex/language";
-import { addLatexPackage, insertLatexSymbol } from "#/lib/latex/symbols";
 import { commentQuote } from "#/lib/project-comments.schema";
 import { personalDictionaryHas } from "#/lib/settings.schema";
-import { browserSpellChecker } from "#/lib/spelling/checker";
-import { personalDictionaryChanged, spellcheck } from "#/lib/spelling/editor";
 import { useSettings } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";

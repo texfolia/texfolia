@@ -1,3 +1,4 @@
+import { formatChanges } from "@texfolia/editor/latex/format";
 import { IndexeddbPersistence } from "y-indexeddb";
 import {
   applyAwarenessUpdate,
@@ -7,7 +8,6 @@ import {
 } from "y-protocols/awareness";
 import * as Y from "yjs";
 
-import { formatChanges } from "../latex/format";
 import { shareSearchParam } from "../project-share-links.schema";
 import { decodeSource, encodeSource } from "../project-source";
 import { collaborationCachePrefix, stopDocumentCaching } from "./cache";

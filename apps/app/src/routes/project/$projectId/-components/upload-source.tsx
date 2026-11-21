@@ -1,14 +1,14 @@
 import { IconUpload } from "@tabler/icons-react";
-import { useId, useRef, useState, useImperativeHandle, type Ref } from "react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "#/components/ui/dialog";
+} from "@texfolia/ui/dialog";
+import { useId, useRef, useState, useImperativeHandle, type Ref } from "react";
+
 import { readDroppedFiles, type DroppedFile } from "#/lib/dropped-files";
 import { newProjectNodePath } from "#/lib/project-paths";
 import {

@@ -4,17 +4,14 @@ import {
   notFound,
   useRouter,
 } from "@tanstack/react-router";
+import { Button, buttonVariants } from "@texfolia/ui/button";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
+import { Textarea } from "@texfolia/ui/textarea";
 import { useState } from "react";
 import { z } from "zod";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
-import { Button, buttonVariants } from "#/components/ui/button";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "#/components/ui/native-select";
-import { Textarea } from "#/components/ui/textarea";
 import { webPath } from "#/lib/origins";
 import { useTemplatePreviews } from "#/lib/template-preview";
 import {

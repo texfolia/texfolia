@@ -1,4 +1,12 @@
 import { IconCheck, IconDots, IconRestore } from "@tabler/icons-react";
+import { Button } from "@texfolia/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@texfolia/ui/dropdown-menu";
+import { Textarea } from "@texfolia/ui/textarea";
 import { cn } from "cn";
 import {
   type FormEvent,
@@ -8,14 +16,6 @@ import {
   useState,
 } from "react";
 
-import { Button } from "#/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
-import { Textarea } from "#/components/ui/textarea";
 import type { CommentThread } from "#/hooks/use-comments";
 import { resolveCommentAnchor } from "#/lib/comments/anchor";
 import {

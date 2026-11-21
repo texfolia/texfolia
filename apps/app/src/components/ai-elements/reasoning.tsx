@@ -5,7 +5,7 @@ import {
   TraceCollapsibleTrigger,
   TraceLine,
   TraceTitle,
-} from "#/components/ui/trace";
+} from "@texfolia/ui/trace";
 
 export function Reasoning({
   text,

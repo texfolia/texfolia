@@ -1,13 +1,12 @@
 import { IconX } from "@tabler/icons-react";
-import { useId, useMemo, useRef, useState } from "react";
-
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
 import {
   latexPreamble,
   type LatexSymbol,
   searchLatexSymbols,
-} from "#/lib/latex/symbols";
+} from "@texfolia/editor/latex/symbols";
+import { Button } from "@texfolia/ui/button";
+import { Input } from "@texfolia/ui/input";
+import { useId, useMemo, useRef, useState } from "react";
 
 export type SymbolPreamble = {
   source: string;

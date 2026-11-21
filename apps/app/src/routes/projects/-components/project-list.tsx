@@ -12,9 +12,7 @@ import {
 import { useLiveQuery } from "@tanstack/react-db";
 import { Link } from "@tanstack/react-router";
 import { useTable } from "@tanstack/react-table";
-import { useEffect, useRef, useState } from "react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   Empty,
   EmptyContent,
@@ -22,17 +20,14 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "#/components/ui/empty";
+} from "@texfolia/ui/empty";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
-} from "#/components/ui/input-group";
-import { Kbd } from "#/components/ui/kbd";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "#/components/ui/native-select";
+} from "@texfolia/ui/input-group";
+import { Kbd } from "@texfolia/ui/kbd";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import {
   Sidebar,
   SidebarContent,
@@ -45,7 +40,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
-} from "#/components/ui/sidebar";
+} from "@texfolia/ui/sidebar";
 import {
   Table,
   TableBody,
@@ -53,12 +48,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "#/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "#/components/ui/tooltip";
+} from "@texfolia/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
+import { useEffect, useRef, useState } from "react";
+
 import { features } from "#/lib/features";
 import {
   useProjects,

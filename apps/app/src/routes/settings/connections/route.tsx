@@ -1,14 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-
-import { connectGitAccount } from "#/components/git-remote-form";
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   Item,
   ItemContent,
   ItemTitle,
   ItemDescription,
-} from "#/components/ui/item";
+} from "@texfolia/ui/item";
+import { useState } from "react";
+
+import { connectGitAccount } from "#/components/git-remote-form";
 import { getConnections } from "#/lib/account-settings.functions";
 import { authClient } from "#/lib/auth-client";
 import { gitScopes } from "#/lib/git";

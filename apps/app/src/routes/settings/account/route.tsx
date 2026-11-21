@@ -1,22 +1,22 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-
 import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-} from "#/components/ui/alert-dialog";
-import { Button } from "#/components/ui/button";
-import { Field, FieldLabel } from "#/components/ui/field";
-import { Input } from "#/components/ui/input";
+} from "@texfolia/ui/alert-dialog";
+import { Button } from "@texfolia/ui/button";
+import { Field, FieldLabel } from "@texfolia/ui/field";
+import { Input } from "@texfolia/ui/input";
 import {
   Item,
   ItemContent,
   ItemTitle,
   ItemDescription,
-} from "#/components/ui/item";
+} from "@texfolia/ui/item";
+import { useRef, useState } from "react";
+
 import { authClient } from "#/lib/auth-client";
 export const Route = createFileRoute("/settings/account")({
   component: AccountPage,

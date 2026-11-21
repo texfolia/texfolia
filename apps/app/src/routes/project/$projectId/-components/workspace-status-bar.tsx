@@ -13,9 +13,9 @@ import {
   IconTimeline,
   IconUsers,
 } from "@tabler/icons-react";
+import type { WordCount } from "@texfolia/editor/latex/word-count";
+import { Button } from "@texfolia/ui/button";
 
-import { Button } from "#/components/ui/button";
-import type { WordCount } from "#/lib/latex/word-count";
 import type { PanelView, WorkspaceChrome } from "#/lib/workspace-layout";
 
 import type { CompileStatus } from "../-hooks/use-compilation";

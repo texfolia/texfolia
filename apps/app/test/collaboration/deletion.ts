@@ -19,7 +19,7 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from "../../src/lib/collaboration/protocol";
-import { hashSource } from "../../src/lib/latex/source-sync";
+import { hashSource } from "../../src/lib/compile/source-sync";
 import { decodeSource, encodeSource } from "../../src/lib/project-source";
 import { createProject } from "../../src/lib/project.server";
 
