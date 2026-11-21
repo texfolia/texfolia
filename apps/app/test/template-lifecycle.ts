@@ -122,14 +122,18 @@ try {
     if (message.type() === "error")
       console.error("Browser error", message.text());
   });
-  // Marketing /templates is on apps/web. Preview generation still runs from
-  // app template detail pages via useTemplatePreviews.
-  for (const seed of seeds) {
-    await page.goto(`${origin}/template/${seed.id}`);
-  }
-  await page
-    .getByRole("heading", { name: "Simple article", exact: true })
-    .waitFor();
+  // The gallery lives on apps/web, so each detail page drives its own preview
+  // and must stay open until that preview settles.
+  const previewTabs = await Promise.all(
+    seeds.map(async (seed) => {
+      const tab = await context.newPage();
+      tab.setDefaultTimeout(20_000);
+      tab.on("pageerror", (error) => errors.push(error.message));
+      await tab.goto(`${origin}/template/${seed.id}`);
+      await tab.getByRole("heading", { level: 1 }).waitFor();
+      return tab;
+    }),
+  );
   const webOrigin = (
     process.env.TEMPLATE_TEST_WEB_URL ??
     process.env.PUBLIC_WEB_URL ??
@@ -165,10 +169,11 @@ try {
       break;
     assert(
       Date.now() < deadline,
-      `Gallery must finish previews without scheduled events: ${JSON.stringify(rows.map((row) => ({ id: row.id, previewStatus: row.previewStatus, next: row.previewNextAttemptAt })))}. Browser errors: ${errors.join("; ")}`,
+      `Template pages must finish previews without scheduled events: ${JSON.stringify(rows.map((row) => ({ id: row.id, previewStatus: row.previewStatus, next: row.previewNextAttemptAt })))}. Browser errors: ${errors.join("; ")}`,
     );
     await Bun.sleep(50);
   }
+  await Promise.all(previewTabs.map((tab) => tab.close()));
   await page.goto(`${origin}/template/${failed.id}`);
   assert.equal(
     await page.getByRole("button", { name: "Retry preview" }).count(),
