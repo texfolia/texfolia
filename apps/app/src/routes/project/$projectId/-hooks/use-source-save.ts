@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { documentCachingStopped } from "#/lib/collaboration/cache";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
-import type { CompileSources } from "#/lib/latex/source-sync";
+import type { CompileSources } from "#/lib/compile/source-sync";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import {
   reconcileSourceDrafts,

@@ -122,7 +122,7 @@
     "web#build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "env": ["PUBLIC_*"],
+      "env": ["CLOUDFLARE_ENV", "PUBLIC_*"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
     "generate-routes": {

@@ -105,7 +105,7 @@ try {
       previewStatus: "ready",
     });
   }
-  // Public catalog API powers the Astro gallery on apps/web.
+  // Public catalog API powers the marketing gallery on apps/web.
   const catalog = await fetch(new URL("/api/templates", baseUrl));
   assert.equal(catalog.status, 200);
   const listed = (await catalog.json()) as { title: string }[];

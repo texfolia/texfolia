@@ -1,8 +1,8 @@
 import { IconUsers } from "@tabler/icons-react";
+import { Button } from "@texfolia/ui/button";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-import { Button } from "#/components/ui/button";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 const presenceSchema = z.object({

@@ -3,16 +3,16 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
+import {
+  appearanceStorageKey,
+  legacyAppearanceStorageKey,
+} from "@texfolia/editor/themes";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
 import { encodeSource } from "../src/lib/project-source";
 import type { ProjectDetails } from "../src/lib/project.functions";
-import {
-  appearanceStorageKey,
-  legacyAppearanceStorageKey,
-} from "../src/lib/themes";
 
 const projectId = crypto.randomUUID();
 const rootId = crypto.randomUUID();

@@ -1,8 +1,8 @@
 import { sourcePathSchema } from "@texfolia/contracts";
+import { spellingLanguageSchema } from "@texfolia/editor/spelling/languages";
 import { z } from "zod";
 
 import { sourceContentSchema } from "./project-source";
-import { spellingLanguageSchema } from "./spelling/languages";
 
 export const projectNameSchema = z.string().trim().min(1, {
   message: "Please enter a project name.",

@@ -1,7 +1,6 @@
 import { IconTool } from "@tabler/icons-react";
 import type { ToolCallPart, ToolResultPart } from "@tanstack/ai";
-
-import { CodeBlock, CodeBlockContent } from "#/components/ui/code-block";
+import { CodeBlock, CodeBlockContent } from "@texfolia/ui/code-block";
 import {
   Trace,
   TraceCollapsible,
@@ -10,7 +9,7 @@ import {
   TraceLine,
   TraceIcon,
   TraceTitle,
-} from "#/components/ui/trace";
+} from "@texfolia/ui/trace";
 
 function ToolValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
   if (depth > 6) return <p className="text-muted-foreground">Nested result</p>;

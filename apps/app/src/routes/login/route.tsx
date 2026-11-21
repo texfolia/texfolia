@@ -1,26 +1,26 @@
 import { IconArrowLeft } from "@tabler/icons-react";
 import { revalidateLogic, useForm } from "@tanstack/react-form-start";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { useEffect, useRef, useState } from "react";
-import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
-import { z } from "zod";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   Field,
   FieldError,
   FieldGroup,
   FieldLabel,
   FieldSeparator,
-} from "#/components/ui/field";
-import { Input } from "#/components/ui/input";
+} from "@texfolia/ui/field";
+import { Input } from "@texfolia/ui/input";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
-} from "#/components/ui/input-otp";
+} from "@texfolia/ui/input-otp";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { useEffect, useRef, useState } from "react";
+import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
+import { z } from "zod";
+
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth-client";
 import { authClient } from "#/lib/auth-client";
 import { webPath } from "#/lib/origins";

@@ -7,7 +7,7 @@ import { createServer } from "vite";
 import * as Y from "yjs";
 
 import { clientMessageSchema } from "../src/lib/collaboration/protocol";
-import { compileDeltaSchema, hashSource } from "../src/lib/latex/source-sync";
+import { compileDeltaSchema, hashSource } from "../src/lib/compile/source-sync";
 import {
   createNodeSchema,
   renameNodeSchema,

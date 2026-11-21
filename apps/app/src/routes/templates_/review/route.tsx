@@ -5,11 +5,11 @@ import {
   redirect,
   notFound,
 } from "@tanstack/react-router";
+import { Button } from "@texfolia/ui/button";
 import { useState } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
-import { Button } from "#/components/ui/button";
 import {
   getTemplateReviewQueue,
   getTemplateAccount,

@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,8 +7,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "#/components/ui/alert-dialog";
-import { toast } from "#/components/ui/toast";
+} from "@texfolia/ui/alert-dialog";
+import { toast } from "@texfolia/ui/toast";
+import { useState } from "react";
+
 import type { Project } from "#/lib/project.functions";
 import { useProjects } from "#/providers/projects-provider";
 

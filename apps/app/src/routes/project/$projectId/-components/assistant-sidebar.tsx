@@ -1,6 +1,22 @@
 import { IconCopy, IconRefresh, IconX } from "@tabler/icons-react";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { Markdown } from "@tanstack/markdown/react";
+import { Button } from "@texfolia/ui/button";
+import { CodeBlock, CodeBlockContent } from "@texfolia/ui/code-block";
+import {
+  Message,
+  MessageContent,
+  MessageHeader,
+  MessageFooter,
+} from "@texfolia/ui/message";
+import {
+  MessageScrollerProvider,
+  MessageScroller,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+} from "@texfolia/ui/message-scroller";
 import {
   useCallback,
   useEffect,
@@ -16,22 +32,6 @@ import { Reasoning } from "#/components/ai-elements/reasoning";
 import { Sources } from "#/components/ai-elements/sources";
 import { Suggestion } from "#/components/ai-elements/suggestion";
 import { Tool } from "#/components/ai-elements/tool";
-import { Button } from "#/components/ui/button";
-import { CodeBlock, CodeBlockContent } from "#/components/ui/code-block";
-import {
-  Message,
-  MessageContent,
-  MessageHeader,
-  MessageFooter,
-} from "#/components/ui/message";
-import {
-  MessageScrollerProvider,
-  MessageScroller,
-  MessageScrollerViewport,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerButton,
-} from "#/components/ui/message-scroller";
 import { aiConfigurationSchema, type AiConfiguration } from "#/lib/ai/schema";
 import {
   sendLatestMessage,

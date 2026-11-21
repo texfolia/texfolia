@@ -4,16 +4,16 @@ import {
   IconBrandGit,
   IconFolderPlus,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
+} from "@texfolia/ui/dialog";
+import { useEffect, useState } from "react";
+
 import { getTemplateAccount, listTemplates } from "#/lib/template.functions";
 
 import { FilesProjectForm } from "./files-project-form";

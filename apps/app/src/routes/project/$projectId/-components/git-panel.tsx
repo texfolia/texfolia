@@ -1,17 +1,17 @@
 import { IconRefresh } from "@tabler/icons-react";
-import { useCallback, useEffect, useState } from "react";
-import { z } from "zod";
-
-import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
-} from "#/components/ui/context-menu";
-import { Input } from "#/components/ui/input";
-import { Textarea } from "#/components/ui/textarea";
+} from "@texfolia/ui/context-menu";
+import { Input } from "@texfolia/ui/input";
+import { Textarea } from "@texfolia/ui/textarea";
+import { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
+
+import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
 import type { GitAction, GitResult } from "#/lib/git";
 import { gitAction } from "#/lib/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";

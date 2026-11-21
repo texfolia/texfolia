@@ -2,28 +2,40 @@
   "name": "web",
   "private": true,
   "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
   "scripts": {
-    "build": "astro build",
-    "deploy": "astro build && wrangler deploy --env production",
-    "dev": "astro dev --port 4321 --strictPort",
+    "build": "CLOUDFLARE_ENV=production vite build",
+    "cf:typegen": "wrangler types --strict-vars=false",
+    "deploy": "wrangler deploy --env production",
+    "dev": "vite dev --port 4321 --strictPort",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
-    "preview": "astro build && wrangler dev",
-    "typecheck": "astro check"
+    "preview": "vite preview --port 4321 --strictPort",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.6.13",
     "@fontsource-variable/inter": "^5.3.0",
+    "@tanstack/react-router": "1.170.46",
+    "@tanstack/react-start": "1.169.4",
     "@texfolia/auth": "workspace:*",
-    "astro": "^5.18.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.12",
+    "@cloudflare/vite-plugin": "^1.26.0",
     "@tailwindcss/vite": "^4.3.3",
     "@texfolia/config": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^6.0.2",
+    "vite": "^8.3.6",
     "wrangler": "^4.70.0"
   }
 }

@@ -1,7 +1,5 @@
 import { IconChevronsUp, IconLogout } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,8 +9,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "#/components/ui/alert-dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+} from "@texfolia/ui/alert-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@texfolia/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +19,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
+} from "@texfolia/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "#/components/ui/sidebar";
+} from "@texfolia/ui/sidebar";
+import { useState } from "react";
+
 import { settingsLinks } from "#/lib/settings-navigation";
 import { signOut } from "#/lib/sign-out";
 

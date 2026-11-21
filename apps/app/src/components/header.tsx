@@ -1,13 +1,13 @@
 import { ClientOnly, Link } from "@tanstack/react-router";
-
-import { NavigationShortcuts } from "#/components/navigation-shortcuts";
-import { Button, buttonVariants } from "#/components/ui/button";
+import { Button, buttonVariants } from "@texfolia/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
+} from "@texfolia/ui/dropdown-menu";
+
+import { NavigationShortcuts } from "#/components/navigation-shortcuts";
 import { authClient } from "#/lib/auth-client";
 import { webPath } from "#/lib/origins";
 

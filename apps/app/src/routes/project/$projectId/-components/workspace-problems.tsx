@@ -1,4 +1,5 @@
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
+
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export function WorkspaceProblems() {

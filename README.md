@@ -42,10 +42,10 @@ Secrets, Stripe webhooks, and running each app on its own are covered in the [lo
 
 ## System design
 
-- **Browser:** a CodeMirror workspace, with workers for analysis and formatting and an IndexedDB offline cache.
+- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `@texfolia/editor`; the shadcn primitives live in `@texfolia/ui`.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
 - **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
-- **Marketing site:** Astro on Cloudflare Workers (`texfolia.com`).
+- **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered; the templates gallery reads the app's public catalog API.
 - **Compiler:** a Hono API. Each project gets its own LaTeX engine container, and the PDF streams back to the preview.
 
 ### Where editing and storage happen
@@ -96,7 +96,7 @@ sequenceDiagram
     B->>W: Fetch job status or saved PDF
 ```
 
-More detail: [product app](apps/app/README.md), [compiler](apps/compiler/README.md), and the [docs](docs) folder.
+More detail: [product app](apps/app/README.md), [marketing site](apps/web/README.md), [compiler](apps/compiler/README.md), and the [docs](docs) folder.
 
 ## Repository layout
 
@@ -104,12 +104,14 @@ More detail: [product app](apps/app/README.md), [compiler](apps/compiler/README.
 apps/
   app/                 React product app: auth, projects, and the compile endpoint
   compiler/            Hono compiler API, job processing, and the LaTeX engine
-  web/                 Astro marketing site (landing, pricing, templates gallery)
+  web/                 React marketing site: landing, pricing, policies, templates gallery
 packages/
   auth/                Shared Better Auth server and client helpers
+  config/              Shared TypeScript settings
   contracts/           Schemas shared by the product app and the compiler
   db/                  Drizzle schema, PostgreSQL client, and migrations
-  config/              Shared TypeScript settings
+  editor/              LaTeX language tooling, spelling, and CodeMirror themes for the app
+  ui/                  shadcn/Base UI React primitives for the app
 docs/                  Feature and operations guides
 ```
 

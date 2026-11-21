@@ -10,7 +10,7 @@ import {
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
-import { hashSource } from "./latex/source-sync";
+import { hashSource } from "./compile/source-sync";
 import { lockProject } from "./project-access.server";
 import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import type { SourceBucket } from "./project-source.server";

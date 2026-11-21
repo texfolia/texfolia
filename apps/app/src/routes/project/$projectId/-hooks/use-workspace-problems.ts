@@ -1,6 +1,5 @@
+import type { LatexProblem } from "@texfolia/editor/latex/analysis";
 import { useCallback, useMemo, useState } from "react";
-
-import type { LatexProblem } from "#/lib/latex/analysis";
 
 function sameProblem(a: LatexProblem, b: LatexProblem) {
   return (

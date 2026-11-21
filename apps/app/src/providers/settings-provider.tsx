@@ -1,5 +1,7 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { useNavigate } from "@tanstack/react-router";
+import { type FormatSettings } from "@texfolia/editor/latex/format";
+import type { SpellingLanguage } from "@texfolia/editor/spelling/languages";
 import {
   createContext,
   type ReactNode,
@@ -10,7 +12,6 @@ import {
   useState,
 } from "react";
 
-import { type FormatSettings } from "#/lib/latex/format";
 import {
   updateProjectFormatting,
   updateProjectSpelling,
@@ -23,7 +24,6 @@ import {
   type Settings,
 } from "#/lib/settings.schema";
 import { shortcutConflicts } from "#/lib/shortcuts";
-import type { SpellingLanguage } from "#/lib/spelling/languages";
 import {
   ShortcutsProvider,
   useAppShortcut,

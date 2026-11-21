@@ -10,6 +10,22 @@ import {
   IconZoomOut,
   IconDots,
 } from "@tabler/icons-react";
+import {
+  pdfToSource,
+  rotatePdfPoint,
+  type SyncTexIndex,
+  type SyncTexLocation,
+} from "@texfolia/editor/latex/synctex";
+import { Button } from "@texfolia/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@texfolia/ui/dropdown-menu";
+import { Input } from "@texfolia/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
@@ -18,24 +34,8 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
-import { Button } from "#/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuCheckboxItem,
-  DropdownMenuSeparator,
-} from "#/components/ui/dropdown-menu";
-import { Input } from "#/components/ui/input";
+import { reportCompilePreview } from "#/lib/compile/compile-telemetry";
 import { downloadFile } from "#/lib/download-file";
-import { reportCompilePreview } from "#/lib/latex/compile-telemetry";
-import {
-  pdfToSource,
-  rotatePdfPoint,
-  type SyncTexIndex,
-  type SyncTexLocation,
-} from "#/lib/latex/synctex";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";

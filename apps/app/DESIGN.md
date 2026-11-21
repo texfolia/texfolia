@@ -152,7 +152,7 @@ Semantic roles follow the selected theme; no fixed editor palette is prescribed.
 - **Chrome:** activity, status, and tab tokens distinguish persistent workspace regions and active files.
 - **Boundaries and focus:** `border`, `input`, and `ring` retain the existing Nova treatments.
 
-**The Theme Authority Rule.** Use semantic CSS variables. `src/lib/themes.ts` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
+**The Theme Authority Rule.** Use semantic CSS variables. `@texfolia/editor/themes` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
 
 ## Typography
 
@@ -206,7 +206,7 @@ Settings opens as a standard dialog with a dimmed backdrop, User and Project tab
 
 Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems remains a dock panel.
 
-The functional reference is [Editor workspace](../../docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, neutral base, CSS variables, Tabler icons) and `src/components/ui/`.
+The functional reference is [Editor workspace](../../docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, neutral base, CSS variables, Tabler icons) and the primitives in [`packages/ui`](../../packages/ui/README.md).
 
 ## Do's and Don'ts
 

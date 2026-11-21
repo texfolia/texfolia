@@ -1,18 +1,15 @@
 import { IconRefresh, IconUsers } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
-} from "#/components/ui/context-menu";
-import { Input } from "#/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "#/components/ui/native-select";
+} from "@texfolia/ui/context-menu";
+import { Input } from "@texfolia/ui/input";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import {
   getProjectAccess,
   grantProjectAccess,

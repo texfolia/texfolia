@@ -2,6 +2,14 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { ClientOnly } from "@tanstack/react-router";
 
 import "dockview-react/dist/styles/dockview.css";
+import { latexCompletion } from "@texfolia/editor/latex/completion";
+import { projectOutline } from "@texfolia/editor/latex/outline";
+import {
+  addLatexPackage,
+  packageInsertion,
+} from "@texfolia/editor/latex/symbols";
+import { sourceToPdf } from "@texfolia/editor/latex/synctex";
+import { SidebarProvider } from "@texfolia/ui/sidebar";
 import { cn } from "cn";
 import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
 import {
@@ -13,14 +21,9 @@ import {
 } from "react";
 
 import { SettingsDialog } from "#/components/settings-dialog";
-import { SidebarProvider } from "#/components/ui/sidebar";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
-import { latexCompletion } from "#/lib/latex/completion";
-import { projectOutline } from "#/lib/latex/outline";
-import { addLatexPackage, packageInsertion } from "#/lib/latex/symbols";
-import { sourceToPdf } from "#/lib/latex/synctex";
 import { projectPaths, invalidProjectPaths } from "#/lib/project-paths";
 import type { ProjectDetails } from "#/lib/project.functions";
 import { workspaceLayoutKey } from "#/lib/workspace-layout";
@@ -316,7 +319,6 @@ export function ProjectWorkspace({
       }}
     >
       <SidebarProvider
-        keyboardShortcut={false}
         ref={container}
         className={cn(
           "h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2rem] [--workspace-header-height:2.5rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none [&_[data-slot=sidebar-footer]]:p-0 [&_[data-slot=sidebar-group]]:p-0 [&_[data-slot=sidebar-menu]]:gap-0",

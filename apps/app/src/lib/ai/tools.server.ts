@@ -6,8 +6,8 @@ import { z } from "zod";
 
 import type { createAuth } from "../auth";
 import { handleCompileGet, handleCompilePost } from "../compile-route.server";
+import { parseCompileLog } from "../compile/compile-log";
 import { gitBranchSchema } from "../git";
-import { parseCompileLog } from "../latex/compile-log";
 import { lockProject } from "../project-access.server";
 import { createProjectNode, renameProjectNode } from "../project-node.server";
 import { projectNodePaths, projectPaths } from "../project-paths";

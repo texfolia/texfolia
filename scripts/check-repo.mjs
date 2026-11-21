@@ -58,9 +58,14 @@ for (const file of files.filter(
     if (node.type === "comment") continue;
     if (
       node.type === "atrule" &&
-      ["import", "custom-variant", "theme", "utility", "font-face"].includes(
-        node.name,
-      )
+      [
+        "import",
+        "source",
+        "custom-variant",
+        "theme",
+        "utility",
+        "font-face",
+      ].includes(node.name)
     )
       continue;
     if (

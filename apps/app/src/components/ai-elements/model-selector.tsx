@@ -1,13 +1,12 @@
 import { IconChevronDown } from "@tabler/icons-react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-} from "#/components/ui/dropdown-menu";
+} from "@texfolia/ui/dropdown-menu";
 
 export function ModelSelector({
   models,

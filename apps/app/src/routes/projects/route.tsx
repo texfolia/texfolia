@@ -1,12 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { SidebarProvider, useSidebar } from "@texfolia/ui/sidebar";
 
-import { SidebarProvider } from "#/components/ui/sidebar";
 import { getProjects } from "#/lib/project.functions";
 import {
   createProjectsStore,
   ProjectsProvider,
 } from "#/providers/projects-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
+import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
 
 import { ProjectList } from "./-components/project-list";
@@ -52,10 +53,17 @@ function ProjectsPage() {
       <ProjectsProvider store={store}>
         <SettingsProvider userId={user.id}>
           <SidebarProvider>
+            <SidebarShortcut />
             <ProjectList user={user} />
           </SidebarProvider>
         </SettingsProvider>
       </ProjectsProvider>
     </ThemeProvider>
   );
+}
+
+function SidebarShortcut() {
+  const { toggleSidebar } = useSidebar();
+  useAppShortcut("sidebar", toggleSidebar);
+  return null;
 }

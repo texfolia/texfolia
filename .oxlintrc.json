@@ -2,8 +2,8 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
     ".agents/skills/*",
-    "apps/app/src/routeTree.gen.ts",
-    "apps/app/src/lib/theme-catalog.gen.ts",
+    "apps/*/src/routeTree.gen.ts",
+    "packages/editor/src/themes/theme-catalog.gen.ts",
     "apps/app/worker-configuration.d.ts"
   ],
   "plugins": ["typescript", "unicorn", "oxc"],

@@ -1,25 +1,22 @@
-import { useState, type ReactNode } from "react";
-
-import { Button } from "#/components/ui/button";
+import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-} from "#/components/ui/context-menu";
+} from "@texfolia/ui/context-menu";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
-import { Input } from "#/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "#/components/ui/native-select";
+} from "@texfolia/ui/dialog";
+import { Input } from "@texfolia/ui/input";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
+import { useState, type ReactNode } from "react";
+
 import { projectNodePaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";

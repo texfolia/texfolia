@@ -1,5 +1,5 @@
 dist
-.astro
+.tanstack
 .wrangler
 .env
 .dev.vars

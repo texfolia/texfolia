@@ -1,4 +1,19 @@
 import { IconDots, IconPlus, IconX } from "@tabler/icons-react";
+import { Button } from "@texfolia/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@texfolia/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@texfolia/ui/dropdown-menu";
+import { Input } from "@texfolia/ui/input";
 import {
   useCallback,
   useEffect,
@@ -8,21 +23,6 @@ import {
 } from "react";
 import { z } from "zod";
 
-import { Button } from "#/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "#/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "#/components/ui/dropdown-menu";
-import { Input } from "#/components/ui/input";
 import {
   threadSchema,
   threadHistorySchema,

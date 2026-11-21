@@ -1,3 +1,11 @@
+import { type LatexProblem } from "@texfolia/editor/latex/analysis";
+import { Button } from "@texfolia/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "@texfolia/ui/context-menu";
 import type { EditorView } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import {
@@ -15,15 +23,7 @@ import {
 } from "react";
 import * as Y from "yjs";
 
-import { Button } from "#/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-} from "#/components/ui/context-menu";
 import { downloadFile } from "#/lib/download-file";
-import { type LatexProblem } from "#/lib/latex/analysis";
 import { useWorkspace, type Workspace } from "#/providers/workspace-provider";
 
 import type { FilePanelParams } from "../-hooks/use-dock-panels";

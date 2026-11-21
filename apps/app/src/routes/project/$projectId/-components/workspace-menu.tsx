@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-
 import {
   Menubar,
   MenubarMenu,
@@ -9,7 +8,8 @@ import {
   MenubarSeparator,
   MenubarGroup,
   MenubarCheckboxItem,
-} from "#/components/ui/menubar";
+} from "@texfolia/ui/menubar";
+
 import type { EditorCommand } from "#/lib/editor-command";
 import type {
   PanelView,

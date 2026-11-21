@@ -4,19 +4,15 @@ import {
   createColumnHelper,
   filterFn_arrIncludes,
 } from "@tanstack/react-table";
-
 import {
   Avatar,
   AvatarFallback,
   AvatarGroup,
   AvatarGroupCount,
   AvatarImage,
-} from "#/components/ui/avatar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "#/components/ui/tooltip";
+} from "@texfolia/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
+
 import type { Features } from "#/lib/features";
 import type { Project } from "#/lib/project.functions";
 
