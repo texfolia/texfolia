@@ -148,7 +148,16 @@ try {
     }
   }
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  // `/` redirects to /login, whose Turnstile widget rejects the empty test site key.
+  const context = await browser.newContext();
+  await context.route("https://challenges.cloudflare.com/**", (route) =>
+    route.fulfill({
+      contentType: "application/javascript",
+      body: `window.turnstile = { render() { return "widget"; }, reset() {}, remove() {}, execute() {}, getResponse() { return ""; }, isExpired() { return false; } };
+window[new URL(document.currentScript.src).searchParams.get("onload")]?.();`,
+    }),
+  );
+  const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -265,7 +274,7 @@ try {
   assert(pdfReady, "PDF.js did not initialize a real PDF worker");
   assert.deepEqual(errors, []);
 
-  const probe = await browser.newPage();
+  const probe = await context.newPage();
   await probe.goto(origin);
   const blocked = await probe.evaluate(
     () =>
