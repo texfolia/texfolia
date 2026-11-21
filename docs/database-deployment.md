@@ -16,7 +16,7 @@ Local development and CI continue to use plain Postgres and `db:push`.
 3. Apply `bun run db:migrate` to an empty, isolated local Postgres database with
    `DATABASE_URL` set to that database. Run the integration checks in the
    [database guide](../packages/db/README.md#verify-plain-postgres),
-   [source-storage guide](../apps/web/README.md#local-development-and-rollout),
+   [source-storage guide](../apps/app/README.md#local-development-and-rollout),
    and [template guide](templates.md#verification).
 4. On that disposable database, run `bun run db:push` and confirm it reports no
    schema changes. Investigate any difference before proceeding.
@@ -61,7 +61,7 @@ uses loopback Postgres, Docker compiler containers, and local Worker storage.
 Production uses Cloudflare Workers, Containers, R2, queues, Durable Objects, and
 Neon through Hyperdrive. These environments do not share resources or secrets.
 
-Edit `apps/web/wrangler.jsonc` before building the production deployment artifact.
+Edit `apps/app/wrangler.jsonc` before building the production deployment artifact.
 
 1. Replace the existing `env.production.hyperdrive` placeholder ID with the
    cache-disabled production configuration. Keep the binding name `HYPERDRIVE`.
@@ -93,9 +93,9 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
    with `DATABASE_URL` set to Neon's direct connection. Use `db:migrate`.
    `db:push` accepts only local databases.
 3. Run `bun run deploy` after the migration succeeds. Turbo builds the web app
-   for `env.production` and deploys `texfolia-compiler` before `texfolia-web`.
+   for `env.production` and deploys `texfolia-compiler` before `texfolia-app`.
    Both Worker deploy scripts explicitly pass `--env production`.
-   `bun run --cwd apps/web build` explicitly sets `CLOUDFLARE_ENV=production`.
+   `bun run --cwd apps/app build` explicitly sets `CLOUDFLARE_ENV=production`.
    Inspect the generated Worker name, Hyperdrive ID, source bucket, and compiler
    service before deploying the artifact. Selecting an environment only at deploy
    time does not retarget a Vite build. See

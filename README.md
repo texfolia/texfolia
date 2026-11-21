@@ -25,15 +25,18 @@ Requires [Bun](https://bun.sh) 1.4.4, [Docker](https://www.docker.com) with Comp
 git clone https://github.com/natebabyak/texfolia.git
 cd texfolia
 bun install
+cp apps/app/.env.example apps/app/.env
 cp apps/web/.env.example apps/web/.env
 cp packages/db/.env.example packages/db/.env
-# Fill in the secrets in apps/web/.env, then:
+# Fill in the secrets in apps/app/.env, then:
 bun run db:start
 bun run db:push
 bun run dev
 ```
 
-Open [localhost:3000](http://localhost:3000), create a project, and press Cmd/Ctrl+S to save and compile.
+Open the product app at [localhost:3000](http://localhost:3000) and the marketing
+site at [localhost:4321](http://localhost:4321). Create a project and press
+Cmd/Ctrl+S to save and compile.
 
 Secrets, Stripe webhooks, and running each app on its own are covered in the [local development guide](docs/local-development.md).
 
@@ -41,7 +44,8 @@ Secrets, Stripe webhooks, and running each app on its own are covered in the [lo
 
 - **Browser:** a CodeMirror workspace, with workers for analysis and formatting and an IndexedDB offline cache.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
-- **Web app:** TanStack Start on Cloudflare Workers. PostgreSQL holds accounts, the file tree, and build records.
+- **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
+- **Marketing site:** Astro on Cloudflare Workers (`texfolia.com`).
 - **Compiler:** a Hono API. Each project gets its own LaTeX engine container, and the PDF streams back to the preview.
 
 ### Where editing and storage happen
@@ -59,11 +63,11 @@ flowchart TD
     Editor <-->|Authenticated collaboration WebSocket| Collaboration["ProjectCollaboration Durable Object"]
     Collaboration <-->|Yjs snapshots and update journal| SQLite[("DO SQLite")]
     Collaboration -->|Persist merged text| R2[("Source R2 bucket")]
-    Editor <-->|Projects, source saves, compile requests, and PDFs| Web["TanStack Start web app"]
-    Web <-->|Read and write saved sources| R2
-    Web <-->|Accounts, file tree, source versions, and compile records| DB[("PostgreSQL")]
-    Web <-->|Optional social sign-in and billing| Services["OAuth providers and Stripe"]
-    Web <-->|Submit jobs, check status, and fetch PDFs| Compiler["Hono compiler API"]
+    Editor <-->|Projects, source saves, compile requests, and PDFs| App["TanStack Start product app"]
+    App <-->|Read and write saved sources| R2
+    App <-->|Accounts, file tree, source versions, and compile records| DB[("PostgreSQL")]
+    App <-->|Optional social sign-in and billing| Services["OAuth providers and Stripe"]
+    App <-->|Submit jobs, check status, and fetch PDFs| Compiler["Hono compiler API"]
 ```
 
 ### How a compile becomes a PDF
@@ -71,7 +75,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant B as Browser
-    participant W as Web app
+    participant W as Product app
     participant P as Project coordinator
     participant T as Project container
     participant R as Artifact storage
@@ -92,18 +96,20 @@ sequenceDiagram
     B->>W: Fetch job status or saved PDF
 ```
 
-More detail: [web app](apps/web/README.md), [compiler](apps/compiler/README.md), and the [docs](docs) folder.
+More detail: [product app](apps/app/README.md), [compiler](apps/compiler/README.md), and the [docs](docs) folder.
 
 ## Repository layout
 
 ```text
 apps/
-  web/                 React workspace, auth, projects, and the compile endpoint
+  app/                 React product app: auth, projects, and the compile endpoint
   compiler/            Hono compiler API, job processing, and the LaTeX engine
+  web/                 Astro marketing site (landing, pricing, templates gallery)
 packages/
-  contracts/           Schemas shared by the web app and the compiler
+  auth/                Shared Better Auth server and client helpers
+  contracts/           Schemas shared by the product app and the compiler
   db/                  Drizzle schema, PostgreSQL client, and migrations
-  typescript-config/   Shared TypeScript settings
+  config/              Shared TypeScript settings
 docs/                  Feature and operations guides
 ```
 

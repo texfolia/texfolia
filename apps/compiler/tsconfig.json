@@ -1,5 +1,5 @@
 {
-  "extends": "@texfolia/typescript-config/base.json",
+  "extends": "@texfolia/config/base.json",
   "compilerOptions": {
     "types": ["bun", "@cloudflare/workers-types"]
   }

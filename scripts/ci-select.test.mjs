@@ -60,7 +60,7 @@ test("shared contract fixtures run every check", () => {
 });
 
 test("web unit-only changes skip integration and production assets", () => {
-  const plan = selectChecks(["apps/web/src/lib/shortcuts.test.ts"]);
+  const plan = selectChecks(["apps/app/src/lib/shortcuts.test.ts"]);
   assert.equal(plan["web-checks"], true);
   assert.equal(plan.compiler, false);
   assert.equal(plan.postgres, false);
@@ -70,7 +70,7 @@ test("web unit-only changes skip integration and production assets", () => {
 test("every mapped test input selects its owners and required setup", () => {
   for (const suite of Object.values(suites)) {
     for (const input of suite.inputs) {
-      const path = `apps/web/test/${input}${input.endsWith("/") ? "worker.ts" : ""}`;
+      const path = `apps/app/test/${input}${input.endsWith("/") ? "worker.ts" : ""}`;
       const plan = selectChecks([path]);
       const owners = Object.entries(suites).filter(([, candidate]) =>
         candidate.inputs.includes(input),
@@ -96,16 +96,16 @@ test("every mapped test input selects its owners and required setup", () => {
 });
 
 test("production asset test changes need only the Checks build and browser", () => {
-  const plan = selectChecks(["apps/web/test/production-assets.ts"]);
+  const plan = selectChecks(["apps/app/test/production-assets.ts"]);
   assert.equal(plan["production-assets"], true);
   assert.equal(plan.postgres, false);
 });
 
 test("runtime web changes keep every integration suite", () => {
   for (const path of [
-    "apps/web/src/components/editor.tsx",
-    "apps/web/public/logo.svg",
-    "apps/web/vite.config.ts",
+    "apps/app/src/components/editor.tsx",
+    "apps/app/public/logo.svg",
+    "apps/app/vite.config.ts",
   ]) {
     const plan = selectChecks([path]);
     assert.deepEqual(selectedSuites(plan), Object.keys(suites), path);
@@ -116,7 +116,7 @@ test("runtime web changes keep every integration suite", () => {
 test("shared, lockfile, CI, environment, schema, and unknown root changes select everything", () => {
   for (const path of [
     "packages/db/src/index.ts",
-    "packages/typescript-config/base.json",
+    "packages/config/base.json",
     "bun.lock",
     "package.json",
     "turbo.json",
@@ -124,15 +124,15 @@ test("shared, lockfile, CI, environment, schema, and unknown root changes select
     ".github/actions/setup-ci/action.yml",
     "scripts/ci-select.mjs",
     ".oxfmtrc.json",
-    "apps/web/.env.local",
-    "apps/web/.dev.vars",
-    "apps/web/src/env.ts",
-    "apps/web/src/vite-env.d.ts",
+    "apps/app/.env.local",
+    "apps/app/.dev.vars",
+    "apps/app/src/env.ts",
+    "apps/app/src/vite-env.d.ts",
     "apps/compiler/src/environment.ts",
-    "apps/web/src/env/config.ts",
-    "apps/web/src/lib/project.schema.ts",
+    "apps/app/src/env/config.ts",
+    "apps/app/src/lib/project.schema.ts",
     "apps/compiler/wrangler.jsonc",
-    "apps/web/worker-configuration.d.ts",
+    "apps/app/worker-configuration.d.ts",
     "new-build-config.json",
   ]) {
     const plan = selectChecks([path]);
@@ -146,11 +146,11 @@ test("shared, lockfile, CI, environment, schema, and unknown root changes select
 
 test("unmapped test helpers fall back to all integration suites", () => {
   assert.deepEqual(
-    selectedSuites(selectChecks(["apps/web/test/new-helper.ts"])),
+    selectedSuites(selectChecks(["apps/app/test/new-helper.ts"])),
     Object.keys(suites),
   );
   assert.equal(
-    selectChecks(["apps/web/test/new-helper.ts"])["production-assets"],
+    selectChecks(["apps/app/test/new-helper.ts"])["production-assets"],
     true,
   );
   assert.equal(selectChecks([], { fallback: true }).full, true);
@@ -160,8 +160,8 @@ test("multiple changes select the union", () => {
   assert.deepEqual(
     selectedSuites(
       selectChecks([
-        "apps/web/test/collaboration/browser.ts",
-        "apps/web/test/ai-assistant.ts",
+        "apps/app/test/collaboration/browser.ts",
+        "apps/app/test/ai-assistant.ts",
       ]),
     ),
     ["assistant", "collaboration"],
@@ -233,12 +233,12 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       ".oxfmtrc.json",
       ".oxlintrc.json",
       ".gitignore",
-      "apps/web/package.json",
+      "apps/app/package.json",
       "apps/compiler/package.json",
       "packages/contracts/package.json",
       "packages/db/package.json",
-      "packages/typescript-config/package.json",
-      "packages/typescript-config/base.json",
+      "packages/config/package.json",
+      "packages/config/base.json",
     ]) {
       mkdirSync(dirname(join(cwd, path)), { recursive: true });
       copyFileSync(join(root, path), join(cwd, path));
@@ -247,7 +247,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       "apps/compiler/src/local.ts",
       "packages/contracts/fixtures/path-policy.json",
       "apps/compiler/engine/compile.go",
-      "apps/web/src/lib/shortcuts.test.ts",
+      "apps/app/src/lib/shortcuts.test.ts",
       "packages/db/src/index.ts",
     ])
       write(path, "base input");
@@ -268,29 +268,29 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
         ["compiler#test", "compiler#lint"],
       ],
       [
-        "apps/web/src/lib/shortcuts.test.ts",
-        ["@texfolia/contracts", "@texfolia/db", "web"],
-        ["web#test"],
+        "apps/app/src/lib/shortcuts.test.ts",
+        ["@texfolia/contracts", "@texfolia/db", "app"],
+        ["app#test"],
       ],
       [
         "apps/compiler/src/local.ts",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
-        ["web#typecheck"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["app#typecheck"],
       ],
       [
         "packages/contracts/fixtures/path-policy.json",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
-        ["@texfolia/contracts#test", "compiler#test", "web#typecheck"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["@texfolia/contracts#test", "compiler#test", "app#typecheck"],
       ],
       [
         "packages/db/src/index.ts",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
-        ["web#test", "compiler#test", "web#typecheck"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["app#test", "compiler#test", "app#typecheck"],
       ],
       [
         ".github/workflows/ci.yml",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
-        ["web#test", "compiler#test"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "app"],
+        ["app#test", "compiler#test"],
       ],
     ]) {
       git("reset", "--hard", base);
@@ -330,17 +330,17 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
     git("reset", "--hard", base);
     git("clean", "-fdx");
     const buildHash = () =>
-      turbo(["--filter=web"], ["build"]).tasks.find(
-        (task) => task.taskId === "web#build",
+      turbo(["--filter=app"], ["build"]).tasks.find(
+        (task) => task.taskId === "app#build",
       ).hash;
     const before = buildHash();
-    write("apps/web/dist/server/.dev.vars", "GENERATED=true");
+    write("apps/app/dist/server/.dev.vars", "GENERATED=true");
     assert.equal(
       buildHash(),
       before,
       "generated environment output must not invalidate its own build",
     );
-    write("apps/web/.env.ci-test", "VITE_TEST=changed");
+    write("apps/app/.env.ci-test", "VITE_TEST=changed");
     assert.notEqual(
       buildHash(),
       before,

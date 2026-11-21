@@ -52,7 +52,7 @@ const platform = remote
       SOURCES: { put: Parameters<typeof seedTemplates>[0]["putSource"] };
     }>({
       configPath: fileURLToPath(
-        new URL("../../../apps/web/wrangler.jsonc", import.meta.url),
+        new URL("../../../apps/app/wrangler.jsonc", import.meta.url),
       ),
       envFiles: [],
       remoteBindings: false,
@@ -60,7 +60,7 @@ const platform = remote
         path:
           values["persist-to"] ??
           fileURLToPath(
-            new URL("../../../apps/web/.wrangler/state/v3", import.meta.url),
+            new URL("../../../apps/app/.wrangler/state/v3", import.meta.url),
           ),
       },
     });

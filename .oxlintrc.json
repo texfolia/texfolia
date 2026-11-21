@@ -2,9 +2,9 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
     ".agents/skills/*",
-    "apps/web/src/routeTree.gen.ts",
-    "apps/web/src/lib/theme-catalog.gen.ts",
-    "apps/web/worker-configuration.d.ts"
+    "apps/app/src/routeTree.gen.ts",
+    "apps/app/src/lib/theme-catalog.gen.ts",
+    "apps/app/worker-configuration.d.ts"
   ],
   "plugins": ["typescript", "unicorn", "oxc"],
   "categories": {

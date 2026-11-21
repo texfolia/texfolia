@@ -7,11 +7,11 @@ subscription and an organization Team subscription remain separate subscriptions
 
 ## Set up Stripe
 
-1. Set `STRIPE_SECRET_KEY` in `apps/web/.env` to your Stripe sandbox key.
-2. Run `bun run --cwd apps/web billing:setup`. The script reuses prices by lookup
+1. Set `STRIPE_SECRET_KEY` in `apps/app/.env` to your Stripe sandbox key.
+2. Run `bun run --cwd apps/app billing:setup`. The script reuses prices by lookup
    key and validates their currency, amount, interval, and billing scheme. It
    prints `STRIPE_PRO_PRICE_ID` and `STRIPE_TEAM_PRICE_ID` for your environment.
-3. Copy those two values into `apps/web/.env`. Team uses the same price for
+3. Copy those two values into `apps/app/.env`. Team uses the same price for
    `priceId` and `seatPriceId`, so checkout charges only for members.
 4. Enable Stripe's customer portal for invoices, payment methods, and subscription
    cancellation. Disable customer changes to plans and quantities in the portal;
@@ -55,8 +55,8 @@ Use an isolated database whose name contains `test`. Apply the current schema wi
 `DATABASE_URL=<test connection> bun run --cwd packages/db db:push`, then run:
 
 ```sh
-INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/web test:billing
-INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/web test:pricing
+INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/app test:billing
+INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/app test:pricing
 ```
 
 `test:billing` requires configured sandbox prices and rejects live Stripe keys. It

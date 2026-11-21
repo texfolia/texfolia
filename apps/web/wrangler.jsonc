@@ -1,78 +1,25 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "texfolia-web-local",
+  "main": "./dist/_worker.js/index.js",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "src/worker.ts",
-  "r2_buckets": [
-    {
-      "binding": "SOURCES",
-      "bucket_name": "texfolia-sources-local",
-      "remote": false,
-    },
-  ],
-  "durable_objects": {
-    "bindings": [
-      { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
-    ],
+  "upload_source_maps": true,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
   },
-  "migrations": [
-    {
-      "tag": "v1-collaboration",
-      "new_sqlite_classes": ["ProjectCollaboration"],
-    },
-  ],
-  "triggers": { "crons": ["17 * * * *", "* * * * *"] },
-  "services": [
-    {
-      "binding": "COMPILER",
-      "service": "texfolia-compiler-local",
-      "remote": false,
-    },
-  ],
   "observability": {
     "enabled": true,
-    "logs": { "enabled": true, "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
   },
-  "send_email": [
-    {
-      "name": "EMAIL",
-    },
-  ],
   "vars": {
-    "TEMPLATE_REVIEWER_IDS": "",
-    "EMAIL_FROM": "noreply@texfolia.com",
-    "TURNSTILE_HOSTNAMES": "localhost",
+    "PUBLIC_APP_URL": "http://localhost:3000",
   },
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "<local-only; configure production before deploying>",
-      "localConnectionString": "postgres://user:password@localhost:5432/db",
-      "remote": false,
-    },
-  ],
   "env": {
     "production": {
       "name": "texfolia-web",
-      "r2_buckets": [
-        { "binding": "SOURCES", "bucket_name": "texfolia-sources" },
-      ],
-      "durable_objects": {
-        "bindings": [
-          { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
-        ],
-      },
-      "hyperdrive": [
-        { "binding": "HYPERDRIVE", "id": "<production hyperdrive id>" },
-      ],
-      "services": [{ "binding": "COMPILER", "service": "texfolia-compiler" }],
-      "send_email": [{ "name": "EMAIL" }],
       "vars": {
-        "TEMPLATE_REVIEWER_IDS": "",
-        "EMAIL_FROM": "noreply@texfolia.com",
-        "TURNSTILE_HOSTNAMES": "www.texfolia.com",
+        "PUBLIC_APP_URL": "https://app.texfolia.com",
       },
     },
   },

@@ -1,16 +1,15 @@
 {
-  "extends": "@texfolia/typescript-config/base.json",
-  "include": ["**/*.ts", "**/*.tsx"],
+  "extends": "@texfolia/config/base.json",
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist"],
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "module": "ESNext",
-    "paths": {
-      "#/*": ["./src/*"]
-    },
+    "jsx": "preserve",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["astro/client"],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noUncheckedSideEffectImports": true
+    "noUnusedParameters": true
   }
 }

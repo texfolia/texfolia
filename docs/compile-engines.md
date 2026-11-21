@@ -32,7 +32,7 @@ NAT-316's multiple-engine acceptance criteria.
 
 ## Current compile path
 
-The authenticated [web compile route](../apps/web/src/lib/compile-route.server.ts)
+The authenticated [web compile route](../apps/app/src/lib/compile-route.server.ts)
 checks project access, reserves a job using `compileRequestDigest`, reconciles
 sources, and forwards the request to the private compiler. Its digest includes
 the submitted source delta and clean-build flag, but no engine choice.
@@ -143,7 +143,7 @@ Real-image checks must exercise these behaviors, including any approved Lua mode
 
 Keep existing source, output, PDF, log, and timeout limits. Preserve PDF-first
 streaming, optional Poppler previews, failure logs, and generation-bound SyncTeX
-artifacts. The recently added [SyncTeX reader](../apps/web/src/lib/latex/synctex.ts)
+artifacts. The recently added [SyncTeX reader](../apps/app/src/lib/latex/synctex.ts)
 needs fixtures from every supported mode, including nested main files.
 
 ### Freeze selection for each build

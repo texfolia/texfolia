@@ -24,7 +24,7 @@ dictionary**. Spelling stays in the editor and is not listed in Problems.
 Only prose is checked. Commands, environment names, math, comments, verbatim
 material, `\label`, `\ref` and `\cite` keys, file, unit and glossary arguments,
 and the preamble (except `\title`) are skipped. The checker reuses the word
-counter's parser; see `apps/web/src/lib/spelling/prose.ts`. Hyphenated words are
+counter's parser; see `apps/app/src/lib/spelling/prose.ts`. Hyphenated words are
 checked part by part, accent commands such as `caf\'e` are read as the letters
 they typeset, and acronyms, numbers and single letters are skipped. Package and
 class files are not checked.
@@ -43,7 +43,7 @@ remove words. It applies to every project and language and is stored with the
 other browser-local preferences. Lowercase entries also accept capitalized
 forms. **Add to dictionary** saves immediately, including for viewers.
 
-`bun run --cwd apps/web test:spelling` checks the worker, dictionary loading,
+`bun run --cwd apps/app test:spelling` checks the worker, dictionary loading,
 suggestions and the personal dictionary in Chromium.
 
 ## Bottom panel

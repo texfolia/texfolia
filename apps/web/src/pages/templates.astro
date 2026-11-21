@@ -1,0 +1,155 @@
+---
+export const prerender = false;
+
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Footer from "@/components/Footer.astro";
+import Header from "@/components/Header.astro";
+import { appPath, appUrl } from "@/lib/urls";
+
+type PublicTemplate = {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  license: string;
+  publisherName: string;
+  previewStatus: "ready" | "pending" | "failed" | string;
+};
+
+const pageParam = Number(Astro.url.searchParams.get("page") ?? "0");
+const page = Number.isFinite(pageParam)
+  ? Math.min(1000, Math.max(0, Math.trunc(pageParam)))
+  : 0;
+
+let templates: PublicTemplate[] = [];
+let fetchError = false;
+
+try {
+  const response = await fetch(
+    new URL(`/api/templates?page=${page}`, `${appUrl()}/`),
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  templates = (await response.json()) as PublicTemplate[];
+} catch {
+  fetchError = true;
+  templates = [];
+}
+
+const publishUrl = appPath("/templates/publish");
+const prevHref = page > 0 ? `/templates?page=${page - 1}` : null;
+const nextHref = templates.length === 24 ? `/templates?page=${page + 1}` : null;
+---
+
+<BaseLayout
+  title="LaTeX templates | Texfolia"
+  description="Start with a reusable LaTeX template. Open an independent copy in Texfolia and make it yours."
+>
+  <div class="flex min-h-svh flex-col">
+    <Header />
+    <main id="main-content" class="mx-auto max-w-6xl px-6 py-16">
+      <div class="mb-12 flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <h1
+            class="max-w-2xl font-serif text-5xl leading-tight tracking-tight sm:text-6xl"
+          >
+            A starting point for your next paper.
+          </h1>
+          <p class="mt-4 max-w-xl text-lg text-muted-foreground">
+            LaTeX templates you can make your own. Every template opens as an
+            independent project, with its source files included.
+          </p>
+        </div>
+        <a href={publishUrl} class="btn btn-outline">Publish a template</a>
+      </div>
+
+      {
+        fetchError ? (
+          <section class="border-y py-16">
+            <h2 class="text-2xl font-medium">Templates are temporarily unavailable</h2>
+            <p class="mt-3 text-muted-foreground">
+              The gallery could not be loaded. Try again in a moment.
+            </p>
+          </section>
+        ) : templates.length ? (
+          <div class="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+            {templates.map((item) => {
+              const detailUrl = appPath(`/template/${item.id}`);
+              const previewUrl = appPath(`/api/templates/${item.id}/preview`);
+              return (
+                <article>
+                  <a
+                    href={detailUrl}
+                    class="group block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4"
+                  >
+                    <div class="overflow-hidden rounded-lg border bg-muted">
+                      {item.previewStatus === "ready" ? (
+                        <img
+                          src={previewUrl}
+                          alt={`First page of ${item.title}`}
+                          loading="lazy"
+                          width="600"
+                          height="780"
+                          class="aspect-[10/13] w-full object-cover object-top transition-transform duration-200 motion-safe:group-hover:scale-[1.02]"
+                        />
+                      ) : (
+                        <p class="flex aspect-[10/13] items-center justify-center text-sm">
+                          {item.previewStatus === "failed"
+                            ? "Preview unavailable"
+                            : "Generating preview…"}
+                        </p>
+                      )}
+                    </div>
+                    <h2 class="mt-4 text-xl font-medium group-hover:underline">
+                      {item.title}
+                    </h2>
+                  </a>
+                  <p class="mt-1 text-sm text-muted-foreground">
+                    By {item.publisherName} · {item.license}
+                  </p>
+                  <p class="mt-3 line-clamp-3 text-sm">{item.description}</p>
+                  <ul
+                    aria-label="Tags"
+                    class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground"
+                  >
+                    {item.tags.map((tag) => (
+                      <li class="rounded bg-muted px-2 py-1">{tag}</li>
+                    ))}
+                  </ul>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <section class="border-y py-16">
+            <h2 class="text-2xl font-medium">
+              {page ? "No more templates" : "The library is taking shape"}
+            </h2>
+            <p class="mt-3 text-muted-foreground">
+              {page
+                ? "Return to the previous page to keep browsing."
+                : "Be among the first to share a template. Each snapshot is reviewed before it appears here."}
+            </p>
+          </section>
+        )
+      }
+
+      <nav aria-label="Template pages" class="mt-12 flex gap-4">
+        {
+          prevHref && (
+            <a href={prevHref} class="btn btn-outline">
+              Previous
+            </a>
+          )
+        }
+        {
+          nextHref && (
+            <a href={nextHref} class="btn btn-outline">
+              Next
+            </a>
+          )
+        }
+      </nav>
+    </main>
+    <Footer />
+  </div>
+</BaseLayout>

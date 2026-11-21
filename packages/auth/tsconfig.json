@@ -1,0 +1,6 @@
+{
+  "extends": "@texfolia/config/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"]
+  }
+}

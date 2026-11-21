@@ -53,12 +53,12 @@ DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:pu
 Run the upload and permission regression checks:
 
 ```sh
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/projects.ts
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/projects.ts
 ```
 
 Build the app and run the rendered dashboard and workspace suite:
 
 ```sh
-bun run --cwd apps/web build
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/ui-overhaul.ts
+bun run --cwd apps/app build
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/ui-overhaul.ts
 ```

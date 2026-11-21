@@ -44,53 +44,53 @@ jobs:
         if: steps.select.outputs.postgres == 'true'
         with:
           playwright: ${{ steps.select.outputs.postgres-browser }}
-      - name: Build web once for browser suites
+      - name: Build app once for browser suites
         if: steps.select.outputs.postgres-build == 'true'
-        run: bunx turbo run build --filter=web
+        run: bunx turbo run build --filter=app
       - name: Apply database schema
         if: steps.select.outputs.postgres == 'true'
         run: bun run db:push
       - name: Exercise app database operations
         if: steps.select.outputs.database == 'true'
-        run: bun run apps/web/test/postgres.ts
+        run: bun run apps/app/test/postgres.ts
       - name: Exercise authenticated compile retries with Postgres
         if: steps.select.outputs.compile-route == 'true'
-        run: bun run --cwd apps/web test:compile-route
+        run: bun run --cwd apps/app test:compile-route
       - name: Exercise AI billing with Postgres
         if: steps.select.outputs.ai-billing == 'true'
-        run: bun run --cwd apps/web test:ai-billing
+        run: bun run --cwd apps/app test:ai-billing
       - name: Exercise the managed assistant
         if: steps.select.outputs.assistant == 'true'
-        run: bun run --cwd apps/web test:ai-assistant
+        run: bun run --cwd apps/app test:ai-assistant
       - name: Exercise real-time collaboration locally
         if: steps.select.outputs.collaboration == 'true'
         run: |
-          bun run --cwd apps/web test:collaboration
-          bun run --cwd apps/web test:collaboration-cache
+          bun run --cwd apps/app test:collaboration
+          bun run --cwd apps/app test:collaboration-cache
       - name: Exercise metadata synchronization in two authenticated workspaces
         if: steps.select.outputs.workspace-metadata == 'true'
-        run: bun run --cwd apps/web test:workspace-metadata:prebuilt
+        run: bun run --cwd apps/app test:workspace-metadata:prebuilt
       - name: Exercise project controls, sharing, and keyboard access
         if: steps.select.outputs.ui-overhaul == 'true'
-        run: bun run --cwd apps/web test/ui-overhaul.ts
+        run: bun run --cwd apps/app test/ui-overhaul.ts
       - name: Exercise GitHub and GitLab integration with Postgres and local R2
         if: steps.select.outputs.git == 'true'
-        run: bun run --cwd apps/web test:git
+        run: bun run --cwd apps/app test:git
       - name: Exercise project source storage with local R2
         if: steps.select.outputs.source-storage == 'true'
-        run: bun run apps/web/test/source-storage.ts
+        run: bun run apps/app/test/source-storage.ts
       - name: Test project tags and imports
         if: steps.select.outputs.projects == 'true'
-        run: bun run --cwd apps/web test:projects
+        run: bun run --cwd apps/app test:projects
       - name: Exercise templates with Postgres and local R2
         if: steps.select.outputs.templates == 'true'
-        run: bun run apps/web/test/templates.ts
+        run: bun run apps/app/test/templates.ts
       - name: Exercise template seed commands with Postgres and local R2
         if: steps.select.outputs.template-seed == 'true'
         run: bun run packages/db/test/template-seed-cli.ts
       - name: Exercise template previews and retries in a browser without cron
         if: steps.select.outputs.template-lifecycle == 'true'
-        run: bun run --cwd apps/web test:template-lifecycle:prebuilt
+        run: bun run --cwd apps/app test:template-lifecycle:prebuilt
   checks:
     name: Checks
     runs-on: ubuntu-latest
@@ -118,12 +118,12 @@ jobs:
       - name: Record Go version for Turbo task hashes
         if: steps.select.outputs.compiler == 'true'
         run: echo "CI_GO_VERSION=$(go env GOVERSION)" >> "$GITHUB_ENV"
-      - name: Build web for production
+      - name: Build app for production
         if: steps.select.outputs.production-assets == 'true'
-        run: bunx turbo run build --filter=web
+        run: bunx turbo run build --filter=app
       - name: Check production CSS and worker assets
         if: steps.select.outputs.production-assets == 'true'
-        run: bun run --cwd apps/web test:production-assets
+        run: bun run --cwd apps/app test:production-assets
       - name: Install PDF preview renderer
         if: steps.select.outputs.compiler == 'true'
         run: sudo apt-get update && sudo apt-get install -y poppler-utils

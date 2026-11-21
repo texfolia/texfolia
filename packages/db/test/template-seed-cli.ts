@@ -64,7 +64,7 @@ try {
     };
   }>({
     configPath: fileURLToPath(
-      new URL("../../../apps/web/wrangler.jsonc", import.meta.url),
+      new URL("../../../apps/app/wrangler.jsonc", import.meta.url),
     ),
     envFiles: [],
     remoteBindings: false,
