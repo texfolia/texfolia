@@ -487,6 +487,7 @@ const readTools = [
   "git_diff",
   "git_status",
   "list_files",
+  "list_skills",
   "read_compile_logs",
   "read_file",
   "search_project",
