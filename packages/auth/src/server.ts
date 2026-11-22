@@ -10,9 +10,10 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import Stripe from "stripe";
 import { z } from "zod";
 
-import { canManageBilling, subscriptionPlans } from "./billing";
+import { subscriptionPlans } from "./billing";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./client";
 import { parseOrigins } from "./hosts";
+import { isOrgAdmin } from "./roles";
 
 export type EmailMessage = {
   to: string;
@@ -99,7 +100,7 @@ export const authorizeOrganizationBilling: NonNullable<
     ],
   });
 
-  return membership ? canManageBilling(membership.role) : false;
+  return membership ? isOrgAdmin(membership.role) : false;
 };
 
 export function createBillingPlugin({

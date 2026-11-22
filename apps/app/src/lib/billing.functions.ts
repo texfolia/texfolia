@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import { isOrgAdmin } from "@texfolia/auth/roles";
 import { z } from "zod";
 
 import { ensureSession } from "./auth.functions";
-import { canManageBilling } from "./billing";
 
 export const getBilling = createServerFn({ method: "GET" })
   .validator(z.object({ organizationId: z.string().min(1).optional() }))
@@ -38,7 +38,7 @@ export const getBilling = createServerFn({ method: "GET" })
       (m) => m.userId === session.user.id,
     );
     const canManage =
-      !selected || (!!membership && canManageBilling(membership.role));
+      !selected || (!!membership && isOrgAdmin(membership.role));
     const subscriptions = canManage
       ? await context.db.query.subscription.findMany({
           where: {
