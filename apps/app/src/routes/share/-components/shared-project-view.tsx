@@ -3,6 +3,7 @@ import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import { bibtexLanguage, themedLatex } from "@texfolia/editor/latex/highlight";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
+import { cn } from "cn";
 import {
   lazy,
   Suspense,
@@ -19,7 +20,6 @@ import { ProjectBuildEvents } from "#/lib/compile/project-build-events";
 import { projectPaths } from "#/lib/project-paths";
 import type { getSharedProject } from "#/lib/project-share-links.functions";
 import { withShareToken } from "#/lib/project-share-links.schema";
-import { cn } from "#/lib/utils";
 import { useTheme } from "#/providers/theme-provider";
 
 const PdfViewer = lazy(

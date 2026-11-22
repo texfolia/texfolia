@@ -33,7 +33,7 @@
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "postcss": "8.5.33",
-    "turbo": "latest"
+    "turbo": "2.11.10"
   },
   "devEngines": {
     "packageManager": {
