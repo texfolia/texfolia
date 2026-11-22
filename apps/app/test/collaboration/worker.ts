@@ -84,6 +84,13 @@ export default {
               }),
             },
           });
+        // Deletes without purging the room, as when the purge call fails.
+        else if (action === "project-only")
+          await deleteProject({
+            db,
+            ownerId: request.headers.get("X-Owner") ?? "",
+            projectId,
+          });
         else if (action === "project")
           await deleteProject({
             db,
