@@ -15,6 +15,7 @@ import { searchProject } from "../project-search";
 import { encodeSource } from "../project-source";
 import { deleteProjectNode } from "../project-source.server";
 import { aiEntitlement } from "./billing.server";
+import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
 
 /** Tools that change project state; offered only to collaborators who can edit. */
 export const writeToolNames = new Set([
@@ -33,6 +34,7 @@ export const writeToolNames = new Set([
 const maxEditBytes = 64 * 1024;
 const maxSearchFileBytes = 1024n * 1024n;
 const pathSchema = z.string().min(1).max(1024);
+const maxSkills = 100;
 
 export function projectTools({
   db,
@@ -227,6 +229,42 @@ export function projectTools({
     }).server(async ({ path }) => {
       const { node, content } = await readFile(path);
       return { path, content, version: node.objectKey };
+    }),
+    toolDefinition({
+      name: "list_skills",
+      description:
+        "List the project's agent skills (.agents/skills/<name>/SKILL.md) by name and description, and the paths of any AGENTS.md files. Returns no file bodies; read a skill or AGENTS.md with read_file when it is relevant to the user's request.",
+      inputSchema: z.object({}),
+    }).server(async () => {
+      const nodes = await files();
+      const entries = nodes
+        .filter((n) => n.kind === "text" && skillFolderName(n.path))
+        .sort((a, b) => a.path.localeCompare(b.path));
+      const skills = await Promise.all(
+        entries.slice(0, maxSkills).map(async (node) => {
+          if (node.sizeBytes > BigInt(maxEditBytes))
+            return {
+              ...parseSkill(node.path, ""),
+              problems: ["SKILL.md exceeds the assistant's 64 KiB read limit."],
+            };
+          const object = node.objectKey
+            ? await env.SOURCES.get(node.objectKey)
+            : null;
+          return parseSkill(node.path, object ? await object.text() : "");
+        }),
+      );
+      return {
+        // Shallowest first: a nested AGENTS.md applies only to its folder.
+        agentsFiles: nodes
+          .filter((n) => n.kind === "text" && isAgentsFile(n.path))
+          .map((n) => n.path)
+          .sort(
+            (a, b) =>
+              a.split("/").length - b.split("/").length || a.localeCompare(b),
+          ),
+        skills,
+        truncated: entries.length > maxSkills,
+      };
     }),
     toolDefinition({
       name: "search_project",

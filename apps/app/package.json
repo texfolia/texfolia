@@ -97,6 +97,7 @@
     "y-codemirror.next": "^0.3.6",
     "y-indexeddb": "^9.0.12",
     "y-protocols": "^1.0.7",
+    "yaml": "^2.8.3",
     "yjs": "^13.6.33",
     "zod": "^4.6.7"
   },

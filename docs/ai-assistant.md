@@ -80,8 +80,36 @@ git mutations. The **Generate message** button in the Git panel uses the same
 subscription, Gateway, spending cap, and usage meter. It suggests an editable
 message and creates no commit. See [Git integration](git-integration.md).
 
+## Agent instructions, skills, and snippets
+
+Texfolia uses open file conventions, so the same files work with any agent,
+including one that runs on a Git clone of the project:
+
+- `AGENTS.md` ([agents.md](https://agents.md)) at the project root holds
+  project instructions. An `AGENTS.md` in a folder applies to that folder.
+- Skills live in `.agents/skills/<name>/SKILL.md` and follow the
+  [Agent Skills format](https://agentskills.io/specification): YAML
+  frontmatter with `name` (matching the folder name) and `description`, then
+  Markdown instructions.
+- Snippets are ordinary project files. Put them anywhere in the project, or
+  in a skill's `assets/` folder when a skill uses them. There is no snippet store.
+
+These are normal project files. They sync through Git, ZIP export, and
+templates like any other file, so a template can ship its own `.agents`
+folder. Texfolia does not use a proprietary format or database for them.
+
+The assistant loads them on demand. The read-only `list_skills` tool returns
+each skill's name, description, path and any format problems, plus the paths
+of `AGENTS.md` files. It does not return file bodies. The assistant reads a
+skill or `AGENTS.md` with `read_file` only when it matches the request, so
+their text uses context only when needed. The instructions tell the assistant
+that these files cannot authorize actions the user did not request, such as
+deleting files or changing Git state. This matters because templates and
+collaborators can add them. Adding `AGENTS.md` or a skill index to the system
+prompt is still undecided; see NAT-415 and the context budget in NAT-373.
+
 Project viewers can use the assistant for read-only questions. Their runs
-receive only `list_files`, `search_project`, `read_file`, `git_status`,
+receive only `list_files`, `list_skills`, `search_project`, `read_file`, `git_status`,
 `git_diff`, and `read_compile_logs`; file edits, file creation, renames,
 deletions, compiles, and git mutations are not offered.
 The server write checks still apply to editors' tool calls. A run stops if the
