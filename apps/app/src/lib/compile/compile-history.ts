@@ -5,9 +5,22 @@ import {
 } from "@texfolia/contracts";
 import { z } from "zod";
 
-// The Logs tab lists this many recent compiles. Older jobs keep their status
-// row for accounting, but their timeline is pruned.
+// "Recent compiles" in the Logs tab lists this many compiles.
 export const compileHistoryLimit = 10;
+// By default the Logs tab lists every compile since the editor opened, up to
+// this many. A job keeps its timeline while it is one of the latest
+// compileHistoryLimit, or one of the latest sessionHistoryLimit started within
+// timelineRetentionMs. Older jobs keep their status row for accounting.
+export const sessionHistoryLimit = 200;
+export const timelineRetentionMs = 24 * 60 * 60_000;
+// The browser sends how long the editor has been open, measured on its
+// monotonic clock, so the server resolves the session start on its own clock.
+export const sessionHistoryParam = "sessionMs";
+export const sessionElapsedSchema = z.coerce
+  .number()
+  .int()
+  .min(0)
+  .max(365 * timelineRetentionMs);
 
 const instant = z.iso.datetime({ offset: true });
 
@@ -56,6 +69,8 @@ export const compileHistoryEntrySchema = z.object({
 export type CompileHistoryEntry = z.infer<typeof compileHistoryEntrySchema>;
 export const compileHistorySchema = z.object({
   jobs: z.array(compileHistoryEntrySchema),
+  // More jobs matched than the response lists.
+  truncated: z.boolean().default(false),
 });
 
 export type TimelineEvent = {

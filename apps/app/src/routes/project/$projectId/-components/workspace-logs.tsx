@@ -1,16 +1,20 @@
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { cn } from "cn";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 import {
   type CompileHistoryEntry,
+  compileHistoryLimit,
   compileHistorySchema,
   compileTimeline,
   compileTotalMs,
   containerStart,
   formatDuration,
+  sessionHistoryLimit,
+  sessionHistoryParam,
   type TimelineEvent,
 } from "#/lib/compile/compile-history";
 import { useWorkspace } from "#/providers/workspace-provider";
@@ -47,11 +51,16 @@ function statusLabel(entry: CompileHistoryEntry) {
       : "Queued";
 }
 
-// The Logs tab: a short history of recent compiles, a timeline of the selected
-// compile, and its raw TeX log. It fetches only while visible.
-export function WorkspaceLogs() {
+type LogScope = "session" | "recent";
+
+// The Logs tab: every compile since the editor opened (or the last few), a
+// timeline of the selected compile, and its raw TeX log. It fetches only while
+// visible.
+export function WorkspaceLogs({ openedAt }: { openedAt: number }) {
   const { projectId, build } = useWorkspace();
+  const [scope, setScope] = useState<LogScope>("session");
   const [jobs, setJobs] = useState<CompileHistoryEntry[] | null>(null);
+  const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
@@ -60,19 +69,27 @@ export function WorkspaceLogs() {
     const controller = new AbortController();
     request.current = controller;
     try {
+      const query = new URLSearchParams({ history: "1" });
+      // Elapsed time on the browser's monotonic clock, so the server finds the
+      // session start on its own clock.
+      if (scope === "session")
+        query.set(
+          sessionHistoryParam,
+          String(Math.max(0, Math.round(performance.now() - openedAt))),
+        );
       const response = await fetch(
-        `/api/compile/${encodeURIComponent(projectId)}?history=1`,
+        `/api/compile/${encodeURIComponent(projectId)}?${query}`,
         { signal: controller.signal },
       );
       if (!response.ok) throw new Error(String(response.status));
-      const { jobs } = compileHistorySchema.parse(await response.json());
-      setJobs(jobs);
+      const result = compileHistorySchema.parse(await response.json());
+      setJobs(result.jobs);
+      setTruncated(result.truncated);
       setError("");
     } catch {
-      if (!controller.signal.aborted)
-        setError("Recent compiles could not be loaded.");
+      if (!controller.signal.aborted) setError("Compiles could not be loaded.");
     }
-  }, [projectId]);
+  }, [projectId, scope, openedAt]);
   // The job record and the browser's render report land shortly after the
   // build event, so read again a little later.
   const current = build?.current;
@@ -96,13 +113,27 @@ export function WorkspaceLogs() {
     >
       <div className="flex min-h-0 w-64 shrink-0 flex-col border-r max-md:max-h-32 max-md:w-full max-md:border-r-0 max-md:border-b">
         <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b px-2">
-          <h3 className="text-muted-foreground text-xs font-medium">
-            Recent compiles
-          </h3>
+          <NativeSelect
+            size="sm"
+            aria-label="Compiles to show"
+            className="[&_select]:h-6! [&_select]:border-0 [&_select]:text-xs"
+            value={scope}
+            onChange={(event) => {
+              setScope(event.target.value as LogScope);
+              setSelected(null);
+            }}
+          >
+            <NativeSelectOption value="session">
+              Since you opened the project
+            </NativeSelectOption>
+            <NativeSelectOption value="recent">
+              Last {compileHistoryLimit} compiles
+            </NativeSelectOption>
+          </NativeSelect>
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Refresh recent compiles"
+            aria-label="Refresh compiles"
             title="Refresh"
             onClick={() => void load()}
           >
@@ -115,7 +146,11 @@ export function WorkspaceLogs() {
           </p>
         )}
         {jobs && !jobs.length && (
-          <p className="text-muted-foreground p-2">No compiles yet.</p>
+          <p className="text-muted-foreground p-2 text-xs">
+            {scope === "session"
+              ? "No compiles since you opened the project."
+              : "No compiles yet."}
+          </p>
         )}
         <ul className="min-h-0 flex-1 overflow-auto py-1">
           {jobs?.map((job) => {
@@ -158,6 +193,11 @@ export function WorkspaceLogs() {
             );
           })}
         </ul>
+        {truncated && scope === "session" && (
+          <p className="text-muted-foreground border-t p-2 text-xs">
+            Showing the latest {jobs?.length ?? sessionHistoryLimit} compiles.
+          </p>
+        )}
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-auto">
         {entry ? (

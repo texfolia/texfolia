@@ -12,9 +12,12 @@ import {
   and,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
+  lt,
   notInArray,
+  or,
   sql,
 } from "drizzle-orm";
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
@@ -23,7 +26,13 @@ import { z } from "zod";
 import type { createAuth } from "#/lib/auth";
 import { compilePlan } from "#/lib/billing.server";
 import { withCompileSources } from "#/lib/compile-source.server";
-import { compileHistoryLimit } from "#/lib/compile/compile-history";
+import {
+  compileHistoryLimit,
+  sessionElapsedSchema,
+  sessionHistoryLimit,
+  sessionHistoryParam,
+  timelineRetentionMs,
+} from "#/lib/compile/compile-history";
 import { compileDeltaSchema, hashSource } from "#/lib/compile/source-sync";
 import { fetchCompiler } from "#/lib/compiler.server";
 import { streamProjectResponse } from "#/lib/live-project.server";
@@ -183,9 +192,16 @@ function compilerTimeline(result: { createdAt?: string; timing?: JobTiming }) {
   return { compiler: { ...result.timing, acceptedAt: result.createdAt } };
 }
 
-// Only the most recent compiles keep a timeline; older rows remain for
-// accounting.
+// Recent compiles keep a timeline so the Logs tab can show a whole editing
+// session; older rows remain for accounting.
 async function pruneTimelines(db: Db, projectId: string) {
+  const latest = (limit: number) =>
+    db
+      .select({ id: projectJob.id })
+      .from(projectJob)
+      .where(eq(projectJob.projectId, projectId))
+      .orderBy(desc(projectJob.createdAt))
+      .limit(limit);
   await db
     .update(projectJob)
     .set({ timing: null })
@@ -193,18 +209,18 @@ async function pruneTimelines(db: Db, projectId: string) {
       and(
         eq(projectJob.projectId, projectId),
         isNotNull(projectJob.timing),
-        notInArray(
-          projectJob.id,
-          db
-            .select({ id: projectJob.id })
-            .from(projectJob)
-            .where(eq(projectJob.projectId, projectId))
-            .orderBy(desc(projectJob.createdAt))
-            .limit(compileHistoryLimit),
+        notInArray(projectJob.id, latest(compileHistoryLimit)),
+        or(
+          lt(projectJob.createdAt, new Date(Date.now() - timelineRetentionMs)),
+          notInArray(projectJob.id, latest(sessionHistoryLimit)),
         ),
       ),
     );
 }
+
+// The job row and the server clock can disagree slightly, so the session
+// includes compiles created just before the editor opened.
+const sessionClockSlackMs = 5_000;
 
 async function finishJob(
   db: Db,
@@ -573,6 +589,17 @@ export const compileHandlers = {
     const pdfOnly = denied.shareScope === "pdf";
     if (url.searchParams.get("history") === "1") {
       if (pdfOnly) return json({ error: "Not found" }, 404);
+      const session = url.searchParams.has(sessionHistoryParam)
+        ? sessionElapsedSchema.safeParse(
+            url.searchParams.get(sessionHistoryParam),
+          )
+        : null;
+      if (session && !session.success)
+        return json({ error: "Invalid session" }, 400);
+      const since = session
+        ? new Date(Date.now() - session.data - sessionClockSlackMs)
+        : null;
+      const limit = since ? sessionHistoryLimit : compileHistoryLimit;
       const jobs = await db
         .select({
           id: projectJob.id,
@@ -584,10 +611,18 @@ export const compileHandlers = {
           timing: projectJob.timing,
         })
         .from(projectJob)
-        .where(eq(projectJob.projectId, params.projectId))
+        .where(
+          and(
+            eq(projectJob.projectId, params.projectId),
+            since ? gte(projectJob.createdAt, since) : undefined,
+          ),
+        )
         .orderBy(desc(projectJob.createdAt))
-        .limit(compileHistoryLimit);
-      return json({ jobs });
+        .limit(limit + 1);
+      return json({
+        jobs: jobs.slice(0, limit),
+        truncated: jobs.length > limit,
+      });
     }
     if (!url.searchParams.has("job")) {
       try {

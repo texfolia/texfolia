@@ -60,6 +60,10 @@ test("the bottom panel is closed by default, including for layouts saved before 
   expect(readWorkspaceLayout(JSON.stringify({ chrome: open })).chrome).toEqual(
     open,
   );
+  const terminal = { ...open, panelView: "terminal" } satisfies WorkspaceChrome;
+  expect(
+    readWorkspaceLayout(JSON.stringify({ chrome: terminal })).chrome,
+  ).toEqual(terminal);
 });
 
 test("restored editor tabs use the default renderer, even if saved with another", () => {
