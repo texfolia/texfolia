@@ -10,7 +10,7 @@ export const sidebarViewSchema = z.enum([
   "collaboration",
 ]);
 export type SidebarView = z.infer<typeof sidebarViewSchema>;
-export const panelViewSchema = z.enum(["problems", "logs"]);
+export const panelViewSchema = z.enum(["problems", "logs", "terminal"]);
 export type PanelView = z.infer<typeof panelViewSchema>;
 export const panelHeightBounds = { min: 120, max: 640 };
 const chromeSchema = z.object({

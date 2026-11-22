@@ -187,6 +187,9 @@ export function WorkspaceMenu({
                 Problems
               </MenubarItem>
               <MenubarItem onClick={() => onPanel("logs")}>Logs</MenubarItem>
+              <MenubarItem onClick={() => onPanel("terminal")}>
+                Terminal
+              </MenubarItem>
               <MenubarSeparator />
               {(
                 [

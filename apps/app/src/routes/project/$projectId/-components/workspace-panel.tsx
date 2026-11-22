@@ -7,12 +7,14 @@ import { panelHeightBounds, type PanelView } from "#/lib/workspace-layout";
 
 import { WorkspaceLogs } from "./workspace-logs";
 import { WorkspaceProblems } from "./workspace-problems";
+import { WorkspaceTerminal } from "./workspace-terminal";
 
 // IDE-style bottom panel. It opens only when the user asks for it.
 export function WorkspacePanel({
   view,
   height,
   problemCount,
+  openedAt,
   onView,
   onResize,
   onClose,
@@ -20,6 +22,8 @@ export function WorkspacePanel({
   view: PanelView;
   height: number;
   problemCount: number;
+  // performance.now() when the editor opened; Logs lists compiles since then.
+  openedAt: number;
   onView: (view: PanelView) => void;
   onResize: (height: number) => void;
   onClose: () => void;
@@ -42,6 +46,9 @@ export function WorkspacePanel({
             <TabsTrigger value="logs" className="px-2 text-xs">
               Logs
             </TabsTrigger>
+            <TabsTrigger value="terminal" className="px-2 text-xs">
+              Terminal
+            </TabsTrigger>
           </TabsList>
           <Button
             variant="ghost"
@@ -58,7 +65,10 @@ export function WorkspacePanel({
           <WorkspaceProblems />
         </TabsContent>
         <TabsContent value="logs" className="min-h-0 overflow-hidden">
-          <WorkspaceLogs />
+          <WorkspaceLogs openedAt={openedAt} />
+        </TabsContent>
+        <TabsContent value="terminal" className="min-h-0 overflow-hidden">
+          <WorkspaceTerminal onLogs={() => onView("logs")} />
         </TabsContent>
       </Tabs>
     </>

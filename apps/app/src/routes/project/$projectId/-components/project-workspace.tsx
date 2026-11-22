@@ -128,6 +128,8 @@ export function ProjectWorkspace({
     ready,
     updateAnalysis: update,
   });
+  // The route remounts per project, so this marks when this editor opened.
+  const [openedAt] = useState(() => performance.now());
   const { chrome, updateChrome, togglePanel, persistLayout, initialDock } =
     useWorkspaceChrome({ layoutKey, dock: panels.api, ready });
   const collaboration = useCollaborationFiles({
@@ -496,6 +498,7 @@ export function ProjectWorkspace({
                 view={chrome.panelView}
                 height={chrome.panelHeight}
                 problemCount={allProblems.length}
+                openedAt={openedAt}
                 onView={(panelView) => updateChrome({ panelView })}
                 onResize={(panelHeight) => updateChrome({ panelHeight })}
                 onClose={() => updateChrome({ panelOpen: false })}

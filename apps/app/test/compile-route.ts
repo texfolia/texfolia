@@ -28,6 +28,8 @@ import {
   compileHistoryLimit,
   compileHistorySchema,
   parseJobTimeline,
+  sessionHistoryParam,
+  timelineRetentionMs,
 } from "../src/lib/compile/compile-history";
 import { hashSource } from "../src/lib/compile/source-sync";
 import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
@@ -788,15 +790,22 @@ try {
   );
 
   const pruned = await fixture();
-  await db.insert(projectJob).values(
-    Array.from({ length: compileHistoryLimit + 2 }, (_, index) => ({
+  const hourAgo = Date.now() - 60 * 60_000;
+  const olderJobs = (count: number, start: number) =>
+    Array.from({ length: count }, (_, index) => ({
       projectId: pruned.projectId,
       status: "failed" as const,
       sizeBytes: 0n,
-      createdAt: new Date(Date.now() - 60_000 + index),
+      createdAt: new Date(start + index),
       timing: { web: { receivedAt: new Date().toISOString() } },
-    })),
-  );
+    }));
+  const expired = await db
+    .insert(projectJob)
+    .values(olderJobs(3, Date.now() - timelineRetentionMs - 60_000))
+    .returning({ id: projectJob.id });
+  await db
+    .insert(projectJob)
+    .values(olderJobs(compileHistoryLimit + 2, hourAgo));
   const prunedId = crypto.randomUUID();
   assert.equal((await submit({ ...pruned, id: prunedId })).status, 202);
   await completed(pruned.projectId, pruned.userId, prunedId);
@@ -804,13 +813,53 @@ try {
     columns: { id: true, timing: true },
     where: { projectId: pruned.projectId },
   });
-  assert.equal(timelines.length, compileHistoryLimit + 3);
+  assert.equal(timelines.length, compileHistoryLimit + 6);
   assert.equal(
     timelines.filter((row) => row.timing !== null).length,
-    compileHistoryLimit,
-    "Only the most recent compiles keep a timeline",
+    compileHistoryLimit + 3,
+    "Compiles from the last day keep a timeline beyond the recent few",
+  );
+  assert(
+    expired.every(
+      ({ id }) => timelines.find((row) => row.id === id)?.timing === null,
+    ),
+    "Older compiles lose their timeline",
   );
   assert.notEqual(timelines.find((row) => row.id === prunedId)?.timing, null);
+
+  const historyRequest = async (query: string) =>
+    mf.dispatchFetch(
+      `${(await mf.ready).origin}/api/compile/${pruned.projectId}?history=1${query}`,
+      { headers: { Cookie: cookies.get(pruned.userId) ?? "" } },
+    );
+  const listed = async (query: string) => {
+    const response = await historyRequest(query);
+    assert.equal(response.status, 200);
+    return compileHistorySchema.parse(await response.json());
+  };
+  const recent = await listed("");
+  assert.equal(recent.jobs.length, compileHistoryLimit);
+  assert.equal(recent.truncated, true);
+  const opened = await listed(`&${sessionHistoryParam}=30000`);
+  assert.deepEqual(
+    opened.jobs.map((job) => job.id),
+    [prunedId],
+    "Session history lists only compiles since the editor opened",
+  );
+  assert.equal(opened.truncated, false);
+  const longSession = await listed(
+    `&${sessionHistoryParam}=${2 * 60 * 60_000}`,
+  );
+  assert.equal(
+    longSession.jobs.length,
+    compileHistoryLimit + 3,
+    "Session history is not capped at the recent few",
+  );
+  assert(longSession.jobs.every((job) => job.timing.web));
+  assert.equal(
+    (await historyRequest(`&${sessionHistoryParam}=-1`)).status,
+    400,
+  );
 
   await db.delete(session).where(eq(session.userId, original.userId));
   assert.equal(
@@ -819,7 +868,7 @@ try {
     "Retry still requires a valid session",
   );
   console.info(
-    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, share links (PDF-only limits, no writes, revocation), persisted compile timelines with pruning, and Postgres reconciliation",
+    "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, share links (PDF-only limits, no writes, revocation), persisted compile timelines with pruning, session history, and Postgres reconciliation",
   );
 } finally {
   for (const id of cookies.keys()) await db.delete(user).where(eq(user.id, id));
