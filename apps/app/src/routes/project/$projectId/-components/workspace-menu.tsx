@@ -36,6 +36,7 @@ export function WorkspaceMenu({
   onSettings,
   onEditor,
   onSearch,
+  onAddReference,
   chrome,
   onChrome,
   onPanel,
@@ -58,6 +59,7 @@ export function WorkspaceMenu({
   onSettings: () => void;
   onEditor: (command: EditorCommand) => void;
   onSearch: () => void;
+  onAddReference: () => void;
   chrome: WorkspaceChrome;
   onChrome: (patch: Partial<WorkspaceChrome>) => void;
   onPanel: (view: PanelView) => void;
@@ -152,6 +154,9 @@ export function WorkspaceMenu({
               ))}
               <MenubarSeparator />
               <MenubarItem onClick={onSearch}>Search in project</MenubarItem>
+              <MenubarItem disabled={!canWrite} onClick={onAddReference}>
+                Add reference…
+              </MenubarItem>
             </MenubarGroup>
           </MenubarContent>
         </MenubarMenu>

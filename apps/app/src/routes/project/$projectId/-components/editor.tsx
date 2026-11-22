@@ -123,6 +123,8 @@ type EditorProps = {
   completion?: CompletionSource;
   problems?: LatexProblem[];
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
+  /** Opens Add reference, for an undefined citation key when one is given. */
+  onAddReference?: (key?: string) => void;
   jump?: {
     line: number;
     column?: number;
@@ -170,6 +172,7 @@ export function Editor({
   completion,
   problems,
   onSyntaxProblems,
+  onAddReference,
   jump,
   formatSettings = defaultFormatSettings,
   preamble,
@@ -185,6 +188,9 @@ export function Editor({
   revealPdf.current = onRevealPdf;
   const syntaxCallback = useRef(onSyntaxProblems);
   syntaxCallback.current = onSyntaxProblems;
+  const addReferenceRef = useRef(onAddReference);
+  addReferenceRef.current = onAddReference;
+  const canAddReference = !!onAddReference;
   const container = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const openRequest = useRef(0);
@@ -476,8 +482,11 @@ export function Editor({
         completion,
         getProblems: () => problemsRef.current ?? [],
         publishSyntax: (next) => syntaxCallback.current?.(next),
+        addReference: canAddReference
+          ? (key) => addReferenceRef.current?.(key)
+          : undefined,
       }),
-    [name, completion],
+    [name, completion, canAddReference],
   );
 
   const extensions = useMemo(
@@ -754,6 +763,14 @@ export function Editor({
                 >
                   Redo
                 </DropdownMenuItem>
+                {onAddReference && (isLatex || /\.bib$/i.test(name)) && (
+                  <DropdownMenuItem
+                    disabled={readOnly}
+                    onClick={() => onAddReference()}
+                  >
+                    Add reference…
+                  </DropdownMenuItem>
+                )}
                 {canFormat && (
                   <DropdownMenuItem
                     disabled={readOnly || formatting}

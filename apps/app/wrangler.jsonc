@@ -22,6 +22,15 @@
       "new_sqlite_classes": ["ProjectCollaboration"],
     },
   ],
+  // Per-user budget for citation metadata lookups (Crossref, DataCite, Open
+  // Library), so one account cannot exhaust the shared upstream rate limits.
+  "ratelimits": [
+    {
+      "name": "REFERENCE_LOOKUPS",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 60 },
+    },
+  ],
   "triggers": { "crons": ["17 * * * *", "41 3 * * *", "* * * * *"] },
   "services": [
     {
@@ -68,6 +77,13 @@
         { "binding": "HYPERDRIVE", "id": "<production hyperdrive id>" },
       ],
       "services": [{ "binding": "COMPILER", "service": "texfolia-compiler" }],
+      "ratelimits": [
+        {
+          "name": "REFERENCE_LOOKUPS",
+          "namespace_id": "1001",
+          "simple": { "limit": 30, "period": 60 },
+        },
+      ],
       "send_email": [{ "name": "EMAIL" }],
       "vars": {
         "TEMPLATE_REVIEWER_IDS": "",

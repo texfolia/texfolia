@@ -25,6 +25,7 @@ import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { projectPaths, invalidProjectPaths } from "#/lib/project-paths";
+import { encodeSource } from "#/lib/project-source";
 import type { ProjectDetails } from "#/lib/project.functions";
 import { workspaceLayoutKey } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
@@ -46,6 +47,11 @@ import {
   useGitBranch,
 } from "../-hooks/use-workspace-session";
 import { useWorkspaceShortcuts } from "../-hooks/use-workspace-shortcuts";
+import {
+  AddReferenceDialog,
+  type AddReferenceRequest,
+  newBibFile,
+} from "./add-reference-dialog";
 import type { CreateNodeHandle } from "./create-node-form";
 import { dockComponents, dockTabComponents, FileTab } from "./dock-panels";
 import { DraftRecovery } from "./draft-recovery";
@@ -179,6 +185,16 @@ export function ProjectWorkspace({
   const [searchRequest, setSearchRequest] = useState<SearchRequest>({
     sequence: 0,
   });
+  const [referenceRequest, setReferenceRequest] =
+    useState<AddReferenceRequest | null>(null);
+  const bibFiles = useMemo(
+    () =>
+      [...paths]
+        .filter(([, path]) => /\.bib$/i.test(path))
+        .map(([id, path]) => ({ id, path }))
+        .sort((a, b) => a.path.localeCompare(b.path)),
+    [paths],
+  );
 
   function observeChange(id: string, value: string, local?: boolean) {
     const previous = drafts.get(id) ?? { value: "", savedValue: "" };
@@ -213,6 +229,54 @@ export function ProjectWorkspace({
           insertion.insert +
           draft.value.slice(insertion.from),
       );
+  }
+
+  /** Opens Add reference, offering to cite at the cursor of a LaTeX tab. */
+  function addReference(key?: string) {
+    if (!writable) return;
+    const view = panels.activeEditor();
+    const path = panels.activeId ? paths.get(panels.activeId) : undefined;
+    setReferenceRequest({
+      key,
+      cite:
+        view && path && /\.(?:tex|ltx)$/i.test(path)
+          ? {
+              path,
+              insert: (citation) => {
+                if (!view.dom.isConnected) return;
+                view.dispatch(
+                  view.state.replaceSelection(`\\cite{${citation}}`),
+                );
+                view.focus();
+              },
+            }
+          : undefined,
+    });
+  }
+
+  function readBib(id: string) {
+    return (
+      collaboration.get(id)?.text.toString() ?? drafts.get(id)?.value ?? ""
+    );
+  }
+
+  function appendBib(id: string, text: string) {
+    const file = collaboration.get(id);
+    if (!file) throw new Error("This file is not available for editing.");
+    file.replace(file.text.toString() + text);
+  }
+
+  async function createBib(content: string) {
+    const root = nodes.find(
+      (node) => node.kind === "folder" && node.parentId === null,
+    );
+    if (!root) throw new Error("This project has no root folder.");
+    await files.create({
+      kind: "text",
+      parentId: root.id,
+      name: newBibFile,
+      content: encodeSource(new TextEncoder().encode(content)),
+    });
   }
 
   function revealPdf(path: string, line: number) {
@@ -296,6 +360,7 @@ export function ProjectWorkspace({
             ? { source: mainDraft.value, filename: main }
             : undefined,
         addSymbolPackage,
+        addReference,
         paths,
         completion,
         problems,
@@ -325,6 +390,15 @@ export function ProjectWorkspace({
         )}
       >
         <SettingsDialog />
+        <AddReferenceDialog
+          request={referenceRequest}
+          onClose={() => setReferenceRequest(null)}
+          bibFiles={bibFiles}
+          knownKeys={result.analysis.citations}
+          readBib={readBib}
+          appendBib={appendBib}
+          createBib={createBib}
+        />
         <WorkspaceMenu
           name={name}
           canWrite={writable && ready}
@@ -350,6 +424,7 @@ export function ProjectWorkspace({
           onSettings={() => setSettingsOpen(true)}
           onEditor={panels.runCommand}
           onSearch={openSearch}
+          onAddReference={() => addReference()}
           chrome={chrome}
           onChrome={updateChrome}
           onPanel={(view) => updateChrome({ panelOpen: true, panelView: view })}
