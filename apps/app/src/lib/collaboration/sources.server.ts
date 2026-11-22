@@ -8,7 +8,11 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { lockProject } from "../project-access.server";
 import { encodeSource } from "../project-source";
-import { putSource, type SourceBucket } from "../project-source.server";
+import {
+  putSource,
+  retireSources,
+  type SourceBucket,
+} from "../project-source.server";
 
 export async function collaborationAccess(
   db: Db,
@@ -108,6 +112,8 @@ export async function persistMergedSource(options: {
       throw new Error(
         "Source changed outside collaboration. Reopen the project before saving.",
       );
+    if (node.objectKey !== stored.objectKey)
+      await retireSources(tx, projectId, [node.objectKey]);
     const updatedAt = new Date();
     await tx
       .update(projectNode)

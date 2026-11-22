@@ -20,6 +20,7 @@ import {
   collectProjectSources,
   saveProjectSource,
   type SourceBucket,
+  sweepProjectSources,
 } from "../../src/lib/project-source.server";
 import {
   createProject,
@@ -500,14 +501,13 @@ export default {
         data: { templateId: published.id, organizationId: null },
       });
       await uploaded.promise;
-      // The copy holds this request's only connection. Collection runs in the
+      // The copy holds this request's only connection. The sweep runs in the
       // cron handler with its own db, and the lock check needs a third.
       const collectorDb = createDb(env.HYPERDRIVE.connectionString);
       const observerDb = createDb(env.HYPERDRIVE.connectionString);
-      const collecting = collectProjectSources({
+      const collecting = sweepProjectSources({
         db: collectorDb,
         bucket,
-        collaboration: env.COLLABORATION,
       }).finally(() => collectorDb.$client.end());
       try {
         const deadline = Date.now() + 5000;

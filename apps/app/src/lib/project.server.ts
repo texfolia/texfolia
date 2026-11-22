@@ -16,7 +16,7 @@ import {
 } from "./collaboration/cleanup.server";
 import { fetchCompiler } from "./compiler.server";
 import { lockProject } from "./project-access.server";
-import type { SourceBucket } from "./project-source.server";
+import { retireSources, type SourceBucket } from "./project-source.server";
 import type {
   createProjectSchema,
   renameProjectSchema,
@@ -333,6 +333,20 @@ export async function deleteProject({
           "Only organization owners and admins can delete projects",
         );
     } else if (found.ownerId !== ownerId) throw new Error("Project not found");
+    const sources = await tx
+      .select({ key: projectNode.objectKey })
+      .from(projectNode)
+      .where(
+        and(
+          eq(projectNode.projectId, projectId),
+          isNull(projectNode.deletedAt),
+        ),
+      );
+    await retireSources(
+      tx,
+      projectId,
+      sources.map((source) => source.key),
+    );
     const [deleted] = await tx
       .update(project)
       .set({ deletedAt: new Date() })

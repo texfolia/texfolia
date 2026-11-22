@@ -4,7 +4,10 @@ import { createDb } from "@texfolia/db";
 import { reconcileAiUsage } from "./lib/ai/billing.server";
 import { aiConfig } from "./lib/ai/gateway.server";
 import { collectGitObjects } from "./lib/git.server";
-import { collectProjectSources } from "./lib/project-source.server";
+import {
+  collectProjectSources,
+  sweepProjectSources,
+} from "./lib/project-source.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
 import { refreshTemplatePreviews } from "./lib/template-preview.server";
@@ -38,6 +41,8 @@ export default {
         });
         await collectGitObjects({ db, bucket: env.SOURCES });
         await collectTemplateObjects({ db, bucket: env.SOURCES });
+      } else if (controller.cron === "41 3 * * *") {
+        await sweepProjectSources({ db, bucket: env.SOURCES });
       } else {
         const results = await Promise.allSettled([
           refreshTemplatePreviews({ db, bucket: env.SOURCES }),

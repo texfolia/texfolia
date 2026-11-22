@@ -167,10 +167,7 @@ export async function checkDeletion({
   );
   room.socket.close();
   room.doc.destroy();
-  await db
-    .update(project)
-    .set({ deletedAt: new Date() })
-    .where(eq(project.id, idle.projectId));
+  await cleanup(`project-only/${idle.projectId}`);
   assert(
     await registered(idle.projectId),
     "A clean room's registration survives project deletion",
