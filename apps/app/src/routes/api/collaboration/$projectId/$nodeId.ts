@@ -2,6 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
+import {
+  collaborationProtocol,
+  protocolSearchParam,
+} from "#/lib/collaboration/protocol";
 import { collaborationAccess } from "#/lib/collaboration/sources.server";
 import { requestPrincipal } from "#/lib/request-principal.server";
 
@@ -20,6 +24,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
           return new Response("WebSocket required", { status: 426 });
         if (new URL(request.url).origin !== request.headers.get("Origin"))
           return new Response("Invalid origin", { status: 403 });
+        const searchParams = new URL(request.url).searchParams;
         const parsed = z
           .object({
             projectId: z.uuid(),
@@ -28,7 +33,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
           })
           .safeParse({
             ...params,
-            clientId: new URL(request.url).searchParams.get("clientId"),
+            clientId: searchParams.get("clientId"),
           });
         if (!parsed.success)
           return new Response("File not found", { status: 404 });
@@ -56,6 +61,9 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
             userId: principal.userId,
             name: principal.name.slice(0, 200),
             awareness: null,
+            // Older tabs still speak base64 JSON; the room asks them to reload.
+            binary:
+              searchParams.get(protocolSearchParam) === collaborationProtocol,
           }),
         );
         return env.COLLABORATION.getByName(params.projectId).fetch(

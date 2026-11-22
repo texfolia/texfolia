@@ -3,31 +3,33 @@ import * as encoding from "lib0/encoding";
 import { z } from "zod";
 
 export const maxCollaborationBytes = 20 * 1024 * 1024;
-const updateSchema = z.base64().max(4 * Math.ceil(maxCollaborationBytes / 3));
+const maxAwarenessBytes = 6144;
+const maxControlLength = 1024;
 
-export const clientMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("sync"), vector: updateSchema }),
-  z.object({ type: z.literal("update"), update: updateSchema }),
-  z.object({ type: z.literal("awareness"), update: z.string().max(8192) }),
-  z.object({
-    type: z.literal("save"),
-    id: z.uuid(),
-    // Omitted when the server already has every update; otherwise a state-vector diff.
-    update: updateSchema.optional(),
-  }),
-]);
-export const serverMessageSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("sync"),
-    update: updateSchema,
-    vector: updateSchema,
-    dirty: z.boolean(),
-    objectKey: z.string().nullable(),
-    canWrite: z.boolean(),
-    user: z.object({ name: z.string(), color: z.string() }),
-  }),
-  z.object({ type: z.literal("update"), update: updateSchema }),
-  z.object({ type: z.literal("awareness"), update: z.string() }),
+/**
+ * Clients that speak this protocol connect with `?protocol=2`. Older tabs that
+ * still send base64 JSON are told to reload instead of being synchronized.
+ */
+export const collaborationProtocol = "2";
+export const protocolSearchParam = "protocol";
+export const outdatedClientMessage =
+  "Texfolia was updated. Reload this page to keep collaborating; your offline edits are kept in this browser.";
+
+// Yjs traffic travels as binary frames whose first byte is the message type,
+// as y-websocket does. Control messages (`save`, `saved`, `error`) stay JSON.
+const frameType = { sync: 0, update: 1, awareness: 2 } as const;
+
+const syncMetaSchema = z.object({
+  dirty: z.boolean(),
+  objectKey: z.string().nullable(),
+  canWrite: z.boolean(),
+  user: z.object({ name: z.string(), color: z.string() }),
+});
+const clientControlSchema = z.strictObject({
+  type: z.literal("save"),
+  id: z.uuid(),
+});
+const serverControlSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("saved"),
     id: z.uuid(),
@@ -41,9 +43,120 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     id: z.uuid().optional(),
   }),
 ]);
-export type ServerMessage = z.infer<typeof serverMessageSchema>;
-export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
+export type ClientMessage =
+  | { type: "sync"; vector: Uint8Array }
+  | { type: "update"; update: Uint8Array }
+  | { type: "awareness"; update: Uint8Array }
+  // While synchronized every update has already been sent on the ordered
+  // socket, so a save carries no payload.
+  | z.infer<typeof clientControlSchema>;
+export type ServerMessage =
+  | ({ type: "sync"; update: Uint8Array; vector: Uint8Array } & z.infer<
+      typeof syncMetaSchema
+    >)
+  | { type: "update"; update: Uint8Array }
+  | { type: "awareness"; update: Uint8Array }
+  | z.infer<typeof serverControlSchema>;
+
+function asBytes(data: ArrayBuffer | ArrayBufferView) {
+  return data instanceof ArrayBuffer
+    ? new Uint8Array(data)
+    : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+}
+
+function frame(type: number, payload: Uint8Array) {
+  const bytes = new Uint8Array(payload.byteLength + 1);
+  bytes[0] = type;
+  bytes.set(payload, 1);
+  return bytes;
+}
+
+export function encodeClientMessage(message: ClientMessage) {
+  switch (message.type) {
+    case "sync":
+      return frame(frameType.sync, message.vector);
+    case "update":
+    case "awareness":
+      return frame(frameType[message.type], message.update);
+    case "save":
+      return JSON.stringify(message);
+  }
+}
+
+export function decodeClientMessage(
+  data: string | ArrayBuffer | ArrayBufferView,
+): ClientMessage {
+  if (typeof data === "string") {
+    if (data.length > maxControlLength)
+      throw new Error("Invalid collaboration message");
+    return clientControlSchema.parse(JSON.parse(data));
+  }
+  if (data.byteLength < 1 || data.byteLength > maxCollaborationBytes + 1)
+    throw new Error("Invalid collaboration message");
+  const bytes = asBytes(data);
+  const payload = bytes.subarray(1);
+  switch (bytes[0]) {
+    case frameType.sync:
+      return { type: "sync", vector: payload };
+    case frameType.update:
+      return { type: "update", update: payload };
+    case frameType.awareness:
+      if (payload.byteLength > maxAwarenessBytes)
+        throw new Error("Invalid collaboration message");
+      return { type: "awareness", update: payload };
+    default:
+      throw new Error("Invalid collaboration message");
+  }
+}
+
+export function encodeServerMessage(message: ServerMessage) {
+  switch (message.type) {
+    case "sync": {
+      const { update, vector, dirty, objectKey, canWrite, user } = message;
+      const encoder = encoding.createEncoder();
+      encoding.writeUint8(encoder, frameType.sync);
+      encoding.writeVarUint8Array(encoder, update);
+      encoding.writeVarUint8Array(encoder, vector);
+      encoding.writeVarString(
+        encoder,
+        JSON.stringify({ dirty, objectKey, canWrite, user }),
+      );
+      return encoding.toUint8Array(encoder);
+    }
+    case "update":
+    case "awareness":
+      return frame(frameType[message.type], message.update);
+    default:
+      return JSON.stringify(message);
+  }
+}
+
+export function decodeServerMessage(data: unknown): ServerMessage {
+  if (typeof data === "string")
+    return serverControlSchema.parse(JSON.parse(data));
+  if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data))
+    throw new Error("Invalid collaboration response");
+  const bytes = asBytes(data);
+  if (bytes.byteLength < 1) throw new Error("Invalid collaboration response");
+  switch (bytes[0]) {
+    case frameType.sync: {
+      const decoder = decoding.createDecoder(bytes.subarray(1));
+      const update = decoding.readVarUint8Array(decoder);
+      const vector = decoding.readVarUint8Array(decoder);
+      const meta = syncMetaSchema.parse(
+        JSON.parse(decoding.readVarString(decoder)),
+      );
+      return { type: "sync", update, vector, ...meta };
+    }
+    case frameType.update:
+      return { type: "update", update: bytes.subarray(1) };
+    case frameType.awareness:
+      return { type: "awareness", update: bytes.subarray(1) };
+    default:
+      throw new Error("Invalid collaboration response");
+  }
+}
 const positionId = z.object({
   client: z.number().int().nonnegative(),
   clock: z.number().int().nonnegative(),

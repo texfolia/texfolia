@@ -23,11 +23,12 @@ import { chromium, type BrowserContext } from "playwright";
 import * as Y from "yjs";
 
 import {
-  serverMessageSchema,
+  decodeServerMessage,
+  encodeClientMessage,
+  outdatedClientMessage,
   type ServerMessage,
 } from "../src/lib/collaboration/protocol";
 import { hashSource } from "../src/lib/compile/source-sync";
-import { decodeSource, encodeSource } from "../src/lib/project-source";
 import { createProject } from "../src/lib/project.server";
 import type { BrowserApi } from "./collaboration/browser";
 import { checkDeletion } from "./collaboration/deletion";
@@ -484,7 +485,7 @@ try {
     sizeBytes: BigInt(largeBytes.length),
   });
   const largeResponse = await mf.dispatchFetch(
-    `${origin}/api/collaboration/${projectId}/${largeId}?clientId=12345`,
+    `${origin}/api/collaboration/${projectId}/${largeId}?protocol=2&clientId=12345`,
     {
       headers: {
         Upgrade: "websocket",
@@ -508,9 +509,7 @@ try {
       }, 20_000);
       const listener = (event: RuntimeMessageEvent) => {
         try {
-          const message = serverMessageSchema.parse(
-            JSON.parse(String(event.data)),
-          );
+          const message = decodeServerMessage(event.data);
           if (expected.type === "saved") {
             if (
               (message.type !== "saved" && message.type !== "error") ||
@@ -535,25 +534,25 @@ try {
   const largeDoc = new Y.Doc();
   const synced = largeMessage({ type: "sync" });
   largeSocket.send(
-    JSON.stringify({
+    encodeClientMessage({
       type: "sync",
-      vector: encodeSource(Y.encodeStateVector(largeDoc)),
+      vector: Y.encodeStateVector(largeDoc),
     }),
   );
   const initialLarge = await synced;
   assert(initialLarge.type === "sync");
-  Y.applyUpdate(largeDoc, decodeSource(initialLarge.update));
+  Y.applyUpdate(largeDoc, initialLarge.update);
   assert.equal(largeDoc.getText("source").toString(), largeText);
   largeDoc.getText("source").insert(0, "large ");
   const largeSaveId = crypto.randomUUID();
   const largeSaved = largeMessage({ type: "saved", id: largeSaveId });
   largeSocket.send(
-    JSON.stringify({
-      type: "save",
-      id: largeSaveId,
-      update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
+    encodeClientMessage({
+      type: "update",
+      update: Y.encodeStateAsUpdate(largeDoc),
     }),
   );
+  largeSocket.send(encodeClientMessage({ type: "save", id: largeSaveId }));
   const storedLarge = await largeSaved;
   assert(storedLarge.type === "saved");
   assert.equal(storedLarge.value, "large " + largeText);
@@ -573,22 +572,22 @@ try {
   const beforeEdit = Y.encodeStateVector(largeDoc);
   largeDoc.getText("source").insert(0, "sent ");
   largeSocket.send(
-    JSON.stringify({
+    encodeClientMessage({
       type: "update",
-      update: encodeSource(Y.encodeStateAsUpdate(largeDoc, beforeEdit)),
+      update: Y.encodeStateAsUpdate(largeDoc, beforeEdit),
     }),
   );
   const emptySaveId = crypto.randomUUID();
   const emptySaved = largeMessage({ type: "saved", id: emptySaveId });
-  largeSocket.send(JSON.stringify({ type: "save", id: emptySaveId }));
+  largeSocket.send(encodeClientMessage({ type: "save", id: emptySaveId }));
   const storedEmpty = await emptySaved;
   assert(storedEmpty.type === "saved");
   assert.equal(storedEmpty.value, "sent large " + largeText);
   const cleanSync = largeMessage({ type: "sync" });
   largeSocket.send(
-    JSON.stringify({
+    encodeClientMessage({
       type: "sync",
-      vector: encodeSource(Y.encodeStateVector(largeDoc)),
+      vector: Y.encodeStateVector(largeDoc),
     }),
   );
   const clean = await cleanSync;
@@ -617,18 +616,18 @@ try {
   const rejectedSaveId = crypto.randomUUID();
   const rejectedSave = largeMessage({ type: "saved", id: rejectedSaveId });
   largeSocket.send(
-    JSON.stringify({
-      type: "save",
-      id: rejectedSaveId,
-      update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
+    encodeClientMessage({
+      type: "update",
+      update: Y.encodeStateAsUpdate(largeDoc),
     }),
   );
+  largeSocket.send(encodeClientMessage({ type: "save", id: rejectedSaveId }));
   await assert.rejects(rejectedSave, /Project exceeds 50 MiB/);
   largeSocket.close();
   // The failed flush discards the memory cache. Restore the pending SQLite
   // document and shorten it without first having to persist the oversized text.
   const resumed = await mf.dispatchFetch(
-    `${origin}/api/collaboration/${projectId}/${largeId}?clientId=12345`,
+    `${origin}/api/collaboration/${projectId}/${largeId}?protocol=2&clientId=12345`,
     {
       headers: {
         Upgrade: "websocket",
@@ -651,9 +650,9 @@ try {
       assert.equal(message.id, undefined);
       assert.match(message.message, /Project exceeds 50 MiB/);
       resumedSocket.send(
-        JSON.stringify({
+        encodeClientMessage({
           type: "sync",
-          vector: encodeSource(Y.encodeStateVector(largeDoc)),
+          vector: Y.encodeStateVector(largeDoc),
         }),
       );
     }),
@@ -665,12 +664,12 @@ try {
   const repairedSaveId = crypto.randomUUID();
   const repaired = largeMessage({ type: "saved", id: repairedSaveId });
   largeSocket.send(
-    JSON.stringify({
-      type: "save",
-      id: repairedSaveId,
-      update: encodeSource(Y.encodeStateAsUpdate(largeDoc)),
+    encodeClientMessage({
+      type: "update",
+      update: Y.encodeStateAsUpdate(largeDoc),
     }),
   );
+  largeSocket.send(encodeClientMessage({ type: "save", id: repairedSaveId }));
   const repairedSource = await repaired;
   assert(
     repairedSource.type === "saved" &&
@@ -678,6 +677,38 @@ try {
   );
   largeSocket.close();
   largeDoc.destroy();
+
+  console.log("Checking outdated base64 JSON clients are asked to reload");
+  const outdated = await mf.dispatchFetch(
+    `${origin}/api/collaboration/${projectId}/${nodeId}?clientId=54321`,
+    {
+      headers: {
+        Upgrade: "websocket",
+        Cookie: cookies.get(ownerId) ?? "",
+        Origin: origin,
+      },
+    },
+  );
+  assert.equal(outdated.status, 101);
+  const outdatedSocket = outdated.webSocket;
+  assert(outdatedSocket);
+  const outdatedFrames: unknown[] = [];
+  outdatedSocket.addEventListener("message", (event) => {
+    outdatedFrames.push(event.data);
+  });
+  outdatedSocket.accept();
+  outdatedSocket.send(JSON.stringify({ type: "sync", vector: "AA==" }));
+  await a.page.evaluate(() => window.collaborationTest.insert(0, "!"));
+  const deadline = Date.now() + 10_000;
+  while (!outdatedFrames.length && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  // Give the room time to (wrongly) forward the live edit as a binary frame.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.deepEqual(
+    outdatedFrames.map((frame) => decodeServerMessage(frame)),
+    [{ type: "error", message: outdatedClientMessage }],
+  );
+  outdatedSocket.close();
 
   console.log("Checking permission change");
   // A connected editor downgraded to viewer cannot keep writing through its socket.

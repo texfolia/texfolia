@@ -4,6 +4,10 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 
 import { CollaborativeFile } from "../../src/lib/collaboration/file";
+import {
+  collaborationProtocol,
+  encodeClientMessage,
+} from "../../src/lib/collaboration/protocol";
 
 const parameters = new URLSearchParams(location.search);
 const file = new CollaborativeFile({
@@ -72,17 +76,16 @@ const api = {
   undo: () => undoManager?.undo(),
   maliciousUpdate: () => {
     const socket = new WebSocket(
-      `${location.origin.replace("http", "ws")}/api/collaboration/${parameters.get("projectId")}/${parameters.get("nodeId")}?clientId=${file.doc.clientID}`,
+      `${location.origin.replace("http", "ws")}/api/collaboration/${parameters.get("projectId")}/${parameters.get("nodeId")}?protocol=${collaborationProtocol}&clientId=${file.doc.clientID}`,
     );
     return new Promise<string>((resolve, reject) => {
       socket.onopen = () => {
         const doc = new Y.Doc();
         doc.getText("source").insert(0, "FORBIDDEN");
-        const bytes = Y.encodeStateAsUpdate(doc);
         socket.send(
-          JSON.stringify({
+          encodeClientMessage({
             type: "update",
-            update: btoa(String.fromCharCode(...bytes)),
+            update: Y.encodeStateAsUpdate(doc),
           }),
         );
         doc.destroy();

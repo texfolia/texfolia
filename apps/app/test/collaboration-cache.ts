@@ -4,7 +4,10 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import * as Y from "yjs";
 
-import { encodeSource } from "../src/lib/project-source";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "../src/lib/collaboration/protocol";
 import type { CacheTestApi } from "./collaboration-cache/browser";
 
 declare global {
@@ -33,13 +36,13 @@ const backend = Bun.serve({
   port: 0,
   websocket: {
     message(socket, raw) {
-      const message = JSON.parse(String(raw));
+      const message = decodeClientMessage(raw);
       if (message.type === "sync")
         socket.send(
-          JSON.stringify({
+          encodeServerMessage({
             type: "sync",
-            update: encodeSource(Y.encodeStateAsUpdate(source)),
-            vector: encodeSource(Y.encodeStateVector(source)),
+            update: Y.encodeStateAsUpdate(source),
+            vector: Y.encodeStateVector(source),
             dirty: true,
             objectKey: null,
             canWrite: true,

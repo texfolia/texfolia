@@ -9,11 +9,11 @@ import { z } from "zod";
 
 import {
   awarenessFrame,
-  serverMessageSchema,
+  decodeServerMessage,
+  encodeClientMessage,
   type ClientMessage,
   type ServerMessage,
 } from "../../src/lib/collaboration/protocol";
-import { decodeSource, encodeSource } from "../../src/lib/project-source";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,
@@ -106,8 +106,8 @@ export async function checkShareLinks({
     ) {
       const url =
         "token" in auth
-          ? `${socketUrl}?clientId=${clientId}&share=${auth.token}`
-          : `${socketUrl}?clientId=${clientId}`;
+          ? `${socketUrl}?protocol=2&clientId=${clientId}&share=${auth.token}`
+          : `${socketUrl}?protocol=2&clientId=${clientId}`;
       const response = await mf.dispatchFetch(url, {
         headers: {
           Origin: origin,
@@ -129,16 +129,14 @@ export async function checkShareLinks({
         closeCode = event.code;
       });
       socket.addEventListener("message", (event) => {
-        const message = serverMessageSchema.parse(
-          JSON.parse(String(event.data)),
-        );
+        const message = decodeServerMessage(event.data);
         messages.push(message);
         if (message.type === "sync" || message.type === "update")
-          Y.applyUpdate(doc, decodeSource(message.update));
+          Y.applyUpdate(doc, message.update);
       });
       const send = (message: ClientMessage) =>
-        socket.send(JSON.stringify(message));
-      send({ type: "sync", vector: encodeSource(Y.encodeStateVector(doc)) });
+        socket.send(encodeClientMessage(message));
+      send({ type: "sync", vector: Y.encodeStateVector(doc) });
       await eventually(
         () => messages.some((m) => m.type === "sync"),
         "Socket did not synchronize",
@@ -160,7 +158,7 @@ export async function checkShareLinks({
     owner.doc.getText("source").insert(0, "shared text");
     owner.send({
       type: "update",
-      update: encodeSource(Y.encodeStateAsUpdate(owner.doc)),
+      update: Y.encodeStateAsUpdate(owner.doc),
     });
     await eventually(
       () => guest.doc.getText("source").toString() === "shared text",
@@ -172,7 +170,7 @@ export async function checkShareLinks({
     denied.getText("source").insert(0, "DENIED");
     guest.send({
       type: "update",
-      update: encodeSource(Y.encodeStateAsUpdate(denied)),
+      update: Y.encodeStateAsUpdate(denied),
     });
     denied.destroy();
     await eventually(
@@ -188,11 +186,11 @@ export async function checkShareLinks({
     const ownerAwareness = awareness(owner.messages);
     guest.send({
       type: "awareness",
-      update: encodeSource(awarenessFrame(3, 1, { cursor: null })),
+      update: awarenessFrame(3, 1, { cursor: null }),
     });
     editor.send({
       type: "awareness",
-      update: encodeSource(awarenessFrame(2, 1, { cursor: null })),
+      update: awarenessFrame(2, 1, { cursor: null }),
     });
     await eventually(
       () => awareness(owner.messages) > ownerAwareness,
@@ -214,7 +212,7 @@ export async function checkShareLinks({
     assert.equal(
       (
         await mf.dispatchFetch(
-          `${socketUrl}?clientId=4&share=${pdfLink.token}`,
+          `${socketUrl}?protocol=2&clientId=4&share=${pdfLink.token}`,
           { headers: { Origin: origin, Upgrade: "websocket" } },
         )
       ).status,
@@ -248,9 +246,7 @@ export async function checkShareLinks({
     owner.doc.getText("source").insert(0, secret);
     owner.send({
       type: "update",
-      update: encodeSource(
-        Y.encodeStateAsUpdate(owner.doc, Y.encodeStateVector(editor.doc)),
-      ),
+      update: Y.encodeStateAsUpdate(owner.doc, Y.encodeStateVector(editor.doc)),
     });
     await eventually(
       () => editor.doc.getText("source").toString().includes(secret),
@@ -280,9 +276,12 @@ export async function checkShareLinks({
     );
     assert.equal(
       (
-        await mf.dispatchFetch(`${socketUrl}?clientId=3&share=${link.token}`, {
-          headers: { Origin: origin, Upgrade: "websocket" },
-        })
+        await mf.dispatchFetch(
+          `${socketUrl}?protocol=2&clientId=3&share=${link.token}`,
+          {
+            headers: { Origin: origin, Upgrade: "websocket" },
+          },
+        )
       ).status,
       401,
       "Revoked link reconnected",
