@@ -8,6 +8,7 @@ import {
   shortcutConflicts,
   shortcutMapSchema,
   startsWithModifier,
+  yieldsToKeymap,
 } from "./shortcuts";
 
 test("defaults are complete, valid, and resolve the old sidebar/Bold conflict", () => {
@@ -110,4 +111,28 @@ test("Mod+K prefixes resolve to save without compiling or keyboard shortcuts", (
   expect(matcher.match("Mod+S", [...bindings], 1400).action).toBe("save");
   matcher.match("Mod+K", [...bindings], 2000);
   expect(matcher.pending(3100)).toBe(false);
+});
+test("Vim and Emacs take their keys in the editor, except protected actions", () => {
+  const yields = (
+    action: Parameters<typeof yieldsToKeymap>[0],
+    keymap: Parameters<typeof yieldsToKeymap>[2],
+    mac = false,
+  ) => yieldsToKeymap(action, defaultShortcuts[action], keymap, mac);
+  // Mod+B is Vim's page up and Emacs's backward-char off macOS.
+  expect(yields("bold", "vim")).toBe(true);
+  expect(yields("bold", "emacs")).toBe(true);
+  expect(yields("bold", "default")).toBe(false);
+  // Command never reaches either keymap.
+  expect(yields("bold", "vim", true)).toBe(false);
+  // Emacs's C-k (kill line) starts Mod+K sequences.
+  expect(yields("saveWithoutCompiling", "emacs")).toBe(true);
+  expect(yields("saveWithoutCompiling", "vim")).toBe(false);
+  // Alt+Shift+F is Emacs's select-word-forward on every platform.
+  expect(yields("format", "emacs", true)).toBe(true);
+  // Save, compile, and tab switching always win, even over Emacs's C-s.
+  for (const action of ["save", "compile", "nextTab", "previousTab"] as const)
+    expect(yields(action, "emacs")).toBe(false);
+  // Explicit Ctrl bindings collide on macOS too.
+  expect(yieldsToKeymap("search", "Ctrl+P", "emacs", true)).toBe(true);
+  expect(yieldsToKeymap("search", "", "emacs", false)).toBe(false);
 });

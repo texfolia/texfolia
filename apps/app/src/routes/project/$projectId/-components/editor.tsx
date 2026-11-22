@@ -21,6 +21,12 @@ import {
   IconMathSymbols,
   IconMessagePlus,
 } from "@tabler/icons-react";
+import {
+  keymapHistory,
+  loadKeymapExtension,
+  loadedKeymapExtension,
+} from "@texfolia/editor/keymaps/extension";
+import { editorKeymapLabels } from "@texfolia/editor/keymaps/keymaps";
 import type { LatexProblem } from "@texfolia/editor/latex/analysis";
 import {
   applyLatexHeading,
@@ -220,6 +226,36 @@ export function Editor({
     undoManager ? undoManager.undo() : undo(view);
   const runRedo = (view: EditorView) =>
     undoManager ? undoManager.redo() : redo(view);
+  const history = useMemo(
+    () =>
+      keymapHistory.of({
+        undo: (view) => (undoManager ? undoManager.undo() : undo(view)),
+        redo: (view) => (undoManager ? undoManager.redo() : redo(view)),
+      }),
+    [undoManager],
+  );
+  // Vim and Emacs load on first use; the default keys apply until then.
+  const [, setKeymapLoads] = useState(0);
+  const keymapExtension = loadedKeymapExtension(preferences.keymap);
+  useEffect(() => {
+    if (keymapExtension) return;
+    let live = true;
+    const label = editorKeymapLabels[preferences.keymap];
+    loadKeymapExtension(preferences.keymap).then(
+      () => {
+        if (live) setKeymapLoads((count) => count + 1);
+      },
+      () => {
+        if (live)
+          setError(
+            `${label} keys could not be loaded. Check your connection and reload the page.`,
+          );
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [preferences.keymap, keymapExtension]);
   const modified = value !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
   const isMarkdown = /\.(?:md|markdown)$/i.test(name);
@@ -446,6 +482,8 @@ export function Editor({
 
   const extensions = useMemo(
     () => [
+      keymapExtension ?? [],
+      history,
       ...(collaboration
         ? [
             yCollab(collaboration.text, collaboration.awareness, {
@@ -512,6 +550,8 @@ export function Editor({
       collaboration,
       undoManager,
       preferences,
+      keymapExtension,
+      history,
       readOnly,
       formatSettings.indent,
       isLatex,

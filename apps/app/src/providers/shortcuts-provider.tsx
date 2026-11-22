@@ -1,3 +1,4 @@
+import type { EditorKeymap } from "@texfolia/editor/keymaps/keymaps";
 import {
   createContext,
   useContext,
@@ -15,6 +16,7 @@ import {
   startsWithModifier,
   type ShortcutAction,
   type ShortcutMap,
+  yieldsToKeymap,
 } from "#/lib/shortcuts";
 
 type Registration = {
@@ -26,14 +28,19 @@ type Registration = {
 const ShortcutContext = createContext<Set<Registration> | null>(null);
 export function ShortcutsProvider({
   map,
+  editorKeymap = "default",
   children,
 }: {
   map: ShortcutMap;
+  // Inside the editor, Vim and Emacs keep the keys they use. See yieldsToKeymap.
+  editorKeymap?: EditorKeymap;
   children: ReactNode;
 }) {
   const registrations = useRef(new Set<Registration>());
   const latest = useRef(map);
   latest.current = map;
+  const keymap = useRef(editorKeymap);
+  keymap.current = editorKeymap;
   useEffect(() => {
     const matcher = createSequenceMatcher();
     const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -50,6 +57,9 @@ export function ShortcutsProvider({
         event.target instanceof Element &&
         !!event.target.closest('[role="dialog"]');
       const typing = isTypingTarget(event.target);
+      const inEditor =
+        event.target instanceof Element &&
+        !!event.target.closest(".cm-editor[data-keymap]");
       const chord = eventChord(event, mac);
       if (!chord) return;
       if (
@@ -72,7 +82,16 @@ export function ShortcutsProvider({
               entry.target.current?.contains(event.target))) &&
           (!typing ||
             (shortcutActions[entry.action].typing &&
-              startsWithModifier(latest.current[entry.action]))),
+              startsWithModifier(latest.current[entry.action]))) &&
+          !(
+            inEditor &&
+            yieldsToKeymap(
+              entry.action,
+              latest.current[entry.action],
+              keymap.current,
+              mac,
+            )
+          ),
       );
       const result = matcher.match(
         chord,

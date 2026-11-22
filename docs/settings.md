@@ -9,7 +9,8 @@ and preserves the selected plan and organization.
 
 The dialog's User tab and the Preferences page share the Appearance, Editor,
 Spelling, and Keyboard shortcuts sections. Appearance previews across the app. Font size,
-line wrapping, compile on save, and shortcut changes take effect after saving.
+line wrapping, keymap, compile on save, and shortcut changes take effect after
+saving, without a reload.
 
 Compile after saving is on by default. With it on, Save and Mod+S save sources
 and then run a cached compile. With it off, they only save. Save without
@@ -23,7 +24,7 @@ Apply in that prompt saves changes and keeps Settings open. Discard leaves
 without saving. Keep editing returns to the draft. Browser reloads and tab
 closure use the browser's unsaved-changes prompt on Preferences.
 
-Appearance uses `texfolia.appearance.v2:<userId>`. Editor and compile preferences,
+Appearance uses `texfolia.appearance.v2:<userId>`. Editor preferences (including the keymap), compile preferences,
 the personal dictionary, and the shortcut map use `texfolia.settings.v2:<userId>`. These are browser-local values,
 with no account sync. The old browser editor preference migrates on first use.
 The editor toolbar's Wrap lines control and the PDF viewer's match-theme control
@@ -108,6 +109,34 @@ but N P does not. The editor keeps Mod+/ for toggling comments. Browser and edit
 defaults for clipboard actions, selection, undo, redo, search, and Tab indentation
 remain fixed.
 
+## Vim and Emacs keymaps
+
+The Editor section's Keymap field chooses Default, Vim, or Emacs. It is stored as
+`editor.keymap` in `texfolia.settings.v2:<userId>` and defaults to Default for
+existing preferences. `@replit/codemirror-vim` and `@replit/codemirror-emacs` load
+as separate chunks the first time someone chooses them. Open editors switch
+when the preference is saved. If a chunk fails to load, the editor shows an
+error and keeps the default keys.
+
+`packages/editor/src/keymaps/keymaps.ts` lists the Ctrl and Alt chords each
+keymap binds. Inside an editor running Vim or Emacs, an app shortcut whose
+first chord is on that list gives the key to the editor. For example, Ctrl+B is
+Vim's page up rather than Bold, and Emacs's Ctrl+K kills the line instead of
+starting Mod+K sequences. Save, Save & compile, Clean build, and Next and
+Previous editor tab never yield, so Mod+S saves on Windows and Linux even though Emacs
+binds Ctrl+S.
+Outside the editor, every shortcut keeps its binding. On macOS, Mod is Command,
+which neither keymap uses, so only explicit Ctrl and Alt bindings yield. The
+Keyboard shortcuts section marks each action that yields to the chosen keymap.
+
+Vim's `u` and Ctrl+R and Emacs's undo keys use the editor's history, which is the
+shared Yjs undo manager in collaborative files. Vim ex commands such as `:w` are
+not connected to app actions.
+
+The Emacs package marks its key registration `/*@__PURE__*/`, so bundlers drop
+it. `patches/@replit%2Fcodemirror-emacs@6.1.0.patch` removes those annotations.
+Check the patch when you upgrade the package.
+
 ## Account pages
 
 Account saves profile name and image through Better Auth. Changing email uses
@@ -126,6 +155,8 @@ estimate physical R2 usage or compile CPU time.
 
 `bun run --cwd apps/app test:settings` checks the project access gate and Usage
 queries against an isolated database named by `INTEGRATION_DATABASE_URL`.
+`bun run --cwd apps/app test:editor-keymaps` checks Vim and Emacs in a browser:
+switching without a reload, undo through Yjs, and shortcut yielding.
 `bun run --cwd apps/app test:themes` checks drafts, theme preview, shortcut
 recording, remapped editor actions, close guards, and responsive dialog layout.
 The UI overhaul suite checks settings routes, Preferences navigation blocking,
