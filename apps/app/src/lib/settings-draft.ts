@@ -19,6 +19,10 @@ export function rebaseUserDraft(
         draft.editor.wrapLines === previous.editor.wrapLines
           ? current.editor.wrapLines
           : draft.editor.wrapLines,
+      keymap:
+        draft.editor.keymap === previous.editor.keymap
+          ? current.editor.keymap
+          : draft.editor.keymap,
     },
     compile: {
       onSave:

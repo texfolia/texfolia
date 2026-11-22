@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./latex/*": "./src/latex/*.ts",
+    "./keymaps/*": "./src/keymaps/*.ts",
     "./spelling/*": "./src/spelling/*.ts",
     "./themes": "./src/themes/themes.ts",
     "./theme-editor": "./src/themes/theme-editor.ts"
@@ -23,6 +24,8 @@
     "@codemirror/language": "^6.13.1",
     "@codemirror/lint": "^6.9.0",
     "@lezer/highlight": "^1.2.5",
+    "@replit/codemirror-emacs": "^6.1.0",
+    "@replit/codemirror-vim": "^6.4.0",
     "@texfolia/contracts": "workspace:*",
     "@uiw/codemirror-theme-abcdef": "4.25.12",
     "@uiw/codemirror-theme-abyss": "4.25.12",

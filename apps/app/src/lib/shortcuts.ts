@@ -1,3 +1,7 @@
+import {
+  keymapChords,
+  type EditorKeymap,
+} from "@texfolia/editor/keymaps/keymaps";
 import { z } from "zod";
 
 // Defaults follow VS Code unless a binding would take over an important
@@ -209,4 +213,32 @@ export function createSequenceMatcher() {
       return { action: complete?.id, pending: !!prefix };
     },
   };
+}
+
+/** Actions that keep their binding inside a Vim or Emacs editor. */
+export const keymapProtectedActions: ReadonlySet<ShortcutAction> = new Set([
+  "save",
+  "compile",
+  "cleanBuild",
+  "nextTab",
+  "previousTab",
+]);
+/**
+ * Whether an action gives its binding to the editor's Vim or Emacs keymap
+ * while focus is in the editor, because its first chord is one the keymap
+ * uses. Protected actions never yield, so they win over the keymap.
+ */
+export function yieldsToKeymap(
+  action: ShortcutAction,
+  binding: string,
+  keymap: EditorKeymap,
+  mac: boolean,
+) {
+  if (!binding || keymap === "default" || keymapProtectedActions.has(action))
+    return false;
+  const [first = ""] = binding.split(" ");
+  const chord = normalizeBinding(
+    first.replaceAll("Mod", mac ? "Meta" : "Ctrl"),
+  );
+  return !!chord && keymapChords[keymap].includes(chord);
 }

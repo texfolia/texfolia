@@ -8,6 +8,7 @@ hooks that drive it stay in `apps/app`.
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `@texfolia/editor/latex/*`       | LaTeX analysis, completion, editor commands, formatting, highlighting, the language extension, outline, symbols, SyncTeX, and word count |
 | `@texfolia/editor/latex/workers` | Browser workers for analysis and formatting                                                                                              |
+| `@texfolia/editor/keymaps/*`     | Vim and Emacs: names, the chords each binds, lazy loading, and the undo hook for Yjs history                                             |
 | `@texfolia/editor/spelling/*`    | The spell checker, its worker, prose extraction, dictionaries, and the CodeMirror lint extension                                         |
 | `@texfolia/editor/themes`        | The UIW theme catalog, appearance schema and migration, and lazy theme loading                                                           |
 | `@texfolia/editor/theme-editor`  | The CodeMirror extension for the selected theme                                                                                          |

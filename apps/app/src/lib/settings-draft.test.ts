@@ -15,12 +15,13 @@ test("an immediate Wrap change preserves an unapplied font edit", () => {
   expect(rebaseUserDraft(draft, defaultSettings, current).editor).toEqual({
     fontSize: 20,
     wrapLines: false,
+    keymap: "default",
   });
 });
 test("external changes leave an untouched draft clean and preserve touched shortcuts", () => {
   const current = {
     ...defaultSettings,
-    editor: { fontSize: 18, wrapLines: false },
+    editor: { fontSize: 18, wrapLines: false, keymap: "emacs" as const },
     shortcuts: { ...defaultSettings.shortcuts, save: "Mod+Shift+S" },
   };
   expect(rebaseUserDraft(defaultSettings, defaultSettings, current)).toEqual(
@@ -33,6 +34,21 @@ test("external changes leave an untouched draft clean and preserve touched short
   expect(rebaseUserDraft(draft, defaultSettings, current).shortcuts).toEqual({
     ...current.shortcuts,
     bold: "Mod+Shift+J",
+  });
+});
+test("an unapplied keymap choice survives an external font change", () => {
+  const draft = {
+    ...defaultSettings,
+    editor: { ...defaultSettings.editor, keymap: "vim" as const },
+  };
+  const current = {
+    ...defaultSettings,
+    editor: { ...defaultSettings.editor, fontSize: 16 },
+  };
+  expect(rebaseUserDraft(draft, defaultSettings, current).editor).toEqual({
+    fontSize: 16,
+    wrapLines: true,
+    keymap: "vim",
   });
 });
 test("project reloads update untouched values and preserve a formatting draft", () => {

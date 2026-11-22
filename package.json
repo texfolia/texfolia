@@ -40,5 +40,8 @@
       "name": "bun",
       "version": "1.4.4"
     }
+  },
+  "patchedDependencies": {
+    "@replit/codemirror-emacs@6.1.0": "patches/@replit%2Fcodemirror-emacs@6.1.0.patch"
   }
 }

@@ -1,3 +1,4 @@
+import { editorKeymaps } from "@texfolia/editor/keymaps/keymaps";
 import { z } from "zod";
 
 import { defaultShortcuts, shortcutMapSchema } from "./shortcuts";
@@ -6,6 +7,7 @@ export { projectFormattingSchema as formatSettingsSchema } from "./project.schem
 export const editorSettingsSchema = z.object({
   fontSize: z.number().int().min(10).max(24),
   wrapLines: z.boolean(),
+  keymap: z.enum(editorKeymaps).default("default"),
 });
 export const autoCompileDelays = [0, 1, 2, 5] as const;
 export type AutoCompileDelay = (typeof autoCompileDelays)[number];
@@ -45,7 +47,7 @@ export const settingsSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 export const defaultSettings: Settings = {
   id: "preferences",
-  editor: { fontSize: 13, wrapLines: true },
+  editor: { fontSize: 13, wrapLines: true, keymap: "default" },
   compile: { onSave: true, afterIdle: 0 },
   shortcuts: defaultShortcuts,
   spelling: { words: [] },

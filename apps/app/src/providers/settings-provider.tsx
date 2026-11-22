@@ -312,7 +312,10 @@ export function SettingsProvider({
   const value = useSettingsState(userId, project);
   return (
     <SettingsContext value={value}>
-      <ShortcutsProvider map={value.shortcuts}>
+      <ShortcutsProvider
+        map={value.shortcuts}
+        editorKeymap={value.editor.keymap}
+      >
         <SettingsShortcuts />
         {children}
       </ShortcutsProvider>

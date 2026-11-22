@@ -62,13 +62,18 @@ test("existing editor preferences migrate without local formatting and survive a
   expect(store.preferences.get("preferences")?.editor).toEqual({
     fontSize: 18,
     wrapLines: false,
+    keymap: "default",
   });
-  await store.updateEditor({ fontSize: 20, wrapLines: true });
+  await store.updateEditor({
+    fontSize: 20,
+    wrapLines: true,
+    keymap: "default",
+  });
   const fresh = storeFor(backend);
   await fresh.initialize();
   expect(settingsSchema.parse(fresh.preferences.get("preferences"))).toEqual({
     id: "preferences",
-    editor: { fontSize: 20, wrapLines: true },
+    editor: { fontSize: 20, wrapLines: true, keymap: "default" },
     compile: { onSave: true, afterIdle: 0 },
     shortcuts: defaultShortcuts,
     spelling: { words: [] },
@@ -98,7 +103,7 @@ test("active settings consumers see each other's updates", async () => {
   await second.initialize();
   await first.save({
     id: "preferences",
-    editor: { fontSize: 13, wrapLines: true },
+    editor: { fontSize: 13, wrapLines: true, keymap: "default" },
     compile: { onSave: true, afterIdle: 0 },
     shortcuts: { ...defaultShortcuts, save: "Mod+Shift+S" },
     spelling: { words: [] },
@@ -109,6 +114,7 @@ test("active settings consumers see each other's updates", async () => {
   await second.updateEditor({
     fontSize: 22,
     wrapLines: false,
+    keymap: "default",
   });
   expect(first.preferences.get("preferences")?.editor.fontSize).toBe(22);
   expect(first.preferences.get("preferences")?.shortcuts.save).toBe(
@@ -122,7 +128,7 @@ test("storage failure rejects the change and rolls preferences back", async () =
   await store.initialize();
   backend.failWrites();
   await expect(
-    store.updateEditor({ fontSize: 23, wrapLines: false }),
+    store.updateEditor({ fontSize: 23, wrapLines: false, keymap: "default" }),
   ).rejects.toThrow();
   expect(store.preferences.get("preferences")?.editor.fontSize).toBe(13);
 });
@@ -140,7 +146,11 @@ test("denied browser storage still allows session preferences", async () => {
   );
   cleanups.push(() => store.preferences.cleanup());
   await store.initialize();
-  await store.updateEditor({ fontSize: 19, wrapLines: false });
+  await store.updateEditor({
+    fontSize: 19,
+    wrapLines: false,
+    keymap: "default",
+  });
   expect(store.preferences.get("preferences")?.editor.fontSize).toBe(19);
   expect(store.warning).toContain("until you leave this page");
 });
@@ -164,7 +174,7 @@ test("user preferences and shortcuts are isolated by account", async () => {
   await second.initialize();
   await first.save({
     id: "preferences",
-    editor: { fontSize: 24, wrapLines: false },
+    editor: { fontSize: 24, wrapLines: false, keymap: "default" },
     compile: { onSave: false, afterIdle: 5 },
     shortcuts: { ...defaultShortcuts, newProject: "G P" },
     spelling: { words: [] },
@@ -205,6 +215,7 @@ test("v1 collection editor values migrate without copying browser formatting", a
   expect(store.preferences.get("preferences")?.editor).toEqual({
     fontSize: 21,
     wrapLines: false,
+    keymap: "default",
   });
   expect(
     Object.hasOwn(store.preferences.get("preferences") ?? {}, "formatting"),
@@ -215,7 +226,11 @@ test("stored preferences from before auto-compile keep it off", async () => {
   const backend = createStorage();
   const store = storeFor(backend);
   await store.initialize();
-  await store.updateEditor({ fontSize: 15, wrapLines: true });
+  await store.updateEditor({
+    fontSize: 15,
+    wrapLines: true,
+    keymap: "default",
+  });
   const key = userSettingsStorageKey("test-user");
   const stored = JSON.parse(backend.storage.getItem(key) ?? "{}");
   for (const row of Object.values<{ data: { compile: object } }>(stored))
@@ -228,4 +243,36 @@ test("stored preferences from before auto-compile keep it off", async () => {
     onSave: false,
     afterIdle: 0,
   });
+});
+
+test("the keymap saves with the editor preferences and defaults for older rows", async () => {
+  const backend = createStorage();
+  const key = userSettingsStorageKey("test-user");
+  backend.storage.setItem(
+    key,
+    JSON.stringify({
+      "s:preferences": {
+        versionKey: "old",
+        data: {
+          id: "preferences",
+          editor: { fontSize: 15, wrapLines: true },
+          compile: { onSave: true, afterIdle: 0 },
+          shortcuts: defaultShortcuts,
+          spelling: { words: [] },
+        },
+      },
+    }),
+  );
+  const store = storeFor(backend);
+  await store.initialize();
+  const stored = settingsSchema.parse(store.preferences.get("preferences"));
+  expect(stored.editor).toEqual({
+    fontSize: 15,
+    wrapLines: true,
+    keymap: "default",
+  });
+  await store.save({ ...stored, editor: { ...stored.editor, keymap: "vim" } });
+  const fresh = storeFor(backend);
+  await fresh.initialize();
+  expect(fresh.preferences.get("preferences")?.editor.keymap).toBe("vim");
 });

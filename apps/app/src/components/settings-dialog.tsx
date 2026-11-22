@@ -6,6 +6,10 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import {
+  editorKeymapLabels,
+  editorKeymaps,
+} from "@texfolia/editor/keymaps/keymaps";
+import {
   spellingDictionaries,
   spellingLanguages,
   spellingLanguageSchema,
@@ -55,6 +59,7 @@ import {
   shortcutConflicts,
   shortcutIds,
   type ShortcutAction,
+  yieldsToKeymap,
 } from "#/lib/shortcuts";
 import {
   type SettingsSection,
@@ -199,7 +204,7 @@ function EditorSettingsFields() {
         <div>
           <ItemTitle>Editor</ItemTitle>
           <ItemDescription>
-            Font, line wrapping, and saving are your preferences in this
+            Font, line wrapping, keymap, and saving are your preferences in this
             browser.
           </ItemDescription>
         </div>
@@ -241,6 +246,31 @@ function EditorSettingsFields() {
         </Field>
         <p className="text-muted-foreground text-xs">
           The editor toolbar’s Wrap lines control saves immediately.
+        </p>
+        <Field>
+          <FieldLabel htmlFor={`${id}-keymap`}>Keymap</FieldLabel>
+          <NativeSelect
+            id={`${id}-keymap`}
+            value={draft.editor.keymap}
+            onChange={(event) => {
+              const keymap = editorKeymaps.find(
+                (keymap) => keymap === event.target.value,
+              );
+              if (keymap)
+                setDraft({ ...draft, editor: { ...draft.editor, keymap } });
+            }}
+          >
+            {editorKeymaps.map((keymap) => (
+              <NativeSelectOption key={keymap} value={keymap}>
+                {editorKeymapLabels[keymap]}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+        <p className="text-muted-foreground text-xs">
+          Vim and Emacs keep the Ctrl and Alt keys they use while the editor has
+          focus. Save, Save &amp; compile, Clean build, and tab switching keep
+          their shortcuts everywhere.
         </p>
         <Field orientation="horizontal">
           <Checkbox
@@ -433,6 +463,10 @@ function ShortcutSettingsFields() {
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [chords, setChords] = useState<string[]>([]);
   const conflicts = shortcutConflicts(draft.shortcuts);
+  const mac =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad/.test(navigator.platform);
+  const keymap = draft.editor.keymap;
   const change = (action: ShortcutAction, binding: string) =>
     setDraft({
       ...draft,
@@ -490,6 +524,12 @@ function ShortcutSettingsFields() {
                 : draft.shortcuts[action].replaceAll(" ", " → ") ||
                   "Unassigned"}
             </Kbd>
+            {yieldsToKeymap(action, draft.shortcuts[action], keymap, mac) && (
+              <ItemDescription>
+                Runs outside the editor. In the editor,{" "}
+                {editorKeymapLabels[keymap]} uses this key.
+              </ItemDescription>
+            )}
           </ItemContent>
           <div className="flex gap-2">
             <Button
