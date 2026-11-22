@@ -1,3 +1,4 @@
+import { bibEntryKeys, similarKeys } from "./bibtex";
 import type { WordCount } from "./word-count";
 
 export type LatexProblem = {
@@ -6,6 +7,8 @@ export type LatexProblem = {
   message: string;
   severity: "error" | "warning" | "info";
   range?: { from: number; to: number };
+  /** An undefined \\cite key, with defined keys it may be a typo of. */
+  citation?: { key: string; suggestions: string[] };
 };
 
 type SymbolAt = { key: string; from: number; to: number };
@@ -82,15 +85,7 @@ export function scanFile(path: string, text: string): FileSymbols {
   const source = maskLatexSource(text);
 
   if (/\.bib$/i.test(path)) {
-    for (const match of source.matchAll(
-      /@([a-z]+)\s*[{(]\s*([^\s,{}()]+)\s*,/gi,
-    )) {
-      const [, type, key] = match;
-      if (!type || !key || /^(?:comment|string|preamble)$/i.test(type))
-        continue;
-      const from = match.index + match[0].lastIndexOf(key);
-      symbols.bibliography.push({ key, from, to: from + key.length });
-    }
+    symbols.bibliography = bibEntryKeys(source);
     return symbols;
   }
 
@@ -150,41 +145,75 @@ export function analyzeProject(
   const extensionless = new Set(
     paths.map((path) => path.replace(/\.[^/.]+$/, "")),
   );
-  for (const file of files.values()) {
+  // The first definition of each key, without case as BibTeX compares them.
+  const defined = new Map<string, { path: string; from: number }>();
+  const duplicates = new Map<SymbolAt, { path: string; from: number }>();
+  for (const [path, file] of files) {
     for (const label of file.labels) labels.add(label);
-    for (const entry of file.bibliography) keys.add(entry.key);
+    for (const entry of file.bibliography) {
+      keys.add(entry.key);
+      const first = defined.get(entry.key.toLowerCase());
+      if (first) duplicates.set(entry, first);
+      else defined.set(entry.key.toLowerCase(), { path, from: entry.from });
+    }
     for (const citation of file.citations) cited.add(citation.key);
     for (const pkg of file.packages)
       if (Object.hasOwn(catalog, pkg))
         for (const command of catalog[pkg] ?? []) commands.add(command);
   }
 
+  const sortedKeys = [...keys].sort();
+  const lines = new Map<string, ReturnType<typeof lineNumber>>();
+  const lineIn = (path: string, offset: number) => {
+    let getLine = lines.get(path);
+    if (!getLine) {
+      getLine = lineNumber(files.get(path)?.text ?? "");
+      lines.set(path, getLine);
+    }
+    return getLine(offset);
+  };
+  const suggestions = new Map<string, string[]>();
   for (const [path, file] of files) {
-    let getLine: ReturnType<typeof lineNumber> | undefined;
     function report(
       symbol: SymbolAt,
       message: string,
       severity: "warning" | "info" = "warning",
+      extra: Partial<LatexProblem> = {},
     ) {
-      getLine ??= lineNumber(file.text);
       const { from, to } = symbol;
       problems.push({
         path,
-        line: getLine(from),
+        line: lineIn(path, from),
         message,
         severity,
         range: { from, to },
+        ...extra,
       });
     }
     for (const symbol of file.references)
       if (!labels.has(symbol.key))
         report(symbol, `Undefined label “${symbol.key}”`);
     for (const symbol of file.citations)
-      if (symbol.key !== "*" && !keys.has(symbol.key))
-        report(symbol, `Unknown citation “${symbol.key}”`);
-    for (const symbol of file.bibliography)
-      if (!cited.has("*") && !cited.has(symbol.key))
+      if (symbol.key !== "*" && !keys.has(symbol.key)) {
+        let similar = suggestions.get(symbol.key);
+        if (!similar) {
+          similar = similarKeys(symbol.key, sortedKeys);
+          suggestions.set(symbol.key, similar);
+        }
+        report(symbol, `Unknown citation “${symbol.key}”`, "warning", {
+          citation: { key: symbol.key, suggestions: similar },
+        });
+      }
+    for (const symbol of file.bibliography) {
+      const first = duplicates.get(symbol);
+      if (first)
+        report(
+          symbol,
+          `Duplicate bibliography key “${symbol.key}” (first defined in ${first.path}, line ${lineIn(first.path, first.from)})`,
+        );
+      else if (!cited.has("*") && !cited.has(symbol.key))
         report(symbol, `Unused bibliography entry “${symbol.key}”`, "info");
+    }
     for (const symbol of file.includes) {
       if (/[#\\{}]/.test(symbol.key)) continue; // TeX can expand dynamic paths.
       const target = symbol.key.replace(/^\.\//, "");
@@ -201,7 +230,7 @@ export function analyzeProject(
 
   return {
     labels: [...labels].sort(),
-    citations: [...keys].sort(),
+    citations: sortedKeys,
     commands: [...commands].sort(),
     problems,
   };

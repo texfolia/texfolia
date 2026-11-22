@@ -67,6 +67,8 @@ export type Workspace = {
   change: (id: string, value: string) => void;
   symbolPreamble: { source: string; filename: string } | undefined;
   addSymbolPackage: (packageName: string) => void;
+  /** Opens Add reference; `key` names an undefined citation to define. */
+  addReference: (key?: string) => void;
   registerEditor: (id: string, view: EditorView | null) => void;
 };
 

@@ -1,6 +1,6 @@
 import type { CompletionSource } from "@codemirror/autocomplete";
-import { type Diagnostic, linter } from "@codemirror/lint";
-import { type EditorView, StateEffect } from "@uiw/react-codemirror";
+import { type Action, type Diagnostic, linter } from "@codemirror/lint";
+import { type EditorState, StateEffect } from "@uiw/react-codemirror";
 import { latexLinter } from "codemirror-lang-latex";
 
 import type { LatexProblem } from "./analysis";
@@ -13,11 +13,14 @@ export function editorLanguage({
   completion,
   getProblems,
   publishSyntax,
+  addReference,
 }: {
   filename: string;
   completion?: CompletionSource;
   getProblems: () => readonly LatexProblem[];
   publishSyntax: (problems: LatexProblem[]) => void;
+  /** Offered as a quick fix for undefined citation keys. */
+  addReference?: (key: string) => void;
 }) {
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(filename);
   const support = isLatex ? themedLatex(filename) : null;
@@ -51,7 +54,10 @@ export function editorLanguage({
             severity: severity === "hint" ? "info" : severity,
           })),
         );
-        return [...syntax, ...projectDiagnostics(view, getProblems())];
+        return [
+          ...syntax,
+          ...projectDiagnostics(view.state, getProblems(), addReference),
+        ];
       },
       {
         needsRefresh: (update) =>
@@ -65,19 +71,46 @@ export function editorLanguage({
   ];
 }
 
-function projectDiagnostics(
-  view: EditorView,
+function citationActions(
+  { key, suggestions }: NonNullable<LatexProblem["citation"]>,
+  addReference?: (key: string) => void,
+): Action[] {
+  const actions: Action[] = suggestions.map((suggestion) => ({
+    name: `Use “${suggestion}”`,
+    apply(view, from, to) {
+      if (view.state.sliceDoc(from, to) === key)
+        view.dispatch({ changes: { from, to, insert: suggestion } });
+    },
+  }));
+  if (addReference)
+    actions.push({ name: "Add reference…", apply: () => addReference(key) });
+  return actions;
+}
+
+export function projectDiagnostics(
+  state: EditorState,
   problems: readonly LatexProblem[],
+  addReference?: (key: string) => void,
 ): Diagnostic[] {
-  const doc = view.state.doc;
-  return problems.flatMap(({ line, range, severity, message }) => {
+  const doc = state.doc;
+  const editable = !state.readOnly;
+  return problems.flatMap(({ line, range, severity, message, citation }) => {
     if (
       range &&
       range.from >= 0 &&
       range.from <= range.to &&
       range.to <= doc.length
     )
-      return [{ ...range, severity, message }];
+      return [
+        {
+          ...range,
+          severity,
+          message,
+          ...(citation && editable
+            ? { actions: citationActions(citation, addReference) }
+            : {}),
+        },
+      ];
     if (range || line < 1 || line > doc.lines) return [];
     const { from, to } = doc.line(line);
     return [{ from, to, severity, message }];

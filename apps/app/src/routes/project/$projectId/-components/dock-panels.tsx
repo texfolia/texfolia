@@ -203,6 +203,11 @@ export function FileEditor({
         completion={workspace.completion}
         problems={workspace.problems.get(path) ?? noProblems}
         onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
+        onAddReference={
+          workspace.canWrite && status.canWrite
+            ? workspace.addReference
+            : undefined
+        }
         jump={jump}
         initialSnapshot={initialSnapshot}
         onSnapshot={({ anchor, head, scroll }) => {

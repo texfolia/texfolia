@@ -3,7 +3,7 @@ import { Button } from "@texfolia/ui/button";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export function WorkspaceProblems() {
-  const { allProblems, reveal } = useWorkspace();
+  const { allProblems, reveal, canWrite, addReference } = useWorkspace();
   return (
     <section
       aria-label="LaTeX problems"
@@ -12,10 +12,13 @@ export function WorkspaceProblems() {
       {allProblems.length ? (
         <ul className="space-y-1">
           {allProblems.map((problem, index) => (
-            <li key={`${problem.path}:${problem.line}:${index}`}>
+            <li
+              key={`${problem.path}:${problem.line}:${index}`}
+              className="flex items-start gap-1"
+            >
               <Button
                 variant="ghost"
-                className="h-auto w-full justify-start gap-3 text-left whitespace-normal"
+                className="h-auto min-w-0 flex-1 justify-start gap-3 text-left whitespace-normal"
                 onClick={() => reveal(problem.path, problem.line)}
               >
                 <span
@@ -29,6 +32,16 @@ export function WorkspaceProblems() {
                 </span>
                 {problem.message}
               </Button>
+              {problem.citation && canWrite && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => addReference(problem.citation?.key)}
+                >
+                  Add reference
+                </Button>
+              )}
             </li>
           ))}
         </ul>
