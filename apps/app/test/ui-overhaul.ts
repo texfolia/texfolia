@@ -345,6 +345,11 @@ try {
         url: origin,
       },
     ]);
+    // Signing out lands on /login. With no site key in CI, the real Turnstile
+    // script throws, so block it as the public context does.
+    await context.route("https://challenges.cloudflare.com/**", (route) =>
+      route.abort(),
+    );
     const page = await context.newPage();
     monitor(page);
     return page;
