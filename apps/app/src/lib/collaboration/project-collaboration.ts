@@ -81,8 +81,6 @@ export class ProjectCollaboration extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.storage.sql.exec("DROP TABLE IF EXISTS history_versions");
-    ctx.storage.sql.exec("DROP TABLE IF EXISTS history_activity");
     ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS documents (
       node_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, snapshot BLOB NOT NULL,
       object_key TEXT, dirty INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)`);
