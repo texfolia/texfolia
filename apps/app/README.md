@@ -62,11 +62,19 @@ Postgres transaction. A failed R2 write leaves metadata unchanged. A failed SQL
 commit can leave an unreferenced object, never a committed pointer to an object
 that was not uploaded. The same lock serializes node/project deletion and GC.
 
-The web Worker's hourly scheduled handler deletes unreferenced source objects,
-including superseded versions, failed-write orphans, deleted descendants, and
-deleted projects. Shared hashes are retained while any live node references
-them. It uses SQL references, not an age-based bucket lifecycle that could erase
-old but still-current files. Source reads also hold the project lock in shared
+Each write that replaces or deletes a source also records the old key in the
+`source_garbage` table, in the same transaction. This covers saves, collaboration
+saves, Git checkouts and pulls, node deletion, and project deletion. The web
+Worker's hourly scheduled handler reads only that table. For each queued key, it
+locks the project and deletes the object if no live node references it, so the
+run's cost depends on recent changes, not bucket size. Shared hashes are retained
+while any live node references them.
+
+A daily sweep (`41 3 * * *`) lists the whole `projects/` prefix as a safety net.
+It removes objects the queue cannot see: uploads whose SQL transaction rolled
+back, and projects removed by account or organization cascades. Both passes use
+SQL references, not an age-based bucket lifecycle that could erase old but
+still-current files. Source reads also hold the project lock in shared
 mode so GC cannot remove a version while it is being read.
 
 On open, sources come from the server. Legacy local-storage drafts are uploaded

@@ -22,7 +22,11 @@ import { GitRepository, gitHttp, type GitFiles } from "./git-repository.server";
 import { lockProject, type ProjectTransaction } from "./project-access.server";
 import { projectPaths } from "./project-paths";
 import { encodeSource } from "./project-source";
-import { putSource, type SourceBucket } from "./project-source.server";
+import {
+  putSource,
+  retireSources,
+  type SourceBucket,
+} from "./project-source.server";
 
 export async function gitAccount({
   db,
@@ -155,6 +159,11 @@ async function replaceFiles(
       (node.kind === "folder" ||
         !Object.hasOwn(files, paths.get(node.id) ?? "")),
   );
+  await retireSources(
+    tx,
+    projectId,
+    removed.map((node) => node.objectKey),
+  );
   if (removed.length)
     await tx
       .update(projectNode)
@@ -218,6 +227,8 @@ async function replaceFiles(
       kind,
     });
     const existing = byPath.get(path);
+    if (existing && existing.objectKey !== stored.objectKey)
+      await retireSources(tx, projectId, [existing.objectKey]);
     const values = { parentId, name, kind, ...stored, updatedAt: new Date() };
     if (existing)
       await tx

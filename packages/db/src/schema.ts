@@ -173,6 +173,24 @@ export const projectCollaboration = pgTable("project_collaboration", {
   projectId: uuid("project_id").primaryKey(),
 });
 
+// Source object keys that a node stopped referencing. Like the registry above,
+// it has no foreign key, so pending cleanup survives owner cascades. Rows are
+// candidates: collection deletes an object only when no live node uses it.
+export const sourceGarbage = pgTable(
+  "source_garbage",
+  {
+    id: bigint("id", { mode: "bigint" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    projectId: uuid("project_id").notNull(),
+    objectKey: text("object_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("source_garbage_project_id_idx").on(t.projectId)],
+);
+
 export const projectJob = pgTable(
   "project_job",
   {

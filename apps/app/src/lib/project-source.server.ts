@@ -1,5 +1,5 @@
 import type { Db } from "@texfolia/db";
-import { project, projectNode } from "@texfolia/db/schema";
+import { project, projectNode, sourceGarbage } from "@texfolia/db/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
@@ -118,6 +118,8 @@ export async function saveProjectSource({
       previousSize: node.sizeBytes,
       kind: node.kind,
     });
+    if (node.objectKey !== stored.objectKey)
+      await retireSources(tx, data.projectId, [node.objectKey]);
     const updatedAt = new Date();
     await tx
       .update(projectNode)
@@ -160,6 +162,13 @@ export async function deleteProjectNode({
       for (const node of nodes)
         if (node.parentId && deleted.has(node.parentId)) deleted.add(node.id);
     }
+    await retireSources(
+      tx,
+      projectId,
+      nodes
+        .filter((node) => deleted.has(node.id))
+        .map((node) => node.objectKey),
+    );
     await tx
       .update(projectNode)
       .set({ deletedAt: new Date(), updatedAt: new Date() })
@@ -204,6 +213,63 @@ export async function readProjectSource({
   });
 }
 
+// Queues keys that nodes stop referencing. Call it in the same transaction as
+// the node change, so a rollback also discards the queue entry.
+export async function retireSources(
+  tx: ProjectTransaction,
+  projectId: string,
+  objectKeys: Iterable<string | null | undefined>,
+) {
+  const keys = new Set<string>();
+  for (const key of objectKeys) if (key) keys.add(key);
+  if (keys.size)
+    await tx
+      .insert(sourceGarbage)
+      .values([...keys].map((objectKey) => ({ projectId, objectKey })));
+}
+
+// Locks a project the way source writes do. The advisory lock also covers
+// projects whose row is not committed yet or was removed by a cascade.
+async function lockProjectForCollection(
+  tx: ProjectTransaction,
+  projectId: string,
+) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
+  );
+  const [found] = await tx
+    .select({ deletedAt: project.deletedAt })
+    .from(project)
+    .where(eq(project.id, projectId))
+    .for("update");
+  return Boolean(found && !found.deletedAt);
+}
+
+async function liveSourceKeys(
+  tx: ProjectTransaction,
+  projectId: string,
+  keys: string[],
+) {
+  const references = keys.length
+    ? await tx
+        .select({ key: projectNode.objectKey })
+        .from(projectNode)
+        .where(
+          and(
+            eq(projectNode.projectId, projectId),
+            isNull(projectNode.deletedAt),
+            inArray(projectNode.objectKey, keys),
+          ),
+        )
+    : [];
+  return new Set(references.map((node) => node.key));
+}
+
+// R2 deletes at most 1,000 keys per call.
+const garbageBatchSize = 1000;
+
+// Deletes queued source objects that no live node references. Work scales with
+// recently replaced or deleted sources, not with the bucket.
 export async function collectProjectSources({
   db,
   bucket,
@@ -213,50 +279,80 @@ export async function collectProjectSources({
   bucket: SourceBucket;
   collaboration?: CollaborationCleanup;
 }) {
+  const projectIds = await db
+    .selectDistinct({ projectId: sourceGarbage.projectId })
+    .from(sourceGarbage);
+  for (const { projectId } of projectIds) {
+    let remaining = true;
+    while (remaining)
+      remaining = await db.transaction(async (tx) => {
+        const live = await lockProjectForCollection(tx, projectId);
+        const queued = await tx
+          .select()
+          .from(sourceGarbage)
+          .where(eq(sourceGarbage.projectId, projectId))
+          .orderBy(sourceGarbage.id)
+          .limit(garbageBatchSize);
+        const keys = [...new Set(queued.map((row) => row.objectKey))];
+        const liveKeys = live
+          ? await liveSourceKeys(tx, projectId, keys)
+          : new Set();
+        const garbage = keys.filter(
+          (key) =>
+            key.startsWith(`projects/${projectId}/sources/`) &&
+            !liveKeys.has(key),
+        );
+        if (garbage.length) await bucket.delete(garbage);
+        if (queued.length)
+          await tx.delete(sourceGarbage).where(
+            inArray(
+              sourceGarbage.id,
+              queued.map((row) => row.id),
+            ),
+          );
+        return queued.length === garbageBatchSize;
+      });
+  }
+  await collectCollaborationSources({ db, collaboration });
+}
+
+// Safety net for objects the queue cannot see: uploads whose SQL transaction
+// rolled back and projects removed by account or organization cascades. It
+// lists the whole prefix, so it runs daily rather than hourly.
+export async function sweepProjectSources({
+  db,
+  bucket,
+}: {
+  db: Db;
+  bucket: SourceBucket;
+}) {
   let cursor: string | undefined;
   do {
-    const page = await bucket.list({ prefix: "projects/", cursor, limit: 100 });
-    const projectIds = new Set(
-      page.objects.flatMap((object) => {
-        const match =
-          /^projects\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\/sources\/[0-9a-f]{64}$/.exec(
-            object.key,
-          );
-        return match?.[1] ? [match[1]] : [];
-      }),
-    );
-    for (const projectId of projectIds)
+    const page = await bucket.list({
+      prefix: "projects/",
+      cursor,
+      limit: garbageBatchSize,
+    });
+    const byProject = new Map<string, string[]>();
+    for (const object of page.objects) {
+      const match =
+        /^projects\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\/sources\/[0-9a-f]{64}$/.exec(
+          object.key,
+        );
+      if (!match?.[1]) continue;
+      const keys = byProject.get(match[1]) ?? [];
+      keys.push(object.key);
+      byProject.set(match[1], keys);
+    }
+    for (const [projectId, keys] of byProject)
       await db.transaction(async (tx) => {
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
-        );
-        const [found] = await tx
-          .select()
-          .from(project)
-          .where(eq(project.id, projectId))
-          .for("update");
-        const references =
-          found && !found.deletedAt
-            ? await tx
-                .select({ key: projectNode.objectKey })
-                .from(projectNode)
-                .where(
-                  and(
-                    eq(projectNode.projectId, projectId),
-                    isNull(projectNode.deletedAt),
-                  ),
-                )
-            : [];
-        const liveKeys = new Set(references.map((node) => node.key));
-        const garbage = page.objects.filter(
-          (object) =>
-            object.key.startsWith(`projects/${projectId}/sources/`) &&
-            !liveKeys.has(object.key),
-        );
-        if (garbage.length)
-          await bucket.delete(garbage.map((object) => object.key));
+        const live = await lockProjectForCollection(tx, projectId);
+        const liveKeys = live
+          ? await liveSourceKeys(tx, projectId, keys)
+          : new Set();
+        const garbage = keys.filter((key) => !liveKeys.has(key));
+        if (garbage.length) await bucket.delete(garbage);
       });
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
-  await collectCollaborationSources({ db, collaboration });
 }

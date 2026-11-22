@@ -6,6 +6,7 @@ import {
   projectCollaboration,
   projectCollaborator,
   projectNode,
+  sourceGarbage,
   user,
 } from "@texfolia/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -29,6 +30,7 @@ import {
   readProjectSource,
   saveProjectSource,
   type SourceBucket,
+  sweepProjectSources,
 } from "../../src/lib/project-source.server";
 import {
   createProject,
@@ -556,11 +558,18 @@ export default {
       const beforeSweep = await bucket.list({
         prefix: `projects/${projectId}/sources/`,
       });
+      // A rolled-back write never reaches the queue, so only the sweep sees it.
       await collectProjectSources({
         db,
         bucket,
         collaboration: env.COLLABORATION,
       });
+      assert.equal(
+        (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
+          .objects.length,
+        beforeSweep.objects.length,
+      );
+      await sweepProjectSources({ db, bucket });
       const afterSweep = await bucket.list({
         prefix: `projects/${projectId}/sources/`,
       });
@@ -731,11 +740,26 @@ export default {
           return bucket.put(`projects/${projectId}/sources/${hash}`, text);
         }),
       );
+      // Normal collection touches only queued keys, never the rest of the bucket.
+      const listing: SourceBucket = {
+        get: bucket.get.bind(bucket),
+        put: bucket.put.bind(bucket),
+        delete: bucket.delete.bind(bucket),
+        list: async () => {
+          throw new Error("Queued collection must not list the bucket");
+        },
+      };
       await collectProjectSources({
         db,
-        bucket,
+        bucket: listing,
         collaboration: env.COLLABORATION,
       });
+      assert.equal(
+        (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
+          .objects.length,
+        107,
+      );
+      await sweepProjectSources({ db, bucket });
       assert.equal(
         (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
           .objects.length,
@@ -774,6 +798,15 @@ export default {
         bucket,
         collaboration: env.COLLABORATION,
       });
+      assert.equal(
+        (
+          await db
+            .select()
+            .from(sourceGarbage)
+            .where(eq(sourceGarbage.projectId, projectId))
+        ).length,
+        0,
+      );
       assert.equal(
         (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
           .objects.length,

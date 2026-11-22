@@ -79,8 +79,9 @@ Keep transactions limited to related database operations. Call email, billing, a
 
 Source storage deliberately uploads immutable R2 objects while holding the
 project row lock. This serializes byte quotas, source versions, deletion, and
-garbage collection. Metadata commits only after the upload succeeds; the source
-sweep removes objects left by rolled-back SQL transactions. See
+garbage collection. Metadata commits only after the upload succeeds; the daily
+source sweep removes objects left by rolled-back SQL transactions. Replaced and
+deleted sources are queued in `source_garbage` for the hourly collection. See
 [the web reference](../../apps/app/README.md#project-source-storage) for storage
 behavior and verification. For an existing database,
 prepare and review an upgrade against its actual schema before deploying.

@@ -22,7 +22,7 @@
       "new_sqlite_classes": ["ProjectCollaboration"],
     },
   ],
-  "triggers": { "crons": ["17 * * * *", "* * * * *"] },
+  "triggers": { "crons": ["17 * * * *", "41 3 * * *", "* * * * *"] },
   "services": [
     {
       "binding": "COMPILER",
