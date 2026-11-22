@@ -1,3 +1,4 @@
+import { isOrgAdmin } from "@texfolia/auth/roles";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -112,12 +113,7 @@ export async function publishTemplate({
           ),
         )
         .for("share");
-      if (
-        !membership ||
-        !membership.role
-          .split(",")
-          .some((role) => role === "owner" || role === "admin")
-      )
+      if (!membership || !isOrgAdmin(membership.role))
         throw new Error(
           "Only organization owners and admins can publish templates",
         );

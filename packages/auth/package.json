@@ -7,7 +7,8 @@
     ".": "./src/server.ts",
     "./billing": "./src/billing.ts",
     "./client": "./src/client.ts",
-    "./hosts": "./src/hosts.ts"
+    "./hosts": "./src/hosts.ts",
+    "./roles": "./src/roles.ts"
   },
   "scripts": {
     "auth:schema": "bunx auth generate --output ../db/src/auth-schema.ts --config ./auth.config.ts --yes",

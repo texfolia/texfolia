@@ -1,3 +1,4 @@
+import { isOrgAdmin } from "@texfolia/auth/roles";
 import type { Db } from "@texfolia/db";
 import {
   account,
@@ -122,11 +123,7 @@ async function requireRemoteManager(
           eq(member.userId, userId),
         ),
       );
-    if (
-      !membership?.role
-        .split(",")
-        .some((role) => role === "owner" || role === "admin")
-    )
+    if (!membership || !isOrgAdmin(membership.role))
       throw new Error(
         "Only project owners and organization admins can link or unlink a remote.",
       );

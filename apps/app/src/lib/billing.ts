@@ -1,5 +1,1 @@
-export {
-  canManageBilling,
-  paidPlans,
-  subscriptionPlans,
-} from "@texfolia/auth/billing";
+export { paidPlans, subscriptionPlans } from "@texfolia/auth/billing";

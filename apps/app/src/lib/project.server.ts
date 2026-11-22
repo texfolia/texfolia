@@ -1,3 +1,4 @@
+import { isOrgAdmin } from "@texfolia/auth/roles";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -154,9 +155,6 @@ export function accessibleProjects(userId: string): ProjectFilter {
   };
 }
 
-const isManager = (role: string) =>
-  role.split(",").some((item) => item === "owner" || item === "admin");
-
 // One relational query: access, tags, people, and the viewer's organization
 // role all load together. Most recently updated first. The cursor is the last
 // project ID of the previous page; comparing against that row's stored
@@ -235,7 +233,7 @@ export async function getProjects({
       canDelete:
         row.ownerId === userId ||
         !!organization?.members.some(
-          (person) => person.userId === userId && isManager(person.role),
+          (person) => person.userId === userId && isOrgAdmin(person.role),
         ),
     })),
     nextCursor: rows.length > take ? (page.at(-1)?.id ?? null) : null,
@@ -324,11 +322,7 @@ export async function deleteProject({
           ),
         )
         .for("share");
-      if (
-        !membership?.role
-          .split(",")
-          .some((role) => role === "owner" || role === "admin")
-      )
+      if (!membership || !isOrgAdmin(membership.role))
         throw new Error(
           "Only organization owners and admins can delete projects",
         );

@@ -3,12 +3,6 @@ export const paidPlans = {
   team: { name: "Team", monthlyUsd: 20 },
 } as const;
 
-export function canManageBilling(role: string) {
-  return role
-    .split(",")
-    .some((value) => value === "owner" || value === "admin");
-}
-
 export function subscriptionPlans({
   proPriceId,
   teamPriceId,
