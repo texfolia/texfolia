@@ -27,7 +27,7 @@ import {
   encodeClientMessage,
   protocolSearchParam,
 } from "../src/lib/collaboration/protocol";
-import { gitScopes, type GitProvider } from "../src/lib/git";
+import { gitProvider, type GitProvider } from "../src/lib/git-providers";
 import { GitRepository, gitHttp } from "../src/lib/git-repository.server";
 import { createProject } from "../src/lib/project.server";
 import { gitServer, gitCommand } from "./git/http-server";
@@ -171,30 +171,41 @@ try {
     (await action(localProject.id, { kind: "status" })).status.branch,
     null,
   );
-  const initialized = await action(localProject.id, { kind: "initialize" });
-  assert.equal(initialized.status.remote, null);
-  assert.equal(initialized.status.branch, "main");
-  const localCommit = await action(localProject.id, {
-    kind: "commit",
-    message: "Local history before linking",
-  });
-  const localOid = localCommit.status.commits[0]?.oid;
-  assert(localOid);
-  assert.equal(
-    (await action(localProject.id, { kind: "initialize" })).status.commits[0]
-      ?.oid,
-    localOid,
+  await assert.rejects(
+    action(localProject.id, { kind: "initialize" }),
+    /Invalid input|invalid_union|kind/,
+    "Texfolia no longer creates remote-free repositories",
   );
   await assert.rejects(
-    action(localProject.id, { kind: "push" }),
-    /Link a remote/,
+    action(localProject.id, { kind: "commit", message: "No remote" }),
+    /Link a repository first/,
   );
-  const [localRow] = await db
-    .select()
-    .from(projectGit)
-    .where(eq(projectGit.projectId, localProject.id));
-  assert.equal(localRow?.provider, null);
-  assert.equal(localRow?.url, null);
+  // A repository saved by the removed in-app initialize (NAT-413).
+  const legacy = new GitRepository();
+  await legacy.init();
+  legacy.overlay({ "main.tex": bytes("hosted history\n") });
+  const localOid = await legacy.commit("Local history before linking", author);
+  const legacyKey = `git/${localProject.id}/${crypto.randomUUID()}.json`;
+  await (await mf.getR2Bucket("SOURCES")).put(legacyKey, legacy.serialize());
+  await db.insert(projectGit).values({
+    projectId: localProject.id,
+    provider: null,
+    url: null,
+    objectKey: legacyKey,
+    branch: "main",
+  });
+  const hosted = await action(localProject.id, { kind: "status" });
+  assert.equal(hosted.status.remote, null);
+  assert.equal(hosted.status.commits[0]?.oid, localOid);
+  for (const blocked of [
+    { kind: "commit", message: "Still hosted" },
+    { kind: "branch", name: "draft" },
+    { kind: "push" },
+  ])
+    await assert.rejects(
+      action(localProject.id, blocked),
+      /no longer hosts Git repositories/,
+    );
   for (const provider of ["github", "gitlab"] satisfies GitProvider[]) {
     const local = await host.create(`owner/${provider}.git`);
     const seed = new GitRepository();
@@ -213,7 +224,7 @@ try {
       accountId: `remote-${provider}`,
       providerId: provider,
       accessToken: "private-token",
-      scope: gitScopes[provider].join(" "),
+      scope: gitProvider(provider).scopes.join(" "),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -465,7 +476,7 @@ try {
     "No Git host request runs while the project row is locked",
   );
   console.info(
-    "No-repository status, remote-free init/commit/history, and later empty-remote link/push passed",
+    "No-repository status, rejected initialize, read-only legacy hosted history, and its empty-remote link/push passed",
   );
 } finally {
   await mf.dispose();

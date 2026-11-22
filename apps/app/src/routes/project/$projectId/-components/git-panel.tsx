@@ -13,9 +13,13 @@ import { z } from "zod";
 
 import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
 import type { GitAction, GitResult } from "#/lib/git";
+import { gitProvider, gitProviders } from "#/lib/git-providers";
 import { gitAction } from "#/lib/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
+
+const hostedNotice =
+  "Texfolia no longer hosts Git repositories. This project still has history stored here. Link an empty repository to push it, or remove it.";
 
 export function GitPanel() {
   const {
@@ -142,6 +146,8 @@ export function GitPanel() {
     }
   }
   const status = result?.status;
+  // A repository from the removed in-app initialize: history, but no remote.
+  const hosted = !!status && !status.remote && !!status.branch;
   return (
     <section aria-label="Git" data-testid="git-panel">
       <div className="space-y-3 p-2 text-xs" aria-busy={!!busy}>
@@ -177,30 +183,12 @@ export function GitPanel() {
           !status.remote &&
           (canWrite ? (
             <div className="space-y-3">
-              {!status.branch && (
-                <>
-                  <p className="font-medium">Initialize or link repository</p>
-                  <p className="text-muted-foreground">
-                    Git is optional. Initialize to keep commits and history in
-                    Texfolia, or link an empty remote.
-                  </p>
-                  <Button
-                    size="sm"
-                    disabled={!!busy}
-                    onClick={() => void act({ kind: "initialize" })}
-                  >
-                    {busy === "initialize"
-                      ? "Initializing…"
-                      : "Initialize repository"}
-                  </Button>
-                </>
-              )}
-              {status.branch && (
-                <p className="text-muted-foreground">
-                  Repository hosted by Texfolia. Link an empty remote when you
-                  want to push your history.
-                </p>
-              )}
+              <p className="font-medium">Link a repository</p>
+              <p className="text-muted-foreground">
+                {hosted
+                  ? hostedNotice
+                  : `Git is optional and works through ${gitProviders.map((p) => p.label).join(" or ")}. Link an empty repository to commit, push and pull this project.`}
+              </p>
               <GitRemoteForm
                 mode="link"
                 disabled={!!busy}
@@ -224,12 +212,20 @@ export function GitPanel() {
             </div>
           ) : (
             <p className="text-muted-foreground">
-              {status.branch
-                ? "Repository hosted by Texfolia."
-                : "Initialize or link repository"}
+              {hosted ? hostedNotice : "No repository is linked."}
             </p>
           ))}
-        {status?.branch && (
+        {hosted && canWrite && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!!busy}
+            onClick={() => void act({ kind: "unlink" })}
+          >
+            {busy === "unlink" ? "Removing…" : "Remove stored history"}
+          </Button>
+        )}
+        {status?.branch && status.remote && (
           <>
             <div className="flex min-w-0 items-center gap-2">
               {status.remote && (
@@ -276,9 +272,7 @@ export function GitPanel() {
                   }
                 }}
               >
-                Connect{" "}
-                {status.remote.provider === "github" ? "GitHub" : "GitLab"}{" "}
-                access
+                Connect {gitProvider(status.remote.provider).label} access
               </Button>
             )}
             <label className="block space-y-1">

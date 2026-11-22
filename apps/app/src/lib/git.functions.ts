@@ -5,7 +5,12 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { ensureSession } from "./auth.functions";
-import { gitActionSchema, gitScopes, gitRemoteSchema } from "./git";
+import { gitActionSchema, gitRemoteSchema } from "./git";
+import {
+  gitProviders,
+  hasRepositoryAccess,
+  type GitProvider,
+} from "./git-providers";
 import { projectNameSchema } from "./project.schema";
 
 export const getGitAccounts = createServerFn({ method: "GET" }).handler(
@@ -15,18 +20,14 @@ export const getGitAccounts = createServerFn({ method: "GET" }).handler(
       .select({ provider: account.providerId, scope: account.scope })
       .from(account)
       .where(eq(account.userId, session.user.id));
-    return {
-      github: accounts.some(
-        (a) =>
-          a.provider === "github" &&
-          gitScopes.github.every((s) => a.scope?.split(/[ ,]+/).includes(s)),
-      ),
-      gitlab: accounts.some(
-        (a) =>
-          a.provider === "gitlab" &&
-          gitScopes.gitlab.every((s) => a.scope?.split(/[ ,]+/).includes(s)),
-      ),
-    };
+    return Object.fromEntries(
+      gitProviders.map(({ id }) => [
+        id,
+        accounts.some(
+          (a) => a.provider === id && hasRepositoryAccess(id, a.scope),
+        ),
+      ]),
+    ) as Record<GitProvider, boolean>;
   },
 );
 

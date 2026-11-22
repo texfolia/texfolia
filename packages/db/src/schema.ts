@@ -83,8 +83,11 @@ export const projectGit = pgTable("project_git", {
   projectId: uuid("project_id")
     .primaryKey()
     .references(() => project.id, { onDelete: "cascade" }),
+  // Null only for legacy Texfolia-hosted repositories, which can be read, linked
+  // to an empty remote or unlinked (NAT-413). New rows always have a remote.
   provider: text("provider"),
   url: text("url"),
+  // Working clone of the remote, cached so actions need not re-clone.
   objectKey: text("object_key").notNull(),
   // Current branch, cached so opening a project needn't restore the repository.
   branch: text("branch"),

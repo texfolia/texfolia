@@ -1,25 +1,27 @@
 import { z } from "zod";
 
-export const gitProviderSchema = z.enum(["github", "gitlab"]);
-export type GitProvider = z.infer<typeof gitProviderSchema>;
-export const gitScopes = {
-  github: ["repo"],
-  gitlab: ["read_repository", "write_repository"],
-} satisfies Record<GitProvider, string[]>;
+import {
+  gitHostsLabel,
+  gitProviderForHost,
+  gitProviderIds,
+  type GitProvider,
+} from "./git-providers";
+
+export type { GitProvider } from "./git-providers";
+// Git in Texfolia always works through a linked remote on an integrated platform
+// (NAT-413). Platform specifics live in ./git-providers.
+export const gitProviderSchema = z.enum(gitProviderIds);
+export const gitRemoteMessage = `Enter an HTTPS repository URL on ${gitHostsLabel}.`;
 export const gitRemoteSchema = z
   .string()
   .url()
   .transform((value, ctx) => {
     const url = new URL(value);
-    const provider: GitProvider | null =
-      url.hostname === "github.com"
-        ? "github"
-        : url.hostname === "gitlab.com"
-          ? "gitlab"
-          : null;
+    const adapter = gitProviderForHost(url.hostname);
     const path = url.pathname.replace(/\.git\/?$/, "").replace(/\/$/, "");
+    const segments = path.split("/").slice(1);
     if (
-      !provider ||
+      !adapter ||
       url.protocol !== "https:" ||
       url.port ||
       url.username ||
@@ -27,16 +29,14 @@ export const gitRemoteSchema = z
       url.search ||
       url.hash ||
       !/^\/[\w.-]+(?:\/[\w.-]+)+$/.test(path) ||
-      path.split("/").some((p) => p === "." || p === "..") ||
-      (provider === "github" && path.split("/").length !== 3)
+      segments.some((p) => p === "." || p === "..") ||
+      !adapter.isRepositoryPath(segments)
     ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Enter an HTTPS repository URL on github.com or gitlab.com.",
-      });
+      ctx.addIssue({ code: "custom", message: gitRemoteMessage });
       return z.NEVER;
     }
-    return { provider, url: `https://${url.hostname}${path}.git` };
+    const provider: GitProvider = adapter.id;
+    return { provider, url: `https://${adapter.host}${path}.git` };
   });
 export const gitBranchSchema = z
   .string()
@@ -62,7 +62,6 @@ export const gitBranchSchema = z
     "Enter a valid git branch name.",
   );
 export const gitActionSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("initialize") }),
   z.object({ kind: z.literal("status") }),
   z.object({ kind: z.literal("diff") }),
   z.object({ kind: z.literal("fetch") }),

@@ -11,7 +11,7 @@ import { useState } from "react";
 import { connectGitAccount } from "#/components/git-remote-form";
 import { getConnections } from "#/lib/account-settings.functions";
 import { authClient } from "#/lib/auth-client";
-import { gitScopes } from "#/lib/git";
+import { hasRepositoryAccess, isGitProvider } from "#/lib/git-providers";
 export const Route = createFileRoute("/settings/connections")({
   loader: () => getConnections(),
   component: ConnectionsPage,
@@ -41,14 +41,10 @@ function ConnectionsPage() {
       )}
       {providers.map(({ id, label }) => {
         const linked = accounts.filter((account) => account.provider === id);
-        const git = id === "github" || id === "gitlab";
+        const git = isGitProvider(id);
         const repoAccess =
           git &&
-          linked.some((account) =>
-            gitScopes[id].every((scope) =>
-              account.scope?.split(/[ ,]+/).includes(scope),
-            ),
-          );
+          linked.some((account) => hasRepositoryAccess(id, account.scope));
         return (
           <Item key={id} variant="outline">
             <ItemContent>

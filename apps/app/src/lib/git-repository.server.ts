@@ -16,7 +16,11 @@ const maxRepositoryBytes = 20 * 1024 * 1024;
 const storedGitSchema = z.record(z.string(), z.string());
 export type GitFiles = Record<string, Uint8Array>;
 
-export function gitHttp(url: string, token: string): git.HttpClient {
+export function gitHttp(
+  url: string,
+  token: string,
+  username = "oauth2",
+): git.HttpClient {
   return {
     async request(request) {
       const target = new URL(request.url);
@@ -32,7 +36,7 @@ export function gitHttp(url: string, token: string): git.HttpClient {
       if (request.body)
         for await (const part of request.body) parts.push(new Uint8Array(part));
       const headers = new Headers(request.headers);
-      headers.set("Authorization", `Basic ${btoa(`oauth2:${token}`)}`);
+      headers.set("Authorization", `Basic ${btoa(`${username}:${token}`)}`);
       const response = await fetch(target, {
         method: request.method,
         headers,
@@ -76,6 +80,8 @@ export function gitHttp(url: string, token: string): git.HttpClient {
   };
 }
 
+// A working clone of the linked remote. The remote is the source of truth; this
+// copy only carries the index, branches and commits not yet pushed (NAT-413).
 export class GitRepository {
   private volume = new Volume();
   readonly fs = createFsFromVolume(this.volume);
