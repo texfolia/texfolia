@@ -13,10 +13,10 @@ import {
 } from "@texfolia/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
 
-import type { Features } from "#/lib/features";
 import type { Project } from "#/lib/project.functions";
 
 import { ProjectActions } from "./project-actions";
+import type { Features } from "./project-table-features";
 
 const columnHelper = createColumnHelper<Features, Project>();
 export function initials(name: string) {

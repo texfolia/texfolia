@@ -52,7 +52,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
 import { useEffect, useRef, useState } from "react";
 
-import { features } from "#/lib/features";
 import {
   useProjects,
   useProjectsPagination,
@@ -63,6 +62,7 @@ import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { NewProjectDialog } from "./new-project-dialog";
 import { ProjectAccountMenu } from "./project-account-menu";
 import { columns } from "./project-columns";
+import { features } from "./project-table-features";
 
 export function ProjectList({
   user,

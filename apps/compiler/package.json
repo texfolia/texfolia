@@ -22,10 +22,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "latest",
+    "@cloudflare/workers-types": "5.20261031.1",
     "@texfolia/config": "workspace:*",
     "@texfolia/db": "workspace:*",
-    "@types/bun": "latest",
+    "@types/bun": "^1.4.4",
     "typescript": "^6.0.2",
     "wrangler": "^4.70.0"
   }
