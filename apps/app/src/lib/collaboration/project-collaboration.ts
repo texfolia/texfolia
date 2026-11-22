@@ -11,16 +11,13 @@ import type { GitAction } from "../git";
 import { runGit } from "../git.server";
 import { liveProjectAccessIntervalMs } from "../live-project.server";
 import { lockProject, shareLinkIdOf } from "../project-access.server";
-import {
-  decodeSource,
-  encodeSource,
-  type saveSourceSchema,
-} from "../project-source";
+import { decodeSource, type saveSourceSchema } from "../project-source";
 import { invalidateSourceBuild } from "../project-source.server";
 import {
   awarenessFrame,
-  clientMessageSchema,
-  maxCollaborationBytes,
+  decodeClientMessage,
+  encodeServerMessage,
+  outdatedClientMessage,
   readAwareness,
   type ServerMessage,
 } from "./protocol";
@@ -47,8 +44,14 @@ const attachmentSchema = z.object({
   name: z.string().max(200),
   clientId: z.number().int().nonnegative(),
   awareness: z
-    .object({ clock: z.number(), update: z.string(), at: z.number() })
+    .object({
+      clock: z.number(),
+      update: z.instanceof(Uint8Array),
+      at: z.number(),
+    })
     .nullable(),
+  // False for tabs still on the base64 JSON protocol, which only get told to reload.
+  binary: z.boolean().default(false),
 });
 type Attachment = z.infer<typeof attachmentSchema>;
 type DocumentRow = {
@@ -383,19 +386,32 @@ export class ProjectCollaboration extends DurableObject<Env> {
       await this.verifyAccess(info).catch(() => {});
   }
 
-  private async send(ws: WebSocket, message: ServerMessage) {
+  private send(ws: WebSocket, message: ServerMessage) {
+    return this.deliver(
+      ws,
+      message.type === "awareness",
+      encodeServerMessage(message),
+    );
+  }
+
+  private async deliver(
+    ws: WebSocket,
+    awareness: boolean,
+    frame: string | Uint8Array,
+  ) {
     if (ws.readyState !== WebSocket.OPEN) return;
     const info = attachmentSchema.parse(ws.deserializeAttachment());
+    // Outdated tabs cannot read binary frames.
+    if (!info.binary && typeof frame !== "string") return;
     // Anonymous share-link viewers never see who else is in the project.
-    if (message.type === "awareness" && shareLinkIdOf(info.userId) !== null)
-      return;
+    if (awareness && shareLinkIdOf(info.userId) !== null) return;
     try {
       await this.verifyAccess(info);
     } catch {
       ws.close(1008, "Project access could not be verified");
       return;
     }
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+    if (ws.readyState === WebSocket.OPEN) ws.send(frame);
   }
 
   private async broadcast(
@@ -403,8 +419,11 @@ export class ProjectCollaboration extends DurableObject<Env> {
     message: ServerMessage,
     except?: WebSocket,
   ) {
+    // Encode once for every peer.
+    const frame = encodeServerMessage(message);
     for (const peer of this.ctx.getWebSockets(nodeId))
-      if (peer !== except) await this.send(peer, message);
+      if (peer !== except)
+        await this.deliver(peer, message.type === "awareness", frame);
   }
 
   override async fetch(request: Request) {
@@ -421,7 +440,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         }),
       );
       this.remember(info.userId, generation, canWrite);
-      await this.document(info, { node });
+      if (info.binary) await this.document(info, { node });
       const pair = new WebSocketPair();
       pair[1].serializeAttachment(info);
       this.ctx.acceptWebSocket(pair[1], [info.nodeId]);
@@ -473,10 +492,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
     const alarm = await this.ctx.storage.getAlarm();
     if (alarm === null || alarm > flushAt)
       await this.ctx.storage.setAlarm(flushAt);
-    await this.broadcast(info.nodeId, {
-      type: "update",
-      update: encodeSource(bytes),
-    });
+    await this.broadcast(info.nodeId, { type: "update", update: bytes });
   }
 
   override async webSocketMessage(
@@ -487,14 +503,17 @@ export class ProjectCollaboration extends DurableObject<Env> {
       if (ws.readyState !== WebSocket.OPEN) return;
       let requestId: string | undefined;
       try {
-        if (
-          typeof message !== "string" ||
-          message.length > 4 * Math.ceil(maxCollaborationBytes / 3) + 1024
-        )
-          throw new Error("Invalid collaboration message");
-        const data = clientMessageSchema.parse(JSON.parse(message));
-        if (data.type === "save") requestId = data.id;
         const info = attachmentSchema.parse(ws.deserializeAttachment());
+        if (!info.binary) {
+          // The tab keeps its offline edits and merges them after reloading.
+          await this.send(ws, {
+            type: "error",
+            message: outdatedClientMessage,
+          });
+          return;
+        }
+        const data = decodeClientMessage(message);
+        if (data.type === "save") requestId = data.id;
         const access = await this.verifyAccess(info);
         const doc = await this.document(info);
         switch (data.type) {
@@ -502,10 +521,8 @@ export class ProjectCollaboration extends DurableObject<Env> {
             const row = this.row(info.nodeId);
             await this.send(ws, {
               type: "sync",
-              update: encodeSource(
-                Y.encodeStateAsUpdate(doc, decodeSource(data.vector)),
-              ),
-              vector: encodeSource(Y.encodeStateVector(doc)),
+              update: Y.encodeStateAsUpdate(doc, data.vector),
+              vector: Y.encodeStateVector(doc),
               dirty: Boolean(row?.dirty),
               objectKey: row?.object_key ?? null,
               canWrite: access.canWrite,
@@ -527,7 +544,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
           case "save": {
             if (!access.canWrite)
               throw new Error("Viewers cannot edit documents");
-            if (data.update) await this.apply(info, decodeSource(data.update));
+            if (data.type === "update") await this.apply(info, data.update);
             if (data.type === "save") {
               const version = await this.flush(info.nodeId);
               if (!version) throw new Error("File not found");
@@ -544,14 +561,14 @@ export class ProjectCollaboration extends DurableObject<Env> {
             // Share-link viewers are not shown to collaborators.
             if (shareLinkIdOf(info.userId) !== null) break;
             const presence = readAwareness(
-              decodeSource(data.update),
+              data.update,
               info.clientId,
               this.user(info),
             );
             if (info.awareness && presence.clock < info.awareness.clock) break;
             info.awareness = {
               clock: presence.clock,
-              update: encodeSource(presence.frame),
+              update: presence.frame,
               at: Date.now(),
             };
             ws.serializeAttachment(info);
@@ -686,6 +703,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         name: options.name ?? "Collaborator",
         clientId: 0,
         awareness: null,
+        binary: false,
       };
       const access = await this.withDb((db) =>
         collaborationAccess(db, info.projectId, info.nodeId, userId, {
@@ -809,25 +827,22 @@ export class ProjectCollaboration extends DurableObject<Env> {
         info.nodeId,
       );
     });
-    await this.broadcast(info.nodeId, {
-      type: "update",
-      update: encodeSource(update),
-    });
+    await this.broadcast(info.nodeId, { type: "update", update });
   }
 
   override async webSocketClose(ws: WebSocket, code: number, reason: string) {
     return this.serial(async () => {
       const info = attachmentSchema.parse(ws.deserializeAttachment());
+      if (!info.binary) {
+        ws.close(code, reason);
+        return;
+      }
       const update = awarenessFrame(
         info.clientId,
         (info.awareness?.clock ?? 0) + 1,
         null,
       );
-      await this.broadcast(
-        info.nodeId,
-        { type: "awareness", update: encodeSource(update) },
-        ws,
-      );
+      await this.broadcast(info.nodeId, { type: "awareness", update }, ws);
       ws.close(code, reason);
     });
   }

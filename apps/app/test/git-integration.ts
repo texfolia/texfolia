@@ -21,9 +21,14 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as Y from "yjs";
 import { z } from "zod";
 
+import {
+  collaborationProtocol,
+  decodeServerMessage,
+  encodeClientMessage,
+  protocolSearchParam,
+} from "../src/lib/collaboration/protocol";
 import { gitScopes, type GitProvider } from "../src/lib/git";
 import { GitRepository, gitHttp } from "../src/lib/git-repository.server";
-import { decodeSource, encodeSource } from "../src/lib/project-source";
 import { createProject } from "../src/lib/project.server";
 import { gitServer, gitCommand } from "./git/http-server";
 
@@ -268,7 +273,7 @@ try {
       .update(sessionToken)
       .digest("base64");
     const socketResponse = await mf.dispatchFetch(
-      `${(await mf.ready).origin}/api/collaboration/${projectId}/${node.id}`,
+      `${(await mf.ready).origin}/api/collaboration/${projectId}/${node.id}?${protocolSearchParam}=${collaborationProtocol}`,
       {
         headers: {
           Upgrade: "websocket",
@@ -284,46 +289,41 @@ try {
     const doc = new Y.Doc();
     const sync = new Promise<void>((resolve, reject) => {
       socket.addEventListener("message", (event) => {
-        const frame = z
-          .looseObject({
-            type: z.string(),
-            update: z.string().optional(),
-            message: z.string().optional(),
-          })
-          .parse(JSON.parse(String(event.data)));
+        const frame = decodeServerMessage(event.data);
         if (frame.type === "error") reject(new Error(frame.message));
-        if (frame.update) Y.applyUpdate(doc, decodeSource(frame.update));
+        if (frame.type === "sync" || frame.type === "update")
+          Y.applyUpdate(doc, frame.update);
         if (frame.type === "sync") resolve();
       });
     });
     socket.send(
-      JSON.stringify({
+      encodeClientMessage({
         type: "sync",
-        vector: encodeSource(Y.encodeStateVector(doc)),
+        vector: Y.encodeStateVector(doc),
       }),
     );
     await sync;
     const vector = Y.encodeStateVector(doc);
     doc.getText("source").insert(0, "live edit\n");
     socket.send(
-      JSON.stringify({
+      encodeClientMessage({
         type: "update",
-        update: encodeSource(Y.encodeStateAsUpdate(doc, vector)),
+        update: Y.encodeStateAsUpdate(doc, vector),
       }),
     );
     // A sync roundtrip orders the preceding edit ahead of the git RPC.
     await new Promise<void>((resolve) => {
       const listener = (event: { data: unknown }) => {
-        if (JSON.parse(String(event.data)).type === "sync") {
+        if (decodeServerMessage(event.data).type === "sync") {
           socket.removeEventListener("message", listener);
           resolve();
         }
       };
       socket.addEventListener("message", listener);
       socket.send(
-        JSON.stringify({
+        encodeClientMessage({
           type: "sync",
-          vector: encodeSource(Y.encodeStateVector(doc)),
+          vector: Y.encodeStateVector(doc),
         }),
       );
     });

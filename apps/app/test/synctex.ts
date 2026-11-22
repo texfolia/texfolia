@@ -6,9 +6,11 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import { clientMessageSchema } from "../src/lib/collaboration/protocol";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "../src/lib/collaboration/protocol";
 import { hashSource } from "../src/lib/compile/source-sync";
-import { encodeSource, decodeSource } from "../src/lib/project-source";
 import type { ProjectDetails } from "../src/lib/project.functions";
 
 const fixture = new URL(
@@ -77,7 +79,7 @@ const persisted = new Map<
   string,
   { dirty: boolean; objectKey: string | null }
 >();
-const saveRequests: { nodeId: string; update?: string }[] = [];
+const saveRequests: { nodeId: string }[] = [];
 for (const [id, path] of [
   [mainId, "main.tex"],
   [chapterId, "chapters/one.tex"],
@@ -167,33 +169,27 @@ const backend = Bun.serve({
         socket.send("pong");
         return;
       }
-      const message = clientMessageSchema.parse(JSON.parse(String(raw)));
+      const message = decodeClientMessage(raw);
       const doc = documents.get(socket.data.nodeId);
       const state = persisted.get(socket.data.nodeId);
       assert(doc && state);
       if (message.type === "sync")
         socket.send(
-          JSON.stringify({
+          encodeServerMessage({
             type: "sync",
-            update: encodeSource(Y.encodeStateAsUpdate(doc)),
-            vector: encodeSource(Y.encodeStateVector(doc)),
+            update: Y.encodeStateAsUpdate(doc),
+            vector: Y.encodeStateVector(doc),
             ...state,
             canWrite: true,
             user: { name: "SyncTeX test", color: "#123456" },
           }),
         );
-      if (
-        (message.type === "update" || message.type === "save") &&
-        message.update
-      ) {
-        Y.applyUpdate(doc, decodeSource(message.update));
+      if (message.type === "update") {
+        Y.applyUpdate(doc, message.update);
         state.dirty = true;
       }
       if (message.type === "save") {
-        saveRequests.push({
-          nodeId: socket.data.nodeId,
-          update: message.update,
-        });
+        saveRequests.push({ nodeId: socket.data.nodeId });
         const value = doc.getText("source").toString();
         const objectKey = `projects/${projectId}/sources/${await hashSource(new TextEncoder().encode(value))}`;
         const updatedAt = Date.now();
@@ -448,7 +444,7 @@ try {
   await previewResponse;
   assert.deepEqual(
     saveRequests.slice(savesBefore),
-    [{ nodeId: chapterId, update: undefined }],
+    [{ nodeId: chapterId }],
     "Saving sends one payload-free request for the one edited file",
   );
   assert(previewRequested);

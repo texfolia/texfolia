@@ -15,12 +15,12 @@ import type { Miniflare } from "miniflare";
 import * as Y from "yjs";
 
 import {
-  serverMessageSchema,
+  decodeServerMessage,
+  encodeClientMessage,
   type ClientMessage,
   type ServerMessage,
 } from "../../src/lib/collaboration/protocol";
 import { hashSource } from "../../src/lib/compile/source-sync";
-import { decodeSource, encodeSource } from "../../src/lib/project-source";
 import { createProject } from "../../src/lib/project.server";
 
 async function eventually(
@@ -98,7 +98,7 @@ export async function checkDeletion({
     return { projectId: created.id, node };
   }
   async function connect(projectId: string, nodeId: string) {
-    const url = `${origin}/api/collaboration/${projectId}/${nodeId}?clientId=123`;
+    const url = `${origin}/api/collaboration/${projectId}/${nodeId}?protocol=2&clientId=123`;
     const response = await mf.dispatchFetch(url, {
       headers: { Upgrade: "websocket", Cookie: cookie, Origin: origin },
     });
@@ -112,15 +112,15 @@ export async function checkDeletion({
       closeCode = event.code;
     });
     socket.addEventListener("message", (event) => {
-      const message = serverMessageSchema.parse(JSON.parse(String(event.data)));
+      const message = decodeServerMessage(event.data);
       messages.push(message);
       if (message.type === "sync" || message.type === "update")
-        Y.applyUpdate(doc, decodeSource(message.update));
+        Y.applyUpdate(doc, message.update);
     });
     socket.accept();
     const send = (message: ClientMessage) =>
-      socket.send(JSON.stringify(message));
-    send({ type: "sync", vector: encodeSource(Y.encodeStateVector(doc)) });
+      socket.send(encodeClientMessage(message));
+    send({ type: "sync", vector: Y.encodeStateVector(doc) });
     await eventually(
       () => messages.some((m) => m.type === "sync"),
       "Initial sync missing",
@@ -132,10 +132,11 @@ export async function checkDeletion({
       async edit(value: string, save = false) {
         const vector = Y.encodeStateVector(doc);
         doc.getText("source").insert(0, value);
-        const update = encodeSource(Y.encodeStateAsUpdate(doc, vector));
+        const update = Y.encodeStateAsUpdate(doc, vector);
         const id = crypto.randomUUID();
         messages.length = 0;
-        send(save ? { type: "save", id, update } : { type: "update", update });
+        send({ type: "update", update });
+        if (save) send({ type: "save", id });
         await eventually(
           () =>
             messages.some((m) =>

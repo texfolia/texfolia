@@ -6,7 +6,10 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import { clientMessageSchema } from "../src/lib/collaboration/protocol";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "../src/lib/collaboration/protocol";
 import { compileDeltaSchema, hashSource } from "../src/lib/compile/source-sync";
 import {
   createNodeSchema,
@@ -106,26 +109,22 @@ const backend = Bun.serve({
         socket.send("pong");
         return;
       }
-      const message = clientMessageSchema.parse(JSON.parse(String(raw)));
+      const message = decodeClientMessage(raw);
       const doc = documents.get(socket.data.nodeId);
       assert(doc);
       if (message.type === "sync")
         socket.send(
-          JSON.stringify({
+          encodeServerMessage({
             type: "sync",
-            update: encodeSource(Y.encodeStateAsUpdate(doc)),
-            vector: encodeSource(Y.encodeStateVector(doc)),
+            update: Y.encodeStateAsUpdate(doc),
+            vector: Y.encodeStateVector(doc),
             dirty: true,
             objectKey: null,
             canWrite: true,
             user: { name: "Upload test", color: "#123456" },
           }),
         );
-      if (
-        (message.type === "update" || message.type === "save") &&
-        message.update
-      )
-        Y.applyUpdate(doc, decodeSource(message.update));
+      if (message.type === "update") Y.applyUpdate(doc, message.update);
       if (message.type === "save") {
         const value = doc.getText("source").toString();
         const bytes = new TextEncoder().encode(value);

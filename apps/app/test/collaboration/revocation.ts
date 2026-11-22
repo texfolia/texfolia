@@ -16,11 +16,11 @@ import { z } from "zod";
 
 import {
   awarenessFrame,
-  serverMessageSchema,
+  decodeServerMessage,
+  encodeClientMessage,
   type ClientMessage,
   type ServerMessage,
 } from "../../src/lib/collaboration/protocol";
-import { decodeSource, encodeSource } from "../../src/lib/project-source";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,
@@ -86,7 +86,7 @@ export async function checkRevocation({
         Cookie: cookies.get(userId) ?? "",
         Origin: origin,
       });
-      const socketUrl = `${origin}/api/collaboration/${projectId}/${nodeId}?clientId=123`;
+      const socketUrl = `${origin}/api/collaboration/${projectId}/${nodeId}?protocol=2&clientId=123`;
       const eventsUrl = `${origin}/api/compile/${projectId}?events=1`;
       try {
         if (ownership === "organization") {
@@ -144,18 +144,16 @@ export async function checkRevocation({
             closeCode = event.code;
           });
           socket.addEventListener("message", (event) => {
-            const message = serverMessageSchema.parse(
-              JSON.parse(String(event.data)),
-            );
+            const message = decodeServerMessage(event.data);
             messages.push(message);
             if (message.type === "sync" || message.type === "update")
-              Y.applyUpdate(doc, decodeSource(message.update));
+              Y.applyUpdate(doc, message.update);
           });
           const send = (message: ClientMessage) =>
-            socket.send(JSON.stringify(message));
+            socket.send(encodeClientMessage(message));
           send({
             type: "sync",
-            vector: encodeSource(Y.encodeStateVector(doc)),
+            vector: Y.encodeStateVector(doc),
           });
           await eventually(
             () => messages.some((m) => m.type === "sync"),
@@ -196,15 +194,13 @@ export async function checkRevocation({
               author.doc.getText("source").insert(0, "k");
               author.send({
                 type: "update",
-                update: encodeSource(Y.encodeStateAsUpdate(author.doc, vector)),
+                update: Y.encodeStateAsUpdate(author.doc, vector),
               });
               author.send({
                 type: "awareness",
-                update: encodeSource(
-                  awarenessFrame(123, attempt * 10 + index + 2, {
-                    cursor: null,
-                  }),
-                ),
+                update: awarenessFrame(123, attempt * 10 + index + 2, {
+                  cursor: null,
+                }),
               });
             }
             const expected = author.doc.getText("source").toString();
@@ -251,7 +247,7 @@ export async function checkRevocation({
         recipient.doc.getText("source").insert(0, accepted);
         recipient.send({
           type: "update",
-          update: encodeSource(Y.encodeStateAsUpdate(recipient.doc)),
+          update: Y.encodeStateAsUpdate(recipient.doc),
         });
         await eventually(
           () => owner.doc.getText("source").toString() === accepted,
@@ -273,7 +269,7 @@ export async function checkRevocation({
           });
           recipient.send({
             type: "sync",
-            vector: encodeSource(Y.encodeStateVector(recipient.doc)),
+            vector: Y.encodeStateVector(recipient.doc),
           });
           await eventually(
             () =>
@@ -284,7 +280,7 @@ export async function checkRevocation({
           denied.getText("source").insert(0, "DENIED");
           recipient.send({
             type: "update",
-            update: encodeSource(Y.encodeStateAsUpdate(denied)),
+            update: Y.encodeStateAsUpdate(denied),
           });
           denied.destroy();
           await eventually(
@@ -349,7 +345,7 @@ export async function checkRevocation({
           owner.doc.getText("source").insert(0, secret);
           owner.send({
             type: "update",
-            update: encodeSource(Y.encodeStateAsUpdate(owner.doc)),
+            update: Y.encodeStateAsUpdate(owner.doc),
           });
           await eventually(
             () => viewer.doc.getText("source").toString().includes(secret),
@@ -361,7 +357,7 @@ export async function checkRevocation({
           ).length;
           owner.send({
             type: "awareness",
-            update: encodeSource(awarenessFrame(123, 1, { cursor: null })),
+            update: awarenessFrame(123, 1, { cursor: null }),
           });
           await eventually(
             () =>

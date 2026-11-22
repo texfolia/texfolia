@@ -9,10 +9,12 @@ import {
 import * as Y from "yjs";
 
 import { shareSearchParam } from "../project-share-links.schema";
-import { decodeSource, encodeSource } from "../project-source";
 import { collaborationCachePrefix, stopDocumentCaching } from "./cache";
 import {
-  serverMessageSchema,
+  collaborationProtocol,
+  decodeServerMessage,
+  encodeClientMessage,
+  protocolSearchParam,
   type ClientMessage,
   type ServerMessage,
 } from "./protocol";
@@ -91,7 +93,7 @@ export class CollaborativeFile {
     if (!canWrite) this.setStatus({ canWrite: false });
     this.send({
       type: "sync",
-      vector: encodeSource(Y.encodeStateVector(this.doc)),
+      vector: Y.encodeStateVector(this.doc),
     });
   }
 
@@ -142,7 +144,7 @@ export class CollaborativeFile {
     const local = origin !== this && origin !== this.persistence;
     if (this.status.ready) this.options.onChange(this.text.toString(), local);
     if (local && this.synchronized && this.status.canWrite)
-      this.send({ type: "update", update: encodeSource(update) });
+      this.send({ type: "update", update });
   };
 
   private awarenessChanged = (
@@ -163,9 +165,7 @@ export class CollaborativeFile {
       return;
     this.send({
       type: "awareness",
-      update: encodeSource(
-        encodeAwarenessUpdate(this.awareness, [this.doc.clientID]),
-      ),
+      update: encodeAwarenessUpdate(this.awareness, [this.doc.clientID]),
     });
   };
 
@@ -210,7 +210,7 @@ export class CollaborativeFile {
 
   private send(message: ClientMessage) {
     if (this.socket?.readyState !== WebSocket.OPEN) return false;
-    this.socket.send(JSON.stringify(message));
+    this.socket.send(encodeClientMessage(message));
     return true;
   }
 
@@ -222,16 +222,18 @@ export class CollaborativeFile {
     );
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("clientId", String(this.doc.clientID));
+    url.searchParams.set(protocolSearchParam, collaborationProtocol);
     if (this.options.shareToken)
       url.searchParams.set(shareSearchParam, this.options.shareToken);
     const socket = new WebSocket(url);
+    socket.binaryType = "arraybuffer";
     this.socket = socket;
     socket.onopen = () => {
       if (this.socket !== socket) return;
       this.pongAt = Date.now();
       this.send({
         type: "sync",
-        vector: encodeSource(Y.encodeStateVector(this.doc)),
+        vector: Y.encodeStateVector(this.doc),
       });
       this.heartbeat = setInterval(() => {
         if (
@@ -249,12 +251,10 @@ export class CollaborativeFile {
         return;
       }
       try {
-        if (typeof event.data !== "string")
-          throw new Error("Invalid collaboration response");
-        const data = serverMessageSchema.parse(JSON.parse(event.data));
+        const data = decodeServerMessage(event.data);
         switch (data.type) {
           case "sync": {
-            Y.applyUpdate(this.doc, decodeSource(data.update), this);
+            Y.applyUpdate(this.doc, data.update, this);
             this.synchronized = true;
             this.attempts = 0;
             this.setStatus({
@@ -269,12 +269,9 @@ export class CollaborativeFile {
             });
             let dirty = data.dirty;
             if (data.canWrite) {
-              const pending = Y.encodeStateAsUpdate(
-                this.doc,
-                decodeSource(data.vector),
-              );
+              const pending = Y.encodeStateAsUpdate(this.doc, data.vector);
               if (pending.length > 2) {
-                this.send({ type: "update", update: encodeSource(pending) });
+                this.send({ type: "update", update: pending });
                 dirty = true;
               }
             }
@@ -290,14 +287,10 @@ export class CollaborativeFile {
             break;
           }
           case "update":
-            Y.applyUpdate(this.doc, decodeSource(data.update), this);
+            Y.applyUpdate(this.doc, data.update, this);
             break;
           case "awareness":
-            applyAwarenessUpdate(
-              this.awareness,
-              decodeSource(data.update),
-              this,
-            );
+            applyAwarenessUpdate(this.awareness, data.update, this);
             break;
           case "saved": {
             this.options.onSaved?.(data);

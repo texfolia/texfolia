@@ -11,7 +11,10 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import { encodeSource } from "../src/lib/project-source";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "../src/lib/collaboration/protocol";
 import type { ProjectDetails } from "../src/lib/project.functions";
 
 const projectId = crypto.randomUUID();
@@ -52,13 +55,13 @@ const backend = Bun.serve({
         socket.send("pong");
         return;
       }
-      const message = JSON.parse(String(raw));
+      const message = decodeClientMessage(raw);
       if (message.type === "sync")
         socket.send(
-          JSON.stringify({
+          encodeServerMessage({
             type: "sync",
-            update: encodeSource(Y.encodeStateAsUpdate(doc)),
-            vector: encodeSource(Y.encodeStateVector(doc)),
+            update: Y.encodeStateAsUpdate(doc),
+            vector: Y.encodeStateVector(doc),
             dirty: true,
             objectKey: null,
             canWrite: true,
