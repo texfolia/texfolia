@@ -12,13 +12,12 @@ import { and, eq, isNull, inArray } from "drizzle-orm";
 import * as git from "isomorphic-git";
 
 import { createAuth } from "./auth";
+import { gitRemoteSchema, type GitAction, type GitResult } from "./git";
 import {
-  gitScopes,
-  gitRemoteSchema,
-  type GitAction,
+  gitProvider,
+  hasRepositoryAccess,
   type GitProvider,
-  type GitResult,
-} from "./git";
+} from "./git-providers";
 import { GitRepository, gitHttp, type GitFiles } from "./git-repository.server";
 import { lockProject, type ProjectTransaction } from "./project-access.server";
 import { projectPaths } from "./project-paths";
@@ -42,14 +41,9 @@ export async function gitAccount({
     .select()
     .from(account)
     .where(and(eq(account.userId, userId), eq(account.providerId, provider)));
-  if (
-    !linked ||
-    !gitScopes[provider].every((scope) =>
-      linked.scope?.split(/[ ,]+/).includes(scope),
-    )
-  )
+  if (!linked || !hasRepositoryAccess(provider, linked.scope))
     throw new Error(
-      `Connect ${provider === "github" ? "GitHub" : "GitLab"} repository access first.`,
+      `Connect ${gitProvider(provider).label} repository access first.`,
     );
   const token = await createAuth(db).api.getAccessToken({
     body: { accountId: linked.id, userId },
@@ -244,6 +238,7 @@ async function replaceFiles(
 }
 
 // Status bar branch from the cached row; the full status restores the repository.
+// Legacy Texfolia-hosted repositories (no remote) show no branch.
 export async function gitBranch({
   db,
   projectId,
@@ -256,12 +251,17 @@ export async function gitBranch({
   return db.transaction(async (tx) => {
     await lockProject({ tx, projectId, userId, access: "read" });
     const [linked] = await tx
-      .select({ branch: projectGit.branch })
+      .select({ branch: projectGit.branch, url: projectGit.url })
       .from(projectGit)
       .where(eq(projectGit.projectId, projectId));
-    return linked?.branch ?? null;
+    return linked?.url ? linked.branch : null;
   });
 }
+
+// Repositories created by the removed "initialize" action have no remote. They can
+// still be read, linked to an empty remote (keeping history) or unlinked.
+const hostedRepositoryMessage =
+  "Texfolia no longer hosts Git repositories. Link an empty repository to push this history, or unlink it.";
 
 export async function runGit({
   db,
@@ -285,6 +285,7 @@ export async function runGit({
     changes: [],
     commits: [],
   };
+  let host = "the host";
   try {
     // Short snapshot transaction: no Git host requests while the project row is locked.
     const snapshot = await db.transaction(async (tx) => {
@@ -323,13 +324,18 @@ export async function runGit({
       throw new Error(
         "Unlink the current repository before connecting another.",
       );
-    if (!connecting && action.kind !== "initialize" && !linked)
-      throw new Error("Initialize or link a repository first.");
+    if (!connecting && !linked?.url && !readOnly)
+      throw new Error(
+        linked
+          ? hostedRepositoryMessage
+          : "Link a repository first, or import one as a new project.",
+      );
     const remote = connecting
       ? action.remote
       : linked?.url
         ? gitRemoteSchema.parse(linked.url)
         : null;
+    if (remote) host = gitProvider(remote.provider).label;
     const repo = saved ? GitRepository.restore(saved) : new GitRepository();
     let http: git.HttpClient | undefined;
     if (
@@ -344,14 +350,12 @@ export async function runGit({
       http = gitHttp(
         remote.url,
         await gitAccount({ db, userId: user.id, provider: remote.provider }),
+        gitProvider(remote.provider).tokenUsername,
       );
     if (connecting && http && remote) {
       if (action.kind === "import") await repo.clone(remote.url, http);
       else await repo.requireEmptyRemote(remote.url, http);
     }
-    if (action.kind === "initialize" && !linked) await repo.init();
-    if (!remote && ["push", "pull", "fetch"].includes(action.kind))
-      throw new Error("Link a remote before syncing this repository.");
     if (action.kind !== "import") repo.overlay(files);
     const author = { name: user.name || "Texfolia user", email: user.email };
     switch (action.kind) {
@@ -440,7 +444,7 @@ export async function runGit({
   } catch (error) {
     if (error instanceof git.Errors.MergeConflictError)
       throw new Error(
-        `Pull has conflicts in: ${error.data.filepaths.join(", ")}. Your working tree is unchanged. Resolve the merge on GitHub or GitLab, then pull again.`,
+        `Pull has conflicts in: ${error.data.filepaths.join(", ")}. Your working tree is unchanged. Resolve the merge on ${host}, then pull again.`,
       );
     if (error instanceof git.Errors.PushRejectedError)
       throw new Error(

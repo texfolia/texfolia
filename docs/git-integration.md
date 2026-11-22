@@ -7,19 +7,35 @@ creates, and checks out branches. Refresh git to discover newly created remote
 branches. Empty repositories start on `main`. Existing repositories retain their
 default branch. Linking refuses nonempty remotes; import those from Projects.
 
-## Projects without a remote
+## Integrations only
 
-Git is optional. Editing, compilation, collaboration, export and the assistant
-work without a `project_git` row. The Git view offers **Initialize repository** or
-the existing empty-remote link flow. Initialize creates a repository on `main`
-without contacting a host or requiring an OAuth account. Manual commits and
-history work immediately. The first commit remains an explicit user action.
+Texfolia does not host Git repositories (NAT-413). Git always works through a
+repository on an integrated platform. The platform is the source of truth for
+history. Git is optional: editing, compilation, collaboration, export and the
+assistant work without a `project_git` row. A project without one offers only the
+empty-remote link flow; import creates a new project from an existing remote.
 
-A Texfolia-hosted repository uses the same immutable R2 snapshot as a linked
-repository; its `project_git.provider` and `url` are null. Linking an empty GitHub
-or GitLab remote later adds `origin` to the existing repository, preserving local
-commits and branches so they can be pushed. Push, pull and refresh of remote
-branches require a remote. Import continues to create a new project from a remote.
+Projects initialized before NAT-413 may still have a Texfolia-hosted repository
+(`project_git.provider` and `url` are null). Its status and diff stay readable, so
+the history is visible. Every other action is refused except two. **Link** an empty
+remote adds `origin` and keeps the local commits and branches so they can be
+pushed. **Unlink** (shown as **Remove stored history**) discards them. The status
+bar shows no branch for these repositories.
+
+## Platform adapters
+
+The core Git module (`apps/app/src/lib/git.ts`, `git.server.ts`,
+`git-repository.server.ts`) speaks plain Git smart HTTP through isomorphic-git.
+Each platform is an adapter in `apps/app/src/lib/git-providers/` that supplies:
+its Better Auth provider ID, label, HTTPS host, OAuth repository scopes, the
+username sent with the token, which URL paths name a repository, and an example
+URL. Remote URL validation, account checks, the remote form, the Git view and
+Settings → Connections all read the registry in `git-providers/index.ts`.
+
+To add a platform, such as Cursor Origin or Bitbucket: register its OAuth
+provider in `packages/auth`, write an adapter, and add it to `gitProviders`.
+Platforms whose Git HTTP differs from GitHub and GitLab (for example, a token
+that is not sent as basic authentication) need a new adapter field.
 
 ## Accounts and credentials
 

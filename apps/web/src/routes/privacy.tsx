@@ -79,12 +79,12 @@ const sections: PolicySection[] = [
           and project copies are independent of the original project.
         </p>
         <p>
-          Optional Git history stores repository data on Texfolia. Git commits
-          record author names and email addresses. Connecting a GitHub or GitLab
-          repository uses provider credentials; pushing sends committed files
-          and history to that host. Unlinking discards Texfolia's repository
-          data and keeps current project files. Remote copies follow the host's
-          policies.
+          Optional Git works through a linked GitHub or GitLab repository and
+          uses your provider credentials. Texfolia keeps a working copy of that
+          repository, including commits not yet pushed. Git commits record
+          author names and email addresses; pushing sends committed files and
+          history to the host. Unlinking discards Texfolia's repository data and
+          keeps current project files. Remote copies follow the host's policies.
         </p>
       </>
     ),

@@ -4,13 +4,19 @@ import { Label } from "@texfolia/ui/label";
 import { useEffect, useState } from "react";
 
 import { authClient } from "#/lib/auth-client";
-import { gitRemoteSchema, gitScopes, type GitProvider } from "#/lib/git";
+import { gitRemoteMessage, gitRemoteSchema } from "#/lib/git";
+import {
+  gitProvider,
+  gitProviderIds,
+  gitProviders,
+  type GitProvider,
+} from "#/lib/git-providers";
 import { getGitAccounts } from "#/lib/git.functions";
 
 export async function connectGitAccount(provider: GitProvider) {
   const result = await authClient.linkSocial({
     provider,
-    scopes: gitScopes[provider],
+    scopes: [...gitProvider(provider).scopes],
     callbackURL: window.location.href,
   });
   if (result.error)
@@ -29,7 +35,13 @@ export function GitRemoteForm({
   const key = `texfolia.git.${mode}`;
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
-  const [accounts, setAccounts] = useState({ github: false, gitlab: false });
+  const [accounts, setAccounts] = useState<Record<GitProvider, boolean>>(
+    () =>
+      Object.fromEntries(gitProviderIds.map((id) => [id, false])) as Record<
+        GitProvider,
+        boolean
+      >,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -67,9 +79,7 @@ export function GitRemoteForm({
         event.preventDefault();
         setError("");
         if (!parsed.success) {
-          setError(
-            "Enter an HTTPS repository URL on github.com or gitlab.com.",
-          );
+          setError(gitRemoteMessage);
           return;
         }
         if (!accounts[parsed.data.provider]) {
@@ -109,7 +119,7 @@ export function GitRemoteForm({
           id={`git-url-${mode}`}
           type="url"
           required
-          placeholder="https://github.com/owner/repository"
+          placeholder={gitProviders[0].exampleUrl}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={disabled || busy}
@@ -117,20 +127,20 @@ export function GitRemoteForm({
       </div>
       <p className="text-muted-foreground text-xs">
         {mode === "link"
-          ? "Link an empty repository to keep these project files. Import an existing repository from Projects."
+          ? "Link an empty repository to push these project files to it. Import an existing repository from Projects."
           : "Import a public or private repository, including its git history."}
       </p>
       <Button size="sm" type="submit" disabled={disabled || busy}>
         {busy
           ? "Connecting…"
           : provider && !accounts[provider]
-            ? `Authorize ${provider === "github" ? "GitHub" : "GitLab"}`
+            ? `Authorize ${gitProvider(provider).label}`
             : mode === "import"
               ? "Import repository"
               : "Link repository"}
       </Button>
       <div className="flex flex-wrap gap-2">
-        {(["github", "gitlab"] satisfies GitProvider[]).map((p) => (
+        {gitProviders.map(({ id: p, label }) => (
           <Button
             key={p}
             type="button"
@@ -139,8 +149,7 @@ export function GitRemoteForm({
             disabled={disabled || busy}
             onClick={() => void authorize(p)}
           >
-            {accounts[p] ? "Reconnect" : "Connect"}{" "}
-            {p === "github" ? "GitHub" : "GitLab"}
+            {accounts[p] ? "Reconnect" : "Connect"} {label}
           </Button>
         ))}
       </div>

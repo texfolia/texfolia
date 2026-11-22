@@ -18,9 +18,9 @@ const sections: PolicySection[] = [
       <>
         <p>
           Texfolia provides an online LaTeX workspace with project storage,
-          compilation, collaboration, optional Git history, reviewed templates,
-          and a managed AI assistant. Available plans and features are described
-          on the <Link to="/pricing">pricing page</Link>.
+          compilation, collaboration, optional GitHub and GitLab integration,
+          reviewed templates, and a managed AI assistant. Available plans and
+          features are described on the <Link to="/pricing">pricing page</Link>.
         </p>
         <ToBeCompleted>
           Identify the legal operator, contact details, effective date, and how
@@ -152,7 +152,7 @@ const sections: PolicySection[] = [
         <p>
           Project export downloads a ZIP of current saved sources, with
           generated files optional when a build exists. Optional Git commits
-          keep versions; pushing keeps a copy on the connected repository host.
+          keep versions in a linked GitHub or GitLab repository once pushed.
           Project deletion removes access and starts server cleanup, with some
           work handled by background jobs. Account deletion is available through
           an email-confirmed flow in{" "}
