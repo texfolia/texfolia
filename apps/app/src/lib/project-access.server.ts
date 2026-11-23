@@ -1,15 +1,10 @@
-import type { Db } from "@texfolia/db";
-import {
-  member,
-  project,
-  projectCollaborator,
-  projectShareLink,
-} from "@texfolia/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { projectCollaborator, projectShareLink } from "@texfolia/db/schema";
+import { projectLock, type ProjectGrant } from "@texfolia/projects/server";
+import { and, eq } from "drizzle-orm";
 
-export type ProjectTransaction = Parameters<
-  Parameters<Db["transaction"]>[0]
->[0];
+// Composes project access: `@texfolia/projects` checks owners and organization
+// members; collaborator invitations and share links are granted here until
+// sharing has its own package (NAT-434).
 
 // Anonymous share-link viewers act as this principal wherever a user ID is
 // checked. Account IDs never contain a colon, so the prefix cannot collide.
@@ -25,61 +20,41 @@ export function shareLinkIdOf(principal: string) {
     : null;
 }
 
-export async function lockProject({
+const shareLinkGrant: ProjectGrant = async ({
   tx,
   projectId,
   userId,
-  access = "write",
-  content = "sources",
-}: {
-  tx: ProjectTransaction;
-  projectId: string;
-  userId: string;
-  access?: "read" | "write";
-  // "build" covers build files, the PDF, and the live build stream. PDF-only
-  // share links can read only these.
-  content?: "sources" | "build";
-}) {
-  const [found] = await tx
-    .select()
-    .from(project)
-    .where(and(eq(project.id, projectId), isNull(project.deletedAt)))
-    .for(access === "write" ? "update" : "share");
-  if (!found) throw new Error("Project not found");
+  access,
+  content,
+}) => {
   const linkId = shareLinkIdOf(userId);
-  if (linkId !== null) {
-    if (access === "write") throw new Error("Project not found");
-    const [link] = await tx
-      .select({ scope: projectShareLink.scope })
-      .from(projectShareLink)
-      .where(
-        and(
-          eq(projectShareLink.id, linkId),
-          eq(projectShareLink.projectId, projectId),
-        ),
-      )
-      .for("share");
-    if (!link || (link.scope === "pdf" && content !== "build"))
-      throw new Error("Project not found");
-    return { ...found, canWrite: false, shareScope: link.scope };
-  }
-  if (found.organizationId) {
-    const [membership] = await tx
-      .select()
-      .from(member)
-      .where(
-        and(
-          eq(member.organizationId, found.organizationId),
-          eq(member.userId, userId),
-        ),
-      )
-      .for("share");
-    if (!membership) throw new Error("Project not found");
-    // Every org role can edit org projects; see docs/project-controls.md.
-    return { ...found, canWrite: true, shareScope: null };
-  }
-  if (found.ownerId === userId)
-    return { ...found, canWrite: true, shareScope: null };
+  if (linkId === null) return null;
+  if (access === "write") throw new Error("Project not found");
+  const [link] = await tx
+    .select({ scope: projectShareLink.scope })
+    .from(projectShareLink)
+    .where(
+      and(
+        eq(projectShareLink.id, linkId),
+        eq(projectShareLink.projectId, projectId),
+      ),
+    )
+    .for("share");
+  if (!link || (link.scope === "pdf" && content !== "build"))
+    throw new Error("Project not found");
+  return { canWrite: false, shareScope: link.scope };
+};
+
+// Collaborators apply to personal projects only; organization projects are
+// governed by membership.
+const collaboratorGrant: ProjectGrant = async ({
+  tx,
+  projectId,
+  userId,
+  access,
+  project,
+}) => {
+  if (project.organizationId) return null;
   const [collaborator] = await tx
     .select()
     .from(projectCollaborator)
@@ -92,9 +67,9 @@ export async function lockProject({
     .for("share");
   if (!collaborator || (access === "write" && collaborator.role !== "editor"))
     throw new Error("Project not found");
-  return {
-    ...found,
-    canWrite: collaborator.role === "editor",
-    shareScope: null,
-  };
-}
+  return { canWrite: collaborator.role === "editor", shareScope: null };
+};
+
+// Share-link principals never match an owner, member, or collaborator, so the
+// link grant runs first and the collaborator grant can deny everyone else.
+export const lockProject = projectLock([shareLinkGrant, collaboratorGrant]);

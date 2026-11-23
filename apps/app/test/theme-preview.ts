@@ -76,7 +76,7 @@ const backend = Bun.serve({
       if (rejectFormatting)
         return new Response("Project settings unavailable", { status: 503 });
       const data = (
-        await import("../src/lib/project.schema")
+        await import("@texfolia/projects")
       ).updateProjectFormattingSchema.parse(await request.json());
       formattingSaves++;
       project.formatIndent = data.formatting.indent;

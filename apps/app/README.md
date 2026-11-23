@@ -18,6 +18,11 @@ enabled routes, CAPTCHA policy, rate limits, and verification commands.
 See [Projects dashboard](../../docs/projects.md) for creation flows, private tags,
 client-side table behavior, and verification.
 
+Project CRUD, file-tree nodes, paths, metadata, search, and owner/organization
+access live in [`@texfolia/projects`](../../packages/projects/README.md). The
+app adds collaborator and share-link grants, build invalidation, collaboration
+cleanup, and review-comment versions around those operations.
+
 ## Public templates
 
 The public gallery lives on the marketing site ([`apps/web`](../web/README.md) at

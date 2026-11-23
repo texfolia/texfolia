@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
 
-import {
-  projectMetadataVersion,
-  type ProjectMetadata,
-} from "./project-metadata";
+import { projectMetadataVersion, type ProjectMetadata } from "../src/metadata";
 
 const main = {
   id: "main",

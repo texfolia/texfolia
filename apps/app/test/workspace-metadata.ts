@@ -17,16 +17,16 @@ import {
   session,
   user,
 } from "@texfolia/db/schema";
+import {
+  projectMetadataSchema,
+  projectMetadataVersion,
+} from "@texfolia/projects";
 import { and, eq } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
-import {
-  projectMetadataSchema,
-  projectMetadataVersion,
-} from "../src/lib/project-metadata";
 import { createProject } from "../src/lib/project.server";
 
 declare global {

@@ -1,48 +1,16 @@
 import type { Db } from "@texfolia/db";
+import * as projects from "@texfolia/projects/server";
 
-import {
-  lockProject,
-  shareLinkIdOf,
-  type ProjectTransaction,
-} from "./project-access.server";
+import { lockProject, shareLinkIdOf } from "./project-access.server";
 import { commentsVersion } from "./project-comments.server";
 
-export async function readProjectMetadata({
-  tx,
-  projectId,
-  userId,
-}: {
-  tx: ProjectTransaction;
-  projectId: string;
-  userId: string;
-}) {
-  const { canWrite } = await lockProject({
-    tx,
-    projectId,
-    userId,
-    access: "read",
-  });
-  const rows = await tx.query.projectNode.findMany({
-    where: { projectId, deletedAt: { isNull: true } },
-  });
-  return {
-    nodes: rows.map(({ id, projectId, parentId, name, kind }) => ({
-      id,
-      projectId,
-      parentId,
-      name,
-      kind,
-    })),
-    sourceVersions: Object.fromEntries(
-      rows
-        .filter((node) => node.kind !== "folder")
-        .map((node) => [
-          node.id,
-          { objectKey: node.objectKey, updatedAt: node.updatedAt.getTime() },
-        ]),
-    ),
-    canWrite,
-  };
+// Adds the app's access check and the review-comments version to the
+// metadata `@texfolia/projects` reads.
+
+export function readProjectMetadata(
+  args: Omit<Parameters<typeof projects.readProjectMetadata>[0], "lock">,
+) {
+  return projects.readProjectMetadata({ ...args, lock: lockProject });
 }
 
 export function getProjectMetadata({

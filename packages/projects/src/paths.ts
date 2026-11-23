@@ -9,7 +9,13 @@ import {
   sourcePathError,
 } from "@texfolia/storage";
 
-import type { ProjectNode } from "#/lib/project.functions";
+export type ProjectNode = {
+  id: string;
+  projectId: string;
+  parentId: string | null;
+  name: string;
+  kind: "folder" | "text" | "binary";
+};
 
 type PathNode = Pick<ProjectNode, "id" | "parentId" | "name" | "kind">;
 

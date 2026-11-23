@@ -1,5 +1,11 @@
-import { hashSource } from "@texfolia/compile";
 import { z } from "zod";
+
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>) {
+  return Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
 
 export const projectMetadataSchema = z.object({
   nodes: z.array(
@@ -29,7 +35,7 @@ export function projectMetadataVersion({
 }: Pick<ProjectMetadata, "nodes" | "sourceVersions"> & {
   textSource?: "saved" | "live";
 }) {
-  return hashSource(
+  return sha256Hex(
     new TextEncoder().encode(
       JSON.stringify(
         [...nodes]

@@ -70,6 +70,7 @@
     "@texfolia/contracts": "workspace:*",
     "@texfolia/db": "workspace:*",
     "@texfolia/editor": "workspace:*",
+    "@texfolia/projects": "workspace:*",
     "@texfolia/storage": "workspace:*",
     "@texfolia/ui": "workspace:*",
     "@uiw/react-codemirror": "^4.25.12",

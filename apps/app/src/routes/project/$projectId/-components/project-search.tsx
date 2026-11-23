@@ -1,9 +1,9 @@
 import { IconLetterCase } from "@tabler/icons-react";
+import { searchProject } from "@texfolia/projects";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
 import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 
-import { searchProject } from "#/lib/project-search";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export type SearchRequest = { sequence: number; query?: string };

@@ -3,6 +3,7 @@ import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
 import { ProjectBuildEvents } from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import { bibtexLanguage, themedLatex } from "@texfolia/editor/latex/highlight";
+import { projectPaths } from "@texfolia/projects";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import {
@@ -17,7 +18,6 @@ import {
 import { PanelHeader } from "#/components/panel-header";
 import { buildFileUrl } from "#/lib/build";
 import { CollaborativeFile } from "#/lib/collaboration/file";
-import { projectPaths } from "#/lib/project-paths";
 import type { getSharedProject } from "#/lib/project-share-links.functions";
 import { withShareToken } from "#/lib/project-share-links.schema";
 import { useTheme } from "#/providers/theme-provider";

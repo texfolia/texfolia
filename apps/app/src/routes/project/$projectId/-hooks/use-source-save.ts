@@ -1,4 +1,9 @@
 import type { CompileSources } from "@texfolia/compile";
+import {
+  projectMetadataVersion,
+  assertProjectSourcePaths,
+  projectPaths,
+} from "@texfolia/projects";
 import { encodeSource, type SourceFiles } from "@texfolia/storage";
 import { useEffect, useRef, useState } from "react";
 
@@ -10,8 +15,6 @@ import {
   serializeSourceDrafts,
   type SourceDraft,
 } from "#/lib/project-drafts";
-import { projectMetadataVersion } from "#/lib/project-metadata";
-import { assertProjectSourcePaths, projectPaths } from "#/lib/project-paths";
 import { saveProjectSource } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import type { useProjectFiles } from "#/providers/project-files-provider";

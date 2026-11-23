@@ -1,3 +1,4 @@
+import { projectNodePaths } from "@texfolia/projects";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -17,7 +18,6 @@ import { Input } from "@texfolia/ui/input";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useState, type ReactNode } from "react";
 
-import { projectNodePaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 

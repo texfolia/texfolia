@@ -1,11 +1,12 @@
 import { createCompileHandlers } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
+import { streamProjectResponse } from "@texfolia/projects/server";
 import { env } from "cloudflare:workers";
 
 import type { createAuth } from "./auth";
 import { compilePlan } from "./billing.server";
 import { compileProject } from "./compile-source.server";
-import { streamProjectResponse } from "./live-project.server";
+import { lockProject } from "./project-access.server";
 import { requestPrincipal } from "./request-principal.server";
 
 export const compileHandlers = createCompileHandlers<{
@@ -21,6 +22,7 @@ export const compileHandlers = createCompileHandlers<{
     streamProjectResponse({
       ...options,
       connectionString: env.HYPERDRIVE.connectionString,
+      lock: lockProject,
     }),
 });
 

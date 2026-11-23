@@ -2,7 +2,7 @@ import { editorKeymaps } from "@texfolia/editor/keymaps/keymaps";
 import { z } from "zod";
 
 import { defaultShortcuts, shortcutMapSchema } from "./shortcuts";
-export { projectFormattingSchema as formatSettingsSchema } from "./project.schema";
+export { projectFormattingSchema as formatSettingsSchema } from "@texfolia/projects";
 
 export const editorSettingsSchema = z.object({
   fontSize: z.number().int().min(10).max(24),
