@@ -1,3 +1,5 @@
+// Test helpers for Bun: a local Git smart HTTP server backed by
+// `git http-backend`, and a `git` command runner. Not for production code.
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

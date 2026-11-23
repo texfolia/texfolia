@@ -3,9 +3,9 @@ import { join } from "node:path";
 
 import * as git from "isomorphic-git";
 
-import { gitCommand as command, gitServer } from "../../test/git/http-server";
-import { gitBranchSchema, gitRemoteSchema } from "./git";
-import { GitRepository, gitHttp } from "./git-repository.server";
+import { GitRepository, gitHttp } from "../src/repository";
+import { gitBranchSchema, gitRemoteSchema } from "../src/schema";
+import { gitCommand as command, gitServer } from "../src/testing";
 
 const author = { name: "Git Test", email: "git@example.com" };
 const bytes = (value: string) => new TextEncoder().encode(value);

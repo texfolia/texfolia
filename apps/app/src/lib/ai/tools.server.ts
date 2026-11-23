@@ -2,6 +2,7 @@ import { toolDefinition } from "@tanstack/ai";
 import { parseCompileLog } from "@texfolia/compile";
 import type { Db } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
+import { gitBranchSchema, type GitAction } from "@texfolia/git";
 import {
   projectNodePaths,
   projectPaths,
@@ -13,7 +14,6 @@ import { z } from "zod";
 
 import type { createAuth } from "../auth";
 import { handleCompileGet, handleCompilePost } from "../compile-route.server";
-import { gitBranchSchema } from "../git";
 import { lockProject } from "../project-access.server";
 import { createProjectNode, renameProjectNode } from "../project-node.server";
 import { deleteProjectNode } from "../project-source.server";
@@ -155,7 +155,7 @@ export function projectTools({
       return { node, content };
     });
   }
-  async function gitAction(action: import("../git").GitAction) {
+  async function gitAction(action: GitAction) {
     signal.throwIfAborted();
     await aiEntitlement(db, userId);
     const [user] = await db

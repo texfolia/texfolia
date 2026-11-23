@@ -1,6 +1,6 @@
 /**
  * A Git hosting platform Texfolia integrates with. The core Git module
- * (`../git.ts`, `../git.server.ts`, `../git-repository.server.ts`) speaks plain
+ * (`../schema.ts`, `../actions.ts`, `../repository.ts`) speaks plain
  * Git smart HTTP; an adapter supplies only what differs per platform.
  *
  * To add a platform: add its Better Auth social provider in `packages/auth`,

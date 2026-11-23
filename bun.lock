@@ -40,6 +40,7 @@
         "@texfolia/contracts": "workspace:*",
         "@texfolia/db": "workspace:*",
         "@texfolia/editor": "workspace:*",
+        "@texfolia/git": "workspace:*",
         "@texfolia/projects": "workspace:*",
         "@texfolia/storage": "workspace:*",
         "@texfolia/ui": "workspace:*",
@@ -51,12 +52,9 @@
         "dictionary-en-gb": "3.0.0",
         "dictionary-es": "4.0.0",
         "dictionary-fr": "3.0.0",
-        "diff": "^8.0.4",
         "dockview-react": "^8.8.3",
         "drizzle-orm": "^1.0.0-rc.5",
         "input-otp": "^1.5.0",
-        "isomorphic-git": "^1.44.14",
-        "memfs": "^4.80.1",
         "pdfjs-dist": "6.3.289",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
@@ -295,6 +293,28 @@
         "dictionary-en": "4.0.0",
         "typescript": "^6.0.2",
         "vite": "^8.3.6",
+      },
+    },
+    "packages/git": {
+      "name": "@texfolia/git",
+      "version": "0.0.0",
+      "dependencies": {
+        "@texfolia/auth": "workspace:*",
+        "@texfolia/contracts": "workspace:*",
+        "@texfolia/db": "workspace:*",
+        "@texfolia/projects": "workspace:*",
+        "@texfolia/storage": "workspace:*",
+        "diff": "^8.0.4",
+        "drizzle-orm": "^1.0.0-rc.5",
+        "isomorphic-git": "^1.44.14",
+        "memfs": "^4.80.1",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "5.20261031.1",
+        "@texfolia/config": "workspace:*",
+        "@types/bun": "^1.4.4",
+        "typescript": "^6.0.2",
       },
     },
     "packages/projects": {
@@ -1060,6 +1080,8 @@
     "@texfolia/db": ["@texfolia/db@workspace:packages/db"],
 
     "@texfolia/editor": ["@texfolia/editor@workspace:packages/editor"],
+
+    "@texfolia/git": ["@texfolia/git@workspace:packages/git"],
 
     "@texfolia/projects": ["@texfolia/projects@workspace:packages/projects"],
 

@@ -1,4 +1,10 @@
 import { IconRefresh } from "@tabler/icons-react";
+import {
+  gitProvider,
+  gitProviders,
+  type GitAction,
+  type GitResult,
+} from "@texfolia/git";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -12,8 +18,6 @@ import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 
 import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
-import type { GitAction, GitResult } from "#/lib/git";
-import { gitProvider, gitProviders } from "#/lib/git-providers";
 import { gitAction } from "#/lib/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";

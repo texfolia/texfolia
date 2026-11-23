@@ -5,8 +5,8 @@ import {
   gitProviders,
   hasRepositoryAccess,
   isGitProvider,
-} from ".";
-import { gitRemoteSchema } from "../git";
+} from "../src/providers";
+import { gitRemoteSchema } from "../src/schema";
 
 test("every adapter is reachable by its host and id", () => {
   for (const adapter of gitProviders) {

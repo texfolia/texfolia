@@ -1,16 +1,17 @@
+import {
+  gitProvider,
+  gitProviderIds,
+  gitProviders,
+  gitRemoteMessage,
+  gitRemoteSchema,
+  type GitProvider,
+} from "@texfolia/git";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
 import { Label } from "@texfolia/ui/label";
 import { useEffect, useState } from "react";
 
 import { authClient } from "#/lib/auth-client";
-import { gitRemoteMessage, gitRemoteSchema } from "#/lib/git";
-import {
-  gitProvider,
-  gitProviderIds,
-  gitProviders,
-  type GitProvider,
-} from "#/lib/git-providers";
 import { getGitAccounts } from "#/lib/git.functions";
 
 export async function connectGitAccount(provider: GitProvider) {

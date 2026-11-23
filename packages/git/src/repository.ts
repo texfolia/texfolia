@@ -10,7 +10,7 @@ import * as git from "isomorphic-git";
 import { createFsFromVolume, Volume } from "memfs";
 import { z } from "zod";
 
-import type { GitStatus } from "./git";
+import type { GitStatus } from "./schema";
 
 const maxRepositoryBytes = 20 * 1024 * 1024;
 const storedGitSchema = z.record(z.string(), z.string());
