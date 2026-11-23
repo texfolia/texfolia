@@ -1,7 +1,8 @@
-import type { createNodeSchema, renameNodeSchema } from "@texfolia/projects";
 import type { z } from "zod";
 
-import type { createProjectNode as createNode } from "../../src/lib/project-node.server";
+import type { createNodeSchema, renameNodeSchema } from "#/features/projects";
+
+import type { createProjectNode as createNode } from "../../src/features/projects/project-node.server";
 
 // Stand in for TanStack's generated RPC transport, retaining the production store.
 export async function createProjectNode({

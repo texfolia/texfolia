@@ -1,7 +1,4 @@
 import { IconX } from "@tabler/icons-react";
-import type { OutlineEntry } from "@texfolia/editor/latex/outline";
-import type { SourceFiles } from "@texfolia/storage";
-import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
@@ -12,9 +9,12 @@ import {
 } from "@texfolia/ui/dialog";
 import { useMemo, useState, type RefObject } from "react";
 
-import { buildFileUrl } from "#/lib/build";
-import type { ProjectNode } from "#/lib/project.functions";
-import { type SidebarView } from "#/lib/workspace-layout";
+import { buildFileUrl } from "#/features/compile/build";
+import type { OutlineEntry } from "#/features/editor/latex/outline";
+import type { ProjectNode } from "#/features/projects/project.functions";
+import type { SourceFiles } from "#/features/storage";
+import { downloadFile } from "#/features/storage/browser";
+import { type SidebarView } from "#/features/workspace/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 

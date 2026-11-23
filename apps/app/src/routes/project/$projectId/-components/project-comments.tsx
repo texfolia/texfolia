@@ -16,8 +16,7 @@ import {
   useState,
 } from "react";
 
-import type { CommentThread } from "#/hooks/use-comments";
-import { resolveCommentAnchor } from "#/lib/comments/anchor";
+import { resolveCommentAnchor } from "#/features/comments/anchor";
 import {
   createCommentThread,
   deleteComment,
@@ -25,8 +24,9 @@ import {
   replyToCommentThread,
   resolveCommentThread,
   updateComment,
-} from "#/lib/project-comments.functions";
-import { maxCommentLength } from "#/lib/project-comments.schema";
+} from "#/features/comments/project-comments.functions";
+import { maxCommentLength } from "#/features/comments/project-comments.schema";
+import type { CommentThread } from "#/hooks/use-comments";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 type Filter = "open" | "resolved";

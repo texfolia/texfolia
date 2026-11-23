@@ -57,7 +57,7 @@ repair the original project and publish a new snapshot.
 From the repository root, run:
 
 ```sh
-bun test apps/compiler/test/project.test.ts packages/projects/test/node.schema.test.ts packages/projects/test/paths.test.ts
+bun test apps/compiler/test/project.test.ts apps/app/src/features/projects/node.schema.test.ts apps/app/src/features/projects/paths.test.ts
 (cd apps/compiler/engine && go test -race ./...)
 ```
 

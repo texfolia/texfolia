@@ -10,13 +10,13 @@ import {
 } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
 
-import { createProjectNode } from "../src/lib/project-node.server";
+import { createProjectNode } from "../src/features/projects/project-node.server";
 import {
   createProject,
   deleteProject,
   getProject,
   getProjects,
-} from "../src/lib/project.server";
+} from "../src/features/projects/project.server";
 import { checkComments } from "./postgres/comments";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;

@@ -1,14 +1,14 @@
-import { documentCachingStopped } from "@texfolia/collaboration/browser";
 import type { DockviewApi } from "dockview-react";
 import { type RefObject, useEffect, useEffectEvent, useState } from "react";
 
+import { documentCachingStopped } from "#/features/collaboration/browser";
 import {
   defaultWorkspaceChrome,
   readWorkspaceLayout,
   writeWorkspaceLayout,
   type PanelView,
   type WorkspaceChrome,
-} from "#/lib/workspace-layout";
+} from "#/features/workspace/workspace-layout";
 
 const narrowQuery = "(max-width: 767px)";
 

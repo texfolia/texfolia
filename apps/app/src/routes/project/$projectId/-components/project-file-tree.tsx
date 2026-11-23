@@ -20,8 +20,6 @@ import {
   IconPhoto,
   IconTex,
 } from "@tabler/icons-react";
-import { renamedProjectNodes } from "@texfolia/projects";
-import { droppedEntries } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   Collapsible,
@@ -42,7 +40,9 @@ import {
 } from "@texfolia/ui/sidebar";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 
-import type { ProjectNode } from "#/lib/project.functions";
+import { renamedProjectNodes } from "#/features/projects";
+import type { ProjectNode } from "#/features/projects/project.functions";
+import { droppedEntries } from "#/features/storage/browser";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 import { ProjectNodeActions } from "./project-node-actions";

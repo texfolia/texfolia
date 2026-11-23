@@ -3,9 +3,8 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-/* @texfolia/ui and @texfolia/ai render Tailwind classes from outside this app. */
+/* @texfolia/ui renders Tailwind classes from outside this app. */
 @source "../../../packages/ui/src";
-@source "../../../packages/ai/src/ui";
 
 @custom-variant dark (&:is(.dark *));
 

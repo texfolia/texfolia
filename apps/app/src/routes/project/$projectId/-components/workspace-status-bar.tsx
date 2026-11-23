@@ -13,10 +13,13 @@ import {
   IconTimeline,
   IconUsers,
 } from "@tabler/icons-react";
-import type { WordCount } from "@texfolia/editor/latex/word-count";
 import { Button } from "@texfolia/ui/button";
 
-import type { PanelView, WorkspaceChrome } from "#/lib/workspace-layout";
+import type { WordCount } from "#/features/editor/latex/word-count";
+import type {
+  PanelView,
+  WorkspaceChrome,
+} from "#/features/workspace/workspace-layout";
 
 import type { CompileStatus } from "../-hooks/use-compilation";
 import type { GitBranchState } from "../-hooks/use-workspace-session";

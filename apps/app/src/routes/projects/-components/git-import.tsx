@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 
 import { GitRemoteForm } from "#/components/git-remote-form";
-import { importGitProject } from "#/lib/git.functions";
+import { importGitProject } from "#/features/git/git.functions";
 
 export function GitImport({
   onPendingChange,

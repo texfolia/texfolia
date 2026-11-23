@@ -11,18 +11,19 @@ import {
   projectNode,
   user,
 } from "@texfolia/db/schema";
-import { updateProjectFormattingSchema } from "@texfolia/projects";
 import { eq, inArray } from "drizzle-orm";
 
-import {
-  getAccountUsage,
-  saveAccountAiSettings,
-} from "../src/lib/account-settings.server";
+import { updateProjectFormattingSchema } from "#/features/projects";
+
 import {
   createProject,
   getProject,
   updateProjectFormatting,
-} from "../src/lib/project.server";
+} from "../src/features/projects/project.server";
+import {
+  getAccountUsage,
+  saveAccountAiSettings,
+} from "../src/features/settings/account-settings.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

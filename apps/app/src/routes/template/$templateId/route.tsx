@@ -4,10 +4,6 @@ import {
   notFound,
   useRouter,
 } from "@tanstack/react-router";
-import {
-  templateLicenseLabels,
-  templateLicenseUrls,
-} from "@texfolia/templates";
 import { Button, buttonVariants } from "@texfolia/ui/button";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { Textarea } from "@texfolia/ui/textarea";
@@ -16,15 +12,19 @@ import { z } from "zod";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
-import { webPath } from "#/lib/origins";
-import { useTemplatePreviews } from "#/lib/template-preview";
+import {
+  templateLicenseLabels,
+  templateLicenseUrls,
+} from "#/features/templates";
+import { useTemplatePreviews } from "#/features/templates/template-preview";
 import {
   getTemplate,
   getTemplateAccount,
   openTemplate,
   refreshTemplatePreview,
   reportTemplate,
-} from "#/lib/template.functions";
+} from "#/features/templates/template.functions";
+import { webPath } from "#/lib/origins";
 
 export const Route = createFileRoute("/template/$templateId")({
   loader: async ({ params }) => {

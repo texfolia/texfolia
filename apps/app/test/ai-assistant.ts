@@ -4,8 +4,6 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { threadHistorySchema, threadSchema } from "@texfolia/ai";
-import { hashSource } from "@texfolia/compile";
 import { createDb } from "@texfolia/db";
 import {
   aiRequest,
@@ -20,13 +18,16 @@ import {
   subscription,
   user,
 } from "@texfolia/db/schema";
-import { GitRepository } from "@texfolia/git/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import { z } from "zod";
 
-import { createProject } from "../src/lib/project.server";
+import { threadHistorySchema, threadSchema } from "#/features/ai";
+import { hashSource } from "#/features/compile";
+import { GitRepository } from "#/features/git/server";
+
+import { createProject } from "../src/features/projects/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

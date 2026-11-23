@@ -5,12 +5,6 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  collaborationProtocol,
-  decodeServerMessage,
-  encodeClientMessage,
-  protocolSearchParam,
-} from "@texfolia/collaboration";
 import { createDb } from "@texfolia/db";
 import {
   account,
@@ -21,16 +15,23 @@ import {
   session,
   user,
 } from "@texfolia/db/schema";
-import { gitProvider, type GitProvider } from "@texfolia/git";
-import { GitRepository, gitHttp } from "@texfolia/git/server";
-import { gitServer, gitCommand } from "@texfolia/git/testing";
 import { eq, inArray } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as Y from "yjs";
 import { z } from "zod";
 
-import { createProject } from "../src/lib/project.server";
+import {
+  collaborationProtocol,
+  decodeServerMessage,
+  encodeClientMessage,
+  protocolSearchParam,
+} from "#/features/collaboration";
+import { gitProvider, type GitProvider } from "#/features/git";
+import { GitRepository, gitHttp } from "#/features/git/server";
+import { gitServer, gitCommand } from "#/features/git/testing";
+
+import { createProject } from "../src/features/projects/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

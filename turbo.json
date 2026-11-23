@@ -2,7 +2,7 @@
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
   "globalDependencies": [
-    "packages/config/**/*.json",
+    "tsconfig.base.json",
     "tsconfig.json",
     "scripts/local-environment.mts",
     ".oxlintrc.json",

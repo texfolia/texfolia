@@ -1,6 +1,6 @@
 import { type BuildSnapshot } from "@texfolia/contracts";
 
-import type { ProjectNode } from "#/lib/project.functions";
+import type { ProjectNode } from "#/features/projects/project.functions";
 
 export function generatedTreeNodes(
   build: BuildSnapshot | null,

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
-import type { ProjectNode } from "#/lib/project.functions";
+import type { ProjectNode } from "#/features/projects/project.functions";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 const PdfViewer = lazy(() => import("./pdf"));

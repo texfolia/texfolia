@@ -17,7 +17,7 @@ import {
 } from "@texfolia/ui/item";
 import { useRef, useState } from "react";
 
-import { authClient } from "#/lib/auth-client";
+import { authClient } from "#/features/auth/auth-client";
 export const Route = createFileRoute("/settings/account")({
   component: AccountPage,
 });

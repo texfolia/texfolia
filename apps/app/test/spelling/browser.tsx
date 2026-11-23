@@ -1,14 +1,15 @@
-import { editorLanguage } from "@texfolia/editor/latex/language";
-import { browserSpellChecker } from "@texfolia/editor/spelling/checker";
-import {
-  personalDictionaryChanged,
-  spellcheck,
-} from "@texfolia/editor/spelling/editor";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { personalDictionaryHas } from "#/lib/settings.schema";
+import { editorLanguage } from "#/features/editor/latex/language";
+import { browserSpellChecker } from "#/features/editor/spelling/checker";
+import {
+  personalDictionaryChanged,
+  spellcheck,
+} from "#/features/editor/spelling/editor";
+
+import { personalDictionaryHas } from "../../src/features/settings/settings.schema";
 
 export type SpellingTest = {
   text: () => string;

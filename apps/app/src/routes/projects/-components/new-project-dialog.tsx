@@ -14,7 +14,10 @@ import {
 } from "@texfolia/ui/dialog";
 import { useEffect, useState } from "react";
 
-import { getTemplateAccount, listTemplates } from "#/lib/template.functions";
+import {
+  getTemplateAccount,
+  listTemplates,
+} from "#/features/templates/template.functions";
 
 import { FilesProjectForm } from "./files-project-form";
 import { GitImport } from "./git-import";

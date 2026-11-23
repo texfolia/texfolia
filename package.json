@@ -29,7 +29,6 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
-    "@texfolia/config": "workspace:*",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "postcss": "8.5.33",
@@ -40,8 +39,5 @@
       "name": "bun",
       "version": "1.4.4"
     }
-  },
-  "patchedDependencies": {
-    "@replit/codemirror-emacs@6.1.0": "patches/@replit%2Fcodemirror-emacs@6.1.0.patch"
   }
 }

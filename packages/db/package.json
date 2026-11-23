@@ -23,7 +23,6 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
-    "@texfolia/config": "workspace:*",
     "@types/bun": "^1.4.4",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "^1.0.0-rc.5",

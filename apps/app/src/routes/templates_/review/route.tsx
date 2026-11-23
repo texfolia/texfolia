@@ -14,7 +14,7 @@ import {
   getTemplateReviewQueue,
   getTemplateAccount,
   reviewTemplate,
-} from "#/lib/template.functions";
+} from "#/features/templates/template.functions";
 
 export const Route = createFileRoute("/templates_/review")({
   beforeLoad: async () => {

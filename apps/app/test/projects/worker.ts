@@ -9,24 +9,25 @@ import {
   tag,
   user,
 } from "@texfolia/db/schema";
-import { projectPaths, projectTagsSchema } from "@texfolia/projects";
-import { encodeSource, maxSourceFileBytes } from "@texfolia/storage";
 import { and, eq } from "drizzle-orm";
 
-import { importProjectFiles } from "../../src/lib/project-import.server";
+import { projectPaths, projectTagsSchema } from "#/features/projects";
+import { encodeSource, maxSourceFileBytes } from "#/features/storage";
+
+import { importProjectFiles } from "../../src/features/projects/project-import.server";
 import {
   saveProjectSource,
   readProjectSource,
-} from "../../src/lib/project-source.server";
+} from "../../src/features/projects/project-source.server";
 import {
   createProject,
   deleteProject,
   getProjects,
   renameProject,
   setProjectTags,
-} from "../../src/lib/project.server";
+} from "../../src/features/projects/project.server";
 
-export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
 
 export default {
   async fetch(_request: Request, env: Env) {

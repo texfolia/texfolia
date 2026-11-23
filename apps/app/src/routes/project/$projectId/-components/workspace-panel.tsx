@@ -3,7 +3,10 @@ import { Button } from "@texfolia/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
 import { useRef } from "react";
 
-import { panelHeightBounds, type PanelView } from "#/lib/workspace-layout";
+import {
+  panelHeightBounds,
+  type PanelView,
+} from "#/features/workspace/workspace-layout";
 
 import { WorkspaceLogs } from "./workspace-logs";
 import { WorkspaceProblems } from "./workspace-problems";

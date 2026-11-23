@@ -1,3 +1,9 @@
+import { Button } from "@texfolia/ui/button";
+import { Input } from "@texfolia/ui/input";
+import { Label } from "@texfolia/ui/label";
+import { useEffect, useState } from "react";
+
+import { authClient } from "#/features/auth/auth-client";
 import {
   gitProvider,
   gitProviderIds,
@@ -5,14 +11,8 @@ import {
   gitRemoteMessage,
   gitRemoteSchema,
   type GitProvider,
-} from "@texfolia/git";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { Label } from "@texfolia/ui/label";
-import { useEffect, useState } from "react";
-
-import { authClient } from "#/lib/auth-client";
-import { getGitAccounts } from "#/lib/git.functions";
+} from "#/features/git";
+import { getGitAccounts } from "#/features/git/git.functions";
 
 export async function connectGitAccount(provider: GitProvider) {
   const result = await authClient.linkSocial({

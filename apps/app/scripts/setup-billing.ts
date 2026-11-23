@@ -1,5 +1,6 @@
-import { paidPlans } from "@texfolia/billing";
 import Stripe from "stripe";
+
+import { paidPlans } from "#/features/billing";
 
 const key = process.env.STRIPE_SECRET_KEY;
 if (!key) throw new Error("Set STRIPE_SECRET_KEY before configuring billing");

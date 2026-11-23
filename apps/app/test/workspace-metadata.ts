@@ -4,7 +4,6 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { compileDeltaSchema, hashSource } from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import {
@@ -17,17 +16,19 @@ import {
   session,
   user,
 } from "@texfolia/db/schema";
-import {
-  projectMetadataSchema,
-  projectMetadataVersion,
-} from "@texfolia/projects";
 import { and, eq } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
-import { createProject } from "../src/lib/project.server";
+import { compileDeltaSchema, hashSource } from "#/features/compile";
+import {
+  projectMetadataSchema,
+  projectMetadataVersion,
+} from "#/features/projects";
+
+import { createProject } from "../src/features/projects/project.server";
 
 declare global {
   interface Window {

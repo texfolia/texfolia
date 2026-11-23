@@ -1,6 +1,6 @@
-import type { OutlineEntry } from "@texfolia/editor/latex/outline";
 import { Button } from "@texfolia/ui/button";
 
+import type { OutlineEntry } from "#/features/editor/latex/outline";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export function ProjectOutline({ entries }: { entries: OutlineEntry[] }) {

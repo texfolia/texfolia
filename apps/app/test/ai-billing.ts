@@ -1,20 +1,6 @@
 import { setSystemTime, spyOn } from "bun:test";
 import assert from "node:assert/strict";
 
-import {
-  gatewayRequestCost,
-  type AiConfig,
-  type AiFetch,
-} from "@texfolia/ai/gateway";
-import { BillingError, markedUpNanos, nanoDollars } from "@texfolia/billing";
-import {
-  aiEntitlement,
-  aiSpend,
-  getAiSettings,
-  reconcileAiUsage,
-  reserveAiRequest,
-  type MeterReporter,
-} from "@texfolia/billing/server";
 import { createDb } from "@texfolia/db";
 import {
   aiRequest,
@@ -26,6 +12,21 @@ import {
   user,
 } from "@texfolia/db/schema";
 import { eq, inArray } from "drizzle-orm";
+
+import {
+  gatewayRequestCost,
+  type AiConfig,
+  type AiFetch,
+} from "#/features/ai/gateway";
+import { BillingError, markedUpNanos, nanoDollars } from "#/features/billing";
+import {
+  aiEntitlement,
+  aiSpend,
+  getAiSettings,
+  reconcileAiUsage,
+  reserveAiRequest,
+  type MeterReporter,
+} from "#/features/billing/server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

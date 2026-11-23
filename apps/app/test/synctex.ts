@@ -2,21 +2,19 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "@texfolia/collaboration";
-import { hashSource } from "@texfolia/compile";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import type { ProjectDetails } from "../src/lib/project.functions";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "#/features/collaboration";
+import { hashSource } from "#/features/compile";
 
-const fixture = new URL(
-  "../../../packages/editor/test/fixtures/synctex/",
-  import.meta.url,
-);
+import type { ProjectDetails } from "../src/features/projects/project.functions";
+
+const fixture = new URL("./fixtures/synctex/", import.meta.url);
 const pdf = await Bun.file(new URL("main.pdf", fixture)).arrayBuffer();
 const map = await Bun.file(new URL("main.synctex", fixture)).text();
 const projectId = crypto.randomUUID();
@@ -319,11 +317,11 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
-      "#/lib/project.functions": rpc,
-      "#/lib/project-node.functions": rpc,
-      "#/lib/project-source.functions": rpc,
-      "#/lib/git.functions": rpc,
-      "#/lib/project-sharing.functions": rpc,
+      "#/features/projects/project.functions": rpc,
+      "#/features/projects/project-node.functions": rpc,
+      "#/features/projects/project-source.functions": rpc,
+      "#/features/git/git.functions": rpc,
+      "#/features/sharing/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },

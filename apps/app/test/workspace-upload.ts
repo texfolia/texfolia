@@ -2,26 +2,27 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "@texfolia/collaboration";
-import { compileDeltaSchema, hashSource } from "@texfolia/compile";
-import {
-  createNodeSchema,
-  renameNodeSchema,
-  renamedProjectNodes,
-} from "@texfolia/projects";
-import {
-  decodeSource,
-  encodeSource,
-  type SourceFiles,
-} from "@texfolia/storage";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import type { ProjectDetails } from "../src/lib/project.functions";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "#/features/collaboration";
+import { compileDeltaSchema, hashSource } from "#/features/compile";
+import {
+  createNodeSchema,
+  renameNodeSchema,
+  renamedProjectNodes,
+} from "#/features/projects";
+import {
+  decodeSource,
+  encodeSource,
+  type SourceFiles,
+} from "#/features/storage";
+
+import type { ProjectDetails } from "../src/features/projects/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 
 declare global {
@@ -319,11 +320,11 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
-      "#/lib/project.functions": rpc,
-      "#/lib/project-node.functions": rpc,
-      "#/lib/project-source.functions": rpc,
-      "#/lib/git.functions": rpc,
-      "#/lib/project-sharing.functions": rpc,
+      "#/features/projects/project.functions": rpc,
+      "#/features/projects/project-node.functions": rpc,
+      "#/features/projects/project-source.functions": rpc,
+      "#/features/git/git.functions": rpc,
+      "#/features/sharing/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },

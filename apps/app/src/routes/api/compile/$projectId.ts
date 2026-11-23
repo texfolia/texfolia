@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { compileHandlers } from "#/lib/compile-route.server";
+import { compileHandlers } from "#/features/compile/compile-route.server";
 
 export const Route = createFileRoute("/api/compile/$projectId")({
   server: {

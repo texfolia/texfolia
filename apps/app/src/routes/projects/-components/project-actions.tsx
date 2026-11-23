@@ -8,13 +8,6 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import {
-  projectPaths,
-  projectTagsSchema,
-  renameProjectSchema,
-} from "@texfolia/projects";
-import { downloadFile } from "@texfolia/storage/browser";
-import { createZip } from "@texfolia/storage/zip";
 import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
@@ -36,11 +29,18 @@ import { toast } from "@texfolia/ui/toast";
 import { useId, useState } from "react";
 
 import {
+  projectPaths,
+  projectTagsSchema,
+  renameProjectSchema,
+} from "#/features/projects";
+import {
   getProject,
   renameProject,
   setProjectTags,
   type Project,
-} from "#/lib/project.functions";
+} from "#/features/projects/project.functions";
+import { downloadFile } from "#/features/storage/browser";
+import { createZip } from "#/features/storage/zip";
 import { useProjects } from "#/providers/projects-provider";
 import { ProjectAccessPanel } from "#/routes/project/$projectId/-components/project-collaboration";
 

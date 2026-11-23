@@ -1,10 +1,6 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
-import { CollaborativeFile } from "@texfolia/collaboration/browser";
-import { ProjectBuildEvents } from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
-import { bibtexLanguage, themedLatex } from "@texfolia/editor/latex/highlight";
-import { projectPaths } from "@texfolia/projects";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import {
@@ -17,9 +13,13 @@ import {
 } from "react";
 
 import { PanelHeader } from "#/components/panel-header";
-import { buildFileUrl } from "#/lib/build";
-import type { getSharedProject } from "#/lib/project-share-links.functions";
-import { withShareToken } from "#/lib/project-share-links.schema";
+import { CollaborativeFile } from "#/features/collaboration/browser";
+import { ProjectBuildEvents } from "#/features/compile";
+import { buildFileUrl } from "#/features/compile/build";
+import { bibtexLanguage, themedLatex } from "#/features/editor/latex/highlight";
+import { projectPaths } from "#/features/projects";
+import type { getSharedProject } from "#/features/sharing/project-share-links.functions";
+import { withShareToken } from "#/features/sharing/project-share-links.schema";
 import { useTheme } from "#/providers/theme-provider";
 
 const PdfViewer = lazy(

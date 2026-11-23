@@ -1,22 +1,25 @@
-import { documentCachingStopped } from "@texfolia/collaboration/browser";
-import type { CollaborativeFile } from "@texfolia/collaboration/browser";
+import { useEffect, useRef, useState } from "react";
+
+import { documentCachingStopped } from "#/features/collaboration/browser";
+import type { CollaborativeFile } from "#/features/collaboration/browser";
 import {
   reconcileSourceDrafts,
   serializeSourceDrafts,
   type SourceDraft,
-} from "@texfolia/collaboration/browser";
-import type { CompileSources } from "@texfolia/compile";
+} from "#/features/collaboration/browser";
+import type { CompileSources } from "#/features/compile";
 import {
   projectMetadataVersion,
   assertProjectSourcePaths,
   projectPaths,
-} from "@texfolia/projects";
-import { encodeSource, type SourceFiles } from "@texfolia/storage";
-import { useEffect, useRef, useState } from "react";
-
+} from "#/features/projects";
+import { saveProjectSource } from "#/features/projects/project-source.functions";
+import type {
+  ProjectDetails,
+  ProjectNode,
+} from "#/features/projects/project.functions";
+import { encodeSource, type SourceFiles } from "#/features/storage";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
-import { saveProjectSource } from "#/lib/project-source.functions";
-import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState } from "#/providers/workspace-provider";
 

@@ -1,7 +1,7 @@
-import { CollaborativeFile } from "@texfolia/collaboration/browser";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
-import type { ProjectNode } from "#/lib/project.functions";
+import { CollaborativeFile } from "#/features/collaboration/browser";
+import type { ProjectNode } from "#/features/projects/project.functions";
 
 type Saved = Parameters<
   NonNullable<ConstructorParameters<typeof CollaborativeFile>[0]["onSaved"]>

@@ -1,11 +1,4 @@
 import { IconUpload } from "@tabler/icons-react";
-import { newProjectNodePath } from "@texfolia/projects";
-import {
-  encodeSource,
-  maxSourceFileBytes,
-  sourceFileKind,
-} from "@texfolia/storage";
-import { readDroppedFiles, type DroppedFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
@@ -16,7 +9,14 @@ import {
 } from "@texfolia/ui/dialog";
 import { useId, useRef, useState, useImperativeHandle, type Ref } from "react";
 
-import type { ProjectNode } from "#/lib/project.functions";
+import { newProjectNodePath } from "#/features/projects";
+import type { ProjectNode } from "#/features/projects/project.functions";
+import {
+  encodeSource,
+  maxSourceFileBytes,
+  sourceFileKind,
+} from "#/features/storage";
+import { readDroppedFiles, type DroppedFile } from "#/features/storage/browser";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 export type UploadSourceHandle = {

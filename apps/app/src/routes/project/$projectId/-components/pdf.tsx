@@ -10,14 +10,6 @@ import {
   IconZoomOut,
   IconDots,
 } from "@tabler/icons-react";
-import { reportCompilePreview } from "@texfolia/compile";
-import {
-  pdfToSource,
-  rotatePdfPoint,
-  type SyncTexIndex,
-  type SyncTexLocation,
-} from "@texfolia/editor/latex/synctex";
-import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   DropdownMenu,
@@ -36,6 +28,14 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import { reportCompilePreview } from "#/features/compile";
+import {
+  pdfToSource,
+  rotatePdfPoint,
+  type SyncTexIndex,
+  type SyncTexLocation,
+} from "#/features/editor/latex/synctex";
+import { downloadFile } from "#/features/storage/browser";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";

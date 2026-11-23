@@ -1,4 +1,3 @@
-import { projectNameSchema } from "@texfolia/projects";
 import {
   createContext,
   type ReactNode,
@@ -6,12 +5,13 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { projectNameSchema } from "#/features/projects";
 import {
   createProject,
   deleteProject,
   getProjects,
   type Project,
-} from "#/lib/project.functions";
+} from "#/features/projects/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
 
 type ProjectsPage = { projects: Project[]; nextCursor: string | null };

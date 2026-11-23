@@ -1,7 +1,7 @@
 # Public auth abuse protection
 
 Shared auth lives in `@texfolia/auth`; the product app wires it in
-`apps/app/src/lib/auth.ts`. The login page supports
+`apps/app/src/features/auth/auth.ts`. The login page supports
 email OTP and GitHub, Google, GitLab, and Microsoft OAuth. Password sign-in and
 OTP password reset remain available for existing credentials. Password signup
 is disabled because the product does not use it, and creating an unverified
@@ -76,7 +76,7 @@ These are response-body guarantees; local tests do not establish constant timing
 From the repository root:
 
 ```sh
-bun test apps/app/src/lib/auth-abuse.test.ts
+bun test apps/app/src/features/auth/auth-abuse.test.ts
 ```
 
 The suite uses the production auth options, Better Auth's HTTP handler, a memory
@@ -90,5 +90,5 @@ Existing OTP and organization tests cover code consumption, password reset,
 expiry, invitation permissions, and billing authorization:
 
 ```sh
-bun test apps/app/src/lib/auth-otp.test.ts apps/app/src/lib/auth.test.ts
+bun test apps/app/src/features/auth/auth-otp.test.ts apps/app/src/features/auth/auth.test.ts
 ```

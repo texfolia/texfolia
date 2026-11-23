@@ -1,5 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { gatewayRequestCost } from "@texfolia/ai/gateway";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+
+import { aiConfig } from "#/features/ai/ai-config.server";
+import { assistantWorkspace } from "#/features/ai/assistant.server";
+import { gatewayRequestCost } from "#/features/ai/gateway";
 import {
   aiAccess,
   aiErrorResponse,
@@ -11,15 +16,10 @@ import {
   readAssistantThread,
   startAssistant,
   updateAiPreferences,
-} from "@texfolia/ai/server";
-import { reconcileAiUsage } from "@texfolia/billing/server";
-import { env } from "cloudflare:workers";
-import { z } from "zod";
-
-import { aiConfig } from "#/lib/ai-config.server";
-import { assistantWorkspace } from "#/lib/assistant.server";
-import { createAuth } from "#/lib/auth";
-import { lockProject } from "#/lib/project-access.server";
+} from "#/features/ai/server";
+import { createAuth } from "#/features/auth/auth";
+import { reconcileAiUsage } from "#/features/billing/server";
+import { lockProject } from "#/features/sharing/project-access.server";
 
 export const Route = createFileRoute("/api/ai/$projectId")({
   server: {

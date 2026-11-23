@@ -1,13 +1,13 @@
 import { type BuildSnapshot } from "@texfolia/contracts";
+import { useEffect, useState } from "react";
+
+import { buildFileUrl } from "#/features/compile/build";
 import {
   parseSyncTex,
   readSyncTex,
   syncTexArtifact,
   type SyncTexIndex,
-} from "@texfolia/editor/latex/synctex";
-import { useEffect, useState } from "react";
-
-import { buildFileUrl } from "#/lib/build";
+} from "#/features/editor/latex/synctex";
 
 export function useSyncTex({
   projectId,

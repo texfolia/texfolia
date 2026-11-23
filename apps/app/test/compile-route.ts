@@ -5,14 +5,6 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  compileHistoryLimit,
-  compileHistorySchema,
-  hashSource,
-  parseJobTimeline,
-  sessionHistoryParam,
-  timelineRetentionMs,
-} from "@texfolia/compile";
 import { unknownEngineTiming } from "@texfolia/contracts";
 import { buildSnapshotSchema } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
@@ -24,24 +16,36 @@ import {
   subscription,
   user,
 } from "@texfolia/db/schema";
-import { projectMetadataVersion } from "@texfolia/projects";
 import { eq } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { z } from "zod";
 
+import {
+  compileHistoryLimit,
+  compileHistorySchema,
+  hashSource,
+  parseJobTimeline,
+  sessionHistoryParam,
+  timelineRetentionMs,
+} from "#/features/compile";
+import { projectMetadataVersion } from "#/features/projects";
+
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import type { Engine } from "../../compiler/src/types";
-import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
-import { readProjectMetadata } from "../src/lib/project-metadata.server";
+import { readProjectMetadata } from "../src/features/projects/project-metadata.server";
+import { createProject } from "../src/features/projects/project.server";
+import {
+  lockProject,
+  sharePrincipal,
+} from "../src/features/sharing/project-access.server";
 import {
   createShareLink,
   getSharedProject,
   listShareLinks,
   revokeShareLink,
-} from "../src/lib/project-share-links.server";
-import { createProject } from "../src/lib/project.server";
+} from "../src/features/sharing/project-share-links.server";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(
