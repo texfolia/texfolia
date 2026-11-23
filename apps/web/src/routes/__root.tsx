@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import { linkButton } from "#/lib/link-button";
 
 import css from "../styles.css?url";
 
@@ -75,7 +76,7 @@ function Notice({
           {description}
         </p>
         <div className="mt-8">
-          <Link to="/" className="btn btn-outline">
+          <Link to="/" className={linkButton({ variant: "outline" })}>
             Back to home
           </Link>
         </div>

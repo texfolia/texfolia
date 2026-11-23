@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { Page } from "#/components/page";
 import { pageHead } from "#/lib/head";
+import { linkButton } from "#/lib/link-button";
 import {
   fetchTemplateCatalog,
   parseTemplatePage,
@@ -49,7 +50,10 @@ function Templates() {
               independent project, with its source files included.
             </p>
           </div>
-          <a href={appPath("/templates/publish")} className="btn btn-outline">
+          <a
+            href={appPath("/templates/publish")}
+            className={linkButton({ variant: "outline" })}
+          >
             Publish a template
           </a>
         </div>
@@ -82,7 +86,7 @@ function Templates() {
             <Link
               to="/templates"
               search={{ page: page - 1 || undefined }}
-              className="btn btn-outline"
+              className={linkButton({ variant: "outline" })}
             >
               Previous
             </Link>
@@ -91,7 +95,7 @@ function Templates() {
             <Link
               to="/templates"
               search={{ page: page + 1 }}
-              className="btn btn-outline"
+              className={linkButton({ variant: "outline" })}
             >
               Next
             </Link>

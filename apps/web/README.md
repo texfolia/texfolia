@@ -58,6 +58,9 @@ Builds and previews run the Worker in local workerd through the Cloudflare
 Vite plugin. Wrangler can't forward requests to workerd when Vite runs under
 Bun's Node.js shim, so keep a real Node.js on `PATH` for `build` and `preview`.
 
-Styling is Tailwind CSS with a few local tokens and `.btn` utilities in
-`src/styles.css`. The site does not use `@texfolia/ui`; whether it should is
-still open.
+Shared primitives (button, card, table) come from `@texfolia/ui`, imported only
+through its public entry points. `src/styles.css` adds the package to Tailwind's
+sources and defines the theme tokens these components read. Calls to action are
+links styled by `linkButton` (`src/lib/link-button.ts`), which applies the shared
+button variants at the site's larger sizes. Page layout, typography, and copy stay
+here.
