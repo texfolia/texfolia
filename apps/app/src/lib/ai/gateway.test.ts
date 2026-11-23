@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { gatewayModels, type AiFetch, type AiConfig } from "./gateway.server";
-import { markedUpNanos } from "./schema";
 const config: AiConfig = {
   accountId: "a".repeat(32),
   gatewayId: "test",
@@ -71,11 +70,4 @@ describe("AI Gateway catalog", () => {
     const fetcher: AiFetch = async () => new Response(null, { status: 401 });
     await expect(gatewayModels(config, fetcher)).rejects.toThrow("401");
   });
-});
-test("20% markup preserves fractional cents and rejects invalid costs", () => {
-  expect(markedUpNanos(10_000_000)).toBe(12_000_000);
-  expect(markedUpNanos(0)).toBe(0);
-  expect(markedUpNanos(1)).toBe(2);
-  expect(() => markedUpNanos(-1)).toThrow();
-  expect(() => markedUpNanos(Number.NaN)).toThrow();
 });

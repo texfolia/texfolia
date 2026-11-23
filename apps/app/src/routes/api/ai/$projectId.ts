@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { reconcileAiUsage } from "@texfolia/billing/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
-import { reconcileAiUsage } from "#/lib/ai/billing.server";
 import {
   aiAccess,
   aiErrorResponse,
@@ -12,7 +12,7 @@ import {
   startAssistant,
   updateAiPreferences,
 } from "#/lib/ai/chat.server";
-import { aiConfig } from "#/lib/ai/gateway.server";
+import { aiConfig, gatewayRequestCost } from "#/lib/ai/gateway.server";
 import {
   listAssistantThreads,
   readAssistantThread,
@@ -95,9 +95,11 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             auth: context.auth,
           });
           if (new URL(request.url).searchParams.get("reconcile") === "1") {
+            const config = aiConfig();
             await reconcileAiUsage({
               db: context.db,
-              config: aiConfig(),
+              config,
+              requestCost: gatewayRequestCost(config),
               userId: access.userId,
             });
             return Response.json(

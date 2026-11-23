@@ -3,54 +3,36 @@ import { aiRequest, aiRun, aiSettings } from "@texfolia/db/schema";
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import Stripe from "stripe";
 
-import {
-  cloudflareJson,
-  gatewayLogSchema,
-  type AiConfig,
-  type AiFetch,
-} from "./gateway.server";
-import { AiError, markedUpNanos, nanoDollars } from "./schema";
+import type { AiPayer } from "./entitlements";
+import { BillingError, markedUpNanos, nanoDollars } from "./usage";
 
-export async function aiEntitlement(
-  db: Db,
-  userId: string,
-  organizationId?: string | null,
-) {
-  const memberships = await db.query.member.findMany({
-    columns: { organizationId: true },
-    where: { userId },
-  });
-  const subscriptions = await db.query.subscription.findMany({
-    where: {
-      referenceId: {
-        in: [userId, ...memberships.map((m) => m.organizationId)],
-      },
-      plan: { in: ["pro", "team"] },
-      status: { in: ["active", "trialing"] },
-    },
-  });
-  const eligible = subscriptions.filter(
-    (s) =>
-      s.stripeCustomerId &&
-      s.stripeSubscriptionId &&
-      (!s.periodEnd || s.periodEnd > new Date()),
-  );
-  const subscription =
-    eligible.find((s) => s.referenceId === organizationId) ??
-    eligible.find((s) => s.referenceId === userId) ??
-    eligible[0];
-  if (!subscription?.stripeCustomerId || !subscription.stripeSubscriptionId)
-    throw new AiError(
-      "The assistant requires Pro or Team. Upgrade to use AI.",
-      403,
-    );
-  return {
-    customerId: subscription.stripeCustomerId,
-    subscriptionId: subscription.stripeSubscriptionId,
-  };
-}
+/** The Stripe side of AI metering. The app's AI config satisfies it. */
+export type MeteringConfig = {
+  stripeKey: string;
+  priceId: string;
+  meterEventName: string;
+};
 
-export function createAiStripe(config: AiConfig) {
+/** The provider's cost for one request, in US dollars. */
+export type UsageCost = {
+  model: string;
+  cost?: number | null;
+  tokensIn?: number;
+  tokensOut?: number;
+};
+
+/**
+ * Looks up a request's cost by the provider log ID that the run recorded.
+ * The app binds this to the AI Gateway logs API. A missing cost means "not
+ * priced yet", never free.
+ */
+export type RequestCost = (request: {
+  logId: string;
+  accountId: string;
+  gatewayId: string;
+}) => Promise<UsageCost>;
+
+function createAiStripe(config: MeteringConfig) {
   return new Stripe(config.stripeKey, {
     apiVersion: "2026-10-28.endive",
     maxNetworkRetries: 0,
@@ -59,8 +41,8 @@ export function createAiStripe(config: AiConfig) {
 }
 
 export async function ensureAiSubscription(
-  config: AiConfig,
-  payer: Awaited<ReturnType<typeof aiEntitlement>>,
+  config: MeteringConfig,
+  payer: AiPayer,
 ) {
   const stripe = createAiStripe(config);
   const [price, subscription] = await Promise.all([
@@ -75,7 +57,7 @@ export async function ensureAiSubscription(
     customerId !== payer.customerId ||
     !["active", "trialing"].includes(subscription.status)
   )
-    throw new AiError(
+    throw new BillingError(
       "Your subscription changed. Refresh before using AI.",
       409,
     );
@@ -87,7 +69,7 @@ export async function ensureAiSubscription(
     price.recurring.usage_type !== "metered" ||
     !price.recurring.meter
   )
-    throw new AiError(
+    throw new BillingError(
       "AI billing is not configured correctly. Try again later.",
       503,
     );
@@ -101,7 +83,7 @@ export async function ensureAiSubscription(
     meter.value_settings.event_payload_key !== "value" ||
     meter.event_time_window != null
   )
-    throw new AiError("AI usage meter is not configured correctly.", 503);
+    throw new BillingError("AI usage meter is not configured correctly.", 503);
   if (!subscription.items.data.some((item) => item.price.id === price.id))
     await stripe.subscriptionItems.create(
       {
@@ -181,7 +163,7 @@ export async function reserveAiRequest({
         ),
       );
     if (Number(usage?.total ?? 0) + reservedNanos > settings.monthlyCapNanos)
-      throw new AiError(
+      throw new BillingError(
         "Your monthly AI spend cap has been reached, or there is not enough remaining for this request. Adjust the cap or choose a less expensive model.",
         402,
       );
@@ -206,16 +188,16 @@ class MeteringReviewRequired extends Error {}
 export async function reconcileAiUsage({
   db,
   config,
+  requestCost,
   runId,
   userId,
-  fetcher = fetch,
   report,
 }: {
   db: Db;
-  config: AiConfig;
+  config: MeteringConfig;
+  requestCost: RequestCost;
   runId?: string;
   userId?: string;
-  fetcher?: AiFetch;
   report?: MeterReporter;
 }) {
   const stripe = report ? null : createAiStripe(config);
@@ -282,15 +264,11 @@ export async function reconcileAiUsage({
           throw new Error(
             "Gateway response did not provide a log ID; reconcile by request metadata",
           );
-        const log = gatewayLogSchema.parse(
-          await cloudflareJson(
-            { accountId: row.run.accountId, apiToken: config.apiToken },
-            `ai-gateway/gateways/${encodeURIComponent(row.run.gatewayId)}/logs/${encodeURIComponent(current.logId)}`,
-            fetcher,
-          ),
-        ).result;
-        if (log.id !== current.logId)
-          throw new Error("Gateway returned a different log ID");
+        const log = await requestCost({
+          logId: current.logId,
+          accountId: row.run.accountId,
+          gatewayId: row.run.gatewayId,
+        });
         if (log.cost == null) throw new Error("Gateway log has no cost yet");
         const base = Math.ceil(log.cost * nanoDollars);
         charged = markedUpNanos(base, row.run.markupPercent);
@@ -301,8 +279,8 @@ export async function reconcileAiUsage({
             model: log.model,
             baseCostNanos: base,
             chargedNanos: charged,
-            inputTokens: log.tokens_in,
-            outputTokens: log.tokens_out,
+            inputTokens: log.tokensIn,
+            outputTokens: log.tokensOut,
           })
           .where(eq(aiRequest.id, current.id));
       }

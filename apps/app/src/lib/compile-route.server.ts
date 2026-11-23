@@ -1,10 +1,10 @@
+import { compilePlan } from "@texfolia/billing/server";
 import { createCompileHandlers } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
 import { streamProjectResponse } from "@texfolia/projects/server";
 import { env } from "cloudflare:workers";
 
 import type { createAuth } from "./auth";
-import { compilePlan } from "./billing.server";
 import { compileProject } from "./compile-source.server";
 import { lockProject } from "./project-access.server";
 import { requestPrincipal } from "./request-principal.server";

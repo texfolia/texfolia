@@ -4,6 +4,7 @@ import {
   redirect,
   useRouter,
 } from "@tanstack/react-router";
+import { paidPlans } from "@texfolia/billing";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
 import { useRef, useState } from "react";
@@ -11,7 +12,6 @@ import { z } from "zod";
 
 import { authClient } from "#/lib/auth-client";
 import { getSession } from "#/lib/auth.functions";
-import { paidPlans } from "#/lib/billing";
 import { getBilling } from "#/lib/billing.functions";
 import { webPath } from "#/lib/origins";
 

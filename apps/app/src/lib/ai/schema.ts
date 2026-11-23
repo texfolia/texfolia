@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-export const nanoDollars = 1_000_000_000;
 export const maxOutputTokens = 2048;
 export const aiPreferencesSchema = z.object({
   defaultModel: z.string().min(1).max(200).nullable(),
@@ -24,20 +23,6 @@ export const aiConfigurationSchema = z.object({
   pendingRequests: z.number().int().nonnegative(),
 });
 export type AiConfiguration = z.infer<typeof aiConfigurationSchema>;
-
-export function markedUpNanos(base: number, percent = 20) {
-  if (
-    !Number.isSafeInteger(base) ||
-    base < 0 ||
-    !Number.isInteger(percent) ||
-    percent < 0
-  )
-    throw new Error("Invalid AI cost");
-  const amount = Math.ceil((base * (100 + percent)) / 100);
-  if (!Number.isSafeInteger(amount))
-    throw new Error("AI cost exceeds supported precision");
-  return amount;
-}
 
 export class AiError extends Error {
   constructor(
