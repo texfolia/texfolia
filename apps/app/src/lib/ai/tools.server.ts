@@ -1,4 +1,5 @@
 import { toolDefinition } from "@tanstack/ai";
+import { aiEntitlement } from "@texfolia/billing/server";
 import { parseCompileLog } from "@texfolia/compile";
 import type { Db } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
@@ -17,7 +18,6 @@ import { handleCompileGet, handleCompilePost } from "../compile-route.server";
 import { lockProject } from "../project-access.server";
 import { createProjectNode, renameProjectNode } from "../project-node.server";
 import { deleteProjectNode } from "../project-source.server";
-import { aiEntitlement } from "./billing.server";
 import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
 
 /** Tools that change project state; offered only to collaborators who can edit. */

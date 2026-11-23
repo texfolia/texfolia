@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
-import { enforceBillingScope } from "@texfolia/auth";
+import { createOrganizationPlugin } from "@texfolia/auth";
+import {
+  aiEntitlement,
+  compilePlan,
+  createBillingPlugin,
+  enforceBillingScope,
+} from "@texfolia/billing/server";
 import { createDb } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
 import { betterAuth } from "better-auth";
 import { eq, inArray } from "drizzle-orm";
 import Stripe from "stripe";
-
-import { aiEntitlement } from "../src/lib/ai/billing.server";
-import { createBillingPlugin, createOrganizationPlugin } from "../src/lib/auth";
-import { compilePlan } from "../src/lib/billing.server";
 
 const key = process.env.STRIPE_SECRET_KEY;
 assert(

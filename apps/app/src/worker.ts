@@ -1,10 +1,10 @@
 import handler from "@tanstack/react-start/server-entry";
+import { reconcileAiUsage } from "@texfolia/billing/server";
 import { createDb } from "@texfolia/db";
 import { collectGitObjects } from "@texfolia/git/server";
 import { sweepProjectSources } from "@texfolia/storage/server";
 
-import { reconcileAiUsage } from "./lib/ai/billing.server";
-import { aiConfig } from "./lib/ai/gateway.server";
+import { aiConfig, gatewayRequestCost } from "./lib/ai/gateway.server";
 import { collectProjectSources } from "./lib/project-source.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
@@ -44,11 +44,15 @@ export default {
       } else {
         const results = await Promise.allSettled([
           refreshTemplatePreviews({ db, bucket: env.SOURCES }),
-          Promise.resolve().then(() =>
-            process.env.CLOUDFLARE_AI_API_TOKEN
-              ? reconcileAiUsage({ db, config: aiConfig() })
-              : undefined,
-          ),
+          Promise.resolve().then(() => {
+            if (!process.env.CLOUDFLARE_AI_API_TOKEN) return;
+            const config = aiConfig();
+            return reconcileAiUsage({
+              db,
+              config,
+              requestCost: gatewayRequestCost(config),
+            });
+          }),
         ]);
         const failures = results.flatMap((result) =>
           result.status === "rejected" ? [result.reason] : [],

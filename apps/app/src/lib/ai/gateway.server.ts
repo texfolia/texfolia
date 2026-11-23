@@ -1,3 +1,4 @@
+import type { RequestCost } from "@texfolia/billing/server";
 import { z } from "zod";
 
 import { AiError, type AiModel } from "./schema";
@@ -122,3 +123,27 @@ export const gatewayLogSchema = z.object({
     tokens_out: z.number().int().nonnegative().optional(),
   }),
 });
+
+/** Prices metered requests from their AI Gateway logs for `reconcileAiUsage`. */
+export function gatewayRequestCost(
+  config: Pick<AiConfig, "apiToken">,
+  fetcher: AiFetch = fetch,
+): RequestCost {
+  return async ({ logId, accountId, gatewayId }) => {
+    const log = gatewayLogSchema.parse(
+      await cloudflareJson(
+        { accountId, apiToken: config.apiToken },
+        `ai-gateway/gateways/${encodeURIComponent(gatewayId)}/logs/${encodeURIComponent(logId)}`,
+        fetcher,
+      ),
+    ).result;
+    if (log.id !== logId)
+      throw new Error("Gateway returned a different log ID");
+    return {
+      model: log.model,
+      cost: log.cost,
+      tokensIn: log.tokens_in,
+      tokensOut: log.tokens_out,
+    };
+  };
+}

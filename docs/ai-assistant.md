@@ -117,6 +117,9 @@ user's role changes while it is in progress.
 
 ## Check metering
 
+Metering lives in [`@texfolia/billing`](../packages/billing/README.md). The app
+only binds the Gateway log lookup that prices each request.
+
 Each model request first creates an `ai_request` row. Its reservation includes
 20% markup and conservatively bounds input tokens by UTF-8 request bytes plus
 framing overhead, with 2,048 output tokens. Concurrent requests lock the user's

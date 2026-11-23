@@ -318,7 +318,9 @@ Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the
 
 Organization setup follows the [Better Auth organization plugin](https://better-auth.com/docs/plugins/organization)
 and [Stripe organization billing](https://better-auth.com/docs/plugins/stripe#using-with-organizations) documentation.
-`src/lib/auth.ts` contains the organization configuration and billing authorization.
+The organization configuration lives in `packages/auth`. Plans, checkout, the portal,
+webhooks, entitlements, and AI metering are exposed by [`@texfolia/billing`](../../packages/billing/README.md);
+the `/settings/billing` route, its server function, and the billing UI stay in the app.
 Auth tables and relations, including organizations, are generated into
 `packages/db/src/auth-schema.ts` from the shared auth configuration.
 

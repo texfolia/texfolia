@@ -1,6 +1,15 @@
 import { setSystemTime, spyOn } from "bun:test";
 import assert from "node:assert/strict";
 
+import { BillingError, markedUpNanos, nanoDollars } from "@texfolia/billing";
+import {
+  aiEntitlement,
+  aiSpend,
+  getAiSettings,
+  reconcileAiUsage,
+  reserveAiRequest,
+  type MeterReporter,
+} from "@texfolia/billing/server";
 import { createDb } from "@texfolia/db";
 import {
   aiRequest,
@@ -14,15 +23,10 @@ import {
 import { eq, inArray } from "drizzle-orm";
 
 import {
-  aiEntitlement,
-  aiSpend,
-  getAiSettings,
-  reconcileAiUsage,
-  reserveAiRequest,
-  type MeterReporter,
-} from "../src/lib/ai/billing.server";
-import type { AiConfig, AiFetch } from "../src/lib/ai/gateway.server";
-import { AiError, markedUpNanos, nanoDollars } from "../src/lib/ai/schema";
+  gatewayRequestCost,
+  type AiConfig,
+  type AiFetch,
+} from "../src/lib/ai/gateway.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -67,6 +71,7 @@ const fetcher: AiFetch = async (input) => {
     },
   });
 };
+const requestCost = gatewayRequestCost(config, fetcher);
 const report: MeterReporter = async (event) => {
   events.push(event);
 };
@@ -132,7 +137,7 @@ try {
   );
   await assert.rejects(
     aiEntitlement(db, freeId),
-    (e) => e instanceof AiError && e.status === 403,
+    (e) => e instanceof BillingError && e.status === 403,
   );
   const subId = crypto.randomUUID();
   subscriptionIds.push(subId);
@@ -181,7 +186,7 @@ try {
     const first = await request(id);
     const second = await request(id);
     const before = events.length;
-    await reconcileAiUsage({ db, config, runId: id, fetcher, report });
+    await reconcileAiUsage({ db, config, runId: id, requestCost, report });
     assert.equal(
       events.length,
       before + 2,
@@ -195,7 +200,7 @@ try {
     }
     assert.equal(events.at(-1)?.payload.value, "12000000");
     assert.equal(events.at(-1)?.payload.stripe_customer_id, "cus_pro");
-    await reconcileAiUsage({ db, config, runId: id, fetcher, report });
+    await reconcileAiUsage({ db, config, runId: id, requestCost, report });
     assert.equal(
       events.length,
       before + 2,
@@ -204,7 +209,7 @@ try {
   }
   const active = await run("running");
   const activeRequest = await request(active);
-  await reconcileAiUsage({ db, config, runId: active, fetcher, report });
+  await reconcileAiUsage({ db, config, runId: active, requestCost, report });
   assert.equal(
     (await row(activeRequest.id)).attempts,
     0,
@@ -214,7 +219,7 @@ try {
     .update(aiRun)
     .set({ createdAt: new Date(Date.now() - 11 * 60_000) })
     .where(eq(aiRun.id, active));
-  await reconcileAiUsage({ db, config, runId: active, fetcher, report });
+  await reconcileAiUsage({ db, config, runId: active, requestCost, report });
   assert.equal(
     (await row(activeRequest.id)).status,
     "reported",
@@ -232,7 +237,7 @@ try {
     db,
     config,
     runId: failed,
-    fetcher,
+    requestCost,
     report: brokenReport,
   });
   assert.equal((await row(failedRequest.id)).status, "priced");
@@ -243,7 +248,7 @@ try {
     db,
     config,
     runId: failed,
-    fetcher,
+    requestCost,
     report: brokenReport,
   });
   assert.equal(
@@ -262,7 +267,7 @@ try {
   const missingRequest = await request(missing);
   missingCost = true;
   const eventsBefore = events.length;
-  await reconcileAiUsage({ db, config, runId: missing, fetcher, report });
+  await reconcileAiUsage({ db, config, runId: missing, requestCost, report });
   assert.equal((await row(missingRequest.id)).chargedNanos, null);
   assert.equal(
     events.length,
@@ -271,7 +276,7 @@ try {
   );
   missingCost = false;
   await retry(missingRequest.id);
-  await reconcileAiUsage({ db, config, runId: missing, fetcher, report });
+  await reconcileAiUsage({ db, config, runId: missing, requestCost, report });
   assert.equal(
     (await row(missingRequest.id)).status,
     "reported",
@@ -280,14 +285,14 @@ try {
   const unpriced = await run("failed");
   const unpricedRequest = await request(unpriced, { attempts: 11 });
   missingCost = true;
-  await reconcileAiUsage({ db, config, runId: unpriced, fetcher, report });
+  await reconcileAiUsage({ db, config, runId: unpriced, requestCost, report });
   assert.equal((await row(unpricedRequest.id)).status, "needs_review");
   assert.equal((await row(unpricedRequest.id)).chargedNanos, null);
   const lost = await run("aborted");
   const lostRequest = await request(lost, { logId: null, attempts: 11 });
   setSystemTime(Date.now() - 60_000);
   try {
-    await reconcileAiUsage({ db, config, runId: lost, fetcher, report });
+    await reconcileAiUsage({ db, config, runId: lost, requestCost, report });
   } finally {
     setSystemTime();
   }
@@ -299,7 +304,13 @@ try {
   const beforeScheduled = events.length;
   setSystemTime(Date.now() + 3600_000);
   try {
-    await reconcileAiUsage({ db, config, runId: scheduled, fetcher, report });
+    await reconcileAiUsage({
+      db,
+      config,
+      runId: scheduled,
+      requestCost,
+      report,
+    });
   } finally {
     setSystemTime();
   }
@@ -319,8 +330,8 @@ try {
   missingCost = false;
   const eventCount = events.length;
   await Promise.all([
-    reconcileAiUsage({ db, config, runId: parallelRun, fetcher, report }),
-    reconcileAiUsage({ db, config, runId: parallelRun, fetcher, report }),
+    reconcileAiUsage({ db, config, runId: parallelRun, requestCost, report }),
+    reconcileAiUsage({ db, config, runId: parallelRun, requestCost, report }),
   ]);
   assert.equal(
     events.length,
@@ -336,7 +347,13 @@ try {
     reportStartedAt: new Date(Date.now() - 25 * 3600_000),
   });
   const beforeUncertain = events.length;
-  await reconcileAiUsage({ db, config, runId: uncertainRun, fetcher, report });
+  await reconcileAiUsage({
+    db,
+    config,
+    runId: uncertainRun,
+    requestCost,
+    report,
+  });
   assert.equal((await row(uncertain.id)).status, "needs_review");
   assert.equal(
     events.length,
@@ -360,7 +377,7 @@ try {
     db,
     config,
     runId: zeroRun,
-    fetcher: zeroFetcher,
+    requestCost: gatewayRequestCost(config, zeroFetcher),
     report,
   });
   assert.equal((await row(zero.id)).status, "reported");

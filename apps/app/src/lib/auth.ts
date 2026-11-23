@@ -6,13 +6,7 @@ import {
 import type { Db } from "@texfolia/db";
 
 export type { Auth };
-export {
-  authorizeOrganizationBilling,
-  createBillingPlugin,
-  createEmailOTPPlugin,
-  createOrganizationPlugin,
-  enforceBillingScope,
-} from "@texfolia/auth";
+export { createEmailOTPPlugin, createOrganizationPlugin } from "@texfolia/auth";
 
 async function sendEmail(
   options: Parameters<typeof import("./email").sendEmail>[0],
