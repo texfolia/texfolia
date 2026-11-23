@@ -1,14 +1,15 @@
-import { createAuth as createSharedAuth, type Auth } from "@texfolia/auth";
 import type { Db } from "@texfolia/db";
-import { sendEmail, type EmailMessage } from "@texfolia/email";
 
 import {
   invalidateOrganizationCollaborationAccess,
   type CollaborationAccess,
 } from "#/features/collaboration/server";
+import { sendEmail, type EmailMessage } from "#/features/email";
+
+import { createAuth as createBaseAuth, type Auth } from "./server";
 
 export type { Auth };
-export { createEmailOTPPlugin, createOrganizationPlugin } from "@texfolia/auth";
+export { createEmailOTPPlugin, createOrganizationPlugin } from "./server";
 
 // Loaded on first use because only Workers provide the binding module.
 async function deliver(message: EmailMessage) {
@@ -17,7 +18,7 @@ async function deliver(message: EmailMessage) {
 }
 
 export function createAuth(db: Db, collaboration?: CollaborationAccess): Auth {
-  return createSharedAuth(db, {
+  return createBaseAuth(db, {
     sendEmail: deliver,
     onMemberRemoved: async (member) => {
       await invalidateOrganizationCollaborationAccess({

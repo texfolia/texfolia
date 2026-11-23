@@ -1,7 +1,7 @@
 # Public auth abuse protection
 
-Shared auth lives in `@texfolia/auth`; the product app wires it in
-`apps/app/src/features/auth/auth.ts`. The login page supports
+Auth is configured in `apps/app/src/features/auth/server.ts`, and
+`apps/app/src/features/auth/auth.ts` binds it to the Worker. The login page supports
 email OTP and GitHub, Google, GitLab, and Microsoft OAuth. Password sign-in and
 OTP password reset remain available for existing credentials. Password signup
 is disabled because the product does not use it, and creating an unverified

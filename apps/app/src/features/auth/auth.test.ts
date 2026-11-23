@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 
-import type { EmailMessage } from "@texfolia/email";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import Stripe from "stripe";
@@ -10,6 +9,7 @@ import {
   createBillingPlugin,
   enforceBillingScope,
 } from "#/features/billing/server";
+import type { EmailMessage } from "#/features/email";
 import { loginSearchSchema } from "#/routes/login/route";
 
 import { createOrganizationPlugin } from "./auth";

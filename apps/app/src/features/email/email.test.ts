@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { codeEmail, deleteAccountEmail, sendEmail } from "../src";
+import { codeEmail, deleteAccountEmail, sendEmail } from "./index";
 
 const message = codeEmail({
   to: "writer@example.com",

@@ -6,7 +6,7 @@ export type EmailMessage = {
 };
 export type SendEmail = (message: EmailMessage) => Promise<void>;
 
-/** The part of the Workers `send_email` binding this package uses. */
+/** The part of the Workers `send_email` binding this feature uses. */
 export type EmailBinding = {
   send(message: EmailMessage & { from: string }): Promise<unknown>;
 };

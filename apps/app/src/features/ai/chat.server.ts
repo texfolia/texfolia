@@ -8,7 +8,6 @@ import {
   type StreamChunk,
 } from "@tanstack/ai";
 import { createCloudflareText } from "@tanstack/ai-cloudflare";
-import type { Auth } from "@texfolia/auth";
 import { createDb, type Db } from "@texfolia/db";
 import {
   aiRequest,
@@ -21,6 +20,7 @@ import {
 import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import type { Auth } from "#/features/auth/server";
 import { BillingError, markedUpNanos, nanoDollars } from "#/features/billing";
 import {
   aiEntitlement,

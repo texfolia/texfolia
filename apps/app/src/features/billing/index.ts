@@ -1,2 +1,4 @@
-export { paidPlans, subscriptionPlans } from "@texfolia/auth/billing";
+export { paidPlans } from "@texfolia/contracts/plans";
+
+export { subscriptionPlans } from "./plans";
 export { BillingError, markedUpNanos, nanoDollars } from "./usage";

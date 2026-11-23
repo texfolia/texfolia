@@ -26,7 +26,7 @@ in `#/features/sharing` adds collaborator invitations and share links.
 
 ## Boundaries
 
-This feature depends on `@texfolia/db`, `@texfolia/auth` (organization roles),
+This feature depends on `@texfolia/db`, `#/features/auth` (organization roles),
 `#/features/storage` (source uploads and the garbage queue),
 `@texfolia/contracts`, and `#/features/editor` (the spelling-language schema
 only).

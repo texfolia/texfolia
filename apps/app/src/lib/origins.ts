@@ -1,4 +1,4 @@
-import { localHosts, productionHosts } from "@texfolia/auth/hosts";
+import { localHosts, productionHosts } from "@texfolia/contracts/hosts";
 
 /** Marketing site origin for Templates, Pricing, Privacy, and Terms links. */
 export function webOrigin() {

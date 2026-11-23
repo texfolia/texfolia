@@ -4,8 +4,8 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { localHosts } from "@texfolia/auth/hosts";
 import { unknownEngineTiming } from "@texfolia/contracts";
+import { localHosts } from "@texfolia/contracts/hosts";
 import { createDb } from "@texfolia/db";
 import { session, template, user } from "@texfolia/db/schema";
 import { seedTemplates } from "@texfolia/db/seed-templates";

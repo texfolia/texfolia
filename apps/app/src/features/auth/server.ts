@@ -2,12 +2,6 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { stripe, type SubscriptionOptions } from "@better-auth/stripe";
 import { type Db } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
-import {
-  codeEmail,
-  deleteAccountEmail,
-  invitationEmail,
-  type SendEmail,
-} from "@texfolia/email";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { captcha, emailOTP, organization } from "better-auth/plugins";
@@ -16,9 +10,15 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import Stripe from "stripe";
 import { z } from "zod";
 
-import { subscriptionPlans } from "./billing";
-import { AUTH_EMAIL_CAPTCHA_ACTION } from "./client";
-import { parseOrigins } from "./hosts";
+import { subscriptionPlans } from "#/features/billing/plans";
+import {
+  codeEmail,
+  deleteAccountEmail,
+  invitationEmail,
+  type SendEmail,
+} from "#/features/email";
+
+import { AUTH_EMAIL_CAPTCHA_ACTION } from "./captcha";
 import { isOrgAdmin } from "./roles";
 
 export const enforceBillingScope = createAuthMiddleware(async (ctx) => {
@@ -126,6 +126,14 @@ const removedMemberResponseSchema = z.union([
   z.object({ member: removedMemberSchema }).transform(({ member }) => member),
   removedMemberSchema,
 ]);
+
+function parseOrigins(value: string | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => new URL(origin).origin);
+}
 
 // Reads its secrets from process.env. BETTER_AUTH_URL is the app origin
 // (https://app.texfolia.com in production), where OAuth callbacks land.

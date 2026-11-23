@@ -12,11 +12,3 @@ export const localHosts = {
   app: "http://localhost:3000",
   web: ["http://localhost:4321"],
 } as const;
-
-export function parseOrigins(value: string | undefined) {
-  return (value ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-    .map((origin) => new URL(origin).origin);
-}

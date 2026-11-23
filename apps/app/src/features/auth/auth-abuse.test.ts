@@ -2,9 +2,10 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import assert from "node:assert/strict";
 
 import { createDb } from "@texfolia/db";
-import type { EmailMessage } from "@texfolia/email";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
+
+import type { EmailMessage } from "#/features/email";
 
 import { createAuth, createEmailOTPPlugin } from "./auth";
 

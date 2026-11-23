@@ -13,13 +13,13 @@ Open [localhost:4321](http://localhost:4321).
 
 ## Routes
 
-| Route        | Rendering                       | Notes                                                    |
-| ------------ | ------------------------------- | -------------------------------------------------------- |
-| `/`          | Prerendered at build time       | Landing page                                             |
-| `/pricing`   | Prerendered at build time       | Plan names and prices come from `@texfolia/auth/billing` |
-| `/privacy`   | Prerendered at build time       | Placeholder policy for review (`noindex`)                |
-| `/terms`     | Prerendered at build time       | Placeholder terms for review (`noindex`)                 |
-| `/templates` | Server-rendered on each request | Templates gallery; `?page=` pages through the catalog    |
+| Route        | Rendering                       | Notes                                                       |
+| ------------ | ------------------------------- | ----------------------------------------------------------- |
+| `/`          | Prerendered at build time       | Landing page                                                |
+| `/pricing`   | Prerendered at build time       | Plan names and prices come from `@texfolia/contracts/plans` |
+| `/privacy`   | Prerendered at build time       | Placeholder policy for review (`noindex`)                   |
+| `/terms`     | Prerendered at build time       | Placeholder terms for review (`noindex`)                    |
+| `/templates` | Server-rendered on each request | Templates gallery; `?page=` pages through the catalog       |
 
 The prerendered pages are served as static assets. Everything else, including
 `/templates` and the not-found page, runs in the Worker.

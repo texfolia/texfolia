@@ -16,15 +16,16 @@ modules that bind it to the app, named below, are imported by path. Load
 
 ## Boundaries
 
-The feature depends on `@texfolia/db` (subscriptions, members, AI usage tables)
-and `@texfolia/auth`. It does not depend on storage, compile or projects.
+The feature depends on `@texfolia/db` (subscriptions, members, AI usage tables),
+`@texfolia/contracts` (public plans), and `#/features/auth` (roles and the Stripe
+plugin). It does not depend on storage, compile or projects.
 
 - **Checkout, portal and webhooks** are the Better Auth Stripe plugin's
   endpoints (`/api/auth/subscription/*`, `/api/auth/stripe/webhook`). The
   plugin, its plan scope check and organization authorization live in
-  `@texfolia/auth`, because `createAuth` installs them; this feature re-exports
-  them rather than moving them, so the auth package's API is unchanged. Plan
-  data (`paidPlans`) stays in `@texfolia/auth/billing` for the same reason.
+  `#/features/auth/server`, because `createAuth` installs them; this feature
+  re-exports them. Plan data (`paidPlans`) lives in `@texfolia/contracts/plans`,
+  because `apps/web` shows the same prices. `plans.ts` maps price IDs to plans.
 - **AI usage metering** lives here, not in the assistant. The assistant asks
   for an entitlement, reserves each request against the user's cap, and
   reconciles after the run. The cost source is injected: `reconcileAiUsage`
@@ -35,7 +36,7 @@ and `@texfolia/auth`. It does not depend on storage, compile or projects.
 `billing.functions.ts` is the `/settings/billing` server function. The route, the legacy `/billing`
 redirect, the auth route that serves the webhook, and the billing UI stay
 outside the feature. `apps/web` `/pricing` reads only `paidPlans` from
-`@texfolia/auth/billing`.
+`@texfolia/contracts/plans`.
 
 ## Checks
 

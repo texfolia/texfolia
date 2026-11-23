@@ -1,7 +1,7 @@
-import type { Auth } from "@texfolia/auth";
 import type { Db } from "@texfolia/db";
 import type { z } from "zod";
 
+import type { Auth } from "#/features/auth/server";
 import type { GitAction, GitResult } from "#/features/git";
 import type { createNodeSchema, renameNodeSchema } from "#/features/projects";
 import type {

@@ -18,7 +18,7 @@ modules that bind it to the app, named below, are imported by path.
 
 The feature depends on `@texfolia/db` (`project_git`, project nodes, accounts),
 `#/features/storage` (source objects), `#/features/projects` (paths and the
-`LockProject` type) and `@texfolia/auth/roles`. The core does not know about
+`LockProject` type) and `#/features/auth/roles`. The core does not know about
 share links, Better Auth sessions, Durable Objects, or server functions. It takes
 those as arguments:
 
@@ -33,7 +33,7 @@ assistant's Git tools, and Settings → Connections stay outside the feature.
 ## Adding a platform
 
 Write an adapter in `providers/` with `defineGitProvider`, register it in
-`gitProviders`, and add its Better Auth social provider in `packages/auth`. Do
+`gitProviders`, and add its Better Auth social provider in `#/features/auth/server`. Do
 not fork the core module; add an adapter field if the platform's Git HTTP
 differs.
 
