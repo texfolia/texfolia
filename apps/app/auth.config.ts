@@ -1,11 +1,9 @@
 import { createDb } from "@texfolia/db";
 
 import { assertLocalUrl } from "../../scripts/local-environment.mts";
-import { createAuth } from "./src/features/auth/server";
+import { createAuth } from "./src/features/auth/auth";
 
 assertLocalUrl(process.env.DATABASE_URL, "DATABASE_URL");
 
 // Used only by `bun run auth:schema` to generate packages/db/src/auth-schema.ts.
-export const auth = createAuth(createDb(process.env.DATABASE_URL!), {
-  sendEmail: async () => {},
-});
+export const auth = createAuth(createDb(process.env.DATABASE_URL!));

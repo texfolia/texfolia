@@ -20,7 +20,7 @@ import {
 import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import type { Auth } from "#/features/auth/server";
+import type { Auth } from "#/features/auth/auth";
 import { BillingError, markedUpNanos, nanoDollars } from "#/features/billing";
 import {
   aiEntitlement,

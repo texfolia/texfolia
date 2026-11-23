@@ -38,8 +38,7 @@ Signed-out visitors get **Sign in to open in Texfolia**, which signs them in or
 creates an account and returns them to the template.
 Creating a project from a template inside the app stays on the app.
 
-The site does not read sessions. Sign-in, OAuth callbacks, and session cookies
-(scoped to `texfolia.com`, so they also cover `www` and `app`) stay on
+The site does not use auth. Sign-in, OAuth callbacks, and session cookies stay on
 `app.texfolia.com`.
 
 ## Project setup

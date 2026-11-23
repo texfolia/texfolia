@@ -33,7 +33,7 @@ assistant's Git tools, and Settings → Connections stay outside the feature.
 ## Adding a platform
 
 Write an adapter in `providers/` with `defineGitProvider`, register it in
-`gitProviders`, and add its Better Auth social provider in `#/features/auth/server`. Do
+`gitProviders`, and add its Better Auth social provider in `#/features/auth/auth`. Do
 not fork the core module; add an adapter field if the platform's Git HTTP
 differs.
 

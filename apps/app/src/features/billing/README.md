@@ -17,15 +17,15 @@ modules that bind it to the app, named below, are imported by path. Load
 ## Boundaries
 
 The feature depends on `@texfolia/db` (subscriptions, members, AI usage tables),
-`@texfolia/contracts` (public plans), and `#/features/auth` (roles and the Stripe
-plugin). It does not depend on storage, compile or projects.
+`@texfolia/contracts` (public plans), and `#/features/auth/roles`. It does not
+depend on storage, compile or projects.
 
 - **Checkout, portal and webhooks** are the Better Auth Stripe plugin's
   endpoints (`/api/auth/subscription/*`, `/api/auth/stripe/webhook`). The
   plugin, its plan scope check and organization authorization live in
-  `#/features/auth/server`, because `createAuth` installs them; this feature
-  re-exports them. Plan data (`paidPlans`) lives in `@texfolia/contracts/plans`,
-  because `apps/web` shows the same prices. `plans.ts` maps price IDs to plans.
+  `stripe.ts`; `createAuth` in `#/features/auth/auth` installs them. Plan data
+  (`paidPlans`) lives in `@texfolia/contracts/plans`, because `apps/web` shows
+  the same prices. `plans.ts` maps price IDs to plans.
 - **AI usage metering** lives here, not in the assistant. The assistant asks
   for an entitlement, reserves each request against the user's cap, and
   reconciles after the run. The cost source is injected: `reconcileAiUsage`

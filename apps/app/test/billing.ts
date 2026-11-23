@@ -7,7 +7,7 @@ import { betterAuth } from "better-auth";
 import { eq, inArray } from "drizzle-orm";
 import Stripe from "stripe";
 
-import { createOrganizationPlugin } from "#/features/auth/server";
+import { createOrganizationPlugin } from "#/features/auth/auth";
 import {
   aiEntitlement,
   compilePlan,
