@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { listTemplates } from "@texfolia/templates/server";
 import { z } from "zod";
-
-import { listTemplates } from "#/lib/template-catalog.server";
 
 const pageSchema = z.coerce.number().int().min(0).max(1000).catch(0);
 

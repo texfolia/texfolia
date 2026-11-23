@@ -17,8 +17,27 @@ import {
   type SourceBucket,
   sweepProjectSources,
 } from "@texfolia/storage/server";
+import {
+  publishTemplateSchema,
+  templateSnapshotSchema,
+} from "@texfolia/templates";
+import {
+  collectTemplateObjects,
+  findTemplate,
+  getTemplate,
+  listTemplates,
+  openTemplate,
+  publishTemplate as publishTemplateSnapshot,
+  refreshTemplatePreview,
+  refreshTemplatePreviews,
+  reportTemplate,
+  reviewTemplate,
+  templateArchive,
+  templateReviewQueue,
+} from "@texfolia/templates/server";
 import { eq, inArray, isNull } from "drizzle-orm";
 
+import { lockProject } from "../../src/lib/project-access.server";
 import { createProjectNode } from "../../src/lib/project-node.server";
 import {
   collectProjectSources,
@@ -30,30 +49,10 @@ import {
   getProject,
   getProjects,
 } from "../../src/lib/project.server";
-import {
-  findTemplate,
-  getTemplate,
-  listTemplates,
-  templateArchive,
-} from "../../src/lib/template-catalog.server";
-import { collectTemplateObjects } from "../../src/lib/template-cleanup.server";
-import {
-  retryTemplatePreview,
-  refreshTemplatePreviews,
-} from "../../src/lib/template-preview.server";
-import {
-  reportTemplate,
-  reviewTemplate,
-  templateReviewQueue,
-} from "../../src/lib/template-review.server";
-import {
-  openTemplate,
-  publishTemplate,
-} from "../../src/lib/template-snapshot.server";
-import {
-  publishTemplateSchema,
-  templateSnapshotSchema,
-} from "../../src/lib/template.schema";
+
+const publishTemplate = (
+  options: Omit<Parameters<typeof publishTemplateSnapshot>[0], "lock">,
+) => publishTemplateSnapshot({ ...options, lock: lockProject });
 
 export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
 
@@ -706,6 +705,16 @@ export default {
         userId: viewerId,
         data: { ...data, projectId: personal.id },
       });
+      const retryAs = (userId?: string) =>
+        refreshTemplatePreview({
+          db,
+          bucket,
+          compiler,
+          templateId: republished.id,
+          retry: true,
+          userId,
+          reviewers: reviewerId,
+        });
       const retrySource = await findTemplate({
         db,
         templateId: republished.id,
@@ -730,10 +739,7 @@ export default {
         1,
         "A failed attempt clears its temporary compiler project",
       );
-      await assert.rejects(
-        retryTemplatePreview({ db, templateId: republished.id }),
-        /Wait a minute/,
-      );
+      await assert.rejects(retryAs(viewerId), /Wait a minute/);
 
       assert.equal(
         (
@@ -756,9 +762,15 @@ export default {
         .update(template)
         .set({ previewStartedAt: new Date(Date.now() - 61_000) })
         .where(eq(template.id, republished.id));
+      for (const userId of [undefined, editorId])
+        await assert.rejects(
+          retryAs(userId),
+          /Template not found/,
+          "Only the owner or a reviewer can retry a preview",
+        );
       const retries = await Promise.allSettled([
-        retryTemplatePreview({ db, templateId: republished.id }),
-        retryTemplatePreview({ db, templateId: republished.id }),
+        retryAs(viewerId),
+        retryAs(reviewerId),
       ]);
       assert.equal(
         retries.filter((result) => result.status === "fulfilled").length,

@@ -2,13 +2,13 @@ import { fetchCompiler } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
 import { template } from "@texfolia/db/schema";
 import { assertProjectSourcePaths, projectPaths } from "@texfolia/projects";
-import { encodeSource } from "@texfolia/storage";
-import { InvalidSourcePathError } from "@texfolia/storage";
+import { encodeSource, InvalidSourcePathError } from "@texfolia/storage";
 import type { SourceBucket } from "@texfolia/storage/server";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { templateSnapshotSchema } from "./template.schema";
+import { findTemplate, isTemplateReviewer } from "./catalog.server";
+import { templateSnapshotSchema } from "./schema";
 
 type Context = { db: Db; bucket: SourceBucket };
 type StoredTemplate = typeof template.$inferSelect;
@@ -48,7 +48,7 @@ async function compileSnapshot(found: StoredTemplate, bucket: SourceBucket) {
   return body;
 }
 
-export async function retryTemplatePreview({
+async function retryTemplatePreview({
   db,
   templateId,
 }: {
@@ -231,4 +231,34 @@ export async function refreshTemplatePreviews({
           });
     }
   }
+}
+
+// Advances one visible template's preview. Only its owner or a reviewer can
+// retry a failed attempt.
+export async function refreshTemplatePreview({
+  db,
+  bucket,
+  compiler,
+  templateId,
+  retry,
+  userId,
+  reviewers = "",
+}: Context & {
+  compiler?: Pick<Fetcher, "fetch">;
+  templateId: string;
+  retry: boolean;
+  userId?: string;
+  reviewers?: string;
+}) {
+  const found = await findTemplate({ db, templateId, userId, reviewers });
+  if (!found) throw new Error("Template not found");
+  if (retry) {
+    if (
+      !userId ||
+      (found.ownerId !== userId && !isTemplateReviewer(userId, reviewers))
+    )
+      throw new Error("Template not found");
+    await retryTemplatePreview({ db, templateId });
+  }
+  await refreshTemplatePreviews({ db, bucket, compiler, templateId });
 }

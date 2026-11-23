@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { openTemplateSchema, publishTemplateSchema } from "./template.schema";
+import { openTemplateSchema, publishTemplateSchema } from "../src/index";
 
 const valid = {
   projectId: crypto.randomUUID(),

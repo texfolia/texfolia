@@ -5,7 +5,7 @@ import type { SourceBucket } from "@texfolia/storage/server";
 import { createZip } from "@texfolia/storage/zip";
 import { and, desc, eq } from "drizzle-orm";
 
-import { templateSnapshotSchema } from "./template.schema";
+import { templateSnapshotSchema } from "./schema";
 
 export const publicColumns = {
   id: template.id,

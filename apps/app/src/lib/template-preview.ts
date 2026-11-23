@@ -1,38 +1,24 @@
 import { useRouter } from "@tanstack/react-router";
+import {
+  pollTemplatePreviews,
+  queuedTemplatePreviews,
+} from "@texfolia/templates";
 import { useEffect } from "react";
 
 import { refreshTemplatePreview } from "./template.functions";
 
 export function useTemplatePreviews(
-  templates: { id: string; previewStatus: "queued" | "ready" | "failed" }[],
+  templates: Parameters<typeof queuedTemplatePreviews>[0],
 ) {
   const router = useRouter();
-  const queued = templates
-    .filter((item) => item.previewStatus === "queued")
-    .slice(0, 4)
-    .map((item) => item.id)
-    .join(",");
+  const queued = queuedTemplatePreviews(templates).join(",");
   useEffect(() => {
     if (!queued) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function advance() {
-      try {
-        for (const templateId of queued.split(",")) {
-          if (stopped) return;
-          await refreshTemplatePreview({ data: { templateId, retry: false } });
-        }
-        if (!stopped) await router.invalidate();
-      } catch {
-        // A temporary service failure can be retried without losing the snapshot.
-      } finally {
-        if (!stopped) timer = setTimeout(advance, 3000);
-      }
-    }
-    void advance();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
+    return pollTemplatePreviews({
+      templateIds: queued.split(","),
+      refresh: (templateId) =>
+        refreshTemplatePreview({ data: { templateId, retry: false } }),
+      refreshed: () => router.invalidate(),
+    });
   }, [queued, router]);
 }

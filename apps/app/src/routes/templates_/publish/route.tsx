@@ -1,4 +1,9 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import {
+  publishTemplateSchema,
+  templateLicenseLabels,
+  templateLicenses,
+} from "@texfolia/templates";
 import { Button } from "@texfolia/ui/button";
 import { Checkbox } from "@texfolia/ui/checkbox";
 import { Input } from "@texfolia/ui/input";
@@ -12,11 +17,6 @@ import { getSession } from "#/lib/auth.functions";
 import { webPath } from "#/lib/origins";
 import { getProjects } from "#/lib/project.functions";
 import { listMyTemplates, publishTemplate } from "#/lib/template.functions";
-import {
-  publishTemplateSchema,
-  templateLicenseLabels,
-  templateLicenses,
-} from "#/lib/template.schema";
 
 export const Route = createFileRoute("/templates_/publish")({
   beforeLoad: async () => {

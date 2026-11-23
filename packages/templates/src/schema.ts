@@ -36,6 +36,12 @@ export const publishTemplateSchema = z.object({
   visibility: z.enum(["public", "unlisted"]),
   redistributionConfirmed: z.literal(true),
 });
+export const listTemplatesSchema = z.object({
+  page: z.number().int().min(0).max(1000).default(0),
+});
+export const refreshTemplatePreviewSchema = templateIdSchema.extend({
+  retry: z.boolean().default(false),
+});
 export const openTemplateSchema = templateIdSchema.extend({
   organizationId: z.string().min(1).max(128).nullable(),
   name: z.string().trim().min(1).optional(),

@@ -113,6 +113,7 @@ packages/
   db/                  Drizzle schema, PostgreSQL client, and migrations
   editor/              LaTeX language tooling, spelling, and CodeMirror themes for the app
   git/                 Git integrations: linked-remote actions, URL parsing, GitHub/GitLab adapters
+  templates/           Template catalog, publishing, previews, review, and cleanup
   ui/                  shadcn/Base UI React primitives for the app
 docs/                  Feature and operations guides
 ```

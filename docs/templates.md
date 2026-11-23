@@ -5,6 +5,10 @@ ZIPs, licenses, and reviewer reports. Each published snapshot now requires
 review. Previous approval of a publisher does not approve their future uploads.
 The UI overhaul remains in NAT-286.
 
+The implementation lives in [`@texfolia/templates`](../packages/templates/README.md).
+The public gallery stays in `apps/web`. Template routes, server functions, and the
+create-from-template UI stay in `apps/app`.
+
 ## Storage and ownership
 
 Postgres owns metadata and an immutable source manifest. R2 stores source objects
@@ -125,6 +129,7 @@ DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:pu
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run packages/db/test/template-seed-cli.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/templates.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:template-lifecycle
+bun run --cwd packages/templates test
 bun test apps/compiler/test/queues.test.ts
 ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts
 ```

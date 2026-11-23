@@ -4,7 +4,7 @@ import type { SourceBucket } from "@texfolia/storage/server";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { templateSnapshotSchema } from "./template.schema";
+import { templateSnapshotSchema } from "./schema";
 
 type Context = { db: Db; bucket: SourceBucket };
 export async function collectTemplateObjects({

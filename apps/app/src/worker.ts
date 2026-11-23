@@ -3,12 +3,14 @@ import { reconcileAiUsage } from "@texfolia/billing/server";
 import { createDb } from "@texfolia/db";
 import { collectGitObjects } from "@texfolia/git/server";
 import { sweepProjectSources } from "@texfolia/storage/server";
+import {
+  collectTemplateObjects,
+  refreshTemplatePreviews,
+} from "@texfolia/templates/server";
 
 import { aiConfig, gatewayRequestCost } from "./lib/ai/gateway.server";
 import { collectProjectSources } from "./lib/project-source.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
-import { collectTemplateObjects } from "./lib/template-cleanup.server";
-import { refreshTemplatePreviews } from "./lib/template-preview.server";
 
 export { ProjectCollaboration } from "./lib/project-collaboration.server";
 
