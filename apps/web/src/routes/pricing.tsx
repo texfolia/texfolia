@@ -1,8 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { paidPlans } from "@texfolia/auth/billing";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@texfolia/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@texfolia/ui/table";
 
 import { Page } from "#/components/page";
 import { pageHead } from "#/lib/head";
+import { linkButton } from "#/lib/link-button";
 import { appPath } from "#/lib/urls";
 
 export const Route = createFileRoute("/pricing")({
@@ -119,45 +136,52 @@ function Pricing() {
         </p>
         <div className="mt-14 grid gap-5 md:grid-cols-3">
           {plans.map((plan) => (
-            <article
-              key={plan.name}
-              className="flex h-full flex-col border py-8"
-            >
-              <div className="space-y-4 px-6">
-                <h2 className="text-xl font-semibold">{plan.name}</h2>
-                <p className="text-muted-foreground min-h-12 leading-6">
-                  {plan.description}
-                </p>
-                <p className="text-5xl font-medium tracking-tight tabular-nums">
-                  ${plan.price}
-                  {plan.priceUnit && (
-                    <span className="text-muted-foreground ml-1 text-sm font-normal tracking-normal">
-                      {plan.priceUnit}
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="px-6 pt-6">
-                <a
-                  href={plan.href}
-                  className={`btn btn-lg w-full ${plan.primary ? "btn-primary" : "btn-outline"}`}
-                >
-                  {plan.buttonText}
-                </a>
-              </div>
-              <ul className="mt-auto space-y-4 px-6 pt-8 text-sm">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-3">
-                    <span
-                      className="text-muted-foreground mt-0.5"
-                      aria-hidden="true"
-                    >
-                      ✓
-                    </span>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+            <article key={plan.name}>
+              <Card className="h-full [--card-spacing:--spacing(6)]">
+                <CardHeader className="gap-4">
+                  <CardTitle className="text-xl font-semibold">
+                    <h2>{plan.name}</h2>
+                  </CardTitle>
+                  <CardDescription className="min-h-12 text-base leading-6">
+                    <p>{plan.description}</p>
+                  </CardDescription>
+                  <p className="text-5xl font-medium tracking-tight tabular-nums">
+                    ${plan.price}
+                    {plan.priceUnit && (
+                      <span className="text-muted-foreground ml-1 text-sm font-normal tracking-normal">
+                        {plan.priceUnit}
+                      </span>
+                    )}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <a
+                    href={plan.href}
+                    className={linkButton({
+                      variant: plan.primary ? "default" : "outline",
+                      size: "lg",
+                      className: "w-full",
+                    })}
+                  >
+                    {plan.buttonText}
+                  </a>
+                </CardContent>
+                <CardContent className="mt-auto">
+                  <ul className="space-y-4">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-3">
+                        <span
+                          className="text-muted-foreground mt-0.5"
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
             </article>
           ))}
         </div>
@@ -167,50 +191,46 @@ function Pricing() {
           adjust their monthly AI spend cap, including setting it to $0 to pause
           AI.
         </p>
-        <section className="mt-12 border p-6">
-          <h2 className="mb-4 text-xl font-semibold">Compare plans</h2>
-          <p className="text-muted-foreground mb-4 text-sm md:hidden">
-            Scroll horizontally to compare all plans.
-          </p>
-          <div className="overflow-x-auto">
-            <table
-              className="w-full min-w-3xl text-left text-sm"
-              aria-label="Plan comparison"
-            >
-              <caption className="text-muted-foreground mt-4 text-left">
-                Plan limits apply equally to personal and organization projects.
-                Compilation is subject to fair use.
-              </caption>
-              <thead>
-                <tr className="border-b">
-                  <th className="py-3 pr-4 font-medium">Feature</th>
-                  <th className="py-3 pr-4 font-medium">Free</th>
-                  <th className="py-3 pr-4 font-medium">Pro</th>
-                  <th className="py-3 font-medium">Team</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparison.map(([feature, ...values]) => (
-                  <tr key={feature} className="border-b">
-                    <th
-                      scope="row"
-                      className="py-3 pr-4 font-medium whitespace-normal"
-                    >
-                      {feature}
-                    </th>
-                    {values.map((value, index) => (
-                      <td
-                        key={index}
-                        className="py-3 pr-4 whitespace-normal last:pr-0"
-                      >
-                        {value}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <section className="mt-12">
+          <Card className="[--card-spacing:--spacing(6)]">
+            <CardContent>
+              <h2 className="mb-4 text-xl font-semibold">Compare plans</h2>
+              <p className="text-muted-foreground mb-4 text-sm md:hidden">
+                Scroll horizontally to compare all plans.
+              </p>
+              <Table className="min-w-3xl" aria-label="Plan comparison">
+                <TableCaption className="text-left">
+                  Plan limits apply equally to personal and organization
+                  projects. Compilation is subject to fair use.
+                </TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Feature</TableHead>
+                    <TableHead>Free</TableHead>
+                    <TableHead>Pro</TableHead>
+                    <TableHead>Team</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comparison.map(([feature, ...values]) => (
+                    <TableRow key={feature}>
+                      <TableHead scope="row" className="py-3 whitespace-normal">
+                        {feature}
+                      </TableHead>
+                      {values.map((value, index) => (
+                        <TableCell
+                          key={index}
+                          className="py-3 whitespace-normal"
+                        >
+                          {value}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </section>
         <p className="text-muted-foreground mt-8 text-sm">
           Compilation on every plan is subject to{" "}

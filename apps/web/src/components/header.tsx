@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { linkButton } from "#/lib/link-button";
 import { appPath } from "#/lib/urls";
 
 const navLink =
@@ -35,10 +36,13 @@ export function Header() {
             Pricing
           </Link>
         </nav>
-        <a href={appPath("/login")} className="btn btn-outline">
+        <a
+          href={appPath("/login")}
+          className={linkButton({ variant: "outline" })}
+        >
           Sign in
         </a>
-        <a href={appPath("/projects")} className="btn btn-primary btn-lg">
+        <a href={appPath("/projects")} className={linkButton({ size: "lg" })}>
           Open app
         </a>
       </div>

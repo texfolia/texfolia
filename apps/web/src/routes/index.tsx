@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Page } from "#/components/page";
 import { pageHead } from "#/lib/head";
+import { linkButton } from "#/lib/link-button";
 import { appPath } from "#/lib/urls";
 
 export const Route = createFileRoute("/")({
@@ -57,11 +58,17 @@ function Home() {
               collaborate, and compile your next paper, right in your browser.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href={appPath("/login")} className="btn btn-primary btn-lg">
+              <a
+                href={appPath("/login")}
+                className={linkButton({ size: "lg" })}
+              >
                 Start writing
                 <span aria-hidden="true">→</span>
               </a>
-              <Link to="/templates" className="btn btn-outline btn-lg">
+              <Link
+                to="/templates"
+                className={linkButton({ variant: "outline", size: "lg" })}
+              >
                 Find a template
               </Link>
             </div>
@@ -135,7 +142,7 @@ function Home() {
           </p>
           <a
             href={appPath("/projects")}
-            className="btn btn-primary btn-lg mt-8"
+            className={linkButton({ size: "lg", className: "mt-8" })}
           >
             Open your workspace
             <span aria-hidden="true">→</span>
