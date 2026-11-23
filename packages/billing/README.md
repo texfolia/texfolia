@@ -28,7 +28,7 @@ and `@texfolia/auth`. It does not depend on storage, compile or projects.
   for an entitlement, reserves each request against the user's cap, and
   reconciles after the run. The cost source is injected: `reconcileAiUsage`
   takes a `RequestCost` callback, which the app binds to the AI Gateway logs
-  API (`gatewayRequestCost` in `apps/app/src/lib/ai/gateway.server.ts`). Tests
+  API (`gatewayRequestCost` in `@texfolia/ai/gateway`). Tests
   pass `report` to capture meter events instead of calling Stripe.
 
 The `/settings/billing` route and its server function, the legacy `/billing`

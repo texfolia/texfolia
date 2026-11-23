@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
+import { isAgentsFile, parseSkill, skillFolderName } from "../src/skills";
 
 const path = ".agents/skills/bibtex-style/SKILL.md";
 

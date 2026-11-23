@@ -1,0 +1,51 @@
+{
+  "name": "@texfolia/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./gateway": "./src/gateway.ts",
+    "./server": "./src/server.ts",
+    "./ui": "./src/ui.ts"
+  },
+  "scripts": {
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tabler/icons-react": "^3.50.0",
+    "@tanstack/ai": "^1.4.0",
+    "@tanstack/ai-cloudflare": "^1.2.0",
+    "@tanstack/ai-react": "^1.0.2",
+    "@tanstack/markdown": "^1.2.0",
+    "@texfolia/auth": "workspace:*",
+    "@texfolia/billing": "workspace:*",
+    "@texfolia/compile": "workspace:*",
+    "@texfolia/db": "workspace:*",
+    "@texfolia/git": "workspace:*",
+    "@texfolia/projects": "workspace:*",
+    "@texfolia/storage": "workspace:*",
+    "@texfolia/ui": "workspace:*",
+    "drizzle-orm": "^1.0.0-rc.5",
+    "yaml": "^2.8.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261031.1",
+    "@texfolia/config": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^6.0.2"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

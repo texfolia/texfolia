@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { threadHistorySchema, threadSchema } from "@texfolia/ai";
 import { hashSource } from "@texfolia/compile";
 import { createDb } from "@texfolia/db";
 import {
@@ -25,7 +26,6 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import { z } from "zod";
 
-import { threadHistorySchema, threadSchema } from "../src/lib/ai/threads";
 import { createProject } from "../src/lib/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;

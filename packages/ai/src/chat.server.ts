@@ -8,6 +8,7 @@ import {
   type StreamChunk,
 } from "@tanstack/ai";
 import { createCloudflareText } from "@tanstack/ai-cloudflare";
+import type { Auth } from "@texfolia/auth";
 import { BillingError, markedUpNanos, nanoDollars } from "@texfolia/billing";
 import {
   aiEntitlement,
@@ -27,16 +28,15 @@ import {
   aiSettings,
   user as userTable,
 } from "@texfolia/db/schema";
+import type { LockProject } from "@texfolia/projects/server";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { createAuth } from "../auth";
-import { lockProject } from "../project-access.server";
 import { compactHistory } from "./context";
 import {
-  aiConfig,
   gatewayModels,
   gatewayRequestCost,
+  type AiConfig,
   type AiFetch,
 } from "./gateway.server";
 import {
@@ -48,6 +48,7 @@ import {
 import { storedMessageSchema, type StoredMessage } from "./threads";
 import { threadOwner } from "./threads.server";
 import { projectTools } from "./tools.server";
+import type { AssistantContext, AssistantWorkspace } from "./workspace";
 
 const maxThreadMessages = 1000;
 /**
@@ -76,11 +77,11 @@ export async function aiAccess({
   projectId,
   db,
   auth,
-}: {
+  lock,
+}: AssistantContext & {
   request: Request;
   projectId: string;
-  db: Db;
-  auth: ReturnType<typeof createAuth>;
+  lock: LockProject;
 }) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) throw new AiError("Sign in to use the assistant.", 401);
@@ -89,7 +90,7 @@ export async function aiAccess({
   let project;
   try {
     project = await db.transaction((tx) =>
-      lockProject({ tx, projectId, userId: session.user.id, access: "read" }),
+      lock({ tx, projectId, userId: session.user.id, access: "read" }),
     );
   } catch (error) {
     if (error instanceof Error && error.message === "Project not found")
@@ -137,13 +138,15 @@ export async function readAiBody(request: Request) {
 export async function assistantConfiguration({
   db,
   userId,
+  config,
 }: {
   db: Db;
   userId: string;
+  config: AiConfig;
 }) {
   const settings = await getAiSettings(db, userId);
   const [models, spend] = await Promise.all([
-    gatewayModels(aiConfig()),
+    gatewayModels(config),
     aiSpend(db, userId),
   ]);
   return {
@@ -161,10 +164,12 @@ export async function assistantConfiguration({
 export async function updateAiPreferences({
   db,
   userId,
+  config,
   body,
 }: {
   db: Db;
   userId: string;
+  config: AiConfig;
   body: unknown;
 }) {
   const parsed = aiPreferencesSchema.safeParse(body);
@@ -173,7 +178,6 @@ export async function updateAiPreferences({
       "Choose a valid model and a monthly cap between $0 and $10,000.",
       400,
     );
-  const config = aiConfig();
   if (
     parsed.data.defaultModel &&
     !(await gatewayModels(config)).some(
@@ -189,7 +193,7 @@ export async function updateAiPreferences({
       monthlyCapNanos: Math.round(parsed.data.monthlyCapDollars * nanoDollars),
     })
     .where(eq(aiSettings.userId, userId));
-  return assistantConfiguration({ db, userId });
+  return assistantConfiguration({ db, userId, config });
 }
 
 export function meteredGatewayFetch({
@@ -274,7 +278,10 @@ export function meteredGatewayFetch({
 export async function startAssistant({
   request,
   projectId,
-  env,
+  config,
+  connectionString,
+  createAuth,
+  workspace,
   userId,
   canWrite,
   payer,
@@ -284,22 +291,25 @@ export async function startAssistant({
   purpose?: "commit-message";
   request: Request;
   projectId: string;
-  env: Env;
+  config: AiConfig;
+  /** The run opens its own client, because the stream outlives the request. */
+  connectionString: string;
+  createAuth: (db: Db) => Auth;
+  workspace: AssistantWorkspace;
   userId: string;
   canWrite: boolean;
   payer: AiPayer;
   body: unknown;
 }) {
-  const config = aiConfig();
   if (purpose === "commit-message") {
-    const db = createDb(env.HYPERDRIVE.connectionString);
+    const db = createDb(connectionString);
     try {
       const [identity] = await db
         .select()
         .from(userTable)
         .where(eq(userTable.id, userId));
       if (!identity) throw new AiError("Sign in again.", 401);
-      const result = await env.COLLABORATION.getByName(projectId).gitAction({
+      const result = await workspace.gitAction({
         projectId,
         user: { id: userId, name: identity.name, email: identity.email },
         action: { kind: "diff" },
@@ -354,7 +364,7 @@ export async function startAssistant({
     .safeParse(params.forwardedProps);
   if (!parsedOverride.success) throw new AiError("Choose a valid model.", 400);
   const override = parsedOverride.data;
-  const db = createDb(env.HYPERDRIVE.connectionString);
+  const db = createDb(connectionString);
   let closed = false;
   let claimedThread: string | undefined;
   let history: StoredMessage[] = [];
@@ -515,7 +525,13 @@ export async function startAssistant({
     const auth = createAuth(db);
     const checkAccess = async () => {
       abort.signal.throwIfAborted();
-      const access = await aiAccess({ request, projectId, db, auth });
+      const access = await aiAccess({
+        request,
+        projectId,
+        db,
+        auth,
+        lock: workspace.lock,
+      });
       if (
         access.userId !== userId ||
         access.canWrite !== canWrite ||
@@ -593,7 +609,7 @@ export async function startAssistant({
           : projectTools({
               db,
               auth,
-              env,
+              workspace,
               projectId,
               userId,
               canWrite,

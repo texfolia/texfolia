@@ -1,11 +1,12 @@
+import type { AiModel } from "@texfolia/ai";
+import { gatewayModels } from "@texfolia/ai/gateway";
 import { nanoDollars } from "@texfolia/billing";
 import { aiSpend, getAiSettings } from "@texfolia/billing/server";
 import type { Db } from "@texfolia/db";
 import { aiSettings, projectNode, projectJob } from "@texfolia/db/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
-import { aiConfig, gatewayModels } from "./ai/gateway.server";
-import type { AiModel } from "./ai/schema";
+import { aiConfig } from "./ai-config.server";
 import { accessibleProjects } from "./project.server";
 
 export async function getAccountAiSettings(db: Db, userId: string) {
