@@ -10,16 +10,16 @@ import {
   user,
 } from "@texfolia/db/schema";
 import { assertProjectSourcePaths, projectPaths } from "@texfolia/projects";
+import type { LockProject } from "@texfolia/projects/server";
 import type { SourceBucket } from "@texfolia/storage/server";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
-import { lockProject } from "./project-access.server";
 import {
   openTemplateSchema,
   publishTemplateSchema,
   templateSnapshotSchema,
-} from "./template.schema";
+} from "./schema";
 
 type Context = { db: Db; bucket: SourceBucket };
 type Snapshot = z.infer<typeof templateSnapshotSchema>;
@@ -53,10 +53,12 @@ async function copyObject({
 export async function publishTemplate({
   db,
   bucket,
+  lock,
   userId,
   data,
   templateId = crypto.randomUUID(),
 }: Context & {
+  lock: LockProject;
   userId: string;
   data: z.infer<typeof publishTemplateSchema>;
   templateId?: string;
@@ -95,7 +97,7 @@ export async function publishTemplate({
       throw new Error(
         "Publishing limit reached. Try again later (3 per hour, 10 per day).",
       );
-    const source = await lockProject({
+    const source = await lock({
       tx,
       projectId: data.projectId,
       userId,

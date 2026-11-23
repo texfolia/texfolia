@@ -2,7 +2,7 @@ import type { Db } from "@texfolia/db";
 import { template, templateReport } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
-import { isTemplateReviewer, publicColumns } from "./template-catalog.server";
+import { isTemplateReviewer, publicColumns } from "./catalog.server";
 
 export async function reportTemplate({
   db,

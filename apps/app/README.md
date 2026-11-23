@@ -32,6 +32,11 @@ The public gallery lives on the marketing site ([`apps/web`](../web/README.md) a
 reviewed. Preview generation and retries run independently of moderation,
 including in local development without cron.
 
+The catalog, snapshot, preview, review, and cleanup code lives in
+[`@texfolia/templates`](../../packages/templates/README.md). The app keeps the
+routes, server functions, and create-from-template UI, and passes in its project
+lock and R2 binding.
+
 See [Template lifecycle](../../docs/templates.md) for the design, original Drizzle
 seeds, schema setup, retention, and verification commands.
 

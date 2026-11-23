@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { findTemplate, templateArchive } from "@texfolia/templates/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
-
-import { findTemplate, templateArchive } from "#/lib/template-catalog.server";
 
 export const Route = createFileRoute("/api/templates/$templateId/source")({
   server: {
