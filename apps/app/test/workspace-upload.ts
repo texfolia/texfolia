@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import {
+  createNodeSchema,
+  renameNodeSchema,
+  renamedProjectNodes,
+} from "@texfolia/projects";
+import {
   decodeSource,
   encodeSource,
   type SourceFiles,
@@ -16,11 +21,6 @@ import {
   encodeServerMessage,
 } from "../src/lib/collaboration/protocol";
 import { compileDeltaSchema, hashSource } from "../src/lib/compile/source-sync";
-import {
-  createNodeSchema,
-  renameNodeSchema,
-} from "../src/lib/project-node.schema";
-import { renamedProjectNodes } from "../src/lib/project-paths";
 import type { ProjectDetails } from "../src/lib/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 

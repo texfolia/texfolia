@@ -9,6 +9,7 @@ import {
   packageInsertion,
 } from "@texfolia/editor/latex/symbols";
 import { sourceToPdf } from "@texfolia/editor/latex/synctex";
+import { projectPaths, invalidProjectPaths } from "@texfolia/projects";
 import { encodeSource } from "@texfolia/storage";
 import { SidebarProvider } from "@texfolia/ui/sidebar";
 import { cn } from "cn";
@@ -25,7 +26,6 @@ import { SettingsDialog } from "#/components/settings-dialog";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
-import { projectPaths, invalidProjectPaths } from "#/lib/project-paths";
 import type { ProjectDetails } from "#/lib/project.functions";
 import { workspaceLayoutKey } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";

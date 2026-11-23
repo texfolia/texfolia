@@ -7,6 +7,7 @@ import {
 } from "@texfolia/contracts";
 import type { Db } from "@texfolia/db";
 import { projectJob } from "@texfolia/db/schema";
+import { streamProjectResponse } from "@texfolia/projects/server";
 import { env } from "cloudflare:workers";
 import {
   and,
@@ -35,7 +36,6 @@ import {
 } from "#/lib/compile/compile-history";
 import { compileDeltaSchema, hashSource } from "#/lib/compile/source-sync";
 import { fetchCompiler } from "#/lib/compiler.server";
-import { streamProjectResponse } from "#/lib/live-project.server";
 import { lockProject } from "#/lib/project-access.server";
 import { requestPrincipal } from "#/lib/request-principal.server";
 
@@ -583,6 +583,7 @@ export const compileHandlers = {
         projectId: params.projectId,
         userId: denied.userId,
         signal: request.signal,
+        lock: lockProject,
       });
     // PDF-only links see the build stream and the latest PDF, but not job
     // logs or other generated files, which can quote the sources.

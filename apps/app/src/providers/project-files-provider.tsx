@@ -1,17 +1,17 @@
+import {
+  projectMetadataSchema,
+  type ProjectMetadata,
+  createNodeSchema,
+  newProjectNodePath,
+} from "@texfolia/projects";
 import { decodeSource } from "@texfolia/storage";
 import { createContext, type ReactNode, useContext, useEffect } from "react";
 import type { z } from "zod";
 
 import {
-  projectMetadataSchema,
-  type ProjectMetadata,
-} from "#/lib/project-metadata";
-import {
   createProjectNode,
   renameProjectNode,
 } from "#/lib/project-node.functions";
-import { createNodeSchema } from "#/lib/project-node.schema";
-import { newProjectNodePath } from "#/lib/project-paths";
 import { deleteProjectNode } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";

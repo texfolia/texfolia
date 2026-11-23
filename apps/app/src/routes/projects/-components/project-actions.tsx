@@ -8,6 +8,11 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import {
+  projectPaths,
+  projectTagsSchema,
+  renameProjectSchema,
+} from "@texfolia/projects";
 import { downloadFile } from "@texfolia/storage/browser";
 import { createZip } from "@texfolia/storage/zip";
 import { Button } from "@texfolia/ui/button";
@@ -30,14 +35,12 @@ import { Label } from "@texfolia/ui/label";
 import { toast } from "@texfolia/ui/toast";
 import { useId, useState } from "react";
 
-import { projectPaths } from "#/lib/project-paths";
 import {
   getProject,
   renameProject,
   setProjectTags,
   type Project,
 } from "#/lib/project.functions";
-import { projectTagsSchema, renameProjectSchema } from "#/lib/project.schema";
 import { useProjects } from "#/providers/projects-provider";
 import { ProjectAccessPanel } from "#/routes/project/$projectId/-components/project-collaboration";
 

@@ -16,6 +16,7 @@ import {
   subscription,
   user,
 } from "@texfolia/db/schema";
+import { projectMetadataVersion } from "@texfolia/projects";
 import { eq } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
@@ -33,7 +34,6 @@ import {
 } from "../src/lib/compile/compile-history";
 import { hashSource } from "../src/lib/compile/source-sync";
 import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
-import { projectMetadataVersion } from "../src/lib/project-metadata";
 import { readProjectMetadata } from "../src/lib/project-metadata.server";
 import {
   createShareLink,

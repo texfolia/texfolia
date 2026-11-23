@@ -1,6 +1,6 @@
 import { createDb } from "@texfolia/db";
 
-import { lockProject } from "./project-access.server";
+import type { LockProject } from "./access";
 
 // Check every payload; also disconnect silent recipients on the next check.
 // Database time and runtime scheduling add to this interval.
@@ -12,12 +12,14 @@ export function streamProjectResponse({
   projectId,
   userId,
   signal,
+  lock,
 }: {
   response: Response;
   connectionString: string;
   projectId: string;
   userId: string;
   signal: AbortSignal;
+  lock: LockProject;
 }) {
   if (!response.ok || !response.body) return response;
   const reader = response.body.getReader();
@@ -29,7 +31,7 @@ export function streamProjectResponse({
     const db = createDb(connectionString);
     try {
       await db.transaction(async (tx) => {
-        await lockProject({
+        await lock({
           tx,
           projectId,
           userId,

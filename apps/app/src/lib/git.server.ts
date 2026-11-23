@@ -8,6 +8,8 @@ import {
   projectGit,
   projectNode,
 } from "@texfolia/db/schema";
+import { projectPaths } from "@texfolia/projects";
+import type { ProjectTransaction } from "@texfolia/projects/server";
 import { encodeSource } from "@texfolia/storage";
 import {
   putSource,
@@ -25,8 +27,7 @@ import {
   type GitProvider,
 } from "./git-providers";
 import { GitRepository, gitHttp, type GitFiles } from "./git-repository.server";
-import { lockProject, type ProjectTransaction } from "./project-access.server";
-import { projectPaths } from "./project-paths";
+import { lockProject } from "./project-access.server";
 
 export async function gitAccount({
   db,

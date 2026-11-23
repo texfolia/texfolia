@@ -1,8 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { env } from "cloudflare:workers";
-import { z } from "zod";
-
-import { ensureSession } from "./auth.functions";
 import {
   createProjectSchema,
   updateProjectFormattingSchema,
@@ -11,7 +7,11 @@ import {
   projectTagsSchema,
   importProjectFilesSchema,
   projectsPageSchema,
-} from "./project.schema";
+} from "@texfolia/projects";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+
+import { ensureSession } from "./auth.functions";
 
 export const createProject = createServerFn({ method: "POST" })
   .validator(createProjectSchema)

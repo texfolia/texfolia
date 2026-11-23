@@ -9,16 +9,15 @@ import {
   tag,
   user,
 } from "@texfolia/db/schema";
+import { projectPaths, projectTagsSchema } from "@texfolia/projects";
 import { encodeSource, maxSourceFileBytes } from "@texfolia/storage";
 import { and, eq } from "drizzle-orm";
 
 import { importProjectFiles } from "../../src/lib/project-import.server";
-import { projectPaths } from "../../src/lib/project-paths";
 import {
   saveProjectSource,
   readProjectSource,
 } from "../../src/lib/project-source.server";
-import { projectTagsSchema } from "../../src/lib/project.schema";
 import {
   createProject,
   deleteProject,

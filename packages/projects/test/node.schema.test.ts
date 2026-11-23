@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { nodeNameSchema } from "./project-node.schema";
+import { nodeNameSchema } from "../src/node.schema";
 
 test("source names reject colons and paths beyond the compiler's byte limit", () => {
   for (const name of ["chapter:1.tex", "a".repeat(241), "é".repeat(121)])

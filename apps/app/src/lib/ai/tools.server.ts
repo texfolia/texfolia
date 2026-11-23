@@ -1,6 +1,11 @@
 import { toolDefinition } from "@tanstack/ai";
 import type { Db } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
+import {
+  projectNodePaths,
+  projectPaths,
+  searchProject,
+} from "@texfolia/projects";
 import { encodeSource } from "@texfolia/storage";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -11,8 +16,6 @@ import { parseCompileLog } from "../compile/compile-log";
 import { gitBranchSchema } from "../git";
 import { lockProject } from "../project-access.server";
 import { createProjectNode, renameProjectNode } from "../project-node.server";
-import { projectNodePaths, projectPaths } from "../project-paths";
-import { searchProject } from "../project-search";
 import { deleteProjectNode } from "../project-source.server";
 import { aiEntitlement } from "./billing.server";
 import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
