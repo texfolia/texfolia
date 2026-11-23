@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import { createNodeSchema, renameNodeSchema } from "@texfolia/projects";
 import { env } from "cloudflare:workers";
 
 import { ensureSession } from "./auth.functions";
-import { createNodeSchema, renameNodeSchema } from "./project-node.schema";
 
 export const createProjectNode = createServerFn({ method: "POST" })
   .validator(createNodeSchema)

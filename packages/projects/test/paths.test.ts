@@ -7,8 +7,8 @@ import {
   projectNodePaths,
   projectPaths,
   renamedProjectNodes,
-} from "#/lib/project-paths";
-import type { ProjectNode } from "#/lib/project.functions";
+} from "../src/paths";
+import type { ProjectNode } from "../src/paths";
 
 test("files created in nested folders use the same paths in the picker and compiler", () => {
   const nodes: ProjectNode[] = [

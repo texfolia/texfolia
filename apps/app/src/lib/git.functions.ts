@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { account } from "@texfolia/db/schema";
+import { projectNameSchema } from "@texfolia/projects";
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -11,7 +12,6 @@ import {
   hasRepositoryAccess,
   type GitProvider,
 } from "./git-providers";
-import { projectNameSchema } from "./project.schema";
 
 export const getGitAccounts = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {

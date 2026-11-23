@@ -1,4 +1,5 @@
 import { IconUpload } from "@tabler/icons-react";
+import { newProjectNodePath } from "@texfolia/projects";
 import {
   encodeSource,
   maxSourceFileBytes,
@@ -15,7 +16,6 @@ import {
 } from "@texfolia/ui/dialog";
 import { useId, useRef, useState, useImperativeHandle, type Ref } from "react";
 
-import { newProjectNodePath } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 

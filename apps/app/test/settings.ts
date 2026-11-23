@@ -11,13 +11,13 @@ import {
   projectNode,
   user,
 } from "@texfolia/db/schema";
+import { updateProjectFormattingSchema } from "@texfolia/projects";
 import { eq, inArray } from "drizzle-orm";
 
 import {
   getAccountUsage,
   saveAccountAiSettings,
 } from "../src/lib/account-settings.server";
-import { updateProjectFormattingSchema } from "../src/lib/project.schema";
 import {
   createProject,
   getProject,

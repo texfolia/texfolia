@@ -8,13 +8,13 @@ import {
   template,
   user,
 } from "@texfolia/db/schema";
+import { assertProjectSourcePaths, projectPaths } from "@texfolia/projects";
 import type { SourceBucket } from "@texfolia/storage/server";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { hashSource } from "./compile/source-sync";
 import { lockProject } from "./project-access.server";
-import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import {
   openTemplateSchema,
   publishTemplateSchema,

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { searchProject } from "./project-search";
+import { searchProject } from "../src/search";
 
 const sources = new Map([
   [

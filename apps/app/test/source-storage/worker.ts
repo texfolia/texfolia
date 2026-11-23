@@ -9,6 +9,7 @@ import {
   sourceGarbage,
   user,
 } from "@texfolia/db/schema";
+import { projectMetadataVersion } from "@texfolia/projects";
 import {
   encodeSource,
   maxSourceFileBytes,
@@ -22,7 +23,6 @@ import {
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { compileResync } from "../../src/lib/compile-source.server";
-import { projectMetadataVersion } from "../../src/lib/project-metadata";
 import { getProjectMetadata } from "../../src/lib/project-metadata.server";
 import {
   createProjectNode,

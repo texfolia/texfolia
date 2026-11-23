@@ -1,5 +1,6 @@
 import type { Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
+import { importProjectFilesSchema } from "@texfolia/projects";
 import {
   decodeSource,
   maxSourceFileBytes,
@@ -8,8 +9,6 @@ import {
 import { putSource, type SourceBucket } from "@texfolia/storage/server";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
-
-import { importProjectFilesSchema } from "./project.schema";
 
 export async function importProjectFiles({
   db,

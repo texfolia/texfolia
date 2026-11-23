@@ -1,11 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
+import { projectNameSchema } from "@texfolia/projects";
 import { Button } from "@texfolia/ui/button";
 import { Field, FieldLabel } from "@texfolia/ui/field";
 import { Input } from "@texfolia/ui/input";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useId, useState } from "react";
 
-import { projectNameSchema } from "#/lib/project.schema";
 import { openTemplate } from "#/lib/template.functions";
 import { useProjects } from "#/providers/projects-provider";
 
