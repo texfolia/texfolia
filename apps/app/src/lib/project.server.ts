@@ -1,10 +1,10 @@
-import { fetchCompiler } from "@texfolia/compile/server";
-import * as projects from "@texfolia/projects/server";
-
 import {
   cleanupDeletedCollaboration,
   type CollaborationCleanup,
-} from "./collaboration/cleanup.server";
+} from "@texfolia/collaboration/server";
+import { fetchCompiler } from "@texfolia/compile/server";
+import * as projects from "@texfolia/projects/server";
+
 import { lockProject } from "./project-access.server";
 
 // Binds `@texfolia/projects` operations to the app's composed access check and

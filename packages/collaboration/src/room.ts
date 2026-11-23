@@ -1,18 +1,16 @@
-import { hashSource } from "@texfolia/compile";
 import { createDb, type Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
 import { formatChanges } from "@texfolia/editor/latex/format";
-import { liveProjectAccessIntervalMs } from "@texfolia/projects/server";
+import {
+  liveProjectAccessIntervalMs,
+  type ProjectAccessRequest,
+} from "@texfolia/projects/server";
 import { decodeSource, type saveSourceSchema } from "@texfolia/storage";
 import { DurableObject } from "cloudflare:workers";
 import { and, eq, isNull } from "drizzle-orm";
 import * as Y from "yjs";
 import { z } from "zod";
 
-import type { GitAction } from "../git";
-import { runGit } from "../git.server";
-import { lockProject, shareLinkIdOf } from "../project-access.server";
-import { invalidateSourceBuild } from "../project-source.server";
 import {
   awarenessFrame,
   decodeClientMessage,
@@ -26,7 +24,7 @@ import {
   persistMergedSource,
   sourceNode,
   type SourceNode,
-} from "./sources.server";
+} from "./sources";
 import {
   initializeChunks,
   readSnapshot,
@@ -72,7 +70,37 @@ const colors = [
 ];
 const retentionIntervalMs = 60 * 60_000;
 
-export class ProjectCollaboration extends DurableObject<Env> {
+async function hashText(value: string) {
+  return Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
+    ),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+// The bindings every room reads. Apps extend this with their own.
+export type CollaborationEnv = {
+  HYPERDRIVE: { connectionString: string };
+  SOURCES: R2Bucket;
+};
+
+// The Yjs room for one project: a Durable Object that syncs, persists, and
+// flushes collaborative sources. Apps subclass it to supply what collaboration
+// does not own: project access, which principals are anonymous, and what to do
+// after sources change. The subclass is the class Wrangler binds.
+export abstract class CollaborationRoom<
+  E extends CollaborationEnv = CollaborationEnv,
+> extends DurableObject<E> {
+  // Locks the project and checks access. Runs inside a Postgres transaction.
+  protected abstract lockProject(
+    request: ProjectAccessRequest,
+  ): Promise<{ canWrite: boolean }>;
+  // Anonymous principals, such as share-link viewers, have no presence.
+  protected abstract isAnonymous(userId: string): boolean;
+  // Runs after the room persists sources, for example to invalidate builds.
+  protected abstract sourcesChanged(projectId: string): Promise<void>;
+
   private documents = new Map<string, Y.Doc>();
   // Running text and history sizes, so edits are checked without re-encoding.
   private sizes = new WeakMap<Y.Doc, Usage>();
@@ -82,7 +110,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
   private access = new Map<string, { canWrite: boolean }>();
   private accessGeneration = 0;
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: E) {
     super(ctx, env);
     ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS documents (
       node_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, snapshot BLOB NOT NULL,
@@ -286,9 +314,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
         // Reconcile a commit whose SQLite acknowledgement was interrupted. A pending
         // write that never committed must stay editable, including after quota errors.
         if (row.dirty && node.objectKey !== row.object_key) {
-          const hash = await hashSource(
-            new TextEncoder().encode(doc.getText("source").toString()),
-          );
+          const hash = await hashText(doc.getText("source").toString());
           if (node.objectKey !== `projects/${info.projectId}/sources/${hash}`)
             throw new Error(
               "Source changed outside collaboration. Reopen the project before saving.",
@@ -345,7 +371,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       try {
         const { canWrite } = await this.withDb((db) =>
           db.transaction((tx) =>
-            lockProject({
+            this.lockProject({
               tx,
               projectId: info.projectId,
               userId: info.userId,
@@ -404,7 +430,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
     // Outdated tabs cannot read binary frames.
     if (!info.binary && typeof frame !== "string") return;
     // Anonymous share-link viewers never see who else is in the project.
-    if (awareness && shareLinkIdOf(info.userId) !== null) return;
+    if (awareness && this.isAnonymous(info.userId)) return;
     try {
       await this.verifyAccess(info);
     } catch {
@@ -437,6 +463,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       const { node, canWrite } = await this.withDb((db) =>
         collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
           register: true,
+          lock: (request) => this.lockProject(request),
         }),
       );
       this.remember(info.userId, generation, canWrite);
@@ -559,7 +586,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
           }
           case "awareness": {
             // Share-link viewers are not shown to collaborators.
-            if (shareLinkIdOf(info.userId) !== null) break;
+            if (this.isAnonymous(info.userId)) break;
             const presence = readAwareness(
               data.update,
               info.clientId,
@@ -627,7 +654,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       version.updatedAt,
       nodeId,
     );
-    await invalidateSourceBuild(row.project_id, this.env.COMPILER);
+    await this.sourcesChanged(row.project_id);
     return version;
   }
 
@@ -708,6 +735,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
       const access = await this.withDb((db) =>
         collaborationAccess(db, info.projectId, info.nodeId, userId, {
           register: true,
+          lock: (request) => this.lockProject(request),
         }),
       );
       if (!access.canWrite) throw new Error("Viewers cannot edit documents");
@@ -718,9 +746,10 @@ export class ProjectCollaboration extends DurableObject<Env> {
           "File changed on the server. Recover your draft in the collaborative editor.",
         );
       const text = doc.getText("source");
-      const value = new TextDecoder("utf-8", { fatal: true }).decode(
-        decodeSource(data.content),
-      );
+      const value = new TextDecoder("utf-8", {
+        fatal: true,
+        ignoreBOM: false,
+      }).decode(decodeSource(data.content));
       const candidate = new Y.Doc();
       Y.applyUpdate(candidate, Y.encodeStateAsUpdate(doc));
       const target = candidate.getText("source");
@@ -739,22 +768,24 @@ export class ProjectCollaboration extends DurableObject<Env> {
     });
   }
 
-  async gitAction(options: {
+  // Runs an operation that reads or rewrites a project's saved sources outside
+  // collaboration, such as Git. The room checks access, flushes dirty documents
+  // first, and with `rewritesSources` reloads open documents afterward.
+  protected async withSavedSources<T>(options: {
     projectId: string;
-    user: { id: string; name: string; email: string };
-    action: GitAction;
+    userId: string;
+    access: "read" | "write";
+    rewritesSources: boolean;
+    run: (db: Db) => Promise<T>;
   }) {
     return this.serial(async () => {
       await this.withDb((db) =>
         db.transaction((tx) =>
-          lockProject({
+          this.lockProject({
             tx,
             projectId: options.projectId,
-            userId: options.user.id,
-            access:
-              options.action.kind === "status" || options.action.kind === "diff"
-                ? "read"
-                : "write",
+            userId: options.userId,
+            access: options.access,
           }),
         ),
       );
@@ -766,10 +797,8 @@ export class ProjectCollaboration extends DurableObject<Env> {
         )
         .toArray())
         await this.flush(row.node_id);
-      const result = await this.withDb((db) =>
-        runGit({ db, bucket: this.env.SOURCES, ...options }),
-      );
-      if (["import", "pull", "checkout"].includes(options.action.kind)) {
+      const result = await this.withDb(options.run);
+      if (options.rewritesSources) {
         const { nodes } = await this.purgeDeleted(options.projectId);
         for (const row of this.ctx.storage.sql
           .exec<DocumentRow>(
@@ -784,7 +813,7 @@ export class ProjectCollaboration extends DurableObject<Env> {
               { node },
             );
         }
-        await invalidateSourceBuild(options.projectId, this.env.COMPILER);
+        await this.sourcesChanged(options.projectId);
       }
       return result;
     });

@@ -1,7 +1,9 @@
+import {
+  serializeSourceDrafts,
+  type SourceDraft,
+} from "@texfolia/collaboration/browser";
 import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
-
-import { serializeSourceDrafts, type SourceDraft } from "#/lib/project-drafts";
 
 /** Offers browser drafts that could not be migrated to the server. */
 export function DraftRecovery({

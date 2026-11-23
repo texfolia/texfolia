@@ -1,7 +1,7 @@
+import { documentCachingStopped } from "@texfolia/collaboration/browser";
 import type { DockviewApi } from "dockview-react";
 import { type RefObject, useEffect, useEffectEvent, useState } from "react";
 
-import { documentCachingStopped } from "#/lib/collaboration/cache";
 import {
   defaultWorkspaceChrome,
   readWorkspaceLayout,

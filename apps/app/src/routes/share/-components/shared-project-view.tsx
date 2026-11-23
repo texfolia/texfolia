@@ -1,5 +1,6 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
+import { CollaborativeFile } from "@texfolia/collaboration/browser";
 import { ProjectBuildEvents } from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import { bibtexLanguage, themedLatex } from "@texfolia/editor/latex/highlight";
@@ -17,7 +18,6 @@ import {
 
 import { PanelHeader } from "#/components/panel-header";
 import { buildFileUrl } from "#/lib/build";
-import { CollaborativeFile } from "#/lib/collaboration/file";
 import type { getSharedProject } from "#/lib/project-share-links.functions";
 import { withShareToken } from "#/lib/project-share-links.schema";
 import { useTheme } from "#/providers/theme-provider";
@@ -204,7 +204,8 @@ function SharedText({
         nodeId: node.id,
         userId: "share-guest",
         canWrite: false,
-        shareToken: token,
+        anonymous: true,
+        decorateUrl: (url) => withShareToken(url, token),
         onChange: setValue,
       }),
   );

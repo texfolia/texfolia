@@ -7,7 +7,7 @@ import {
   encodeClientMessage,
   encodeServerMessage,
   maxCollaborationBytes,
-} from "./protocol";
+} from "../src/protocol";
 
 const bytes = (...values: number[]) => new Uint8Array(values);
 const buffer = (frame: string | Uint8Array) => {

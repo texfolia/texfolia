@@ -1,3 +1,7 @@
+import {
+  invalidateCollaborationAccess,
+  type CollaborationAccess,
+} from "@texfolia/collaboration/server";
 import type { Db } from "@texfolia/db";
 import { projectShareLink } from "@texfolia/db/schema";
 import type { ProjectTransaction } from "@texfolia/projects/server";
@@ -5,10 +9,6 @@ import { encodeSource } from "@texfolia/storage";
 import { and, asc, count, eq } from "drizzle-orm";
 import type { z } from "zod";
 
-import {
-  invalidateCollaborationAccess,
-  type CollaborationAccess,
-} from "./collaboration/access.server";
 import { lockProject, sharePrincipal } from "./project-access.server";
 import {
   shareLinkLimit,

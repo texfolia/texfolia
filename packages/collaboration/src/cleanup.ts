@@ -2,12 +2,10 @@ import type { Db } from "@texfolia/db";
 import { project, projectCollaboration } from "@texfolia/db/schema";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 
-import type { ProjectCollaboration } from "./project-collaboration";
+import type { CollaborationRoom } from "./room";
 
 export type CollaborationCleanup = {
-  getByName(
-    projectId: string,
-  ): Pick<ProjectCollaboration, "purgeDeletedSources">;
+  getByName(projectId: string): Pick<CollaborationRoom, "purgeDeletedSources">;
 };
 
 export async function cleanupDeletedCollaboration(

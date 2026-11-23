@@ -6,7 +6,7 @@ import {
   sourceContentSchema,
 } from "@texfolia/storage";
 
-import { reconcileSourceDrafts, serializeSourceDrafts } from "./project-drafts";
+import { reconcileSourceDrafts, serializeSourceDrafts } from "../src/drafts";
 
 test("legacy browser drafts migrate only when there is no server content", () => {
   const result = reconcileSourceDrafts({

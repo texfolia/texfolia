@@ -1,3 +1,4 @@
+import type { CollaborativeFile } from "@texfolia/collaboration/browser";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import type { LatexProblem } from "@texfolia/editor/latex/analysis";
 import type { latexCompletion } from "@texfolia/editor/latex/completion";
@@ -10,7 +11,6 @@ import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
 import type { Comments } from "#/hooks/use-comments";
-import type { CollaborativeFile } from "#/lib/collaboration/file";
 import type { EditorCommand } from "#/lib/editor-command";
 
 export type FileState = { value: string; savedValue: string };

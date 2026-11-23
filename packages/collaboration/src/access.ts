@@ -2,10 +2,10 @@ import type { Db } from "@texfolia/db";
 import { project, projectCollaboration } from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";
 
-import type { ProjectCollaboration } from "./project-collaboration";
+import type { CollaborationRoom } from "./room";
 
 export type CollaborationAccess = {
-  getByName(projectId: string): Pick<ProjectCollaboration, "invalidateAccess">;
+  getByName(projectId: string): Pick<CollaborationRoom, "invalidateAccess">;
 };
 
 // Rooms cache access, so every path that revokes or changes it must call this.

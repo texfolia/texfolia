@@ -8,7 +8,7 @@ import { gitActionSchema } from "../../src/lib/git";
 import { collectGitObjects } from "../../src/lib/git.server";
 import { collectProjectSources } from "../../src/lib/project-source.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
-export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration";
+export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
 
 export default {
   async fetch(request: Request, env: Env) {

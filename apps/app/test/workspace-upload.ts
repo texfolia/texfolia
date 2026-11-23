@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "@texfolia/collaboration";
 import { compileDeltaSchema, hashSource } from "@texfolia/compile";
 import {
   createNodeSchema,
@@ -17,10 +21,6 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "../src/lib/collaboration/protocol";
 import type { ProjectDetails } from "../src/lib/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 

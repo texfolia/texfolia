@@ -1,13 +1,12 @@
+import {
+  collaborationProtocol,
+  encodeClientMessage,
+} from "@texfolia/collaboration";
+import { CollaborativeFile } from "@texfolia/collaboration/browser";
 import { formatChanges } from "@texfolia/editor/latex/format";
 import { EditorState, EditorView, keymap } from "@uiw/react-codemirror";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
-
-import { CollaborativeFile } from "../../src/lib/collaboration/file";
-import {
-  collaborationProtocol,
-  encodeClientMessage,
-} from "../../src/lib/collaboration/protocol";
 
 const parameters = new URLSearchParams(location.search);
 const file = new CollaborativeFile({

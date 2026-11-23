@@ -3,8 +3,8 @@ import { expect, test } from "bun:test";
 import { maxSourceFileBytes } from "@texfolia/storage";
 import * as Y from "yjs";
 
-import { maxCollaborationBytes } from "./protocol";
-import { checkUpdate, measureUsage } from "./usage";
+import { maxCollaborationBytes } from "../src/protocol";
+import { checkUpdate, measureUsage } from "../src/usage";
 
 const limitError = /exceeds its text or history limit/;
 
