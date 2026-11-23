@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { paidPlans } from "@texfolia/auth/billing";
+import { paidPlans } from "@texfolia/contracts/plans";
 import {
   Card,
   CardContent,

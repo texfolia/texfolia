@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { hasOrgRole, isOrgAdmin } from "../src/roles";
+import { hasOrgRole, isOrgAdmin } from "./roles";
 
 test("owners and admins are organization admins", () => {
   expect(isOrgAdmin("owner")).toBe(true);

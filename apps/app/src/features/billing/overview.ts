@@ -1,5 +1,6 @@
-import { isOrgAdmin } from "@texfolia/auth/roles";
 import type { Db } from "@texfolia/db";
+
+import { isOrgAdmin } from "#/features/auth/roles";
 
 /**
  * The billing settings page: the user's organizations, the selected

@@ -1,4 +1,3 @@
-import { isOrgAdmin } from "@texfolia/auth/roles";
 import type { Db } from "@texfolia/db";
 import {
   account,
@@ -11,6 +10,7 @@ import {
 import { and, eq, isNull, inArray } from "drizzle-orm";
 import * as git from "isomorphic-git";
 
+import { isOrgAdmin } from "#/features/auth/roles";
 import { projectPaths } from "#/features/projects";
 import type {
   LockProject,

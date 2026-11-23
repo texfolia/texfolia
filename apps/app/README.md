@@ -323,11 +323,11 @@ Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the
 
 Organization setup follows the [Better Auth organization plugin](https://better-auth.com/docs/plugins/organization)
 and [Stripe organization billing](https://better-auth.com/docs/plugins/stripe#using-with-organizations) documentation.
-The organization configuration lives in `packages/auth`. Plans, checkout, the portal,
+The organization configuration lives in [`src/features/auth/auth.ts`](src/features/auth/auth.ts). Plans, checkout, the portal,
 webhooks, entitlements, and AI metering are exposed by [`#/features/billing`](src/features/billing/README.md);
 the `/settings/billing` route, its server function, and the billing UI stay in the app.
 Auth tables and relations, including organizations, are generated into
-`packages/db/src/auth-schema.ts` from the shared auth configuration.
+`packages/db/src/auth-schema.ts` from the auth configuration.
 
 Personal accounts work without an organization. Existing projects remain owned by users,
 and selecting an organization does not transfer personal projects or subscriptions.

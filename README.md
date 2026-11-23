@@ -104,15 +104,13 @@ More detail: [product app](apps/app/README.md), [marketing site](apps/web/README
 apps/
   app/                 React product app: auth, projects, and the compile endpoint
     src/features/      App features: ai, auth, billing, collaboration, comments,
-                       compile, editor, git, projects, references, settings,
+                       compile, editor, email, git, projects, references, settings,
                        sharing, shortcuts, storage, templates, theme, workspace
   compiler/            Hono compiler API, job processing, and the LaTeX engine
   web/                 React marketing site: landing, pricing, policies, templates gallery
 packages/
-  auth/                Shared Better Auth server and client helpers
-  contracts/           Schemas shared by the product app and the compiler
+  contracts/           Schemas, hosts, and plan prices shared by the apps
   db/                  Drizzle schema, PostgreSQL client, and migrations
-  email/               Email messages and delivery through the Worker binding
   ui/                  shadcn/Base UI React primitives for the app and the site
 docs/                  Feature and operations guides
 tsconfig.base.json     TypeScript settings every workspace extends

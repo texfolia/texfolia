@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { localHosts } from "@texfolia/auth/hosts";
+import { localHosts } from "@texfolia/contracts/hosts";
 import { createDb } from "@texfolia/db";
 import { template, user } from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";

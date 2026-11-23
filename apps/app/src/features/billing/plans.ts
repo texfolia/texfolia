@@ -1,8 +1,4 @@
-export const paidPlans = {
-  pro: { name: "Pro", monthlyUsd: 15 },
-  team: { name: "Team", monthlyUsd: 20 },
-} as const;
-
+/** Maps Stripe price IDs to Better Auth Stripe plans. */
 export function subscriptionPlans({
   proPriceId,
   teamPriceId,

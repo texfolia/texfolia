@@ -20,7 +20,7 @@ preview, and retention rules.
 The feature depends on `@texfolia/db` (template rows), `#/features/storage` (R2
 objects and ZIPs), `#/features/projects` (source paths and the `LockProject`
 type), `#/features/compile` (source hashes and the compiler client for previews),
-`@texfolia/auth` (organization roles), and `@texfolia/contracts`.
+`#/features/auth` (organization roles), and `@texfolia/contracts`.
 
 The core takes the rest as arguments:
 

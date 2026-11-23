@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./path-policy.json": "./fixtures/path-policy.json"
+    "./hosts": "./src/hosts.ts",
+    "./path-policy.json": "./fixtures/path-policy.json",
+    "./plans": "./src/plans.ts"
   },
   "scripts": {
     "test": "bun test",

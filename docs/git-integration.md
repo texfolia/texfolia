@@ -34,7 +34,7 @@ URL. Remote URL validation, account checks, the remote form, the Git view and
 Settings → Connections all read the registry in `providers/index.ts`.
 
 To add a platform, such as Cursor Origin or Bitbucket: register its OAuth
-provider in `packages/auth`, write an adapter, and add it to `gitProviders`.
+provider in `apps/app/src/features/auth/auth.ts`, write an adapter, and add it to `gitProviders`.
 Platforms whose Git HTTP differs from GitHub and GitLab (for example, a token
 that is not sent as basic authentication) need a new adapter field.
 

@@ -5,6 +5,5 @@ import { createAuth } from "./src/features/auth/auth";
 
 assertLocalUrl(process.env.DATABASE_URL, "DATABASE_URL");
 
-// Prefer `bun run --cwd packages/auth auth:schema` for schema generation.
-// This config remains for local app-level auth tooling.
+// Used only by `bun run auth:schema` to generate packages/db/src/auth-schema.ts.
 export const auth = createAuth(createDb(process.env.DATABASE_URL!));

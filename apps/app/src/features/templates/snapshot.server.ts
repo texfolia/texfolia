@@ -1,4 +1,3 @@
-import { isOrgAdmin } from "@texfolia/auth/roles";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -11,6 +10,7 @@ import {
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { isOrgAdmin } from "#/features/auth/roles";
 import { hashSource } from "#/features/compile";
 import { assertProjectSourcePaths, projectPaths } from "#/features/projects";
 import type { LockProject } from "#/features/projects/server";

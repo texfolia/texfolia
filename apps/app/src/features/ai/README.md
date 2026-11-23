@@ -21,7 +21,7 @@ The feature depends on `@texfolia/db` (threads, messages, runs, preferences),
 `#/features/billing` (entitlements, reservations, reconciliation),
 `#/features/projects` (paths, search), `#/features/git` (branch and action
 schemas), `#/features/compile` (log parsing), `#/features/storage` (source
-encoding), `@texfolia/auth` (the session type), and `@texfolia/ui`.
+encoding), `#/features/auth/auth` (the session type), and `@texfolia/ui`.
 
 Usage metering stays in `#/features/billing`. This feature reserves each model
 request before sending it and supplies `gatewayRequestCost`, the price lookup

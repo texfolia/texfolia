@@ -3,7 +3,7 @@
  * (`../schema.ts`, `../actions.ts`, `../repository.ts`) speaks plain
  * Git smart HTTP; an adapter supplies only what differs per platform.
  *
- * To add a platform: add its Better Auth social provider in `packages/auth`,
+ * To add a platform: add its Better Auth social provider in `#/features/auth/auth`,
  * write an adapter next to this file, and register it in `index.ts`.
  */
 export type GitProviderAdapter = {

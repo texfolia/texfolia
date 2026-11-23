@@ -13,13 +13,13 @@ Open [localhost:4321](http://localhost:4321).
 
 ## Routes
 
-| Route        | Rendering                       | Notes                                                    |
-| ------------ | ------------------------------- | -------------------------------------------------------- |
-| `/`          | Prerendered at build time       | Landing page                                             |
-| `/pricing`   | Prerendered at build time       | Plan names and prices come from `@texfolia/auth/billing` |
-| `/privacy`   | Prerendered at build time       | Placeholder policy for review (`noindex`)                |
-| `/terms`     | Prerendered at build time       | Placeholder terms for review (`noindex`)                 |
-| `/templates` | Server-rendered on each request | Templates gallery; `?page=` pages through the catalog    |
+| Route        | Rendering                       | Notes                                                       |
+| ------------ | ------------------------------- | ----------------------------------------------------------- |
+| `/`          | Prerendered at build time       | Landing page                                                |
+| `/pricing`   | Prerendered at build time       | Plan names and prices come from `@texfolia/contracts/plans` |
+| `/privacy`   | Prerendered at build time       | Placeholder policy for review (`noindex`)                   |
+| `/terms`     | Prerendered at build time       | Placeholder terms for review (`noindex`)                    |
+| `/templates` | Server-rendered on each request | Templates gallery; `?page=` pages through the catalog       |
 
 The prerendered pages are served as static assets. Everything else, including
 `/templates` and the not-found page, runs in the Worker.
@@ -38,8 +38,7 @@ Signed-out visitors get **Sign in to open in Texfolia**, which signs them in or
 creates an account and returns them to the template.
 Creating a project from a template inside the app stays on the app.
 
-The site does not read sessions. Sign-in, OAuth callbacks, and session cookies
-(scoped to `texfolia.com`, so they also cover `www` and `app`) stay on
+The site does not use auth. Sign-in, OAuth callbacks, and session cookies stay on
 `app.texfolia.com`.
 
 ## Project setup
