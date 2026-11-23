@@ -1,11 +1,11 @@
+import { invalidateOrganizationCollaborationAccess } from "@texfolia/collaboration/server";
 import { createDb } from "@texfolia/db";
 import { project } from "@texfolia/db/schema";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 
 import { createAuth } from "../../src/lib/auth";
-import { invalidateOrganizationCollaborationAccess } from "../../src/lib/collaboration/access.server";
-import { ProjectCollaboration as Room } from "../../src/lib/collaboration/project-collaboration";
+import { ProjectCollaboration as Room } from "../../src/lib/project-collaboration.server";
 import {
   createShareLink,
   revokeShareLink,

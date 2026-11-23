@@ -1,12 +1,12 @@
+import {
+  invalidateCollaborationAccess,
+  type CollaborationAccess,
+} from "@texfolia/collaboration/server";
 import type { Db } from "@texfolia/db";
 import { member, projectCollaborator, user } from "@texfolia/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
-import {
-  invalidateCollaborationAccess,
-  type CollaborationAccess,
-} from "./collaboration/access.server";
 import { lockProject } from "./project-access.server";
 import type {
   grantProjectAccessSchema,

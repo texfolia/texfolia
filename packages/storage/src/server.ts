@@ -34,7 +34,8 @@ export async function putSource({
   const bytes = decodeSource(content);
   if (bytes.byteLength > maxSourceFileBytes)
     throw new Error("File exceeds 10 MiB");
-  if (kind === "text") new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  if (kind === "text")
+    new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
   const [usage] = await tx
     .select({ bytes: sql<string>`coalesce(sum(${projectNode.sizeBytes}), 0)` })
     .from(projectNode)

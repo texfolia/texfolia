@@ -1,8 +1,9 @@
-import { authClient } from "./auth-client";
 import {
   clearCollaborationCaches,
   stopDocumentCaching,
-} from "./collaboration/cache";
+} from "@texfolia/collaboration/browser";
+
+import { authClient } from "./auth-client";
 
 export async function signOut(userId: string) {
   const result = await authClient.signOut();

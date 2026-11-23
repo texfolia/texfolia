@@ -10,7 +10,7 @@ import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
 import { refreshTemplatePreviews } from "./lib/template-preview.server";
 
-export { ProjectCollaboration } from "./lib/collaboration/project-collaboration";
+export { ProjectCollaboration } from "./lib/project-collaboration.server";
 
 export default {
   async fetch(request) {

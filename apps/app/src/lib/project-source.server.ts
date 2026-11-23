@@ -1,3 +1,8 @@
+import {
+  cleanupDeletedCollaboration,
+  collectCollaborationSources,
+  type CollaborationCleanup,
+} from "@texfolia/collaboration/server";
 import { fetchCompiler } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
@@ -11,11 +16,6 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
-import {
-  cleanupDeletedCollaboration,
-  collectCollaborationSources,
-  type CollaborationCleanup,
-} from "./collaboration/cleanup.server";
 import { lockProject } from "./project-access.server";
 
 export async function invalidateSourceBuild(

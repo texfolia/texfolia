@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "@texfolia/collaboration";
+import {
   appearanceStorageKey,
   legacyAppearanceStorageKey,
 } from "@texfolia/editor/themes";
@@ -11,10 +15,6 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "../src/lib/collaboration/protocol";
 import type { ProjectDetails } from "../src/lib/project.functions";
 
 const projectId = crypto.randomUUID();

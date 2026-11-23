@@ -21,6 +21,8 @@ import {
   IconMathSymbols,
   IconMessagePlus,
 } from "@tabler/icons-react";
+import { documentCachingStopped } from "@texfolia/collaboration/browser";
+import type { CollaborativeFile } from "@texfolia/collaboration/browser";
 import {
   keymapHistory,
   loadKeymapExtension,
@@ -86,8 +88,6 @@ import {
   PanelHeader,
 } from "#/components/panel-header";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
-import { documentCachingStopped } from "#/lib/collaboration/cache";
-import type { CollaborativeFile } from "#/lib/collaboration/file";
 import {
   type CommentAnchor,
   createCommentAnchor,

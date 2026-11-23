@@ -5,6 +5,12 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  collaborationProtocol,
+  decodeServerMessage,
+  encodeClientMessage,
+  protocolSearchParam,
+} from "@texfolia/collaboration";
 import { createDb } from "@texfolia/db";
 import {
   account,
@@ -21,12 +27,6 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as Y from "yjs";
 import { z } from "zod";
 
-import {
-  collaborationProtocol,
-  decodeServerMessage,
-  encodeClientMessage,
-  protocolSearchParam,
-} from "../src/lib/collaboration/protocol";
 import { gitProvider, type GitProvider } from "../src/lib/git-providers";
 import { GitRepository, gitHttp } from "../src/lib/git-repository.server";
 import { createProject } from "../src/lib/project.server";

@@ -8,7 +8,6 @@ import {
 } from "y-protocols/awareness";
 import * as Y from "yjs";
 
-import { shareSearchParam } from "../project-share-links.schema";
 import { collaborationCachePrefix, stopDocumentCaching } from "./cache";
 import {
   collaborationProtocol,
@@ -66,8 +65,10 @@ export class CollaborativeFile {
       nodeId: string;
       userId: string;
       canWrite: boolean;
-      // Read-only share-link viewers authenticate with the link's token.
-      shareToken?: string;
+      // Read-only share-link viewers: they have no presence and authenticate
+      // through `decorateUrl`, which adds the link's token to the socket URL.
+      anonymous?: boolean;
+      decorateUrl?: (url: string) => string;
       /** `local` is true when this tab made the edit, not a peer or the cache. */
       onChange: (value: string, local?: boolean) => void;
       onSaved?: (saved: Saved) => void;
@@ -159,7 +160,7 @@ export class CollaborativeFile {
       origin === this ||
       !this.synchronized ||
       // Share-link viewers have no presence; the server drops it as well.
-      this.options.shareToken ||
+      this.options.anonymous ||
       ![...added, ...updated, ...removed].includes(this.doc.clientID)
     )
       return;
@@ -223,9 +224,9 @@ export class CollaborativeFile {
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("clientId", String(this.doc.clientID));
     url.searchParams.set(protocolSearchParam, collaborationProtocol);
-    if (this.options.shareToken)
-      url.searchParams.set(shareSearchParam, this.options.shareToken);
-    const socket = new WebSocket(url);
+    const socket = new WebSocket(
+      this.options.decorateUrl?.(url.toString()) ?? url,
+    );
     socket.binaryType = "arraybuffer";
     this.socket = socket;
     socket.onopen = () => {

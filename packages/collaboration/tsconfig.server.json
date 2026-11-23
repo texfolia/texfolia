@@ -1,0 +1,12 @@
+{
+  // The room runs in workerd, so it checks against the Workers runtime types
+  // rather than the DOM.
+  "extends": "@texfolia/config/base.json",
+  "include": ["src/server.ts", "src/room.ts"],
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}

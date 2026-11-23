@@ -40,7 +40,7 @@ import {
   getProject,
 } from "../../src/lib/project.server";
 
-export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration";
+export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
 
 export default {
   async fetch(_request: Request, env: Env) {

@@ -4,6 +4,7 @@ import {
   projectCollaboration,
   projectNode,
 } from "@texfolia/db/schema";
+import type { ProjectAccessRequest } from "@texfolia/projects/server";
 import { encodeSource } from "@texfolia/storage";
 import {
   putSource,
@@ -12,17 +13,26 @@ import {
 } from "@texfolia/storage/server";
 import { and, eq, isNull } from "drizzle-orm";
 
-import { lockProject } from "../project-access.server";
+// Locks the project row and checks access, throwing to deny. The app owns which
+// grants apply, such as collaborators and share links.
+export type CollaborationLock = (
+  request: ProjectAccessRequest,
+) => Promise<{ canWrite: boolean }>;
 
 export async function collaborationAccess(
   db: Db,
   projectId: string,
   nodeId: string,
   userId: string,
-  options?: { register?: boolean },
+  options: { lock: CollaborationLock; register?: boolean },
 ) {
   return db.transaction(async (tx) => {
-    const access = await lockProject({ tx, projectId, userId, access: "read" });
+    const access = await options.lock({
+      tx,
+      projectId,
+      userId,
+      access: "read",
+    });
     const node = await tx.query.projectNode.findFirst({
       where: {
         id: nodeId,
@@ -32,7 +42,7 @@ export async function collaborationAccess(
       },
     });
     if (!node) throw new Error("File not found");
-    if (options?.register)
+    if (options.register)
       await tx
         .insert(projectCollaboration)
         .values({ projectId })

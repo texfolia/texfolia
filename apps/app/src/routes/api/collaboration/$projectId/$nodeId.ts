@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
-import { z } from "zod";
-
 import {
   collaborationProtocol,
   protocolSearchParam,
-} from "#/lib/collaboration/protocol";
-import { collaborationAccess } from "#/lib/collaboration/sources.server";
+} from "@texfolia/collaboration";
+import { collaborationAccess } from "@texfolia/collaboration/server";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+
+import { lockProject } from "#/lib/project-access.server";
 import { requestPrincipal } from "#/lib/request-principal.server";
 
 export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
@@ -43,6 +44,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
             params.projectId,
             params.nodeId,
             principal.userId,
+            { lock: lockProject },
           );
         } catch (error) {
           if (

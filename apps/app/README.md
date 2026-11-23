@@ -100,6 +100,12 @@ The workspace keeps those documents connected while file tabs open and close,
 so analysis, export, and compile inputs include changes to closed files.
 Binary files retain their existing source-storage path.
 
+The room, protocol, browser cache, and drafts live in
+[`@texfolia/collaboration`](../../packages/collaboration/README.md).
+`src/lib/project-collaboration.server.ts` subclasses its `CollaborationRoom`
+with the app's project lock, share links, build invalidation, and Git. The
+`/api/collaboration` route and the `y-codemirror.next` editor binding stay here.
+
 Open workspaces fetch `/api/projects/:projectId/metadata` after each two-second
 refresh interval, on focus, and on reconnect. Each request checks current project
 access under the same database lock as source writes. Snapshots contain the file
