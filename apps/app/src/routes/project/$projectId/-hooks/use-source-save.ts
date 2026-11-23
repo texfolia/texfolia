@@ -14,10 +14,7 @@ import {
   projectPaths,
 } from "#/features/projects";
 import { saveProjectSource } from "#/features/projects/project-source.functions";
-import type {
-  ProjectDetails,
-  ProjectNode,
-} from "#/features/projects/project.functions";
+import type { ProjectDetails } from "#/features/projects/project.functions";
 import { encodeSource, type SourceFiles } from "#/features/storage";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import type { useProjectFiles } from "#/providers/project-files-provider";
@@ -39,6 +36,7 @@ export function useSourceSave({
   files,
   collaboration,
   drafts,
+  refreshSaved,
   refreshTitle,
 }: {
   project: Pick<ProjectDetails, "id" | "sourceContents" | "sourceVersions">;
@@ -46,10 +44,11 @@ export function useSourceSave({
   ready: boolean;
   files: ReturnType<typeof useProjectFiles>;
   collaboration: {
-    get: (id: string) => CollaborativeFile | undefined;
-    synchronize: (nodes: ProjectNode[]) => Promise<void>;
+    synchronize: () => Promise<ReadonlyMap<string, CollaborativeFile>>;
   };
   drafts: Map<string, FileState>;
+  /** Loads files without a live document at their saved version. */
+  refreshSaved: () => Promise<void>;
   /** Updates a tab title after its saved value changes. */
   refreshTitle: (id: string) => void;
 }) {
@@ -107,24 +106,21 @@ export function useSourceSave({
       const metadata = await files.refresh();
       if (!metadata.canWrite)
         throw new Error("Viewers cannot save project files");
-      const nodes = files.nodes.toArray;
-      await collaboration.synchronize(nodes);
+      // Files without a live document have no edits here, and the room saves
+      // collaborators' edits by itself.
+      const live = await collaboration.synchronize();
       await Promise.all(
-        nodes.map(async (node) => {
-          if (node.kind !== "text") return;
-          const file = collaboration.get(node.id);
-          if (!file)
-            throw new Error("Wait for collaboration to connect before saving.");
+        [...live].map(async ([id, file]) => {
           // Skip files the server has already persisted at the known version.
           if (
-            file.isSaved(files.sourceVersions[node.id]?.objectKey) &&
-            file.text.toString() === drafts.get(node.id)?.savedValue
+            file.isSaved(files.sourceVersions[id]?.objectKey) &&
+            file.text.toString() === drafts.get(id)?.savedValue
           )
             return;
           const saved = await file.save();
           const value = file.text.toString();
-          recordSaved(node.id, saved, value);
-          if (value === saved.value) delete localDrafts.current[node.id];
+          recordSaved(id, saved, value);
+          if (value === saved.value) delete localDrafts.current[id];
         }),
       );
       cacheDrafts();
@@ -162,7 +158,8 @@ export function useSourceSave({
       sourceVersions: versions,
       textSource: saved ? "saved" : "live",
     });
-    await collaboration.synchronize(nodes);
+    const live = await collaboration.synchronize();
+    if (!saved) await refreshSaved();
     const sources: CompileSources = {};
     for (const node of nodes) {
       const path = paths.get(node.id);
@@ -172,7 +169,9 @@ export function useSourceSave({
         ? hash
           ? { hash }
           : ""
-        : (collaboration.get(node.id)?.text.toString() ?? "");
+        : (live.get(node.id)?.text.toString() ??
+          drafts.get(node.id)?.value ??
+          "");
     }
     const binaries = nodes.flatMap((node) => {
       const path = paths.get(node.id);

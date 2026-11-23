@@ -12,11 +12,14 @@ const maxControlLength = 1024;
  */
 export const collaborationProtocol = "2";
 export const protocolSearchParam = "protocol";
+/** Clients that understand `people` messages connect with `?people=1`. */
+export const peopleSearchParam = "people";
 export const outdatedClientMessage =
   "Texfolia was updated. Reload this page to keep collaborating; your offline edits are kept in this browser.";
 
 // Yjs traffic travels as binary frames whose first byte is the message type,
-// as y-websocket does. Control messages (`save`, `saved`, `error`) stay JSON.
+// as y-websocket does. Control messages (`save`, `saved`, `error`, `people`)
+// stay JSON.
 const frameType = { sync: 0, update: 1, awareness: 2 } as const;
 
 const syncMetaSchema = z.object({
@@ -42,7 +45,13 @@ const serverControlSchema = z.discriminatedUnion("type", [
     message: z.string(),
     id: z.uuid().optional(),
   }),
+  // Everyone with a file open in the project, whichever file it is.
+  z.object({
+    type: z.literal("people"),
+    people: z.array(z.object({ name: z.string(), color: z.string() })),
+  }),
 ]);
+export type Person = { name: string; color: string };
 
 export type ClientMessage =
   | { type: "sync"; vector: Uint8Array }

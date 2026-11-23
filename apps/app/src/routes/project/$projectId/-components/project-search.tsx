@@ -33,8 +33,8 @@ export function ProjectSearch({
     return () => cancelAnimationFrame(frame);
   }, [active, request]);
   const deferred = useDeferredValue(query);
-  // Drafts hold the live collaborative text of every text file, so results
-  // include unsaved edits. Binary files have no draft and are never searched.
+  // Drafts hold the live text of open files and the saved text of the others,
+  // so results include unsaved edits. Binary files have no draft.
   const result = active
     ? searchProject(
         [...paths].flatMap(([nodeId, path]) => {

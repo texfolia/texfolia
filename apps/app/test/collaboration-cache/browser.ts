@@ -2,11 +2,17 @@ import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
 
 import { clearCollaborationCaches } from "#/features/collaboration/browser";
-import { CollaborativeFile } from "#/features/collaboration/browser";
+import {
+  CollaborativeDocuments,
+  CollaborativeFile,
+} from "#/features/collaboration/browser";
 
 import { signOut } from "../../src/features/auth/sign-out";
 
 let file: CollaborativeFile | undefined;
+let documents: CollaborativeDocuments | undefined;
+const releases = new Map<string, () => void>();
+const closedValues: Record<string, string> = {};
 let blocker: IDBDatabase | undefined;
 const api = {
   signOut,
@@ -30,6 +36,42 @@ const api = {
     });
     await file.whenConnected();
   },
+  openProject(userId: string, textIds: string[]) {
+    documents = new CollaborativeDocuments({
+      userId,
+      projectId: "project",
+      closeDelayMs: 200,
+      onChange: () => {},
+      onSaved: () => {},
+      onClose: (id, file) => (closedValues[id] = file.text.toString()),
+      onDocuments: () => {},
+    });
+    documents.update({
+      textIds: new Set(textIds),
+      deleted: new Set(),
+      canWrite: true,
+    });
+  },
+  hold(id: string) {
+    if (documents) releases.set(id, documents.hold(id));
+  },
+  release: (id: string) => releases.get(id)?.(),
+  edit: (id: string, value: string) =>
+    documents?.edit(id, (file) => file.replace(value)),
+  documents: () =>
+    [...(documents?.snapshot() ?? [])].map(([id, file]) => ({
+      id,
+      connected: file.getStatus().connected,
+      value: file.text.toString(),
+    })),
+  async synchronized() {
+    return [...((await documents?.synchronize())?.keys() ?? [])];
+  },
+  closedValues: () => closedValues,
+  markers: () =>
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("texfolia.unsynced."))
+      .sort(),
   replace: (value: string) => file?.replace(value),
   value: () => file?.text.toString(),
   connected: () => file?.getStatus().connected,

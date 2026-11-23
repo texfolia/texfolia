@@ -9,15 +9,22 @@ import * as Y from "yjs";
 
 import { formatChanges } from "#/features/editor/latex/format";
 
-import { collaborationCachePrefix, stopDocumentCaching } from "./cache";
+import {
+  collaborationCachePrefix,
+  documentCachingStopped,
+  stopDocumentCaching,
+} from "./cache";
 import {
   collaborationProtocol,
   decodeServerMessage,
   encodeClientMessage,
+  peopleSearchParam,
   protocolSearchParam,
   type ClientMessage,
+  type Person,
   type ServerMessage,
 } from "./protocol";
+import { markUnsynced, removeMarkers, unsyncedMarkers } from "./unsynced";
 
 type Saved = Extract<ServerMessage, { type: "saved" }>;
 type FileStatus = {
@@ -25,7 +32,24 @@ type FileStatus = {
   connected: boolean;
   canWrite: boolean;
   error: string;
+  /** Everyone with a file open in this project, while connected. */
+  people: readonly Person[];
 };
+
+// Whether `doc` has edits the server lacked when it sent this sync. An encoded
+// update always repeats the whole delete set, so its size cannot tell.
+function hasUnsentEdits(
+  doc: Y.Doc,
+  { update, vector }: { update: Uint8Array; vector: Uint8Array },
+) {
+  const server = Y.decodeStateVector(vector);
+  for (const [client, clock] of Y.decodeStateVector(Y.encodeStateVector(doc)))
+    if (clock > (server.get(client) ?? 0)) return true;
+  return !Y.equalDeleteSets(
+    Y.createDeleteSetFromStructStore(doc.store),
+    Y.decodeUpdate(update).ds,
+  );
+}
 
 export class CollaborativeFile {
   readonly doc = new Y.Doc();
@@ -49,6 +73,11 @@ export class CollaborativeFile {
   private revision = 0;
   private savedRevision = 0;
   private savedObjectKey: string | null | undefined;
+  // Local edits count separately, up to the last one the server acknowledged.
+  private localRevision = 0;
+  private acknowledgedRevision = 0;
+  // Markers for unsynced edits that this document's cache includes.
+  private markers = new Set<string>();
   private status: FileStatus;
   private saves = new Map<
     string,
@@ -57,6 +86,7 @@ export class CollaborativeFile {
       reject: (error: Error) => void;
       timer: ReturnType<typeof setTimeout>;
       revision: number;
+      localRevision: number;
     }
   >();
 
@@ -80,6 +110,7 @@ export class CollaborativeFile {
       connected: false,
       canWrite: options.canWrite,
       error: "",
+      people: [],
     };
     this.awareness.setLocalState(null);
     this.doc.on("update", this.documentChanged);
@@ -120,6 +151,8 @@ export class CollaborativeFile {
         );
         await this.persistence.whenSynced;
         if (this.stopped) return;
+        for (const marker of unsyncedMarkers(this.options))
+          this.markers.add(marker);
         this.persistence.db?.addEventListener("versionchange", (event) => {
           if (event.newVersion !== null) return;
           stopDocumentCaching();
@@ -144,6 +177,11 @@ export class CollaborativeFile {
   private documentChanged = (update: Uint8Array, origin: unknown) => {
     this.revision++;
     const local = origin !== this && origin !== this.persistence;
+    if (local) {
+      this.localRevision++;
+      if (this.persistence && !documentCachingStopped())
+        this.markers.add(markUnsynced(this.options, this.doc.clientID));
+    }
     if (this.status.ready) this.options.onChange(this.text.toString(), local);
     if (local && this.synchronized && this.status.canWrite)
       this.send({ type: "update", update });
@@ -179,7 +217,7 @@ export class CollaborativeFile {
     socket?.close();
     clearInterval(this.heartbeat);
     this.synchronized = false;
-    this.setStatus({ connected: false });
+    this.setStatus({ connected: false, people: [] });
     removeAwarenessStates(
       this.awareness,
       [...this.awareness.getStates().keys()].filter(
@@ -225,6 +263,7 @@ export class CollaborativeFile {
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("clientId", String(this.doc.clientID));
     url.searchParams.set(protocolSearchParam, collaborationProtocol);
+    url.searchParams.set(peopleSearchParam, "1");
     const socket = new WebSocket(
       this.options.decorateUrl?.(url.toString()) ?? url,
     );
@@ -270,13 +309,17 @@ export class CollaborativeFile {
               user: data.user,
             });
             let dirty = data.dirty;
-            if (data.canWrite) {
-              const pending = Y.encodeStateAsUpdate(this.doc, data.vector);
-              if (pending.length > 2) {
-                this.send({ type: "update", update: pending });
+            if (hasUnsentEdits(this.doc, data)) {
+              // Edits from the cache are unacknowledged too.
+              this.localRevision++;
+              if (data.canWrite) {
+                this.send({
+                  type: "update",
+                  update: Y.encodeStateAsUpdate(this.doc, data.vector),
+                });
                 dirty = true;
               }
-            }
+            } else this.acknowledge(this.localRevision);
             this.savedRevision = dirty ? -1 : this.revision;
             this.savedObjectKey = data.objectKey;
             this.options.onChange(this.text.toString());
@@ -295,18 +338,22 @@ export class CollaborativeFile {
             applyAwarenessUpdate(this.awareness, data.update, this);
             break;
           case "saved": {
-            this.options.onSaved?.(data);
             this.setStatus({ error: "" });
             const pending = this.saves.get(data.id);
             if (pending) {
               clearTimeout(pending.timer);
               this.savedRevision = pending.revision;
               this.savedObjectKey = data.objectKey;
-              pending.resolve(data);
-              this.saves.delete(data.id);
+              this.acknowledge(pending.localRevision);
             }
+            this.options.onSaved?.(data);
+            pending?.resolve(data);
+            this.saves.delete(data.id);
             break;
           }
+          case "people":
+            this.setStatus({ people: data.people });
+            break;
           case "error": {
             this.setStatus({
               error: data.message,
@@ -352,6 +399,32 @@ export class CollaborativeFile {
     });
   }
 
+  private acknowledge(localRevision: number) {
+    this.acknowledgedRevision = Math.max(
+      this.acknowledgedRevision,
+      localRevision,
+    );
+    if (this.acknowledgedRevision !== this.localRevision) return;
+    removeMarkers(this.markers);
+    this.markers.clear();
+  }
+
+  /** Whether this browser has edits the server may still be missing. */
+  hasPendingEdits() {
+    return (
+      !this.stopped &&
+      this.status.canWrite &&
+      this.localRevision !== this.acknowledgedRevision
+    );
+  }
+
+  /** The object holding exactly this text, or undefined when not known. */
+  savedAs() {
+    return this.revision === this.savedRevision
+      ? this.savedObjectKey
+      : undefined;
+  }
+
   /** Whether the server has persisted every change as `objectKey`. */
   isSaved(objectKey: string | null | undefined) {
     return (
@@ -378,26 +451,43 @@ export class CollaborativeFile {
           ),
         );
       }, 30_000);
-      this.saves.set(id, { resolve, reject, timer, revision: this.revision });
+      this.saves.set(id, {
+        resolve,
+        reject,
+        timer,
+        revision: this.revision,
+        localRevision: this.localRevision,
+      });
       // While synchronized, every local update has already been sent on this
       // ordered socket, so the server needs no payload to persist the file.
       this.send({ type: "save", id });
     });
   }
 
-  whenConnected(): Promise<void> {
-    if (this.status.connected && this.status.ready) return Promise.resolve();
-    return new Promise((resolve, reject) => {
+  whenConnected() {
+    return this.when(
+      ({ connected, ready }) => connected && ready,
+      "Wait for project files to synchronize before exporting or compiling.",
+    );
+  }
+
+  /** Resolves once the text is loaded, from the server or the offline cache. */
+  whenReady() {
+    return this.when(
+      ({ ready }) => ready,
+      "Wait for this file to synchronize before editing.",
+    );
+  }
+
+  private when(check: (status: FileStatus) => boolean, message: string) {
+    if (check(this.status)) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         unsubscribe();
-        reject(
-          new Error(
-            "Wait for project files to synchronize before exporting or compiling.",
-          ),
-        );
+        reject(new Error(message));
       }, 10_000);
       const unsubscribe = this.subscribe(() => {
-        if (!this.status.connected || !this.status.ready) return;
+        if (!check(this.status)) return;
         clearTimeout(timer);
         unsubscribe();
         resolve();

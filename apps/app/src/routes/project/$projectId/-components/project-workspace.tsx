@@ -6,6 +6,7 @@ import { SidebarProvider } from "@texfolia/ui/sidebar";
 import { cn } from "cn";
 import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
 import {
+  useEffect,
   useEffectEvent,
   useMemo,
   useRef,
@@ -14,6 +15,7 @@ import {
 } from "react";
 
 import { SettingsDialog } from "#/components/settings-dialog";
+import { entryAppendix } from "#/features/editor/latex/bibtex";
 import { latexCompletion } from "#/features/editor/latex/completion";
 import { projectOutline } from "#/features/editor/latex/outline";
 import {
@@ -39,6 +41,7 @@ import {
 import { useCollaborationFiles } from "../-hooks/use-collaboration-files";
 import { useCompilation } from "../-hooks/use-compilation";
 import { useDockPanels } from "../-hooks/use-dock-panels";
+import { useSavedSources } from "../-hooks/use-saved-sources";
 import { sourceDraftsKey, useSourceSave } from "../-hooks/use-source-save";
 import { useWorkspaceChrome } from "../-hooks/use-workspace-chrome";
 import { useWorkspaceProblems } from "../-hooks/use-workspace-problems";
@@ -139,10 +142,22 @@ export function ProjectWorkspace({
     ready,
     nodes,
     deleted: fileStatus.deleted,
-    currentDeleted: () => files.getStatus().deleted,
     onSaved: (id, saved, file) =>
       sources.recordSaved(id, saved, file.text.toString()),
     onChange: observeChange,
+    onClose: (id, file) => savedSources.keep(id, file),
+  });
+  const savedSources = useSavedSources({
+    project,
+    ready,
+    files,
+    collaboration,
+    drafts,
+    onLoaded: (id, value) => {
+      const path = paths.get(id);
+      if (path) update(path, value);
+      panels.refreshTitle(id);
+    },
   });
   const sources = useSourceSave({
     project,
@@ -151,8 +166,16 @@ export function ProjectWorkspace({
     files,
     collaboration,
     drafts,
+    refreshSaved: savedSources.refresh,
     refreshTitle: panels.refreshTitle,
   });
+  // Drafts are recovered into live documents.
+  const { hold } = collaboration;
+  const { recovery } = sources;
+  useEffect(() => {
+    const releases = Object.keys(recovery).map(hold);
+    return () => releases.forEach((release) => release());
+  }, [recovery, hold]);
   const writable = canWrite && !sources.recovering;
   const compilation = useCompilation({
     projectId,
@@ -207,12 +230,9 @@ export function ProjectWorkspace({
       compilation.recordEdit(local);
       update(path, value);
     }
-    panels.keepOpen(id);
+    // Opening a preview tab also reports its text; only edits keep it open.
+    if (local) panels.keepOpen(id);
     panels.refreshTitle(id);
-  }
-
-  function change(id: string, value: string) {
-    if (canWrite) collaboration.get(id)?.replace(value);
   }
 
   function addSymbolPackage(packageName: string) {
@@ -222,14 +242,19 @@ export function ProjectWorkspace({
       addLatexPackage(packageName)(view);
       return;
     }
-    const draft = drafts.get(mainId);
-    const insertion = draft && packageInsertion(draft.value, packageName);
-    if (draft && insertion)
-      change(
-        mainId,
-        draft.value.slice(0, insertion.from) +
-          insertion.insert +
-          draft.value.slice(insertion.from),
+    collaboration
+      .edit(mainId, (file) => {
+        const value = file.text.toString();
+        const insertion = packageInsertion(value, packageName);
+        if (insertion)
+          file.replace(
+            value.slice(0, insertion.from) +
+              insertion.insert +
+              value.slice(insertion.from),
+          );
+      })
+      .catch((error: unknown) =>
+        console.error("Package was not added", { packageName, error }),
       );
   }
 
@@ -262,10 +287,11 @@ export function ProjectWorkspace({
     );
   }
 
-  function appendBib(id: string, text: string) {
-    const file = collaboration.get(id);
-    if (!file) throw new Error("This file is not available for editing.");
-    file.replace(file.text.toString() + text);
+  function appendBib(id: string, entry: string) {
+    return collaboration.edit(id, (file) => {
+      const value = file.text.toString();
+      file.replace(value + entryAppendix(value, entry));
+    });
   }
 
   async function createBib(content: string) {
@@ -348,6 +374,7 @@ export function ProjectWorkspace({
     <WorkspaceProvider
       value={{
         collaboration: collaboration.snapshot,
+        holdDocument: hold,
         projectId,
         canWrite: writable,
         build: compilation.build,
@@ -355,7 +382,6 @@ export function ProjectWorkspace({
         drafts,
         keepOpen: panels.keepOpen,
         openMarkdownPreview: panels.openMarkdownPreview,
-        change,
         registerEditor: panels.registerEditor,
         symbolPreamble:
           main && mainDraft
@@ -466,7 +492,11 @@ export function ProjectWorkspace({
                     (id) => collaboration.get(id)?.getStatus().ready,
                   )
                 }
-                onRecover={() => sources.resolveRecovery(change)}
+                onRecover={() =>
+                  sources.resolveRecovery((id, value) =>
+                    collaboration.get(id)?.replace(value),
+                  )
+                }
                 onDiscard={() => sources.resolveRecovery()}
               />
             )}

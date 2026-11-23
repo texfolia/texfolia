@@ -10,6 +10,11 @@ export function stopDocumentCaching() {
   cachingStopped = true;
 }
 
+/** Prefixes the markers for documents with unsynced edits; see unsynced.ts. */
+export function unsyncedPrefix(userId: string) {
+  return `texfolia.unsynced.${userId}.`;
+}
+
 export async function clearCollaborationCaches(userId: string) {
   const databases =
     typeof indexedDB === "undefined" ? [] : await indexedDB.databases();
@@ -35,6 +40,7 @@ export async function clearCollaborationCaches(userId: string) {
   const keys = Object.keys(localStorage);
   for (const key of keys) {
     if (
+      key.startsWith(unsyncedPrefix(userId)) ||
       key.startsWith(layoutPrefix) ||
       (key.startsWith("texfolia.project.") && key.endsWith(".sources"))
     )

@@ -44,6 +44,7 @@ const api = {
   value: () => file.text.toString(),
   editorValue: () => view?.state.doc.toString(),
   status: () => file.getStatus(),
+  people: () => file.getStatus().people.map(({ name }) => name),
   insert: (at: number, text: string) => {
     const startedAt = Date.now();
     view?.dispatch({ changes: { from: at, insert: text } });
