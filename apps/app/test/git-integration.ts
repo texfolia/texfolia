@@ -21,16 +21,16 @@ import {
   session,
   user,
 } from "@texfolia/db/schema";
+import { gitProvider, type GitProvider } from "@texfolia/git";
+import { GitRepository, gitHttp } from "@texfolia/git/server";
+import { gitServer, gitCommand } from "@texfolia/git/testing";
 import { eq, inArray } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as Y from "yjs";
 import { z } from "zod";
 
-import { gitProvider, type GitProvider } from "../src/lib/git-providers";
-import { GitRepository, gitHttp } from "../src/lib/git-repository.server";
 import { createProject } from "../src/lib/project.server";
-import { gitServer, gitCommand } from "./git/http-server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

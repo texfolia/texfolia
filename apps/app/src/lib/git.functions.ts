@@ -1,33 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
-import { account } from "@texfolia/db/schema";
+import { gitActionSchema, gitRemoteSchema } from "@texfolia/git";
 import { projectNameSchema } from "@texfolia/projects";
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { ensureSession } from "./auth.functions";
-import { gitActionSchema, gitRemoteSchema } from "./git";
-import {
-  gitProviders,
-  hasRepositoryAccess,
-  type GitProvider,
-} from "./git-providers";
 
 export const getGitAccounts = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     const session = await ensureSession();
-    const accounts = await context.db
-      .select({ provider: account.providerId, scope: account.scope })
-      .from(account)
-      .where(eq(account.userId, session.user.id));
-    return Object.fromEntries(
-      gitProviders.map(({ id }) => [
-        id,
-        accounts.some(
-          (a) => a.provider === id && hasRepositoryAccess(id, a.scope),
-        ),
-      ]),
-    ) as Record<GitProvider, boolean>;
+    const { gitAccounts } = await import("@texfolia/git/server");
+    return gitAccounts({ db: context.db, userId: session.user.id });
   },
 );
 

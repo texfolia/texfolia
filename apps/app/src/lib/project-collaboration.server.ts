@@ -1,7 +1,7 @@
 import { CollaborationRoom } from "@texfolia/collaboration/room";
+import type { GitAction } from "@texfolia/git";
 import type { ProjectAccessRequest } from "@texfolia/projects/server";
 
-import type { GitAction } from "./git";
 import { runGit } from "./git.server";
 import { lockProject, shareLinkIdOf } from "./project-access.server";
 import { invalidateSourceBuild } from "./project-source.server";

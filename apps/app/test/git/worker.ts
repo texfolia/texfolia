@@ -1,11 +1,11 @@
 import { createDb } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
+import { gitActionSchema } from "@texfolia/git";
+import { collectGitObjects } from "@texfolia/git/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createAuth } from "../../src/lib/auth";
-import { gitActionSchema } from "../../src/lib/git";
-import { collectGitObjects } from "../../src/lib/git.server";
 import { collectProjectSources } from "../../src/lib/project-source.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
 export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";

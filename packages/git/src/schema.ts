@@ -5,11 +5,11 @@ import {
   gitProviderForHost,
   gitProviderIds,
   type GitProvider,
-} from "./git-providers";
+} from "./providers";
 
-export type { GitProvider } from "./git-providers";
+export type { GitProvider } from "./providers";
 // Git in Texfolia always works through a linked remote on an integrated platform
-// (NAT-413). Platform specifics live in ./git-providers.
+// (NAT-413). Platform specifics live in ./providers.
 export const gitProviderSchema = z.enum(gitProviderIds);
 export const gitRemoteMessage = `Enter an HTTPS repository URL on ${gitHostsLabel}.`;
 export const gitRemoteSchema = z

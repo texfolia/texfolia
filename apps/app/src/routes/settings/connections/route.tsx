@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hasRepositoryAccess, isGitProvider } from "@texfolia/git";
 import { Button } from "@texfolia/ui/button";
 import {
   Item,
@@ -11,7 +12,6 @@ import { useState } from "react";
 import { connectGitAccount } from "#/components/git-remote-form";
 import { getConnections } from "#/lib/account-settings.functions";
 import { authClient } from "#/lib/auth-client";
-import { hasRepositoryAccess, isGitProvider } from "#/lib/git-providers";
 export const Route = createFileRoute("/settings/connections")({
   loader: () => getConnections(),
   component: ConnectionsPage,

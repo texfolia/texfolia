@@ -19,13 +19,13 @@ import {
   subscription,
   user,
 } from "@texfolia/db/schema";
+import { GitRepository } from "@texfolia/git/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import { z } from "zod";
 
 import { threadHistorySchema, threadSchema } from "../src/lib/ai/threads";
-import { GitRepository } from "../src/lib/git-repository.server";
 import { createProject } from "../src/lib/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
