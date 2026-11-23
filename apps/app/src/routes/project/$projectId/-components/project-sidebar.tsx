@@ -1,5 +1,7 @@
 import { IconX } from "@tabler/icons-react";
 import type { OutlineEntry } from "@texfolia/editor/latex/outline";
+import type { SourceFiles } from "@texfolia/storage";
+import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
@@ -11,8 +13,6 @@ import {
 import { useMemo, useState, type RefObject } from "react";
 
 import { buildFileUrl } from "#/lib/build";
-import { downloadFile } from "#/lib/download-file";
-import type { SourceFiles } from "#/lib/project-source";
 import type { ProjectNode } from "#/lib/project.functions";
 import { type SidebarView } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";

@@ -9,11 +9,11 @@ import {
   tag,
   user,
 } from "@texfolia/db/schema";
+import { encodeSource, maxSourceFileBytes } from "@texfolia/storage";
 import { and, eq } from "drizzle-orm";
 
 import { importProjectFiles } from "../../src/lib/project-import.server";
 import { projectPaths } from "../../src/lib/project-paths";
-import { encodeSource, maxSourceFileBytes } from "../../src/lib/project-source";
 import {
   saveProjectSource,
   readProjectSource,

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { readDroppedFiles } from "#/lib/dropped-files";
+import { readDroppedFiles } from "../src/dropped-files";
 
 function file(name: string) {
   const value = new File([name], name);

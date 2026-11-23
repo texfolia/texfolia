@@ -1,4 +1,5 @@
 import { type LatexProblem } from "@texfolia/editor/latex/analysis";
+import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -23,7 +24,6 @@ import {
 } from "react";
 import * as Y from "yjs";
 
-import { downloadFile } from "#/lib/download-file";
 import { useWorkspace, type Workspace } from "#/providers/workspace-provider";
 
 import type { FilePanelParams } from "../-hooks/use-dock-panels";

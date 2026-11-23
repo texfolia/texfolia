@@ -1,4 +1,7 @@
 import { IconDownload } from "@tabler/icons-react";
+import { decodeSource, type SourceFiles } from "@texfolia/storage";
+import { downloadFile } from "@texfolia/storage/browser";
+import { createZip } from "@texfolia/storage/zip";
 import { Button } from "@texfolia/ui/button";
 import { Checkbox } from "@texfolia/ui/checkbox";
 import {
@@ -11,10 +14,7 @@ import {
 import { useState, useImperativeHandle, type Ref } from "react";
 
 import { buildFileUrl } from "#/lib/build";
-import { downloadFile } from "#/lib/download-file";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
-import { decodeSource, type SourceFiles } from "#/lib/project-source";
-import { createZip } from "#/lib/zip";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export type ProjectExportHandle = { open: () => void };

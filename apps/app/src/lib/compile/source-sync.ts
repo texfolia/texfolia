@@ -1,6 +1,5 @@
+import { decodeSource, sourceContentSchema } from "@texfolia/storage";
 import { z } from "zod";
-
-import { decodeSource, sourceContentSchema } from "../project-source";
 
 const revision = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const compileDeltaSchema = z.object({

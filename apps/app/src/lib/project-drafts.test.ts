@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 
-import { reconcileSourceDrafts, serializeSourceDrafts } from "./project-drafts";
 import {
   decodeSource,
   encodeSource,
   sourceContentSchema,
-} from "./project-source";
+} from "@texfolia/storage";
+
+import { reconcileSourceDrafts, serializeSourceDrafts } from "./project-drafts";
 
 test("legacy browser drafts migrate only when there is no server content", () => {
   const result = reconcileSourceDrafts({

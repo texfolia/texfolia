@@ -16,6 +16,7 @@ import {
   type SyncTexIndex,
   type SyncTexLocation,
 } from "@texfolia/editor/latex/synctex";
+import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   DropdownMenu,
@@ -35,7 +36,6 @@ import {
   PanelHeader,
 } from "#/components/panel-header";
 import { reportCompilePreview } from "#/lib/compile/compile-telemetry";
-import { downloadFile } from "#/lib/download-file";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";

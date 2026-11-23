@@ -1,13 +1,11 @@
 import handler from "@tanstack/react-start/server-entry";
 import { createDb } from "@texfolia/db";
+import { sweepProjectSources } from "@texfolia/storage/server";
 
 import { reconcileAiUsage } from "./lib/ai/billing.server";
 import { aiConfig } from "./lib/ai/gateway.server";
 import { collectGitObjects } from "./lib/git.server";
-import {
-  collectProjectSources,
-  sweepProjectSources,
-} from "./lib/project-source.server";
+import { collectProjectSources } from "./lib/project-source.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 import { collectTemplateObjects } from "./lib/template-cleanup.server";
 import { refreshTemplatePreviews } from "./lib/template-preview.server";

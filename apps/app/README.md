@@ -34,7 +34,9 @@ seeds, schema setup, retention, and verification commands.
 
 Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed
 by `project_node.object_key` and `size_bytes`. Keys are
-`projects/{projectId}/sources/{sha256}`. Collaborative text edits persist automatically.
+`projects/{projectId}/sources/{sha256}`. Object keys, uploads, limits, and the garbage
+queue live in [`@texfolia/storage`](../../packages/storage/README.md); access
+checks, build invalidation, and collaboration cleanup stay in the app. Collaborative text edits persist automatically.
 **Save** (Cmd/Ctrl+S) waits for merged text to reach R2, then submits the
 acknowledged source snapshot as a cached build while **Compile after saving** is
 on (the default). **Save without compiling** (Cmd/Ctrl+K S) only persists,

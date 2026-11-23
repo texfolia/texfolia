@@ -9,6 +9,16 @@ import {
   sourceGarbage,
   user,
 } from "@texfolia/db/schema";
+import {
+  encodeSource,
+  maxSourceFileBytes,
+  maxSourceProjectBytes,
+  sourceContentSchema,
+} from "@texfolia/storage";
+import {
+  type SourceBucket,
+  sweepProjectSources,
+} from "@texfolia/storage/server";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { compileResync } from "../../src/lib/compile-source.server";
@@ -19,18 +29,10 @@ import {
   renameProjectNode,
 } from "../../src/lib/project-node.server";
 import {
-  encodeSource,
-  maxSourceFileBytes,
-  maxSourceProjectBytes,
-  sourceContentSchema,
-} from "../../src/lib/project-source";
-import {
   collectProjectSources,
   deleteProjectNode,
   readProjectSource,
   saveProjectSource,
-  type SourceBucket,
-  sweepProjectSources,
 } from "../../src/lib/project-source.server";
 import {
   createProject,

@@ -8,6 +8,7 @@ import {
   tag,
   user,
 } from "@texfolia/db/schema";
+import { retireSources, type SourceBucket } from "@texfolia/storage/server";
 import { and, eq, isNull, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
@@ -17,7 +18,6 @@ import {
 } from "./collaboration/cleanup.server";
 import { fetchCompiler } from "./compiler.server";
 import { lockProject } from "./project-access.server";
-import { retireSources, type SourceBucket } from "./project-source.server";
 import type {
   createProjectSchema,
   renameProjectSchema,

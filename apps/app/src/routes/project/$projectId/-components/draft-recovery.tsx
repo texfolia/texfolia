@@ -1,6 +1,6 @@
+import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 
-import { downloadFile } from "#/lib/download-file";
 import { serializeSourceDrafts, type SourceDraft } from "#/lib/project-drafts";
 
 /** Offers browser drafts that could not be migrated to the server. */

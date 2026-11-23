@@ -4,15 +4,15 @@ import {
   projectCollaboration,
   projectNode,
 } from "@texfolia/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
-
-import { lockProject } from "../project-access.server";
-import { encodeSource } from "../project-source";
+import { encodeSource } from "@texfolia/storage";
 import {
   putSource,
   retireSources,
   type SourceBucket,
-} from "../project-source.server";
+} from "@texfolia/storage/server";
+import { and, eq, isNull } from "drizzle-orm";
+
+import { lockProject } from "../project-access.server";
 
 export async function collaborationAccess(
   db: Db,

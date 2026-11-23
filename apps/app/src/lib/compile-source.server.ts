@@ -1,4 +1,6 @@
 import type { Db } from "@texfolia/db";
+import { encodeSource } from "@texfolia/storage";
+import type { SourceBucket } from "@texfolia/storage/server";
 import type { z } from "zod";
 
 import { compileDeltaSchema, hashSource } from "./compile/source-sync";
@@ -6,8 +8,6 @@ import { lockProject } from "./project-access.server";
 import { projectMetadataVersion } from "./project-metadata";
 import { readProjectMetadata } from "./project-metadata.server";
 import { assertProjectSourcePaths, projectPaths } from "./project-paths";
-import { encodeSource } from "./project-source";
-import type { SourceBucket } from "./project-source.server";
 
 type CompileOptions = {
   db: Db;
