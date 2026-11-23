@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { gatewayModels, type AiFetch, type AiConfig } from "./gateway.server";
+import {
+  gatewayModels,
+  parseAiConfig,
+  type AiFetch,
+  type AiConfig,
+} from "../src/gateway.server";
 const config: AiConfig = {
   accountId: "a".repeat(32),
   gatewayId: "test",
@@ -16,6 +21,15 @@ const model = {
   supported_parameters: ["tools", "max_tokens"],
   architecture: { input_modalities: ["text"], output_modalities: ["text"] },
 };
+test("refuses missing or malformed settings as unconfigured", () => {
+  expect(parseAiConfig(config)).toEqual(config);
+  for (const values of [
+    { ...config, apiToken: undefined },
+    { ...config, accountId: "not-an-account" },
+    { ...config, priceId: "prod_test" },
+  ])
+    expect(() => parseAiConfig(values)).toThrow("not configured");
+});
 describe("AI Gateway catalog", () => {
   test("offers only text models with tools, bounded output, and known token prices", async () => {
     const fetcher: AiFetch = async () =>

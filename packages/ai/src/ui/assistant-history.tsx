@@ -28,9 +28,7 @@ import {
   threadHistorySchema,
   type AssistantThread,
   type StoredMessage,
-} from "#/lib/ai/threads";
-
-import { SidebarResize } from "./sidebar-resize";
+} from "../threads";
 
 export async function assistantJson(
   url: string,
@@ -59,14 +57,14 @@ export async function assistantJson(
 }
 
 export function AssistantHistory({
-  projectId,
+  endpoint: assistantEndpoint,
   children,
   historyOpen,
   historyWidth,
   agentsOpen,
   agentsWidth,
+  historyResize,
   onHistoryToggle,
-  onHistoryResize,
   onShowAgents,
   onCloseAgents,
 }: {
@@ -74,11 +72,11 @@ export function AssistantHistory({
   historyWidth: number;
   agentsOpen: boolean;
   agentsWidth: number;
+  historyResize: ReactNode;
   onHistoryToggle: () => void;
-  onHistoryResize: (width: number) => void;
   onShowAgents: () => void;
   onCloseAgents: () => void;
-  projectId: string;
+  endpoint: string;
   children: (
     thread: AssistantThread,
     messages: StoredMessage[],
@@ -86,7 +84,7 @@ export function AssistantHistory({
     onRefresh: () => void,
   ) => ReactNode;
 }) {
-  const endpoint = `/api/ai/${projectId}?threads=1`;
+  const endpoint = `${assistantEndpoint}?threads=1`;
   const [threads, setThreads] = useState<AssistantThread[]>([]);
   const [selected, setSelected] =
     useState<z.infer<typeof threadHistorySchema>>();
@@ -251,14 +249,7 @@ export function AssistantHistory({
           ))}
         </nav>
       </aside>
-      {historyOpen && agentsOpen && (
-        <SidebarResize
-          side="left"
-          width={historyWidth}
-          onResize={onHistoryResize}
-          label="Resize history sidebar"
-        />
-      )}
+      {historyOpen && agentsOpen && historyResize}
       <aside
         aria-label="AI assistant"
         hidden={!agentsOpen}

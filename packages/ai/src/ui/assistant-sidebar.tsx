@@ -23,24 +23,23 @@ import {
   useMemo,
   useState,
   type ComponentProps,
+  type ReactNode,
 } from "react";
 import { z } from "zod";
 
-import { ModelSelector } from "#/components/ai-elements/model-selector";
-import { PromptInput } from "#/components/ai-elements/prompt-input";
-import { Reasoning } from "#/components/ai-elements/reasoning";
-import { Sources } from "#/components/ai-elements/sources";
-import { Suggestion } from "#/components/ai-elements/suggestion";
-import { Tool } from "#/components/ai-elements/tool";
-import { aiConfigurationSchema, type AiConfiguration } from "#/lib/ai/schema";
+import { aiConfigurationSchema, type AiConfiguration } from "../schema";
 import {
   sendLatestMessage,
   type AssistantThread,
   type StoredMessage,
-} from "#/lib/ai/threads";
-import { webPath } from "#/lib/origins";
-
+} from "../threads";
 import { AssistantHistory, assistantJson } from "./assistant-history";
+import { ModelSelector } from "./model-selector";
+import { PromptInput } from "./prompt-input";
+import { Reasoning } from "./reasoning";
+import { Sources } from "./sources";
+import { Suggestion } from "./suggestion";
+import { Tool } from "./tool";
 
 const dollars = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -53,30 +52,34 @@ type Availability =
   | { kind: "unavailable"; message: string; upgrade: boolean };
 
 export function AssistantSidebar({
-  projectId,
+  endpoint,
+  plansUrl,
   open,
   onClose,
   historyOpen,
   historyWidth,
   agentsWidth,
+  historyResize,
   onHistoryToggle,
-  onHistoryResize,
   onShowAgents,
 }: {
   historyOpen: boolean;
   historyWidth: number;
   agentsWidth: number;
+  /** The resize handle between history and the chat, when both are open. */
+  historyResize: ReactNode;
   onHistoryToggle: () => void;
-  onHistoryResize: (width: number) => void;
   onShowAgents: () => void;
-  projectId: string;
+  /** The project's assistant route. */
+  endpoint: string;
+  /** Where to send users whose plan has no assistant. */
+  plansUrl: string;
   open: boolean;
   onClose: () => void;
 }) {
   const [availability, setAvailability] = useState<Availability>({
     kind: "loading",
   });
-  const endpoint = `/api/ai/${projectId}`;
   const load = useCallback(
     async (signal?: AbortSignal) => {
       try {
@@ -163,9 +166,7 @@ export function AssistantSidebar({
               <div className="space-y-4 p-4 text-sm">
                 <p role="status">{availability.message}</p>
                 {availability.upgrade ? (
-                  <Button render={<a href={webPath("/pricing")} />}>
-                    View Pro plans
-                  </Button>
+                  <Button render={<a href={plansUrl} />}>View Pro plans</Button>
                 ) : (
                   <Button variant="ghost" onClick={() => void load()}>
                     Try again
@@ -178,13 +179,13 @@ export function AssistantSidebar({
       )}
       {availability.kind === "ready" && (
         <AssistantHistory
-          projectId={projectId}
+          endpoint={endpoint}
           historyOpen={historyOpen}
           historyWidth={historyWidth}
           agentsOpen={open}
           agentsWidth={agentsWidth}
           onHistoryToggle={onHistoryToggle}
-          onHistoryResize={onHistoryResize}
+          historyResize={historyResize}
           onShowAgents={onShowAgents}
           onCloseAgents={onClose}
         >
@@ -195,7 +196,7 @@ export function AssistantSidebar({
               initialMessages={initialMessages}
               onBusy={onBusy}
               onRefresh={onRefresh}
-              projectId={projectId}
+              endpoint={endpoint}
               config={availability.config}
               onConfiguration={(config) =>
                 setAvailability({ kind: "ready", config })
@@ -214,7 +215,7 @@ function AssistantChat({
   initialMessages,
   onBusy,
   onRefresh,
-  projectId,
+  endpoint,
   config,
   onConfiguration,
   refresh,
@@ -223,7 +224,7 @@ function AssistantChat({
   initialMessages: StoredMessage[];
   onBusy: (busy: boolean) => void;
   onRefresh: () => void;
-  projectId: string;
+  endpoint: string;
   config: AiConfiguration;
   onConfiguration: (config: AiConfiguration) => void;
   refresh: () => void;
@@ -241,10 +242,10 @@ function AssistantChat({
   const [settingsSaved, setSettingsSaved] = useState(false);
   const connection = useMemo(
     () =>
-      fetchServerSentEvents(`/api/ai/${projectId}`, {
+      fetchServerSentEvents(endpoint, {
         fetchClient: sendLatestMessage,
       }),
-    [projectId],
+    [endpoint],
   );
   const { messages, sendMessage, isLoading, error, stop, reload } = useChat({
     connection,
@@ -273,7 +274,7 @@ function AssistantChat({
     const abort = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/ai/${projectId}?reconcile=1`, {
+        const response = await fetch(`${endpoint}?reconcile=1`, {
           method: "POST",
           signal: abort.signal,
         });
@@ -287,7 +288,7 @@ function AssistantChat({
       clearTimeout(timer);
       abort.abort();
     };
-  }, [config, isLoading, projectId, onConfiguration]);
+  }, [config, isLoading, endpoint, onConfiguration]);
   const selected = config.models.find((m) => m.id === (model || defaultModel));
   const remaining =
     config.monthlyCapDollars - config.spentDollars - config.reservedDollars;
@@ -296,7 +297,7 @@ function AssistantChat({
     setSettingsError("");
     setSettingsSaved(false);
     try {
-      const response = await fetch(`/api/ai/${projectId}`, {
+      const response = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -333,7 +334,7 @@ function AssistantChat({
           disabled={isLoading}
           onChange={(value) => {
             setSettingsError("");
-            void assistantJson(`/api/ai/${projectId}?threads=1`, {
+            void assistantJson(`${endpoint}?threads=1`, {
               kind: "model",
               id: threadId,
               model: value || null,

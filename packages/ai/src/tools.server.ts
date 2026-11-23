@@ -1,7 +1,6 @@
 import { toolDefinition } from "@tanstack/ai";
 import { aiEntitlement } from "@texfolia/billing/server";
 import { parseCompileLog } from "@texfolia/compile";
-import type { Db } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
 import { gitBranchSchema, type GitAction } from "@texfolia/git";
 import {
@@ -13,15 +12,11 @@ import { encodeSource } from "@texfolia/storage";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import type { createAuth } from "../auth";
-import { handleCompileGet, handleCompilePost } from "../compile-route.server";
-import { lockProject } from "../project-access.server";
-import { createProjectNode, renameProjectNode } from "../project-node.server";
-import { deleteProjectNode } from "../project-source.server";
 import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
+import type { AssistantContext, AssistantWorkspace } from "./workspace";
 
 /** Tools that change project state; offered only to collaborators who can edit. */
-export const writeToolNames = new Set([
+const writeToolNames = new Set([
   "git_commit",
   "git_push",
   "git_pull",
@@ -42,16 +37,14 @@ const maxSkills = 100;
 export function projectTools({
   db,
   auth,
-  env,
+  workspace,
   projectId,
   userId,
   canWrite,
   headers,
   signal,
-}: {
-  db: Db;
-  auth: ReturnType<typeof createAuth>;
-  env: Env;
+}: AssistantContext & {
+  workspace: AssistantWorkspace;
   projectId: string;
   userId: string;
   canWrite: boolean;
@@ -62,7 +55,7 @@ export function projectTools({
     signal.throwIfAborted();
     await aiEntitlement(db, userId);
     return db.transaction(async (tx) => {
-      await lockProject({ tx, projectId, userId, access: "read" });
+      await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
         where: { projectId, deletedAt: { isNull: true } },
       });
@@ -78,7 +71,7 @@ export function projectTools({
     signal.throwIfAborted();
     await aiEntitlement(db, userId);
     return db.transaction(async (tx) => {
-      await lockProject({ tx, projectId, userId, access: "read" });
+      await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
         where: { projectId, deletedAt: { isNull: true } },
       });
@@ -116,9 +109,9 @@ export function projectTools({
         continue;
       }
       signal.throwIfAborted();
-      const created = await createProjectNode({
+      const created = await workspace.createNode({
         db,
-        ownerId: userId,
+        userId,
         data: {
           id: crypto.randomUUID(),
           projectId,
@@ -136,7 +129,7 @@ export function projectTools({
     signal.throwIfAborted();
     await aiEntitlement(db, userId);
     return db.transaction(async (tx) => {
-      await lockProject({ tx, projectId, userId, access: "read" });
+      await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
         where: { projectId, deletedAt: { isNull: true } },
       });
@@ -148,7 +141,7 @@ export function projectTools({
       if (node.sizeBytes > BigInt(maxEditBytes))
         throw new Error("File exceeds the assistant's 64 KiB read limit");
       const object = node.objectKey
-        ? await env.SOURCES.get(node.objectKey)
+        ? await workspace.bucket.get(node.objectKey)
         : null;
       if (node.objectKey && !object) throw new Error("Saved source is missing");
       const content = object ? await object.text() : "";
@@ -163,7 +156,7 @@ export function projectTools({
       .from(userTable)
       .where(eq(userTable.id, userId));
     if (!user) throw new Error("Sign in again.");
-    const result = await env.COLLABORATION.getByName(projectId).gitAction({
+    const result = await workspace.gitAction({
       projectId,
       user: { id: userId, name: user.name, email: user.email },
       action,
@@ -251,7 +244,7 @@ export function projectTools({
               problems: ["SKILL.md exceeds the assistant's 64 KiB read limit."],
             };
           const object = node.objectKey
-            ? await env.SOURCES.get(node.objectKey)
+            ? await workspace.bucket.get(node.objectKey)
             : null;
           return parseSkill(node.path, object ? await object.text() : "");
         }),
@@ -290,7 +283,7 @@ export function projectTools({
           return [
             (async (): Promise<[string, string]> => {
               const object = node.objectKey
-                ? await env.SOURCES.get(node.objectKey)
+                ? await workspace.bucket.get(node.objectKey)
                 : null;
               return [node.path, object ? await object.text() : ""];
             })(),
@@ -357,7 +350,7 @@ export function projectTools({
       if (new TextEncoder().encode(updated).byteLength > maxEditBytes)
         throw new Error("Edited file exceeds 64 KiB");
       signal.throwIfAborted();
-      const saved = await env.COLLABORATION.getByName(projectId).saveSource({
+      const saved = await workspace.saveSource({
         userId,
         name: "Texfolia assistant",
         data: {
@@ -390,10 +383,9 @@ export function projectTools({
         throw new Error("File exceeds 64 KiB");
       const { parentId, name } = await parentFolder(project, path);
       signal.throwIfAborted();
-      const created = await createProjectNode({
+      const created = await workspace.createNode({
         db,
-        ownerId: userId,
-        bucket: env.SOURCES,
+        userId,
         data: {
           id: crypto.randomUUID(),
           projectId,
@@ -415,7 +407,7 @@ export function projectTools({
       const node = findPath(project, path);
       const { parentId, name } = await parentFolder(project, newPath);
       signal.throwIfAborted();
-      await renameProjectNode({
+      await workspace.renameNode({
         db,
         userId,
         data: { projectId, nodeId: node.id, parentId, name },
@@ -430,12 +422,11 @@ export function projectTools({
     }).server(async ({ path }) => {
       const node = findPath(await tree(), path);
       signal.throwIfAborted();
-      await deleteProjectNode({
+      await workspace.deleteNode({
         db,
         userId,
         projectId,
         nodeId: node.id,
-        collaboration: env.COLLABORATION,
       });
       return { path, deleted: true };
     }),
@@ -450,7 +441,7 @@ export function projectTools({
       requestHeaders.set("Content-Type", "application/json");
       // Without editor metadata, the route snapshots every saved source under lock.
       requestHeaders.delete("X-Source-Metadata");
-      const response = await handleCompilePost({
+      const response = await workspace.compile.POST({
         request: new Request(`https://internal/api/compile/${projectId}`, {
           method: "POST",
           headers: requestHeaders,
@@ -481,7 +472,7 @@ export function projectTools({
       }),
     }).server(async ({ jobId, mainFile }) => {
       const nodes = await files();
-      const response = await handleCompileGet({
+      const response = await workspace.compile.GET({
         request: new Request(
           `https://internal/api/compile/${projectId}?job=${jobId}`,
           { headers, signal },

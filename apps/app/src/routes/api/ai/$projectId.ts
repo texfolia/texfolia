@@ -1,23 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { reconcileAiUsage } from "@texfolia/billing/server";
-import { env } from "cloudflare:workers";
-import { z } from "zod";
-
+import { gatewayRequestCost } from "@texfolia/ai/gateway";
 import {
   aiAccess,
   aiErrorResponse,
   assistantConfiguration,
   checkAiOrigin,
+  listAssistantThreads,
+  manageAssistantThread,
   readAiBody,
+  readAssistantThread,
   startAssistant,
   updateAiPreferences,
-} from "#/lib/ai/chat.server";
-import { aiConfig, gatewayRequestCost } from "#/lib/ai/gateway.server";
-import {
-  listAssistantThreads,
-  readAssistantThread,
-  manageAssistantThread,
-} from "#/lib/ai/threads.server";
+} from "@texfolia/ai/server";
+import { reconcileAiUsage } from "@texfolia/billing/server";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+
+import { aiConfig } from "#/lib/ai-config.server";
+import { assistantWorkspace } from "#/lib/assistant.server";
+import { createAuth } from "#/lib/auth";
+import { lockProject } from "#/lib/project-access.server";
 
 export const Route = createFileRoute("/api/ai/$projectId")({
   server: {
@@ -29,6 +31,7 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             projectId: params.projectId,
             db: context.db,
             auth: context.auth,
+            lock: lockProject,
           });
           const url = new URL(request.url);
           if (url.searchParams.has("threads")) {
@@ -57,7 +60,11 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             );
           }
           return Response.json(
-            await assistantConfiguration({ db: context.db, userId }),
+            await assistantConfiguration({
+              db: context.db,
+              userId,
+              config: aiConfig(),
+            }),
             { headers: { "Cache-Control": "no-store" } },
           );
         } catch (error) {
@@ -72,12 +79,14 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             projectId: params.projectId,
             db: context.db,
             auth: context.auth,
+            lock: lockProject,
           });
           return Response.json(
             await updateAiPreferences({
               db: context.db,
               userId,
               body: await readAiBody(request),
+              config: aiConfig(),
             }),
             { headers: { "Cache-Control": "no-store" } },
           );
@@ -93,6 +102,7 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             projectId: params.projectId,
             db: context.db,
             auth: context.auth,
+            lock: lockProject,
           });
           if (new URL(request.url).searchParams.get("reconcile") === "1") {
             const config = aiConfig();
@@ -106,6 +116,7 @@ export const Route = createFileRoute("/api/ai/$projectId")({
               await assistantConfiguration({
                 db: context.db,
                 userId: access.userId,
+                config,
               }),
               { headers: { "Cache-Control": "no-store" } },
             );
@@ -124,9 +135,12 @@ export const Route = createFileRoute("/api/ai/$projectId")({
           return await startAssistant({
             request,
             projectId: params.projectId,
-            env,
+            connectionString: env.HYPERDRIVE.connectionString,
+            createAuth: (db) => createAuth(db),
+            workspace: assistantWorkspace(env),
             ...access,
             body: await readAiBody(request),
+            config: aiConfig(),
             purpose:
               new URL(request.url).searchParams.get("git-message") === "1"
                 ? "commit-message"

@@ -412,5 +412,10 @@ during a build. CI runs this check after applying the database schema.
 
 ## Managed AI assistant
 
+The assistant lives in [`@texfolia/ai`](../../packages/ai/README.md). The app keeps
+the `/api/ai/$projectId` route, the secrets read by `src/lib/ai-config.server.ts`,
+and `src/lib/assistant.server.ts`, which binds the assistant to project access,
+node operations, collaboration, Git, and the compile route.
+
 See [Configure the managed assistant](../../docs/ai-assistant.md) for Gateway
 credentials, the Stripe usage meter, spend controls, reconciliation, and tests.

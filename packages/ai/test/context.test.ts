@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ModelMessage } from "@tanstack/ai";
 
-import { compactHistory, estimateTokens, stubToolResult } from "./context";
+import { compactHistory, estimateTokens, stubToolResult } from "../src/context";
 
 const big = "x".repeat(40_000);
 

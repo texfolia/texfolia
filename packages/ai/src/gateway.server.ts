@@ -8,29 +8,25 @@ export type AiFetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-export function aiConfig() {
-  const parsed = z
-    .object({
-      accountId: z.string().regex(/^[a-f0-9]{32}$/),
-      gatewayId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
-      apiToken: z.string().min(1),
-      stripeKey: z.string().min(1),
-      meterEventName: z.string().min(1),
-      priceId: z.string().startsWith("price_"),
-    })
-    .safeParse({
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-      gatewayId: process.env.CLOUDFLARE_AI_GATEWAY_ID,
-      apiToken: process.env.CLOUDFLARE_AI_API_TOKEN,
-      stripeKey: process.env.STRIPE_SECRET_KEY,
-      meterEventName: process.env.STRIPE_AI_METER_EVENT_NAME,
-      priceId: process.env.STRIPE_AI_PRICE_ID,
-    });
+const aiConfigSchema = z.object({
+  accountId: z.string().regex(/^[a-f0-9]{32}$/),
+  gatewayId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+  apiToken: z.string().min(1),
+  stripeKey: z.string().min(1),
+  meterEventName: z.string().min(1),
+  priceId: z.string().startsWith("price_"),
+});
+export type AiConfig = z.infer<typeof aiConfigSchema>;
+
+/** Checks the Gateway and metering settings the caller read from its secrets. */
+export function parseAiConfig(
+  values: Record<keyof AiConfig, string | undefined>,
+): AiConfig {
+  const parsed = aiConfigSchema.safeParse(values);
   if (!parsed.success)
     throw new AiError("The assistant is not configured. Try again later.", 503);
   return parsed.data;
 }
-export type AiConfig = ReturnType<typeof aiConfig>;
 
 export async function cloudflareJson(
   config: Pick<AiConfig, "accountId" | "apiToken">,

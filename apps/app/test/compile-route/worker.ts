@@ -1,7 +1,8 @@
+import { projectTools } from "@texfolia/ai/server";
 import { createDb } from "@texfolia/db";
 import { z } from "zod";
 
-import { projectTools } from "../../src/lib/ai/tools.server";
+import { assistantWorkspace } from "../../src/lib/assistant.server";
 import { createAuth } from "../../src/lib/auth";
 import { Route } from "../../src/routes/api/compile/$projectId";
 
@@ -17,7 +18,7 @@ export default {
         const compile = projectTools({
           db,
           auth,
-          env,
+          workspace: assistantWorkspace(env),
           projectId,
           userId: session.user.id,
           canWrite: true,

@@ -1,4 +1,5 @@
 import handler from "@tanstack/react-start/server-entry";
+import { gatewayRequestCost } from "@texfolia/ai/gateway";
 import { reconcileAiUsage } from "@texfolia/billing/server";
 import { createDb } from "@texfolia/db";
 import { collectGitObjects } from "@texfolia/git/server";
@@ -8,7 +9,7 @@ import {
   refreshTemplatePreviews,
 } from "@texfolia/templates/server";
 
-import { aiConfig, gatewayRequestCost } from "./lib/ai/gateway.server";
+import { aiConfig } from "./lib/ai-config.server";
 import { collectProjectSources } from "./lib/project-source.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 
