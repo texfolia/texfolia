@@ -1,4 +1,5 @@
 import { isOrgAdmin } from "@texfolia/auth/roles";
+import { fetchCompiler } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -16,7 +17,6 @@ import {
   cleanupDeletedCollaboration,
   type CollaborationCleanup,
 } from "./collaboration/cleanup.server";
-import { fetchCompiler } from "./compiler.server";
 import { lockProject } from "./project-access.server";
 import type {
   createProjectSchema,

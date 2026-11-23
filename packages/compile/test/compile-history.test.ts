@@ -6,7 +6,7 @@ import {
   compileTotalMs,
   containerStart,
   parseJobTimeline,
-} from "./compile-history";
+} from "../src/compile-history";
 
 const received = Date.parse("2026-11-18T12:00:00.000Z");
 const at = (ms: number) => new Date(received + ms).toISOString();

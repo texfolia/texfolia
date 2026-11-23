@@ -1,4 +1,5 @@
 import { isOrgAdmin } from "@texfolia/auth/roles";
+import { hashSource } from "@texfolia/compile";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -12,7 +13,6 @@ import type { SourceBucket } from "@texfolia/storage/server";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
-import { hashSource } from "./compile/source-sync";
 import { lockProject } from "./project-access.server";
 import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import {

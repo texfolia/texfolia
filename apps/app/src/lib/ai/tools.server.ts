@@ -1,4 +1,5 @@
 import { toolDefinition } from "@tanstack/ai";
+import { parseCompileLog } from "@texfolia/compile";
 import type { Db } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
 import { encodeSource } from "@texfolia/storage";
@@ -7,7 +8,6 @@ import { z } from "zod";
 
 import type { createAuth } from "../auth";
 import { handleCompileGet, handleCompilePost } from "../compile-route.server";
-import { parseCompileLog } from "../compile/compile-log";
 import { gitBranchSchema } from "../git";
 import { lockProject } from "../project-access.server";
 import { createProjectNode, renameProjectNode } from "../project-node.server";

@@ -1,5 +1,6 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
+import { ProjectBuildEvents } from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import { bibtexLanguage, themedLatex } from "@texfolia/editor/latex/highlight";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
@@ -16,7 +17,6 @@ import {
 import { PanelHeader } from "#/components/panel-header";
 import { buildFileUrl } from "#/lib/build";
 import { CollaborativeFile } from "#/lib/collaboration/file";
-import { ProjectBuildEvents } from "#/lib/compile/project-build-events";
 import { projectPaths } from "#/lib/project-paths";
 import type { getSharedProject } from "#/lib/project-share-links.functions";
 import { withShareToken } from "#/lib/project-share-links.schema";
@@ -337,7 +337,9 @@ function SharedPdf({ projectId, token }: { projectId: string; token: string }) {
   const [snapshot, setSnapshot] = useState<BuildSnapshot | null>(null);
   const [disconnected, setDisconnected] = useState(false);
   useEffect(() => {
-    const events = new ProjectBuildEvents(projectId, setSnapshot, token);
+    const events = new ProjectBuildEvents(projectId, setSnapshot, (url) =>
+      withShareToken(url, token),
+    );
     const unsubscribe = events.subscribe((event) =>
       setDisconnected(event.kind === "disconnected"),
     );

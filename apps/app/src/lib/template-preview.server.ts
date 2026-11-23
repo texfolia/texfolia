@@ -1,3 +1,4 @@
+import { fetchCompiler } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
 import { template } from "@texfolia/db/schema";
 import { encodeSource } from "@texfolia/storage";
@@ -6,7 +7,6 @@ import type { SourceBucket } from "@texfolia/storage/server";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { fetchCompiler } from "./compiler.server";
 import { assertProjectSourcePaths, projectPaths } from "./project-paths";
 import { templateSnapshotSchema } from "./template.schema";
 

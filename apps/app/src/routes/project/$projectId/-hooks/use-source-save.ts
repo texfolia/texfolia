@@ -1,9 +1,9 @@
+import type { CompileSources } from "@texfolia/compile";
 import { encodeSource, type SourceFiles } from "@texfolia/storage";
 import { useEffect, useRef, useState } from "react";
 
 import { documentCachingStopped } from "#/lib/collaboration/cache";
 import type { CollaborativeFile } from "#/lib/collaboration/file";
-import type { CompileSources } from "#/lib/compile/source-sync";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import {
   reconcileSourceDrafts,

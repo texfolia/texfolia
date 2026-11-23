@@ -1,3 +1,10 @@
+import {
+  isCurrentBuild,
+  parseCompileLog,
+  ProjectBuildEvents,
+  requestCompilation,
+  type CompileSources,
+} from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import type { LatexProblem } from "@texfolia/editor/latex/analysis";
 import { InvalidSourcePathError } from "@texfolia/storage";
@@ -10,11 +17,6 @@ import {
   useState,
 } from "react";
 
-import { parseCompileLog } from "#/lib/compile/compile-log";
-import { requestCompilation } from "#/lib/compile/compile-project";
-import { ProjectBuildEvents } from "#/lib/compile/project-build-events";
-import { isCurrentBuild } from "#/lib/compile/shared-pdf";
-import type { CompileSources } from "#/lib/compile/source-sync";
 import { invalidProjectPaths } from "#/lib/project-paths";
 import type { ProjectNode } from "#/lib/project.functions";
 

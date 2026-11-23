@@ -1,3 +1,4 @@
+import { fetchCompiler } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
 import type { saveSourceSchema } from "@texfolia/storage";
@@ -15,7 +16,6 @@ import {
   collectCollaborationSources,
   type CollaborationCleanup,
 } from "./collaboration/cleanup.server";
-import { fetchCompiler } from "./compiler.server";
 import { lockProject } from "./project-access.server";
 
 export async function invalidateSourceBuild(

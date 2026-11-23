@@ -1,6 +1,5 @@
+import { hashSource } from "@texfolia/compile";
 import { z } from "zod";
-
-import { hashSource } from "./compile/source-sync";
 
 export const projectMetadataSchema = z.object({
   nodes: z.array(

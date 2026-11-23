@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { hashSource } from "@texfolia/compile";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -20,7 +21,6 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from "../../src/lib/collaboration/protocol";
-import { hashSource } from "../../src/lib/compile/source-sync";
 import { createProject } from "../../src/lib/project.server";
 
 async function eventually(

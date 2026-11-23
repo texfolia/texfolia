@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { compileDeltaSchema, hashSource } from "@texfolia/compile";
 import { type BuildSnapshot } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import {
@@ -22,7 +23,6 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
-import { compileDeltaSchema, hashSource } from "../src/lib/compile/source-sync";
 import {
   projectMetadataSchema,
   projectMetadataVersion,

@@ -10,6 +10,7 @@ import {
   IconZoomOut,
   IconDots,
 } from "@tabler/icons-react";
+import { reportCompilePreview } from "@texfolia/compile";
 import {
   pdfToSource,
   rotatePdfPoint,
@@ -35,7 +36,6 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
-import { reportCompilePreview } from "#/lib/compile/compile-telemetry";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";

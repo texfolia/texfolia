@@ -1,10 +1,4 @@
 import { IconRefresh } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { cn } from "cn";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { z } from "zod";
-
 import {
   type CompileHistoryEntry,
   compileHistoryLimit,
@@ -16,7 +10,13 @@ import {
   sessionHistoryLimit,
   sessionHistoryParam,
   type TimelineEvent,
-} from "#/lib/compile/compile-history";
+} from "@texfolia/compile";
+import { Button } from "@texfolia/ui/button";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
+import { cn } from "cn";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
+
 import { useWorkspace } from "#/providers/workspace-provider";
 
 const logSchema = z.object({ log: z.string() });

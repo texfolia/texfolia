@@ -1,0 +1,10 @@
+{
+  "extends": "@texfolia/config/base.json",
+  "include": ["src/**/*.ts", "test/**/*.ts", "types/**/*.d.ts"],
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bun"],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}

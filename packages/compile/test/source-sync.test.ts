@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { hashSource, ProjectSourceSync } from "./source-sync";
+import { hashSource, ProjectSourceSync } from "../src/source-sync";
 
 test("recompiles send changed content, hashes for binary references, and deletions", async () => {
   const sync = new ProjectSourceSync();
