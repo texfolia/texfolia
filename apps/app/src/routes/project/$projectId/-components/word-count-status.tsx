@@ -1,5 +1,4 @@
 import { IconTextCaption } from "@tabler/icons-react";
-import type { WordCount, WordCounts } from "@texfolia/editor/latex/word-count";
 import { Button } from "@texfolia/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +9,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@texfolia/ui/dropdown-menu";
+
+import type { WordCount, WordCounts } from "#/features/editor/latex/word-count";
 
 const format = new Intl.NumberFormat();
 const total = (counts: WordCounts) =>

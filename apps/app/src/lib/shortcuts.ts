@@ -1,8 +1,9 @@
+import { z } from "zod";
+
 import {
   keymapChords,
   type EditorKeymap,
-} from "@texfolia/editor/keymaps/keymaps";
-import { z } from "zod";
+} from "#/features/editor/keymaps/keymaps";
 
 // Defaults follow VS Code unless a binding would take over an important
 // browser or editor function. An empty binding leaves the action unassigned.

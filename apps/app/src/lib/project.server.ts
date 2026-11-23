@@ -1,14 +1,14 @@
 import {
   cleanupDeletedCollaboration,
   type CollaborationCleanup,
-} from "@texfolia/collaboration/server";
-import { fetchCompiler } from "@texfolia/compile/server";
-import * as projects from "@texfolia/projects/server";
+} from "#/features/collaboration/server";
+import { fetchCompiler } from "#/features/compile/server";
+import * as projects from "#/features/projects/server";
 
 import { lockProject } from "./project-access.server";
 
-// Binds `@texfolia/projects` operations to the app's composed access check and
-// adds post-commit cleanup the package does not own.
+// Binds `#/features/projects` operations to the app's composed access check and
+// adds post-commit cleanup the feature does not own.
 
 type Locked<Args> = Omit<Args, "lock">;
 
@@ -18,7 +18,7 @@ export {
   getProjects,
   maxProjectPageSize,
   projectPageSize,
-} from "@texfolia/projects/server";
+} from "#/features/projects/server";
 
 export function updateProjectFormatting(
   args: Locked<Parameters<typeof projects.updateProjectFormatting>[0]>,

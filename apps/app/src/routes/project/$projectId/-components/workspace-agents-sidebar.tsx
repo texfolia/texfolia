@@ -1,5 +1,4 @@
-import { AssistantSidebar } from "@texfolia/ai/ui";
-
+import { AssistantSidebar } from "#/features/ai/ui";
 import { webPath } from "#/lib/origins";
 import type { WorkspaceChrome } from "#/lib/workspace-layout";
 

@@ -42,6 +42,14 @@ The site does not read sessions. Sign-in, OAuth callbacks, and session cookies
 (scoped to `texfolia.com`, so they also cover `www` and `app`) stay on
 `app.texfolia.com`.
 
+## Project setup
+
+The project follows the TanStack CLI scaffold (React, file router, Cloudflare
+deployment): `.cta.json` records the choices, `tsr.config.json` configures route
+generation, `components.json` points the shadcn CLI at `@texfolia/ui`, and
+`tsconfig.json` extends the root `tsconfig.base.json`. TanStack devtools load in
+development only. Commit `src/routeTree.gen.ts` exactly as the generator writes it.
+
 ## Commands
 
 ```sh
@@ -49,6 +57,8 @@ bun run --cwd apps/web build      # Production build with prerendered pages
 bun run --cwd apps/web preview    # Serve the build in local workerd
 bun run --cwd apps/web test       # Unit tests
 bun run --cwd apps/web typecheck
+bun run --cwd apps/web generate-routes   # Rewrite src/routeTree.gen.ts (runs a build)
+bun run --cwd apps/web cf:typegen        # Rewrite worker-configuration.d.ts
 bun run --cwd apps/web deploy     # Deploy the last build as texfolia-web
 ```
 

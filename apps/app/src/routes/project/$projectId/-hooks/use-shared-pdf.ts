@@ -1,3 +1,6 @@
+import { type BuildSnapshot } from "@texfolia/contracts";
+import { useCallback, useEffect, useEffectEvent, useReducer } from "react";
+
 import {
   type BuildRef,
   initialSharedPdf,
@@ -6,15 +9,12 @@ import {
   sharedPdfReducer,
   sharedPdfStep,
   shownPdfBuildId,
-} from "@texfolia/compile";
-import { type BuildSnapshot } from "@texfolia/contracts";
-import { useCallback, useEffect, useEffectEvent, useReducer } from "react";
-
+} from "#/features/compile";
 import { buildFileUrl } from "#/lib/build";
 
 /**
  * Follows the project's shared PDF, showing this tab's own builds until the
- * server has stored them. The transitions live in `@texfolia/compile` (`shared-pdf`).
+ * server has stored them. The transitions live in `#/features/compile` (`shared-pdf`).
  */
 export function useSharedPdf({
   projectId,

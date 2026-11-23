@@ -1,8 +1,8 @@
-import { projectPaths } from "@texfolia/projects";
 import type { EditorView } from "@uiw/react-codemirror";
 import type { DockviewApi } from "dockview-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { projectPaths } from "#/features/projects";
 import type { EditorCommand } from "#/lib/editor-command";
 import type { ProjectNode } from "#/lib/project.functions";
 import { restoreWorkspaceDock } from "#/lib/workspace-layout";

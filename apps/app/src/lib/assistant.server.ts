@@ -1,4 +1,4 @@
-import type { AssistantWorkspace } from "@texfolia/ai/server";
+import type { AssistantWorkspace } from "#/features/ai/server";
 
 import { handleCompileGet, handleCompilePost } from "./compile-route.server";
 import { lockProject } from "./project-access.server";
@@ -6,7 +6,7 @@ import { createProjectNode, renameProjectNode } from "./project-node.server";
 import { deleteProjectNode } from "./project-source.server";
 
 /**
- * Binds `@texfolia/ai` to the app's project access, node operations,
+ * Binds `#/features/ai` to the app's project access, node operations,
  * collaboration room, and compile route.
  */
 export function assistantWorkspace(env: Env): AssistantWorkspace {

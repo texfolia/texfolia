@@ -11,8 +11,9 @@ import {
   projectNode,
   user,
 } from "@texfolia/db/schema";
-import { updateProjectFormattingSchema } from "@texfolia/projects";
 import { eq, inArray } from "drizzle-orm";
+
+import { updateProjectFormattingSchema } from "#/features/projects";
 
 import {
   getAccountUsage,

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createNodeSchema, renameNodeSchema } from "@texfolia/projects";
 import { env } from "cloudflare:workers";
+
+import { createNodeSchema, renameNodeSchema } from "#/features/projects";
 
 import { ensureSession } from "./auth.functions";
 

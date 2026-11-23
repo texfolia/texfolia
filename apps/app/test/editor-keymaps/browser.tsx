@@ -1,14 +1,15 @@
-import {
-  keymapHistory,
-  loadKeymapExtension,
-  loadedKeymapExtension,
-} from "@texfolia/editor/keymaps/extension";
-import type { EditorKeymap } from "@texfolia/editor/keymaps/keymaps";
 import CodeMirror, { keymap, Prec } from "@uiw/react-codemirror";
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
+
+import {
+  keymapHistory,
+  loadKeymapExtension,
+  loadedKeymapExtension,
+} from "#/features/editor/keymaps/extension";
+import type { EditorKeymap } from "#/features/editor/keymaps/keymaps";
 
 import { defaultShortcuts, type ShortcutAction } from "../../src/lib/shortcuts";
 import {

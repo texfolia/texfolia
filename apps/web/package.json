@@ -7,12 +7,14 @@
   },
   "scripts": {
     "build": "CLOUDFLARE_ENV=production vite build",
-    "cf:typegen": "wrangler types --strict-vars=false",
+    "cf:typegen": "wrangler types --include-runtime=false --strict-vars=false && oxfmt worker-configuration.d.ts",
     "deploy": "wrangler deploy --env production",
     "dev": "vite dev --port 4321 --strictPort",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
+    "generate-routes": "vite build",
     "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "preview": "vite preview --port 4321 --strictPort",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
@@ -31,8 +33,11 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.26.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@texfolia/config": "workspace:*",
+    "@tanstack/devtools-vite": "0.8.6",
+    "@tanstack/react-devtools": "0.10.14",
+    "@tanstack/react-router-devtools": "1.167.2",
     "@types/bun": "^1.4.4",
+    "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",

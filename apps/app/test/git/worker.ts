@@ -1,9 +1,10 @@
 import { createDb } from "@texfolia/db";
 import { user as userTable } from "@texfolia/db/schema";
-import { gitActionSchema } from "@texfolia/git";
-import { collectGitObjects } from "@texfolia/git/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+
+import { gitActionSchema } from "#/features/git";
+import { collectGitObjects } from "#/features/git/server";
 
 import { createAuth } from "../../src/lib/auth";
 import { collectProjectSources } from "../../src/lib/project-source.server";

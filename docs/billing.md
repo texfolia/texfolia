@@ -5,7 +5,7 @@ $20 per organization member per month. Team has no base fee. Each member gets
 Pro compile and AI access, including in their personal projects. A personal Pro
 subscription and an organization Team subscription remain separate subscriptions.
 
-The billing code lives in [`@texfolia/billing`](../packages/billing/README.md).
+The billing code lives in [`#/features/billing`](../apps/app/src/features/billing/README.md).
 
 ## Set up Stripe
 

@@ -1,4 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+
 import {
   createProjectSchema,
   updateProjectFormattingSchema,
@@ -7,9 +10,7 @@ import {
   projectTagsSchema,
   importProjectFilesSchema,
   projectsPageSchema,
-} from "@texfolia/projects";
-import { env } from "cloudflare:workers";
-import { z } from "zod";
+} from "#/features/projects";
 
 import { ensureSession } from "./auth.functions";
 

@@ -4,10 +4,6 @@ import {
   notFound,
   useRouter,
 } from "@tanstack/react-router";
-import {
-  templateLicenseLabels,
-  templateLicenseUrls,
-} from "@texfolia/templates";
 import { Button, buttonVariants } from "@texfolia/ui/button";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { Textarea } from "@texfolia/ui/textarea";
@@ -16,6 +12,10 @@ import { z } from "zod";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import {
+  templateLicenseLabels,
+  templateLicenseUrls,
+} from "#/features/templates";
 import { webPath } from "#/lib/origins";
 import { useTemplatePreviews } from "#/lib/template-preview";
 import {

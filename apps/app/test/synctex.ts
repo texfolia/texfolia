@@ -2,21 +2,19 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "@texfolia/collaboration";
-import { hashSource } from "@texfolia/compile";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "#/features/collaboration";
+import { hashSource } from "#/features/compile";
+
 import type { ProjectDetails } from "../src/lib/project.functions";
 
-const fixture = new URL(
-  "../../../packages/editor/test/fixtures/synctex/",
-  import.meta.url,
-);
+const fixture = new URL("./fixtures/synctex/", import.meta.url);
 const pdf = await Bun.file(new URL("main.pdf", fixture)).arrayBuffer();
 const map = await Bun.file(new URL("main.synctex", fixture)).text();
 const projectId = crypto.randomUUID();

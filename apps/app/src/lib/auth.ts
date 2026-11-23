@@ -1,9 +1,10 @@
 import { createAuth as createSharedAuth, type Auth } from "@texfolia/auth";
+import type { Db } from "@texfolia/db";
+
 import {
   invalidateOrganizationCollaborationAccess,
   type CollaborationAccess,
-} from "@texfolia/collaboration/server";
-import type { Db } from "@texfolia/db";
+} from "#/features/collaboration/server";
 
 export type { Auth };
 export { createEmailOTPPlugin, createOrganizationPlugin } from "@texfolia/auth";

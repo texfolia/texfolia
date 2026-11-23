@@ -1,4 +1,4 @@
-import { parseAiConfig } from "@texfolia/ai/gateway";
+import { parseAiConfig } from "#/features/ai/gateway";
 
 /** The assistant's AI Gateway and usage-meter settings. Throws when unset. */
 export function aiConfig() {

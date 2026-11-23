@@ -1,13 +1,14 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 
-import {
-  createBillingPlugin,
-  enforceBillingScope,
-} from "@texfolia/billing/server";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import Stripe from "stripe";
+
+import {
+  createBillingPlugin,
+  enforceBillingScope,
+} from "#/features/billing/server";
 
 import { loginSearchSchema } from "../routes/login/route";
 import { createOrganizationPlugin } from "./auth";

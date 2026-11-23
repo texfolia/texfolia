@@ -1,12 +1,5 @@
 import assert from "node:assert/strict";
 
-import {
-  decodeServerMessage,
-  encodeClientMessage,
-  type ClientMessage,
-  type ServerMessage,
-} from "@texfolia/collaboration";
-import { hashSource } from "@texfolia/compile";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -20,6 +13,14 @@ import {
 import { eq } from "drizzle-orm";
 import type { Miniflare } from "miniflare";
 import * as Y from "yjs";
+
+import {
+  decodeServerMessage,
+  encodeClientMessage,
+  type ClientMessage,
+  type ServerMessage,
+} from "#/features/collaboration";
+import { hashSource } from "#/features/compile";
 
 import { createProject } from "../../src/lib/project.server";
 

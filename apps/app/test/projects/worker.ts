@@ -9,9 +9,10 @@ import {
   tag,
   user,
 } from "@texfolia/db/schema";
-import { projectPaths, projectTagsSchema } from "@texfolia/projects";
-import { encodeSource, maxSourceFileBytes } from "@texfolia/storage";
 import { and, eq } from "drizzle-orm";
+
+import { projectPaths, projectTagsSchema } from "#/features/projects";
+import { encodeSource, maxSourceFileBytes } from "#/features/storage";
 
 import { importProjectFiles } from "../../src/lib/project-import.server";
 import {

@@ -1,17 +1,18 @@
 import type { Db } from "@texfolia/db";
-import type { GitAction } from "@texfolia/git";
+
+import type { GitAction } from "#/features/git";
 import {
   gitAccount,
   gitBranch as readGitBranch,
   runGit as runGitAction,
   type GitAccessToken,
-} from "@texfolia/git/server";
-import type { SourceBucket } from "@texfolia/storage/server";
+} from "#/features/git/server";
+import type { SourceBucket } from "#/features/storage/server";
 
 import { createAuth } from "./auth";
 import { lockProject } from "./project-access.server";
 
-// Binds @texfolia/git to the app's project access and Better Auth accounts.
+// Binds #/features/git to the app's project access and Better Auth accounts.
 const accessToken: GitAccessToken = async ({ db, userId, provider }) => {
   const linked = await gitAccount({ db, userId, provider });
   const token = await createAuth(db).api.getAccessToken({

@@ -42,7 +42,7 @@ Secrets, Stripe webhooks, and running each app on its own are covered in the [lo
 
 ## System design
 
-- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `@texfolia/editor`; the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `@texfolia/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `@texfolia/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `@texfolia/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `@texfolia/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `@texfolia/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `@texfolia/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `@texfolia/ai`.
+- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `#/features/editor` (feature code is under `apps/app/src/features`); the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `#/features/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `#/features/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `#/features/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `#/features/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `#/features/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `#/features/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `#/features/ai`.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
 - **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
 - **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered; the templates gallery reads the app's public catalog API.
@@ -103,20 +103,18 @@ More detail: [product app](apps/app/README.md), [marketing site](apps/web/README
 ```text
 apps/
   app/                 React product app: auth, projects, and the compile endpoint
+    src/features/      App features, each with a README and its own entry points:
+                       ai, billing, collaboration, compile, editor, git,
+                       projects, storage, and templates
   compiler/            Hono compiler API, job processing, and the LaTeX engine
   web/                 React marketing site: landing, pricing, policies, templates gallery
 packages/
-  ai/                  AI assistant: chat runs, project tools, threads, skills, and panel UI
   auth/                Shared Better Auth server and client helpers
-  collaboration/       Yjs collaboration: Durable Object room, protocol, browser cache, drafts
-  config/              Shared TypeScript settings
   contracts/           Schemas shared by the product app and the compiler
   db/                  Drizzle schema, PostgreSQL client, and migrations
-  editor/              LaTeX language tooling, spelling, and CodeMirror themes for the app
-  git/                 Git integrations: linked-remote actions, URL parsing, GitHub/GitLab adapters
-  templates/           Template catalog, publishing, previews, review, and cleanup
-  ui/                  shadcn/Base UI React primitives for the app
+  ui/                  shadcn/Base UI React primitives for the app and the site
 docs/                  Feature and operations guides
+tsconfig.base.json     TypeScript settings every workspace extends
 ```
 
 ## Contributing

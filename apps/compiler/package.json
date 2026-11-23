@@ -23,7 +23,6 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261031.1",
-    "@texfolia/config": "workspace:*",
     "@texfolia/db": "workspace:*",
     "@types/bun": "^1.4.4",
     "typescript": "^6.0.2",

@@ -5,13 +5,6 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  decodeServerMessage,
-  encodeClientMessage,
-  outdatedClientMessage,
-  type ServerMessage,
-} from "@texfolia/collaboration";
-import { hashSource } from "@texfolia/compile";
 import { createDb } from "@texfolia/db";
 import {
   projectCollaborator,
@@ -28,6 +21,14 @@ import {
 } from "miniflare";
 import { chromium, type BrowserContext } from "playwright";
 import * as Y from "yjs";
+
+import {
+  decodeServerMessage,
+  encodeClientMessage,
+  outdatedClientMessage,
+  type ServerMessage,
+} from "#/features/collaboration";
+import { hashSource } from "#/features/compile";
 
 import { createProject } from "../src/lib/project.server";
 import type { BrowserApi } from "./collaboration/browser";

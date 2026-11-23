@@ -1,15 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
-import { gitActionSchema, gitRemoteSchema } from "@texfolia/git";
-import { projectNameSchema } from "@texfolia/projects";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
+
+import { gitActionSchema, gitRemoteSchema } from "#/features/git";
+import { projectNameSchema } from "#/features/projects";
 
 import { ensureSession } from "./auth.functions";
 
 export const getGitAccounts = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     const session = await ensureSession();
-    const { gitAccounts } = await import("@texfolia/git/server");
+    const { gitAccounts } = await import("#/features/git/server");
     return gitAccounts({ db: context.db, userId: session.user.id });
   },
 );

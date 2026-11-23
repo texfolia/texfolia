@@ -1,9 +1,4 @@
 import { IconFilePlus, IconFolderPlus } from "@tabler/icons-react";
-import {
-  nodeNameSchema,
-  newProjectNodePath,
-  projectNodePaths,
-} from "@texfolia/projects";
 import { Button } from "@texfolia/ui/button";
 import {
   Dialog,
@@ -17,6 +12,11 @@ import { Input } from "@texfolia/ui/input";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useId, useState, useImperativeHandle, type Ref } from "react";
 
+import {
+  nodeNameSchema,
+  newProjectNodePath,
+  projectNodePaths,
+} from "#/features/projects";
 import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 

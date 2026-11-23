@@ -1,11 +1,12 @@
 import { isolateHistory } from "@codemirror/commands";
+import type { EditorView } from "@uiw/react-codemirror";
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import type {
   FormatResponse,
   FormatSettings,
-} from "@texfolia/editor/latex/format";
-import { createFormatWorker } from "@texfolia/editor/latex/workers";
-import type { EditorView } from "@uiw/react-codemirror";
-import { useCallback, useEffect, useRef, useState } from "react";
+} from "#/features/editor/latex/format";
+import { createFormatWorker } from "#/features/editor/latex/workers";
 
 export function useLatexFormatter(settings: FormatSettings) {
   const worker = useRef<Worker | null>(null);

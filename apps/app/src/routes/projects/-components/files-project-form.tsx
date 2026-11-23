@@ -1,16 +1,16 @@
 import { useNavigate } from "@tanstack/react-router";
 import { sourcePathSchema } from "@texfolia/contracts";
-import {
-  sourceFileKind,
-  encodeSource,
-  maxSourceFileBytes,
-  maxSourceProjectBytes,
-} from "@texfolia/storage";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
 import { Label } from "@texfolia/ui/label";
 import { useId, useRef, useState } from "react";
 
+import {
+  sourceFileKind,
+  encodeSource,
+  maxSourceFileBytes,
+  maxSourceProjectBytes,
+} from "#/features/storage";
 import { importProjectFiles } from "#/lib/project.functions";
 
 export function FilesProjectForm({

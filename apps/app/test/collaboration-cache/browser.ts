@@ -1,7 +1,8 @@
-import { clearCollaborationCaches } from "@texfolia/collaboration/browser";
-import { CollaborativeFile } from "@texfolia/collaboration/browser";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
+
+import { clearCollaborationCaches } from "#/features/collaboration/browser";
+import { CollaborativeFile } from "#/features/collaboration/browser";
 
 import { signOut } from "../../src/lib/sign-out";
 

@@ -1,9 +1,9 @@
-import * as projects from "@texfolia/projects/server";
+import * as projects from "#/features/projects/server";
 
 import { lockProject } from "./project-access.server";
 import { invalidateSourceBuild } from "./project-source.server";
 
-// Binds `@texfolia/projects` node operations to the app's access check and
+// Binds `#/features/projects` node operations to the app's access check and
 // invalidates the project build after each committed change.
 
 type Locked<Args> = Omit<Args, "lock">;

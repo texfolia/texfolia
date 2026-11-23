@@ -1,12 +1,5 @@
 import assert from "node:assert/strict";
 
-import {
-  awarenessFrame,
-  decodeServerMessage,
-  encodeClientMessage,
-  type ClientMessage,
-  type ServerMessage,
-} from "@texfolia/collaboration";
 import type { Db } from "@texfolia/db";
 import {
   member,
@@ -20,6 +13,14 @@ import { and, eq } from "drizzle-orm";
 import type { Miniflare } from "miniflare";
 import * as Y from "yjs";
 import { z } from "zod";
+
+import {
+  awarenessFrame,
+  decodeServerMessage,
+  encodeClientMessage,
+  type ClientMessage,
+  type ServerMessage,
+} from "#/features/collaboration";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,

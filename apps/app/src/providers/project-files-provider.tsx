@@ -1,13 +1,13 @@
+import { createContext, type ReactNode, useContext, useEffect } from "react";
+import type { z } from "zod";
+
 import {
   projectMetadataSchema,
   type ProjectMetadata,
   createNodeSchema,
   newProjectNodePath,
-} from "@texfolia/projects";
-import { decodeSource } from "@texfolia/storage";
-import { createContext, type ReactNode, useContext, useEffect } from "react";
-import type { z } from "zod";
-
+} from "#/features/projects";
+import { decodeSource } from "#/features/storage";
 import {
   createProjectNode,
   renameProjectNode,

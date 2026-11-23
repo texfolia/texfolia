@@ -1,11 +1,12 @@
 import type { Db } from "@texfolia/db";
-import * as projects from "@texfolia/projects/server";
+
+import * as projects from "#/features/projects/server";
 
 import { lockProject, shareLinkIdOf } from "./project-access.server";
 import { commentsVersion } from "./project-comments.server";
 
 // Adds the app's access check and the review-comments version to the
-// metadata `@texfolia/projects` reads.
+// metadata `#/features/projects` reads.
 
 export function readProjectMetadata(
   args: Omit<Parameters<typeof projects.readProjectMetadata>[0], "lock">,

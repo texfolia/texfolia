@@ -1,6 +1,6 @@
-import { stopDocumentCaching } from "@texfolia/collaboration/browser";
 import { useCallback, useEffect, useState } from "react";
 
+import { stopDocumentCaching } from "#/features/collaboration/browser";
 import { getGitBranch } from "#/lib/git.functions";
 
 /** Clearing the project's cached drafts or layout in another tab signs out here. */

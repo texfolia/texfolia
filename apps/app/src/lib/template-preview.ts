@@ -1,9 +1,10 @@
 import { useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
+
 import {
   pollTemplatePreviews,
   queuedTemplatePreviews,
-} from "@texfolia/templates";
-import { useEffect } from "react";
+} from "#/features/templates";
 
 import { refreshTemplatePreview } from "./template.functions";
 

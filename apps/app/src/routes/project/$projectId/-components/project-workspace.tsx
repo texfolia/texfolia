@@ -2,15 +2,6 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { ClientOnly } from "@tanstack/react-router";
 
 import "dockview-react/dist/styles/dockview.css";
-import { latexCompletion } from "@texfolia/editor/latex/completion";
-import { projectOutline } from "@texfolia/editor/latex/outline";
-import {
-  addLatexPackage,
-  packageInsertion,
-} from "@texfolia/editor/latex/symbols";
-import { sourceToPdf } from "@texfolia/editor/latex/synctex";
-import { projectPaths, invalidProjectPaths } from "@texfolia/projects";
-import { encodeSource } from "@texfolia/storage";
 import { SidebarProvider } from "@texfolia/ui/sidebar";
 import { cn } from "cn";
 import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
@@ -23,6 +14,15 @@ import {
 } from "react";
 
 import { SettingsDialog } from "#/components/settings-dialog";
+import { latexCompletion } from "#/features/editor/latex/completion";
+import { projectOutline } from "#/features/editor/latex/outline";
+import {
+  addLatexPackage,
+  packageInsertion,
+} from "#/features/editor/latex/symbols";
+import { sourceToPdf } from "#/features/editor/latex/synctex";
+import { projectPaths, invalidProjectPaths } from "#/features/projects";
+import { encodeSource } from "#/features/storage";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";

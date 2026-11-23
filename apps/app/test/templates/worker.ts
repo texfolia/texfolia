@@ -12,15 +12,17 @@ import {
 } from "@texfolia/db/schema";
 import { seedTemplates } from "@texfolia/db/seed-templates";
 import { templateStarters } from "@texfolia/db/template-starters";
-import { encodeSource } from "@texfolia/storage";
+import { eq, inArray, isNull } from "drizzle-orm";
+
+import { encodeSource } from "#/features/storage";
 import {
   type SourceBucket,
   sweepProjectSources,
-} from "@texfolia/storage/server";
+} from "#/features/storage/server";
 import {
   publishTemplateSchema,
   templateSnapshotSchema,
-} from "@texfolia/templates";
+} from "#/features/templates";
 import {
   collectTemplateObjects,
   findTemplate,
@@ -34,8 +36,7 @@ import {
   reviewTemplate,
   templateArchive,
   templateReviewQueue,
-} from "@texfolia/templates/server";
-import { eq, inArray, isNull } from "drizzle-orm";
+} from "#/features/templates/server";
 
 import { lockProject } from "../../src/lib/project-access.server";
 import { createProjectNode } from "../../src/lib/project-node.server";

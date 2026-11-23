@@ -1,8 +1,9 @@
-import { compilePlan } from "@texfolia/billing/server";
-import { createCompileHandlers } from "@texfolia/compile/server";
 import type { Db } from "@texfolia/db";
-import { streamProjectResponse } from "@texfolia/projects/server";
 import { env } from "cloudflare:workers";
+
+import { compilePlan } from "#/features/billing/server";
+import { createCompileHandlers } from "#/features/compile/server";
+import { streamProjectResponse } from "#/features/projects/server";
 
 import type { createAuth } from "./auth";
 import { compileProject } from "./compile-source.server";

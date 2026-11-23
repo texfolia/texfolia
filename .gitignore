@@ -40,3 +40,6 @@ apps/app/public/core/
 
 # Copied from dictionary-* packages before dev/build
 apps/app/public/dictionaries/
+
+# Screenshots and logs from browser test suites
+.audit/

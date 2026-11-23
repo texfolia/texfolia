@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "@texfolia/collaboration";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 import * as Y from "yjs";
+
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "#/features/collaboration";
 
 import type { CacheTestApi } from "./collaboration-cache/browser";
 

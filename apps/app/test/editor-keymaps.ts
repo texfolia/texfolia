@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright";
 import { createServer } from "vite";
 
+import { emacsKeymap } from "../scripts/vite-emacs-keymap";
+
 // Checks the Vim and Emacs keymaps in a real browser: switching without a
 // reload, undo through the Yjs history, and app shortcuts yielding to them.
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -12,6 +14,7 @@ const vite = await createServer({
   root,
   optimizeDeps: { entries: ["test/editor-keymaps/browser.tsx"] },
   plugins: [
+    emacsKeymap(),
     {
       name: "keymap-fixture",
       configureServer(server) {

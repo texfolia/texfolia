@@ -2,24 +2,25 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
+import { chromium } from "playwright";
+import { createServer } from "vite";
+import * as Y from "yjs";
+
 import {
   decodeClientMessage,
   encodeServerMessage,
-} from "@texfolia/collaboration";
-import { compileDeltaSchema, hashSource } from "@texfolia/compile";
+} from "#/features/collaboration";
+import { compileDeltaSchema, hashSource } from "#/features/compile";
 import {
   createNodeSchema,
   renameNodeSchema,
   renamedProjectNodes,
-} from "@texfolia/projects";
+} from "#/features/projects";
 import {
   decodeSource,
   encodeSource,
   type SourceFiles,
-} from "@texfolia/storage";
-import { chromium } from "playwright";
-import { createServer } from "vite";
-import * as Y from "yjs";
+} from "#/features/storage";
 
 import type { ProjectDetails } from "../src/lib/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";

@@ -152,7 +152,7 @@ Semantic roles follow the selected theme; no fixed editor palette is prescribed.
 - **Chrome:** activity, status, and tab tokens distinguish persistent workspace regions and active files.
 - **Boundaries and focus:** `border`, `input`, and `ring` retain the existing Nova treatments.
 
-**The Theme Authority Rule.** Use semantic CSS variables. `@texfolia/editor/themes` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
+**The Theme Authority Rule.** Use semantic CSS variables. `#/features/editor/themes` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
 
 ## Typography
 

@@ -1,4 +1,3 @@
-import { projectNameSchema } from "@texfolia/projects";
 import {
   createContext,
   type ReactNode,
@@ -6,6 +5,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { projectNameSchema } from "#/features/projects";
 import {
   createProject,
   deleteProject,

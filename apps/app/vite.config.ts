@@ -6,6 +6,7 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
 import { assertLocalEnvironment } from "../../scripts/local-environment.mts";
+import { emacsKeymap } from "./scripts/vite-emacs-keymap";
 
 export default defineConfig(({ command, mode }) => {
   if (command === "serve")
@@ -22,6 +23,7 @@ export default defineConfig(({ command, mode }) => {
       tailwindcss(),
       tanstackStart(),
       viteReact(),
+      emacsKeymap(),
     ],
   };
 });

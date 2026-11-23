@@ -5,10 +5,11 @@ import {
   projectNode,
   user,
 } from "@texfolia/db/schema";
-import type { ProjectTransaction } from "@texfolia/projects/server";
 import { and, asc, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
+
+import type { ProjectTransaction } from "#/features/projects/server";
 
 import { decodeCommentPosition } from "./comments/anchor";
 import { lockProject, shareLinkIdOf } from "./project-access.server";

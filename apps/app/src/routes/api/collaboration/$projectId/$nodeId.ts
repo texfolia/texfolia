@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  collaborationProtocol,
-  protocolSearchParam,
-} from "@texfolia/collaboration";
-import { collaborationAccess } from "@texfolia/collaboration/server";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
+import {
+  collaborationProtocol,
+  protocolSearchParam,
+} from "#/features/collaboration";
+import { collaborationAccess } from "#/features/collaboration/server";
 import { lockProject } from "#/lib/project-access.server";
 import { requestPrincipal } from "#/lib/request-principal.server";
 

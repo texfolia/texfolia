@@ -6,15 +6,6 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import {
-  editorKeymapLabels,
-  editorKeymaps,
-} from "@texfolia/editor/keymaps/keymaps";
-import {
-  spellingDictionaries,
-  spellingLanguages,
-  spellingLanguageSchema,
-} from "@texfolia/editor/spelling/languages";
-import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogTitle,
@@ -45,6 +36,15 @@ import { useId, useState } from "react";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
+import {
+  editorKeymapLabels,
+  editorKeymaps,
+} from "#/features/editor/keymaps/keymaps";
+import {
+  spellingDictionaries,
+  spellingLanguages,
+  spellingLanguageSchema,
+} from "#/features/editor/spelling/languages";
 import {
   addPersonalWord,
   autoCompileDelays,

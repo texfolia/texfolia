@@ -1,5 +1,6 @@
-import { decodeSource, encodeSource } from "@texfolia/storage";
 import * as Y from "yjs";
+
+import { decodeSource, encodeSource } from "#/features/storage";
 
 export type CommentAnchor = { anchorStart: string; anchorEnd: string };
 

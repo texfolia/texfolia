@@ -1,11 +1,12 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import {
   type AnalyzeRequest,
   type AnalyzeResponse,
   emptyAnalysis,
-} from "@texfolia/editor/latex/analysis";
-import { emptyWordCount } from "@texfolia/editor/latex/word-count";
-import { createAnalysisWorker } from "@texfolia/editor/latex/workers";
-import { useCallback, useEffect, useRef, useState } from "react";
+} from "#/features/editor/latex/analysis";
+import { emptyWordCount } from "#/features/editor/latex/word-count";
+import { createAnalysisWorker } from "#/features/editor/latex/workers";
 
 export function useLatexAnalysis(paths: string[], main?: string) {
   const worker = useRef<Worker | null>(null);

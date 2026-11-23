@@ -24,7 +24,7 @@ dictionary**. Spelling stays in the editor and is not listed in Problems.
 Only prose is checked. Commands, environment names, math, comments, verbatim
 material, `\label`, `\ref` and `\cite` keys, file, unit and glossary arguments,
 and the preamble (except `\title`) are skipped. The checker reuses the word
-counter's parser; see `packages/editor/src/spelling/prose.ts`. Hyphenated words are
+counter's parser; see `apps/app/src/features/editor/spelling/prose.ts`. Hyphenated words are
 checked part by part, accent commands such as `caf\'e` are read as the letters
 they typeset, and acronyms, numbers and single letters are skipped. Package and
 class files are not checked.

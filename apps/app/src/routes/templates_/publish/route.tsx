@@ -1,9 +1,4 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import {
-  publishTemplateSchema,
-  templateLicenseLabels,
-  templateLicenses,
-} from "@texfolia/templates";
 import { Button } from "@texfolia/ui/button";
 import { Checkbox } from "@texfolia/ui/checkbox";
 import { Input } from "@texfolia/ui/input";
@@ -13,6 +8,11 @@ import { useState } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import {
+  publishTemplateSchema,
+  templateLicenseLabels,
+  templateLicenses,
+} from "#/features/templates";
 import { getSession } from "#/lib/auth.functions";
 import { webPath } from "#/lib/origins";
 import { getProjects } from "#/lib/project.functions";

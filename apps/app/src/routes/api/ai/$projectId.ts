@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { gatewayRequestCost } from "@texfolia/ai/gateway";
+import { env } from "cloudflare:workers";
+import { z } from "zod";
+
+import { gatewayRequestCost } from "#/features/ai/gateway";
 import {
   aiAccess,
   aiErrorResponse,
@@ -11,11 +14,8 @@ import {
   readAssistantThread,
   startAssistant,
   updateAiPreferences,
-} from "@texfolia/ai/server";
-import { reconcileAiUsage } from "@texfolia/billing/server";
-import { env } from "cloudflare:workers";
-import { z } from "zod";
-
+} from "#/features/ai/server";
+import { reconcileAiUsage } from "#/features/billing/server";
 import { aiConfig } from "#/lib/ai-config.server";
 import { assistantWorkspace } from "#/lib/assistant.server";
 import { createAuth } from "#/lib/auth";

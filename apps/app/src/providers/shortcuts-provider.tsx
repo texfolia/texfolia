@@ -1,4 +1,3 @@
-import type { EditorKeymap } from "@texfolia/editor/keymaps/keymaps";
 import {
   createContext,
   useContext,
@@ -8,6 +7,7 @@ import {
   type RefObject,
 } from "react";
 
+import type { EditorKeymap } from "#/features/editor/keymaps/keymaps";
 import {
   createSequenceMatcher,
   eventChord,

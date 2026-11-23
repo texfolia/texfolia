@@ -1,3 +1,8 @@
+import { Button } from "@texfolia/ui/button";
+import { Input } from "@texfolia/ui/input";
+import { Label } from "@texfolia/ui/label";
+import { useEffect, useState } from "react";
+
 import {
   gitProvider,
   gitProviderIds,
@@ -5,12 +10,7 @@ import {
   gitRemoteMessage,
   gitRemoteSchema,
   type GitProvider,
-} from "@texfolia/git";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { Label } from "@texfolia/ui/label";
-import { useEffect, useState } from "react";
-
+} from "#/features/git";
 import { authClient } from "#/lib/auth-client";
 import { getGitAccounts } from "#/lib/git.functions";
 

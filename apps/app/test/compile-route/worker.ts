@@ -1,6 +1,7 @@
-import { projectTools } from "@texfolia/ai/server";
 import { createDb } from "@texfolia/db";
 import { z } from "zod";
+
+import { projectTools } from "#/features/ai/server";
 
 import { assistantWorkspace } from "../../src/lib/assistant.server";
 import { createAuth } from "../../src/lib/auth";

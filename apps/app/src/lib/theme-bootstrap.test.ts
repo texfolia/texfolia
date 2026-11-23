@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 
+import * as uiw from "@uiw/codemirror-themes-all";
+
 import {
   appearanceStorageKey,
   catalogTheme,
   resolveTheme,
   themeCatalog,
-} from "@texfolia/editor/themes";
-import * as uiw from "@uiw/codemirror-themes-all";
+} from "#/features/editor/themes/themes";
 
 import {
   appearanceSnapshot,

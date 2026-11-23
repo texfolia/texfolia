@@ -1,9 +1,9 @@
-import type { FormatSettings } from "@texfolia/editor/latex/format";
 import { Checkbox } from "@texfolia/ui/checkbox";
 import { Field, FieldLabel } from "@texfolia/ui/field";
 import { Input } from "@texfolia/ui/input";
 import { useId } from "react";
 
+import type { FormatSettings } from "#/features/editor/latex/format";
 import { formatSettingsSchema as settingsSchema } from "#/lib/settings.schema";
 
 export function LatexFormatSettingsFields({

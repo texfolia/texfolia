@@ -1,8 +1,9 @@
 import { projectCollaborator, projectShareLink } from "@texfolia/db/schema";
-import { projectLock, type ProjectGrant } from "@texfolia/projects/server";
 import { and, eq } from "drizzle-orm";
 
-// Composes project access: `@texfolia/projects` checks owners and organization
+import { projectLock, type ProjectGrant } from "#/features/projects/server";
+
+// Composes project access: `#/features/projects` checks owners and organization
 // members; collaborator invitations and share links are granted here until
 // sharing has its own package (NAT-434).
 

@@ -1,5 +1,6 @@
-import type { createNodeSchema, renameNodeSchema } from "@texfolia/projects";
 import type { z } from "zod";
+
+import type { createNodeSchema, renameNodeSchema } from "#/features/projects";
 
 import type { createProjectNode as createNode } from "../../src/lib/project-node.server";
 

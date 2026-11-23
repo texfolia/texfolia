@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestUrl, setResponseHeader } from "@tanstack/react-start/server";
+import { env } from "cloudflare:workers";
+
 import {
   listTemplatesSchema,
   openTemplateSchema,
@@ -8,15 +10,14 @@ import {
   reportTemplateSchema,
   reviewTemplateSchema,
   templateIdSchema,
-} from "@texfolia/templates";
-import { env } from "cloudflare:workers";
+} from "#/features/templates";
 
 import { ensureSession, getSession } from "./auth.functions";
 
 export const listTemplates = createServerFn({ method: "GET" })
   .validator(listTemplatesSchema)
   .handler(async ({ context, data }) => {
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     return server.listTemplates({ db: context.db, page: data.page });
   });
 
@@ -24,7 +25,7 @@ export const listMyTemplates = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
     const session = await ensureSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     return server.listMyTemplates({ db: context.db, userId: session.user.id });
   },
 );
@@ -32,7 +33,7 @@ export const listMyTemplates = createServerFn({ method: "GET" }).handler(
 export const getTemplate = createServerFn({ method: "GET" })
   .validator(templateIdSchema)
   .handler(async ({ context, data }) => {
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     const session = await getSession();
     setResponseHeader("Cache-Control", "private, no-store");
     const result = await server.getTemplate({
@@ -55,7 +56,7 @@ export const getTemplate = createServerFn({ method: "GET" })
 export const getTemplateAccount = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     const session = await getSession();
     return session
       ? {
@@ -77,7 +78,7 @@ export const publishTemplate = createServerFn({ method: "POST" })
   .validator(publishTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     const { lockProject } = await import("./project-access.server");
     return server.publishTemplate({
       db: context.db,
@@ -92,7 +93,7 @@ export const refreshTemplatePreview = createServerFn({ method: "POST" })
   .validator(refreshTemplatePreviewSchema)
   .handler(async ({ context, data }) => {
     const session = await getSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     await server.refreshTemplatePreview({
       db: context.db,
       bucket: env.SOURCES,
@@ -106,7 +107,7 @@ export const openTemplate = createServerFn({ method: "POST" })
   .validator(openTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     return server.openTemplate({
       db: context.db,
       bucket: env.SOURCES,
@@ -119,7 +120,7 @@ export const reportTemplate = createServerFn({ method: "POST" })
   .validator(reportTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     return server.reportTemplate({
       db: context.db,
       userId: session.user.id,
@@ -131,7 +132,7 @@ export const getTemplateReviewQueue = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
     const session = await ensureSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     return server.templateReviewQueue({
       db: context.db,
       userId: session.user.id,
@@ -144,7 +145,7 @@ export const reviewTemplate = createServerFn({ method: "POST" })
   .validator(reviewTemplateSchema)
   .handler(async ({ context, data }) => {
     const session = await ensureSession();
-    const server = await import("@texfolia/templates/server");
+    const server = await import("#/features/templates/server");
     return server.reviewTemplate({
       db: context.db,
       userId: session.user.id,

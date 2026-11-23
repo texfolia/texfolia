@@ -1,17 +1,17 @@
 import {
   createCompileSources,
   type CompileProject,
-} from "@texfolia/compile/server";
+} from "#/features/compile/server";
 import {
   assertProjectSourcePaths,
   projectMetadataVersion,
   projectPaths,
-} from "@texfolia/projects";
+} from "#/features/projects";
 
 import { lockProject } from "./project-access.server";
 import { readProjectMetadata } from "./project-metadata.server";
 
-// The project aggregate as `@texfolia/compile` sees it.
+// The project aggregate as `#/features/compile` sees it.
 export const compileProject: CompileProject = {
   lock: lockProject,
   async metadataVersion({ tx, projectId, userId }) {

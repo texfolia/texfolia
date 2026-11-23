@@ -41,15 +41,15 @@ VS Code theme documents.
 
 ## Implementation and verification
 
-[themes.ts](../packages/editor/src/themes/themes.ts) builds the catalog from the package's
+[themes.ts](../apps/app/src/features/editor/themes/themes.ts) builds the catalog from the package's
 `defaultSettings*` exports and pairs each with its native theme extension. The
 extension's CodeMirror dark-theme facet supplies its light or dark mode. Workspace
 tokens derive from the settings' background, foreground, caret, and selection.
 Supporting surfaces and borders mix foreground with background. Gutter border
 shorthands supply a color when present; otherwise workspace borders use a mix.
 
-[theme-editor.ts](../packages/editor/src/themes/theme-editor.ts) uses the package's extension
-directly. [LaTeX tags](../packages/editor/src/latex/tags.ts) inherit standard CodeMirror
+[theme-editor.ts](../apps/app/src/features/editor/themes/theme-editor.ts) uses the package's extension
+directly. [LaTeX tags](../apps/app/src/features/editor/latex/tags.ts) inherit standard CodeMirror
 highlight tags. There is no TextMate scope mapper.
 [ThemeProvider](../apps/app/src/providers/theme-provider.tsx) applies workspace
 variables and separates committed appearance, draft selection, and live preview.
@@ -63,7 +63,7 @@ The stylesheet and Dockview utility continue to consume the existing CSS variabl
 Run unit checks and the browser test from the repository root:
 
 ```sh
-bun test packages/editor/src/themes/themes.test.ts apps/app/src/lib/theme-bootstrap.test.ts
+bun test apps/app/src/features/editor/themes/themes.test.ts apps/app/src/lib/theme-bootstrap.test.ts
 bun run --cwd apps/app test:themes
 ```
 

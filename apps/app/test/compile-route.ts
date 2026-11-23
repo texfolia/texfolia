@@ -5,14 +5,6 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  compileHistoryLimit,
-  compileHistorySchema,
-  hashSource,
-  parseJobTimeline,
-  sessionHistoryParam,
-  timelineRetentionMs,
-} from "@texfolia/compile";
 import { unknownEngineTiming } from "@texfolia/contracts";
 import { buildSnapshotSchema } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
@@ -24,11 +16,20 @@ import {
   subscription,
   user,
 } from "@texfolia/db/schema";
-import { projectMetadataVersion } from "@texfolia/projects";
 import { eq } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { z } from "zod";
+
+import {
+  compileHistoryLimit,
+  compileHistorySchema,
+  hashSource,
+  parseJobTimeline,
+  sessionHistoryParam,
+  timelineRetentionMs,
+} from "#/features/compile";
+import { projectMetadataVersion } from "#/features/projects";
 
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";

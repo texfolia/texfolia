@@ -21,38 +21,6 @@ import {
   IconMathSymbols,
   IconMessagePlus,
 } from "@tabler/icons-react";
-import { documentCachingStopped } from "@texfolia/collaboration/browser";
-import type { CollaborativeFile } from "@texfolia/collaboration/browser";
-import {
-  keymapHistory,
-  loadKeymapExtension,
-  loadedKeymapExtension,
-} from "@texfolia/editor/keymaps/extension";
-import { editorKeymapLabels } from "@texfolia/editor/keymaps/keymaps";
-import type { LatexProblem } from "@texfolia/editor/latex/analysis";
-import {
-  applyLatexHeading,
-  headingCommands,
-  toggleLatexCommand,
-} from "@texfolia/editor/latex/editor-commands";
-import {
-  defaultFormatSettings,
-  type FormatSettings,
-} from "@texfolia/editor/latex/format";
-import {
-  editorLanguage,
-  projectProblemsChanged,
-} from "@texfolia/editor/latex/language";
-import {
-  addLatexPackage,
-  insertLatexSymbol,
-} from "@texfolia/editor/latex/symbols";
-import { browserSpellChecker } from "@texfolia/editor/spelling/checker";
-import {
-  personalDictionaryChanged,
-  spellcheck,
-} from "@texfolia/editor/spelling/editor";
-import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -87,6 +55,38 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import { documentCachingStopped } from "#/features/collaboration/browser";
+import type { CollaborativeFile } from "#/features/collaboration/browser";
+import {
+  keymapHistory,
+  loadKeymapExtension,
+  loadedKeymapExtension,
+} from "#/features/editor/keymaps/extension";
+import { editorKeymapLabels } from "#/features/editor/keymaps/keymaps";
+import type { LatexProblem } from "#/features/editor/latex/analysis";
+import {
+  applyLatexHeading,
+  headingCommands,
+  toggleLatexCommand,
+} from "#/features/editor/latex/editor-commands";
+import {
+  defaultFormatSettings,
+  type FormatSettings,
+} from "#/features/editor/latex/format";
+import {
+  editorLanguage,
+  projectProblemsChanged,
+} from "#/features/editor/latex/language";
+import {
+  addLatexPackage,
+  insertLatexSymbol,
+} from "#/features/editor/latex/symbols";
+import { browserSpellChecker } from "#/features/editor/spelling/checker";
+import {
+  personalDictionaryChanged,
+  spellcheck,
+} from "#/features/editor/spelling/editor";
+import { downloadFile } from "#/features/storage/browser";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import {
   type CommentAnchor,

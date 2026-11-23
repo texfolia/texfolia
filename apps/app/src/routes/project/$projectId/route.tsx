@@ -1,9 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+
 import {
   defaultSpellingLanguage,
   spellingLanguageSchema,
-} from "@texfolia/editor/spelling/languages";
-
+} from "#/features/editor/spelling/languages";
 import { getProject } from "#/lib/project.functions";
 import {
   createProjectFilesStore,

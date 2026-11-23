@@ -1,7 +1,7 @@
 import {
   clearCollaborationCaches,
   stopDocumentCaching,
-} from "@texfolia/collaboration/browser";
+} from "#/features/collaboration/browser";
 
 import { authClient } from "./auth-client";
 

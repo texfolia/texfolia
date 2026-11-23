@@ -3,17 +3,18 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "@texfolia/collaboration";
-import {
-  appearanceStorageKey,
-  legacyAppearanceStorageKey,
-} from "@texfolia/editor/themes";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
+
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+} from "#/features/collaboration";
+import {
+  appearanceStorageKey,
+  legacyAppearanceStorageKey,
+} from "#/features/editor/themes/themes";
 
 import type { ProjectDetails } from "../src/lib/project.functions";
 
@@ -76,7 +77,7 @@ const backend = Bun.serve({
       if (rejectFormatting)
         return new Response("Project settings unavailable", { status: 503 });
       const data = (
-        await import("@texfolia/projects")
+        await import("#/features/projects")
       ).updateProjectFormattingSchema.parse(await request.json());
       formattingSaves++;
       project.formatIndent = data.formatting.indent;

@@ -116,7 +116,7 @@ test("runtime web changes keep every integration suite", () => {
 test("shared, lockfile, CI, environment, schema, and unknown root changes select everything", () => {
   for (const path of [
     "packages/db/src/index.ts",
-    "packages/config/base.json",
+    "tsconfig.base.json",
     "bun.lock",
     "package.json",
     "turbo.json",
@@ -237,8 +237,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       "apps/compiler/package.json",
       "packages/contracts/package.json",
       "packages/db/package.json",
-      "packages/config/package.json",
-      "packages/config/base.json",
+      "tsconfig.base.json",
     ]) {
       mkdirSync(dirname(join(cwd, path)), { recursive: true });
       copyFileSync(join(root, path), join(cwd, path));

@@ -24,10 +24,10 @@ bar shows no branch for these repositories.
 
 ## Platform adapters
 
-The core Git module lives in [`@texfolia/git`](../packages/git/README.md)
+The core Git module lives in [`#/features/git`](../apps/app/src/features/git/README.md)
 (`schema.ts`, `actions.ts`, `repository.ts`) and speaks plain Git smart HTTP
 through isomorphic-git. Each platform is an adapter in
-`packages/git/src/providers/` that supplies:
+`apps/app/src/features/git/providers/` that supplies:
 its Better Auth provider ID, label, HTTPS host, OAuth repository scopes, the
 username sent with the token, which URL paths name a repository, and an example
 URL. Remote URL validation, account checks, the remote form, the Git view and
@@ -106,7 +106,7 @@ and metering as chat, with no mutation tools. The suggested message remains edit
 
 ## Verification
 
-`bun run --cwd packages/git test` runs real git HTTP transport
+`bun test apps/app/src/features/git` runs real git HTTP transport
 against the installed `git-http-backend`, including authentication, binary imports,
 ignore rules, commits, push/pull, branches, conflicts, and persisted repository data.
 

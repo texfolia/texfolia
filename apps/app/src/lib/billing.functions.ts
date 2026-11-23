@@ -8,7 +8,7 @@ export const getBilling = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const session = await ensureSession();
     // Loaded on demand so the Stripe SDK stays out of the client bundle.
-    const { billingOverview } = await import("@texfolia/billing/server");
+    const { billingOverview } = await import("#/features/billing/server");
     return billingOverview(context.db, {
       userId: session.user.id,
       organizationId: data.organizationId,

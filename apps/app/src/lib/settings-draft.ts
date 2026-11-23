@@ -1,4 +1,4 @@
-import type { FormatSettings } from "@texfolia/editor/latex/format";
+import type { FormatSettings } from "#/features/editor/latex/format";
 
 import { settingsSchema, type Settings } from "./settings.schema";
 import { shortcutIds } from "./shortcuts";

@@ -1,20 +1,21 @@
+import type { Db } from "@texfolia/db";
+import { project, projectNode } from "@texfolia/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import type { z } from "zod";
+
 import {
   cleanupDeletedCollaboration,
   collectCollaborationSources,
   type CollaborationCleanup,
-} from "@texfolia/collaboration/server";
-import { fetchCompiler } from "@texfolia/compile/server";
-import type { Db } from "@texfolia/db";
-import { project, projectNode } from "@texfolia/db/schema";
-import type { saveSourceSchema } from "@texfolia/storage";
+} from "#/features/collaboration/server";
+import { fetchCompiler } from "#/features/compile/server";
+import type { saveSourceSchema } from "#/features/storage";
 import {
   collectSourceGarbage,
   putSource,
   retireSources,
   type SourceBucket,
-} from "@texfolia/storage/server";
-import { and, eq, inArray } from "drizzle-orm";
-import type { z } from "zod";
+} from "#/features/storage/server";
 
 import { lockProject } from "./project-access.server";
 

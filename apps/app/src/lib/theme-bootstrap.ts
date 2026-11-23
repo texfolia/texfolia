@@ -3,7 +3,7 @@ import {
   catalogTheme,
   themeCatalog,
   resolveTheme,
-} from "@texfolia/editor/themes";
+} from "#/features/editor/themes/themes";
 
 export function isAppPath(pathname: string) {
   const path = pathname.replace(/\/+$/, "");
