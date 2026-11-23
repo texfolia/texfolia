@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requestPrincipal } from "#/features/auth/request-principal.server";
 import {
   collaborationProtocol,
+  peopleSearchParam,
   protocolSearchParam,
 } from "#/features/collaboration";
 import { collaborationAccess } from "#/features/collaboration/server";
@@ -66,6 +67,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
             // Older tabs still speak base64 JSON; the room asks them to reload.
             binary:
               searchParams.get(protocolSearchParam) === collaborationProtocol,
+            people: searchParams.get(peopleSearchParam) === "1",
           }),
         );
         return env.COLLABORATION.getByName(params.projectId).fetch(

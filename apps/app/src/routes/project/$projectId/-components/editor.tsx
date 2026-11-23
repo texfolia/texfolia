@@ -43,7 +43,7 @@ import CodeMirror, {
   Prec,
   type ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   yCollab,
   ySyncAnnotation,
@@ -348,9 +348,8 @@ export function Editor({
     view?.dispatch({ effects: projectProblemsChanged.of() });
   }, [problems]);
 
-  useEffect(() => {
-    const view = editor.current?.view;
-    if (!jump || !view) return;
+  function applyJump(view: EditorView) {
+    if (!jump) return;
     if (jump.range) {
       const from = Math.min(jump.range.from, view.state.doc.length);
       view.dispatch({
@@ -368,7 +367,12 @@ export function Editor({
       scrollIntoView: true,
     });
     view.focus();
-  }, [jump]);
+  }
+  const jumpArrived = useEffectEvent(() => {
+    const view = editor.current?.view;
+    if (view) applyJump(view);
+  });
+  useEffect(() => jumpArrived(), [jump]);
 
   useEffect(() => {
     if (!modified) return;
@@ -871,6 +875,8 @@ export function Editor({
                 scrollIntoView: !scroll,
               });
             }
+            // Files connect when opened, so a jump can precede the editor.
+            applyJump(view);
             onCreateEditor?.(view);
             const line = view.state.doc.lineAt(view.state.selection.main.head);
             onCursorPosition?.({

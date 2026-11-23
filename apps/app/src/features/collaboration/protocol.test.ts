@@ -7,6 +7,7 @@ import {
   encodeClientMessage,
   encodeServerMessage,
   maxCollaborationBytes,
+  type ServerMessage,
 } from "./protocol";
 
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -98,7 +99,8 @@ describe("collaboration protocol", () => {
         updatedAt: 1,
       },
       { type: "error", message: "nope" },
-    ] as const)
+      { type: "people", people: [{ name: "Ada", color: "#123456" }] },
+    ] satisfies ServerMessage[])
       expect(decodeServerMessage(buffer(encodeServerMessage(message)))).toEqual(
         message,
       );

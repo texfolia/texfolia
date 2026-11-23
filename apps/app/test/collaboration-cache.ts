@@ -28,16 +28,71 @@ const bundle = await build({
 });
 const client = bundle.outputFiles[0]?.text;
 assert(client);
-const source = new Y.Doc();
-source.getText("source").insert(0, "Saved server source");
+const sources = new Map<string, Y.Doc>();
+function sourceOf(nodeId: string) {
+  const existing = sources.get(nodeId);
+  if (existing) return existing;
+  const source = new Y.Doc();
+  source.getText("source").insert(0, "Saved server source");
+  sources.set(nodeId, source);
+  return source;
+}
+// Every socket opened, the open ones per file, and the files sent updates.
+const opened: string[] = [];
+const connected = new Map<string, number>();
+const updates: string[] = [];
+async function eventually(
+  check: () => boolean | Promise<boolean>,
+  label: string,
+) {
+  const deadline = Date.now() + 10_000;
+  while (!(await check())) {
+    assert(Date.now() < deadline, label);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 let rejectSignOut = false;
 let signOutRequests = 0;
 const backend = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   websocket: {
+    data: { nodeId: "" },
+    open(socket) {
+      opened.push(socket.data.nodeId);
+      connected.set(
+        socket.data.nodeId,
+        (connected.get(socket.data.nodeId) ?? 0) + 1,
+      );
+    },
+    close(socket) {
+      connected.set(
+        socket.data.nodeId,
+        (connected.get(socket.data.nodeId) ?? 1) - 1,
+      );
+    },
     message(socket, raw) {
+      if (raw === "ping") {
+        socket.send("pong");
+        return;
+      }
       const message = decodeClientMessage(raw);
+      const source = sourceOf(socket.data.nodeId);
+      // The sign-out checks expect the server copy to stay as it was.
+      if (message.type === "update" && socket.data.nodeId !== "node") {
+        updates.push(socket.data.nodeId);
+        Y.applyUpdate(source, message.update);
+      }
+      if (message.type === "save")
+        socket.send(
+          encodeServerMessage({
+            type: "saved",
+            id: message.id,
+            value: source.getText("source").toString(),
+            objectKey: "saved",
+            updatedAt: Date.now(),
+          }),
+        );
       if (message.type === "sync")
         socket.send(
           encodeServerMessage({
@@ -55,7 +110,12 @@ const backend = Bun.serve({
   fetch(request, server) {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith("/api/collaboration/")) {
-      if (server.upgrade(request)) return;
+      if (
+        server.upgrade(request, {
+          data: { nodeId: pathname.split("/").at(-1) ?? "" },
+        })
+      )
+        return;
       return new Response(null, { status: 400 });
     }
     if (pathname === "/api/auth/sign-out") {
@@ -202,12 +262,145 @@ try {
     await editor.evaluate(() => window.cacheTest.value()),
     "Saved server source",
   );
+
+  console.info("Checking documents connect on demand");
+  await context.close();
+  const projectContext = await browser.newContext();
+  const ids = ["main", "closed", "cached", "never"];
+  async function openProject() {
+    const tab = await projectContext.newPage();
+    tab.on("pageerror", (error) => errors.push(error.message));
+    await tab.goto(`${origin}/fixture`);
+    await tab.waitForFunction(() => !!window.cacheTest);
+    return tab;
+  }
+  let tab = await openProject();
+  // A cache from before unsynced markers existed, with an edit to merge.
+  await tab.evaluate(() =>
+    window.cacheTest.seed("texfolia.yjs.demand.project.cached", "Old edit. "),
+  );
+  opened.length = 0;
+  await tab.evaluate((ids) => window.cacheTest.openProject("demand", ids), ids);
+  await eventually(
+    () => sourceOf("cached").getText("source").toString().includes("Old edit"),
+    "An unmarked cache must merge without opening its file",
+  );
+  await eventually(
+    async () =>
+      (await tab.evaluate(() => window.cacheTest.documents())).length === 0,
+    "A recovered document must close once saved",
+  );
+  assert.deepEqual(opened, ["cached"], "Unopened files must not connect");
+  await tab.evaluate(() => window.cacheTest.hold("main"));
+  await eventually(
+    () => connected.get("main") === 1,
+    "Open file not connected",
+  );
+  await tab.evaluate(() => window.cacheTest.synchronized());
+  assert.deepEqual(opened, ["cached", "main"]);
+
+  // Opening and closing a file whose history has deletions writes nothing.
+  sourceOf("main").getText("source").delete(0, 6);
+  updates.length = 0;
+  await tab.evaluate(() => window.cacheTest.release("main"));
+  await eventually(
+    () => connected.get("main") === 0,
+    "Closed file kept a socket",
+  );
+  await tab.evaluate(() => window.cacheTest.hold("main"));
+  assert.deepEqual(await tab.evaluate(() => window.cacheTest.synchronized()), [
+    "main",
+  ]);
+  assert.deepEqual(updates, [], "A clean document must not send an update");
+
+  // An edit to an unopened file connects it until the edit is saved.
+  await tab.evaluate(() => window.cacheTest.edit("never", "Programmatic"));
+  await eventually(
+    () => sourceOf("never").getText("source").toString() === "Programmatic",
+    "An unopened file must accept an edit",
+  );
+  await eventually(
+    () => connected.get("never") === 0,
+    "Edited file kept a socket",
+  );
+  assert.equal(
+    (await tab.evaluate(() => window.cacheTest.closedValues())).never,
+    "Programmatic",
+  );
+  assert.deepEqual(
+    await tab.evaluate(() => window.cacheTest.markers()),
+    ["texfolia.unsynced.demand.project"],
+    "Saved edits must leave no unsynced markers",
+  );
+
+  // Closing an offline file keeps its unsaved edit, then saves it and closes.
+  await tab.evaluate(() => window.cacheTest.hold("closed"));
+  await tab.evaluate(() => window.cacheTest.synchronized());
+  await projectContext.setOffline(true);
+  await tab.waitForFunction(() =>
+    window.cacheTest.documents().every((document) => !document.connected),
+  );
+  await tab.evaluate(() => window.cacheTest.edit("closed", "Offline one"));
+  await tab.evaluate(() => window.cacheTest.release("closed"));
+  await tab.waitForTimeout(600);
+  assert.deepEqual(
+    (await tab.evaluate(() => window.cacheTest.documents()))
+      .map(({ id, value }) => `${id}: ${value}`)
+      .sort(),
+    ["closed: Offline one", "main: server source"],
+    "An unsaved document must stay live after its tab closes",
+  );
+  await projectContext.setOffline(false);
+  await eventually(
+    () => sourceOf("closed").getText("source").toString() === "Offline one",
+    "Reconnecting must save a closed file's edit",
+  );
+  await eventually(
+    () => connected.get("closed") === 0,
+    "Saved file kept a socket",
+  );
+
+  // An edit left offline when the page closes merges in the next session.
+  await tab.evaluate(() => window.cacheTest.hold("closed"));
+  await tab.evaluate(() => window.cacheTest.synchronized());
+  await projectContext.setOffline(true);
+  await tab.waitForFunction(() =>
+    window.cacheTest.documents().every((document) => !document.connected),
+  );
+  await tab.evaluate(() => window.cacheTest.edit("closed", "Offline two"));
+  assert.equal(
+    (await tab.evaluate(() => window.cacheTest.markers())).length,
+    2,
+  );
+  await tab.close();
+  await projectContext.setOffline(false);
+  tab = await openProject();
+  opened.length = 0;
+  await tab.evaluate((ids) => window.cacheTest.openProject("demand", ids), ids);
+  assert.deepEqual(
+    await tab.evaluate(() => window.cacheTest.synchronized()),
+    ["closed"],
+    "Compiling must wait for recovered edits",
+  );
+  await eventually(
+    () => sourceOf("closed").getText("source").toString() === "Offline two",
+    "An earlier session's edit must merge without opening its file",
+  );
+  await eventually(
+    () => connected.get("closed") === 0,
+    "Recovered file kept a socket",
+  );
+  assert.deepEqual(opened, ["closed"]);
+  assert.deepEqual(await tab.evaluate(() => window.cacheTest.markers()), [
+    "texfolia.unsynced.demand.project",
+  ]);
+  await projectContext.close();
   assert.deepEqual(errors, []);
   console.info(
-    "Collaboration cache checks passed: user isolation, closed documents, failed sign-out, blocked deletion and retry, open offline editor cleanup, and fresh synchronization.",
+    "Collaboration cache checks passed: user isolation, closed documents, failed sign-out, blocked deletion and retry, open offline editor cleanup, fresh synchronization, and on-demand documents.",
   );
 } finally {
   await browser.close();
   backend.stop(true);
-  source.destroy();
+  for (const source of sources.values()) source.destroy();
 }

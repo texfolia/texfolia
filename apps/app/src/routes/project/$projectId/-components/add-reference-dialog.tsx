@@ -57,8 +57,8 @@ export function AddReferenceDialog({
   bibFiles: ReadonlyArray<{ id: string; path: string }>;
   knownKeys: readonly string[];
   readBib: (id: string) => string;
-  /** Throws when the file can't be edited yet. */
-  appendBib: (id: string, text: string) => void;
+  /** Appends an entry; rejects when the file can't be edited yet. */
+  appendBib: (id: string, entry: string) => Promise<void>;
   createBib: (content: string) => Promise<void>;
 }) {
   return (
@@ -154,7 +154,7 @@ function AddReferenceForm({
     setError("");
     try {
       if (target === newTarget) await createBib(entryAppendix("", entry));
-      else appendBib(target, entryAppendix(readBib(target), entry));
+      else await appendBib(target, entry);
       if (cite) request.cite?.insert(key);
       onClose();
     } catch (error) {

@@ -100,9 +100,18 @@ and let migration finish.
 ### Real-time collaboration
 
 The web Worker exports `ProjectCollaboration`, with one SQLite-backed Durable
-Object named by `projectId`. Each text file has a Yjs document and a WebSocket.
-The workspace keeps those documents connected while file tabs open and close,
-so analysis, export, and compile inputs include changes to closed files.
+Object named by `projectId`. Each text file has a Yjs document. A workspace opens
+a document's WebSocket and IndexedDB cache only while something needs it: an open
+tab or Markdown preview, the Comments panel for commented files, or an edit to an
+unopened file, such as adding a reference. A document that is no longer needed
+saves any unacknowledged edits and then disconnects. If it is offline, it stays
+live until it can save them.
+
+Closed files follow their saved sources. When the metadata poll reports a new
+version, the workspace loads it, so search, the outline, analysis, and export
+cover every file. They include unsaved edits from open files, and from closed
+files whose edits are not saved yet. Other people's edits to a file you have not
+opened appear after the room saves them, usually within about four seconds.
 Binary files retain their existing source-storage path.
 
 The room, protocol, browser cache, and drafts live in
@@ -158,6 +167,8 @@ path. The WebSocket route authenticates the session and checks the request
 origin. The object checks current project permissions on every message. Viewer
 clients receive changes and publish presence; the server rejects their document
 updates. Presence names and colors come from the authenticated session.
+Cursors are shared per file. The online count covers the whole project, because
+the room sends each tab the list of people with any file open.
 
 The object journals accepted Yjs updates in SQLite before broadcasting. At 64
 updates or 256 KiB of journal data per file, it replaces the snapshot and deletes
@@ -193,7 +204,9 @@ remain editable if saving failed, including when the project exceeded its quota.
 Editors cache Yjs updates in IndexedDB, scoped by user, project, and file. After
 the first synchronization, editing can continue offline. Reconnect exchanges
 state vectors and merges missing updates in both directions. Reloading the page
-also restores cached updates. The first open of an uncached file needs a server
+also restores cached updates. Edits the server has not acknowledged are marked in
+local storage, so the next session merges them without the file being opened.
+Caches from before those markers are each checked once. The first open of an uncached file needs a server
 connection. Keep the page open until connected if the browser cannot use
 IndexedDB. Viewer clients do not load writable caches.
 

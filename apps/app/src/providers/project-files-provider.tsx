@@ -47,6 +47,7 @@ export function createProjectFilesStore({
     commentsVersion: undefined,
   };
   const listeners = new Set<() => void>();
+  const refreshListeners = new Set<() => void>();
   function setStatus(next: typeof status) {
     if (
       next.canWrite === status.canWrite &&
@@ -127,6 +128,13 @@ export function createProjectFilesStore({
         listeners.delete(listener);
       };
     },
+    /** Calls `listener` after each refresh, when versions may have changed. */
+    onRefresh: (listener: () => void) => {
+      refreshListeners.add(listener);
+      return () => {
+        refreshListeners.delete(listener);
+      };
+    },
     refresh(signal?: AbortSignal): Promise<ProjectMetadata> {
       const run = async () => {
         // A response begun before an acknowledged local write must not undo it.
@@ -167,6 +175,7 @@ export function createProjectFilesStore({
             error: "",
             commentsVersion: metadata.commentsVersion,
           });
+          for (const listener of refreshListeners) listener();
           return metadata;
         }
       };

@@ -82,6 +82,13 @@ export function FileEditor({
       subscription.dispose();
     };
   }, [panelApi]);
+  const { holdDocument } = workspace;
+  const textId = params.node.kind === "text" ? params.node.id : undefined;
+  // Open tabs stay connected, including while another tab hides them.
+  useEffect(
+    () => (textId ? holdDocument(textId) : undefined),
+    [holdDocument, textId],
+  );
   const collaboration = workspace.collaboration.get(params.node.id);
   const status = useSyncExternalStore(
     collaboration?.subscribe ?? emptySubscribe,

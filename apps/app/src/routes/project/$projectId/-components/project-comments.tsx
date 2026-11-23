@@ -65,7 +65,15 @@ export function ProjectComments() {
   const { comments } = workspace;
   const [filter, setFilter] = useState<Filter>("open");
   const threads = comments.data?.threads;
-  const { collaboration, paths } = workspace;
+  const { collaboration, holdDocument, paths } = workspace;
+  // Positions resolve against the live documents of commented files.
+  const commented = [...new Set((threads ?? []).map((thread) => thread.nodeId))]
+    .sort()
+    .join(" ");
+  useEffect(() => {
+    const releases = commented ? commented.split(" ").map(holdDocument) : [];
+    return () => releases.forEach((release) => release());
+  }, [commented, holdDocument]);
   const located = useMemo<Located[]>(() => {
     const texts = new Map<string, string>();
     return (threads ?? [])

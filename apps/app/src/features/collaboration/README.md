@@ -2,15 +2,15 @@
 
 Yjs collaboration for project sources: the Durable Object room that syncs,
 persists, and flushes collaborative text, the binary WebSocket protocol, and
-the browser side (the Yjs document for an open file, its IndexedDB cache, and
-the localStorage draft cache).
+the browser side (the project's live documents, the Yjs document for an open
+file, its IndexedDB cache, and the localStorage draft cache).
 
-| Entry point                        | Contents                                                                                                                                                                                                                                                                    |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#/features/collaboration`         | The wire protocol: `encodeClientMessage`, `decodeClientMessage`, `encodeServerMessage`, `decodeServerMessage`, `awarenessFrame`, `readAwareness`, `collaborationProtocol`, `protocolSearchParam`, `outdatedClientMessage`, `maxCollaborationBytes`. Safe to import anywhere |
-| `#/features/collaboration/browser` | `CollaborativeFile`; the IndexedDB cache helpers `clearCollaborationCaches`, `collaborationCachePrefix`, `documentCachingStopped`, `stopDocumentCaching`; the draft cache `reconcileSourceDrafts`, `serializeSourceDrafts`, `SourceDraft`                                   |
-| `#/features/collaboration/server`  | `collaborationAccess` (the `/api/collaboration` access check), `invalidateCollaborationAccess`, `invalidateOrganizationCollaborationAccess`, `cleanupDeletedCollaboration`, `collectCollaborationSources`. Does not load the Workers runtime, so Bun tests can import it    |
-| `#/features/collaboration/room`    | `CollaborationRoom` (the abstract Durable Object base class) and `CollaborationEnv`. Imports `cloudflare:workers`, so only Worker code loads it                                                                                                                             |
+| Entry point                        | Contents                                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#/features/collaboration`         | The wire protocol: `encodeClientMessage`, `decodeClientMessage`, `encodeServerMessage`, `decodeServerMessage`, `awarenessFrame`, `readAwareness`, `collaborationProtocol`, `protocolSearchParam`, `peopleSearchParam`, `outdatedClientMessage`, `maxCollaborationBytes`. Safe to import anywhere        |
+| `#/features/collaboration/browser` | `CollaborativeDocuments`, which connects documents on demand; `CollaborativeFile`; the IndexedDB cache helpers `clearCollaborationCaches`, `collaborationCachePrefix`, `documentCachingStopped`, `stopDocumentCaching`; the draft cache `reconcileSourceDrafts`, `serializeSourceDrafts`, `SourceDraft` |
+| `#/features/collaboration/server`  | `collaborationAccess` (the `/api/collaboration` access check), `invalidateCollaborationAccess`, `invalidateOrganizationCollaborationAccess`, `cleanupDeletedCollaboration`, `collectCollaborationSources`. Does not load the Workers runtime, so Bun tests can import it                                |
+| `#/features/collaboration/room`    | `CollaborationRoom` (the abstract Durable Object base class) and `CollaborationEnv`. Imports `cloudflare:workers`, so only Worker code loads it                                                                                                                                                         |
 
 The rest of the app imports the core only through these entry points. The
 modules that bind it to the app, named below, are imported by path.
@@ -41,6 +41,10 @@ reloads open documents afterward. The app's `gitAction` RPC uses it.
 `collaborationAccess` takes the same lock. `CollaborativeFile` takes
 `anonymous` and a `decorateUrl` hook, which the share view uses to add its
 share token to the socket URL.
+
+`CollaborativeDocuments` connects a document while something holds it. Releasing
+the last hold saves its unacknowledged edits and closes it. `unsynced.ts` marks
+documents with unacknowledged edits so a later session can merge them.
 
 The `/api/collaboration` route, Wrangler bindings and migrations, and the
 CodeMirror binding stay outside the feature.

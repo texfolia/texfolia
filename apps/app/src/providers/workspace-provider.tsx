@@ -15,7 +15,10 @@ import type { Comments } from "#/hooks/use-comments";
 
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {
+  /** Live documents: files that are open, or whose edits are unsaved. */
   collaboration: ReadonlyMap<string, CollaborativeFile>;
+  /** Connects a text file's document until the returned function is called. */
+  holdDocument: (id: string) => () => void;
   projectId: string;
   canWrite: boolean;
   build: BuildSnapshot | null;
@@ -64,7 +67,6 @@ export type Workspace = {
   formatSettings: FormatSettings;
   keepOpen: (id: string) => void;
   openMarkdownPreview: (id: string) => void;
-  change: (id: string, value: string) => void;
   symbolPreamble: { source: string; filename: string } | undefined;
   addSymbolPackage: (packageName: string) => void;
   /** Opens Add reference; `key` names an undefined citation to define. */

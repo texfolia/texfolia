@@ -51,6 +51,8 @@ const attachmentSchema = z.object({
     .nullable(),
   // False for tabs still on the base64 JSON protocol, which only get told to reload.
   binary: z.boolean().default(false),
+  // Whether the tab understands `people` messages.
+  people: z.boolean().default(false),
 });
 type Attachment = z.infer<typeof attachmentSchema>;
 type DocumentRow = {
@@ -69,6 +71,17 @@ const colors = [
   "#d97706",
   "#0891b2",
 ];
+// A browser closing without a code is reported as one that cannot be sent back,
+// and the closing handshake must be answered for its socket to close.
+function closeCode(code: number) {
+  return [1005, 1006, 1015].includes(code) ? 1000 : code;
+}
+
+// Messages about who else is in the project.
+function isPresence(message: ServerMessage) {
+  return message.type === "awareness" || message.type === "people";
+}
+
 const retentionIntervalMs = 60 * 60_000;
 
 async function hashText(value: string) {
@@ -414,16 +427,12 @@ export abstract class CollaborationRoom<
   }
 
   private send(ws: WebSocket, message: ServerMessage) {
-    return this.deliver(
-      ws,
-      message.type === "awareness",
-      encodeServerMessage(message),
-    );
+    return this.deliver(ws, isPresence(message), encodeServerMessage(message));
   }
 
   private async deliver(
     ws: WebSocket,
-    awareness: boolean,
+    presence: boolean,
     frame: string | Uint8Array,
   ) {
     if (ws.readyState !== WebSocket.OPEN) return;
@@ -431,7 +440,7 @@ export abstract class CollaborationRoom<
     // Outdated tabs cannot read binary frames.
     if (!info.binary && typeof frame !== "string") return;
     // Anonymous share-link viewers never see who else is in the project.
-    if (awareness && this.isAnonymous(info.userId)) return;
+    if (presence && this.isAnonymous(info.userId)) return;
     try {
       await this.verifyAccess(info);
     } catch {
@@ -449,8 +458,40 @@ export abstract class CollaborationRoom<
     // Encode once for every peer.
     const frame = encodeServerMessage(message);
     for (const peer of this.ctx.getWebSockets(nodeId))
-      if (peer !== except)
-        await this.deliver(peer, message.type === "awareness", frame);
+      if (peer !== except) await this.deliver(peer, isPresence(message), frame);
+  }
+
+  // Signed-in users with an open file, leaving out the `closing` socket.
+  private present(closing?: WebSocket) {
+    const users = new Map<string, Attachment>();
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === closing || ws.readyState !== WebSocket.OPEN) continue;
+      const info = attachmentSchema.parse(ws.deserializeAttachment());
+      if (info.binary && !this.isAnonymous(info.userId))
+        users.set(info.userId, info);
+    }
+    return users;
+  }
+
+  private people(closing?: WebSocket): ServerMessage {
+    return {
+      type: "people",
+      people: [...this.present(closing).values()].map((info) =>
+        this.user(info),
+      ),
+    };
+  }
+
+  // Tells every tab who is in the project. Tabs only connect to open files, so
+  // awareness alone would miss people working in other files.
+  private async broadcastPeople(message: ServerMessage, except: WebSocket) {
+    for (const ws of this.ctx.getWebSockets())
+      if (
+        ws !== except &&
+        ws.readyState === WebSocket.OPEN &&
+        attachmentSchema.parse(ws.deserializeAttachment()).people
+      )
+        await this.send(ws, message);
   }
 
   override async fetch(request: Request) {
@@ -469,9 +510,15 @@ export abstract class CollaborationRoom<
       );
       this.remember(info.userId, generation, canWrite);
       if (info.binary) await this.document(info, { node });
+      const joined =
+        info.binary &&
+        !this.isAnonymous(info.userId) &&
+        !this.present().has(info.userId);
       const pair = new WebSocketPair();
       pair[1].serializeAttachment(info);
       this.ctx.acceptWebSocket(pair[1], [info.nodeId]);
+      // The new socket asks for the list itself, when it synchronizes.
+      if (joined) await this.broadcastPeople(this.people(), pair[1]);
       const alarm = await this.ctx.storage.getAlarm();
       if (alarm === null || alarm > Date.now() + liveProjectAccessIntervalMs)
         await this.ctx.storage.setAlarm(
@@ -556,6 +603,7 @@ export abstract class CollaborationRoom<
               canWrite: access.canWrite,
               user: this.user(info),
             });
+            if (info.people) await this.send(ws, this.people());
             for (const peer of this.ctx.getWebSockets(info.nodeId)) {
               const state = attachmentSchema.parse(
                 peer.deserializeAttachment(),
@@ -732,6 +780,7 @@ export abstract class CollaborationRoom<
         clientId: 0,
         awareness: null,
         binary: false,
+        people: false,
       };
       const access = await this.withDb((db) =>
         collaborationAccess(db, info.projectId, info.nodeId, userId, {
@@ -864,7 +913,7 @@ export abstract class CollaborationRoom<
     return this.serial(async () => {
       const info = attachmentSchema.parse(ws.deserializeAttachment());
       if (!info.binary) {
-        ws.close(code, reason);
+        ws.close(closeCode(code), reason);
         return;
       }
       const update = awarenessFrame(
@@ -873,7 +922,9 @@ export abstract class CollaborationRoom<
         null,
       );
       await this.broadcast(info.nodeId, { type: "awareness", update }, ws);
-      ws.close(code, reason);
+      if (!this.isAnonymous(info.userId) && !this.present(ws).has(info.userId))
+        await this.broadcastPeople(this.people(ws), ws);
+      ws.close(closeCode(code), reason);
     });
   }
 

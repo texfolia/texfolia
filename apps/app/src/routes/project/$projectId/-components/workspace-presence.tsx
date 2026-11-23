@@ -1,13 +1,8 @@
 import { IconUsers } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 import { useEffect, useState } from "react";
-import { z } from "zod";
 
 import { useWorkspace } from "#/providers/workspace-provider";
-
-const presenceSchema = z.object({
-  user: z.object({ name: z.string(), color: z.string() }),
-});
 
 export function WorkspacePresence({ onClick }: { onClick: () => void }) {
   const { collaboration } = useWorkspace();
@@ -16,26 +11,19 @@ export function WorkspacePresence({ onClick }: { onClick: () => void }) {
     const refresh = () => {
       const names = new Map<string, string>();
       for (const file of collaboration.values())
-        for (const state of file.awareness.getStates().values()) {
-          const parsed = presenceSchema.safeParse(state);
-          if (parsed.success)
-            names.set(
-              `${parsed.data.user.name}:${parsed.data.user.color}`,
-              parsed.data.user.name,
-            );
-        }
+        // The list covers the whole project, not only this file.
+        for (const { name, color } of file.getStatus().people)
+          names.set(`${name}:${color}`, name);
       const next = [...names.values()].sort();
       setPeople((previous) =>
         JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
       );
     };
-    for (const file of collaboration.values())
-      file.awareness.on("change", refresh);
+    const unsubscribe = [...collaboration.values()].map((file) =>
+      file.subscribe(refresh),
+    );
     refresh();
-    return () => {
-      for (const file of collaboration.values())
-        file.awareness.off("change", refresh);
-    };
+    return () => unsubscribe.forEach((stop) => stop());
   }, [collaboration]);
   return (
     <Button

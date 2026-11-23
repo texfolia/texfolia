@@ -340,6 +340,70 @@ try {
     /Bob/,
   );
 
+  console.log("Checking project-wide presence");
+  // Tabs connect only to open files, so the room lists everyone in the project.
+  const otherId = crypto.randomUUID();
+  await db.insert(projectNode).values({
+    id: otherId,
+    projectId,
+    parentId: node.parentId,
+    kind: "text",
+    name: "other.tex",
+    sizeBytes: 0n,
+  });
+  async function joinOther(userId: string, people: boolean) {
+    const response = await mf.dispatchFetch(
+      `${origin}/api/collaboration/${projectId}/${otherId}?protocol=2&clientId=777${people ? "&people=1" : ""}`,
+      {
+        headers: {
+          Upgrade: "websocket",
+          Cookie: cookies.get(userId) ?? "",
+          Origin: origin,
+        },
+      },
+    );
+    const socket = response.webSocket;
+    assert(socket);
+    const messages: ServerMessage[] = [];
+    socket.addEventListener("message", (event) => {
+      messages.push(decodeServerMessage(event.data));
+    });
+    socket.accept();
+    socket.send(
+      encodeClientMessage({
+        type: "sync",
+        vector: Y.encodeStateVector(new Y.Doc()),
+      }),
+    );
+    for (let attempt = 0; !messages.length && attempt < 200; attempt++)
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    return { socket, messages };
+  }
+  const named = (names: string[]) =>
+    a.page.waitForFunction(
+      (expected) =>
+        window.collaborationTest.people().sort().join() === expected,
+      [...names].sort().join(),
+    );
+  await named([ownerId, editorId, viewerId]);
+  await viewer.context.close();
+  await named([ownerId, editorId]);
+  const joined = await joinOther(viewerId, true);
+  await named([ownerId, editorId, viewerId]);
+  const joinedPeople = joined.messages.find(
+    (message) => message.type === "people",
+  );
+  assert(joinedPeople?.type === "people");
+  assert.equal(joinedPeople.people.length, 3);
+  const unaware = await joinOther(ownerId, false);
+  joined.socket.close();
+  await named([ownerId, editorId]);
+  assert(
+    !unaware.messages.some((message) => message.type === "people"),
+    "Tabs that do not ask for people must not receive them",
+  );
+  unaware.socket.close();
+
   console.log("Checking cursors and formatting");
   // Cursor positions follow minimal formatting edits, and names come from the server.
   await a.page.evaluate(() => window.collaborationTest.replace("alpha beta"));

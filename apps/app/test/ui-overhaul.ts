@@ -202,7 +202,10 @@ async function capture(page: Page, name: string) {
     `${name} must not overflow horizontally`,
   );
 }
-async function eventually(check: () => Promise<boolean>, label: string) {
+async function eventually(
+  check: () => boolean | Promise<boolean>,
+  label: string,
+) {
   const until = Date.now() + 20_000;
   while (!(await check())) {
     assert(Date.now() < until, label);
@@ -257,6 +260,19 @@ try {
     name: "notes.tex",
     kind: "text",
     sizeBytes: 0n,
+  });
+  const appendix = Buffer.from("Unopened appendix text\n");
+  const appendixKey = `projects/${project.id}/sources/${createHash("sha256").update(appendix).digest("hex")}`;
+  await (await mf.getR2Bucket("SOURCES")).put(appendixKey, appendix);
+  const appendixId = crypto.randomUUID();
+  await db.insert(projectNode).values({
+    id: appendixId,
+    projectId: project.id,
+    parentId: rootNode.id,
+    name: "unopened.tex",
+    kind: "text",
+    objectKey: appendixKey,
+    sizeBytes: BigInt(appendix.length),
   });
   const folderId = crypto.randomUUID();
   await db.insert(projectNode).values({
@@ -827,6 +843,16 @@ try {
   await projectRow
     .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
     .waitFor();
+  const sockets = new Map<string, number>();
+  owner.on("websocket", (socket) => {
+    const { pathname } = new URL(socket.url());
+    if (!pathname.startsWith("/api/collaboration/")) return;
+    const nodeId = pathname.split("/").at(-1) ?? "";
+    sockets.set(nodeId, (sockets.get(nodeId) ?? 0) + 1);
+    socket.on("close", () =>
+      sockets.set(nodeId, (sockets.get(nodeId) ?? 1) - 1),
+    );
+  });
   await projectRow
     .getByRole("link", { name: project.name, exact: true })
     .focus();
@@ -939,6 +965,21 @@ try {
     .getByRole("tab", { name: "notes.tex", exact: true })
     .click({ button: "right" });
   await owner.getByRole("menuitem", { name: "Close", exact: true }).click();
+  const nodeIds = new Map(
+    (
+      await db.query.projectNode.findMany({ where: { projectId: project.id } })
+    ).map((node) => [node.name, node.id]),
+  );
+  const notesId = nodeIds.get("notes.tex") ?? "";
+  await eventually(
+    () => sockets.get(notesId) === 0,
+    "Closing a tab closes its collaboration socket",
+  );
+  assert.deepEqual(
+    [...sockets.keys()].sort(),
+    [nodeIds.get("main.tex") ?? "", notesId].sort(),
+    "Files that were never opened never connect",
+  );
   await owner.getByRole("tab", { name: "main.tex", exact: true }).click();
   await owner.locator('.cm-content[contenteditable="true"]').fill("Bold text");
   await owner.keyboard.press("ControlOrMeta+A");
@@ -987,6 +1028,42 @@ try {
     "Workspace heading",
     "Selecting a search result selects the match",
   );
+  assert(!sockets.has(appendixId));
+  await fileSearch.fill("unopened APPENDIX");
+  await owner
+    .getByRole("status")
+    .filter({ hasText: "1 result in 1 file" })
+    .waitFor();
+  // A collaborator's saved edit reaches search without opening the file.
+  const edited = Buffer.from("Unopened appendix text, edited elsewhere\n");
+  const editedKey = `projects/${project.id}/sources/${createHash("sha256").update(edited).digest("hex")}`;
+  await (await mf.getR2Bucket("SOURCES")).put(editedKey, edited);
+  await db
+    .update(projectNode)
+    .set({
+      objectKey: editedKey,
+      sizeBytes: BigInt(edited.length),
+      updatedAt: new Date(),
+    })
+    .where(eq(projectNode.id, appendixId));
+  await fileSearch.fill("edited elsewhere");
+  await owner
+    .getByRole("region", { name: "unopened.tex", exact: true })
+    .getByRole("button", { name: /edited elsewhere/ })
+    .click();
+  await eventually(
+    () =>
+      owner.evaluate(
+        () => document.getSelection()?.toString() === "edited elsewhere",
+      ),
+    "Selecting a result opens an unopened file at the match",
+  );
+  assert.equal(sockets.get(appendixId), 1);
+  await owner
+    .getByRole("tab", { name: "unopened.tex", exact: true })
+    .getByRole("button", { name: "Close tab" })
+    .click();
+  await owner.getByRole("tab", { name: /^main\.tex/ }).click();
   await owner.locator('.cm-content[contenteditable="true"]').fill("");
   await sidebarView(owner, "files");
 
@@ -1219,7 +1296,19 @@ try {
     "chapters/appendix.tex",
     "main.tex",
     "reference.pdf",
+    "unopened.tex",
   ]);
+  const unopenedSource = Bun.spawnSync([
+    "unzip",
+    "-p",
+    zipPath,
+    "unopened.tex",
+  ]);
+  assert.equal(
+    unopenedSource.stdout.toString(),
+    edited.toString(),
+    "Export includes the saved text of closed files",
+  );
   const mainSource = Bun.spawnSync(["unzip", "-p", zipPath, "main.tex"]);
   assert.equal(mainSource.exitCode, 0);
   assert(
