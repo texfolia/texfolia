@@ -9,14 +9,16 @@ compiler service itself is `apps/compiler`; this feature only talks to it.
 | `#/features/compile`        | Client-safe helpers. Starting a compile: `compileDeltaSchema`, `hashSource`, `ProjectSourceSync`, `requestCompilation`. Following completion: `ProjectBuildEvents`, `trackCompilePreview`, `reportCompilePreview`. Logs and history: `parseCompileLog`, `compileHistorySchema`, `compileTimeline` and the history limits. Shared PDF: `sharedPdfReducer`, `sharedPdfStep`, `isCurrentBuild` |
 | `#/features/compile/server` | `fetchCompiler` (the `COMPILER` service binding, or `COMPILER_URL` in development), `createCompileSources` (saved-source snapshots under the project lock), `createCompileHandlers` (the `/api/compile/$projectId` GET, POST and PATCH handlers)                                                                                                                                            |
 
-Other features import only these entry points; the remaining files are private.
+The rest of the app imports the core only through these entry points. The
+modules that bind it to the app, named below, are imported by path.
 
 ## Boundaries
 
 The feature depends on `@texfolia/contracts` (the compiler protocol),
 `@texfolia/db` (the `project_job` table and project nodes) and
-`#/features/storage` (source objects). It does not know about authentication,
-share links, billing, or the project aggregate. The app passes those in:
+`#/features/storage` (source objects). The core does not know about
+authentication, share links, billing, or the project aggregate. It takes those as
+arguments:
 
 - `CompileProject` locks a project and checks access, returns the metadata
   version the browser sends as `X-Source-Metadata`, and maps nodes to paths.
@@ -27,8 +29,8 @@ share links, billing, or the project aggregate. The app passes those in:
 `ProjectBuildEvents` takes an optional URL decorator, which the share view uses
 to add its share token.
 
-The app binds all of this in `apps/app/src/lib/compile-route.server.ts` and
-`apps/app/src/lib/compile-source.server.ts`. The `/api/compile` route files, the
+`compile-route.server.ts` and `compile-source.server.ts` bind all of this.
+`build.ts` builds the URLs of build files. The `/api/compile` route files, the
 `COMPILER` service binding in Wrangler, and the workspace UI (Problems, Logs,
 Terminal, preview) stay outside the feature.
 

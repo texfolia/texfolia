@@ -16,7 +16,7 @@ import {
   legacyAppearanceStorageKey,
 } from "#/features/editor/themes/themes";
 
-import type { ProjectDetails } from "../src/lib/project.functions";
+import type { ProjectDetails } from "../src/features/projects/project.functions";
 
 const projectId = crypto.randomUUID();
 const rootId = crypto.randomUUID();
@@ -132,11 +132,11 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
-      "#/lib/project.functions": rpc,
-      "#/lib/project-node.functions": rpc,
-      "#/lib/project-source.functions": rpc,
-      "#/lib/git.functions": rpc,
-      "#/lib/project-sharing.functions": rpc,
+      "#/features/projects/project.functions": rpc,
+      "#/features/projects/project-node.functions": rpc,
+      "#/features/projects/project-source.functions": rpc,
+      "#/features/git/git.functions": rpc,
+      "#/features/sharing/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },

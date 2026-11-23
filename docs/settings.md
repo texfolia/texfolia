@@ -71,7 +71,7 @@ on Apply or Save. The editor's **Add to dictionary** saves immediately. See
 
 ## Keyboard shortcuts
 
-`apps/app/src/lib/shortcuts.ts` owns the action catalog, default bindings,
+`apps/app/src/features/shortcuts/shortcuts.ts` owns the action catalog, default bindings,
 validation, and conflict checks. Defaults copy VS Code unless that would take
 over an important browser or editor function. The recorder accepts one chord or
 up to four chords separated by spaces. Enter finishes recording. Escape cancels

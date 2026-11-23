@@ -13,10 +13,13 @@ import {
   assertProjectSourcePaths,
   projectPaths,
 } from "#/features/projects";
+import { saveProjectSource } from "#/features/projects/project-source.functions";
+import type {
+  ProjectDetails,
+  ProjectNode,
+} from "#/features/projects/project.functions";
 import { encodeSource, type SourceFiles } from "#/features/storage";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
-import { saveProjectSource } from "#/lib/project-source.functions";
-import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState } from "#/providers/workspace-provider";
 

@@ -1,6 +1,6 @@
 import { AssistantSidebar } from "#/features/ai/ui";
+import type { WorkspaceChrome } from "#/features/workspace/workspace-layout";
 import { webPath } from "#/lib/origins";
-import type { WorkspaceChrome } from "#/lib/workspace-layout";
 
 import { SidebarResize } from "./sidebar-resize";
 

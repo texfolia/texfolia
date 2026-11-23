@@ -2,8 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
-import { readProjectSource } from "#/lib/project-source.server";
-import { requestPrincipal } from "#/lib/request-principal.server";
+import { requestPrincipal } from "#/features/auth/request-principal.server";
+import { readProjectSource } from "#/features/projects/project-source.server";
 
 export const Route = createFileRoute("/api/sources/$projectId/$nodeId")({
   server: {

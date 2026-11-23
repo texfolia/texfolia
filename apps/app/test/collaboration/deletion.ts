@@ -22,7 +22,7 @@ import {
 } from "#/features/collaboration";
 import { hashSource } from "#/features/compile";
 
-import { createProject } from "../../src/lib/project.server";
+import { createProject } from "../../src/features/projects/project.server";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,

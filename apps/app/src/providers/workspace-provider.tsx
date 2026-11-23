@@ -3,6 +3,7 @@ import type { EditorView } from "@uiw/react-codemirror";
 import { createContext, type ReactNode, useContext } from "react";
 
 import type { CollaborativeFile } from "#/features/collaboration/browser";
+import type { EditorCommand } from "#/features/editor/editor-command";
 import type { LatexProblem } from "#/features/editor/latex/analysis";
 import type { latexCompletion } from "#/features/editor/latex/completion";
 import type { FormatSettings } from "#/features/editor/latex/format";
@@ -11,7 +12,6 @@ import type {
   SyncTexLocation,
 } from "#/features/editor/latex/synctex";
 import type { Comments } from "#/hooks/use-comments";
-import type { EditorCommand } from "#/lib/editor-command";
 
 export type FileState = { value: string; savedValue: string };
 export type Workspace = {

@@ -19,6 +19,7 @@
     "@better-auth/drizzle-adapter": "1.7.15",
     "@better-auth/stripe": "1.7.15",
     "@texfolia/db": "workspace:*",
+    "@texfolia/email": "workspace:*",
     "better-auth": "1.7.15",
     "stripe": "^23.1.0",
     "zod": "^4.6.7"

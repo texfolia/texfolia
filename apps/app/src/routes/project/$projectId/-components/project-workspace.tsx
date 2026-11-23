@@ -22,12 +22,12 @@ import {
 } from "#/features/editor/latex/symbols";
 import { sourceToPdf } from "#/features/editor/latex/synctex";
 import { projectPaths, invalidProjectPaths } from "#/features/projects";
+import type { ProjectDetails } from "#/features/projects/project.functions";
 import { encodeSource } from "#/features/storage";
+import { workspaceLayoutKey } from "#/features/workspace/workspace-layout";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
-import type { ProjectDetails } from "#/lib/project.functions";
-import { workspaceLayoutKey } from "#/lib/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
 import {

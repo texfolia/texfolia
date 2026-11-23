@@ -10,7 +10,7 @@ import {
   sharedPdfStep,
   shownPdfBuildId,
 } from "#/features/compile";
-import { buildFileUrl } from "#/lib/build";
+import { buildFileUrl } from "#/features/compile/build";
 
 /**
  * Follows the project's shared PDF, showing this tab's own builds until the

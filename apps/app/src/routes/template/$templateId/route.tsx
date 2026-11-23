@@ -16,15 +16,15 @@ import {
   templateLicenseLabels,
   templateLicenseUrls,
 } from "#/features/templates";
-import { webPath } from "#/lib/origins";
-import { useTemplatePreviews } from "#/lib/template-preview";
+import { useTemplatePreviews } from "#/features/templates/template-preview";
 import {
   getTemplate,
   getTemplateAccount,
   openTemplate,
   refreshTemplatePreview,
   reportTemplate,
-} from "#/lib/template.functions";
+} from "#/features/templates/template.functions";
+import { webPath } from "#/lib/origins";
 
 export const Route = createFileRoute("/template/$templateId")({
   loader: async ({ params }) => {

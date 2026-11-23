@@ -15,11 +15,11 @@ import {
 import { PanelHeader } from "#/components/panel-header";
 import { CollaborativeFile } from "#/features/collaboration/browser";
 import { ProjectBuildEvents } from "#/features/compile";
+import { buildFileUrl } from "#/features/compile/build";
 import { bibtexLanguage, themedLatex } from "#/features/editor/latex/highlight";
 import { projectPaths } from "#/features/projects";
-import { buildFileUrl } from "#/lib/build";
-import type { getSharedProject } from "#/lib/project-share-links.functions";
-import { withShareToken } from "#/lib/project-share-links.schema";
+import type { getSharedProject } from "#/features/sharing/project-share-links.functions";
+import { withShareToken } from "#/features/sharing/project-share-links.schema";
 import { useTheme } from "#/providers/theme-provider";
 
 const PdfViewer = lazy(

@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { getProjectMetadata } from "#/lib/project-metadata.server";
-import { requestPrincipal } from "#/lib/request-principal.server";
+import { requestPrincipal } from "#/features/auth/request-principal.server";
+import { getProjectMetadata } from "#/features/projects/project-metadata.server";
 
 export const Route = createFileRoute("/api/projects/$projectId/metadata")({
   server: {

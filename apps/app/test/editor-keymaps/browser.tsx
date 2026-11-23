@@ -11,7 +11,10 @@ import {
 } from "#/features/editor/keymaps/extension";
 import type { EditorKeymap } from "#/features/editor/keymaps/keymaps";
 
-import { defaultShortcuts, type ShortcutAction } from "../../src/lib/shortcuts";
+import {
+  defaultShortcuts,
+  type ShortcutAction,
+} from "../../src/features/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,

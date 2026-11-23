@@ -38,24 +38,24 @@ import {
   templateReviewQueue,
 } from "#/features/templates/server";
 
-import { lockProject } from "../../src/lib/project-access.server";
-import { createProjectNode } from "../../src/lib/project-node.server";
+import { createProjectNode } from "../../src/features/projects/project-node.server";
 import {
   collectProjectSources,
   saveProjectSource,
-} from "../../src/lib/project-source.server";
+} from "../../src/features/projects/project-source.server";
 import {
   createProject,
   deleteProject,
   getProject,
   getProjects,
-} from "../../src/lib/project.server";
+} from "../../src/features/projects/project.server";
+import { lockProject } from "../../src/features/sharing/project-access.server";
 
 const publishTemplate = (
   options: Omit<Parameters<typeof publishTemplateSnapshot>[0], "lock">,
 ) => publishTemplateSnapshot({ ...options, lock: lockProject });
 
-export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
 
 export default {
   async fetch(_request: Request, env: Env) {

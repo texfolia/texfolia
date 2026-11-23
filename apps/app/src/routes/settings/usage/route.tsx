@@ -12,7 +12,7 @@ import { useState } from "react";
 import {
   getAccountUsage,
   saveAccountAiSettings,
-} from "#/lib/account-settings.functions";
+} from "#/features/settings/account-settings.functions";
 export const Route = createFileRoute("/settings/usage")({
   loader: () => getAccountUsage(),
   component: UsagePage,

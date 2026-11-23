@@ -53,7 +53,7 @@ directly. [LaTeX tags](../apps/app/src/features/editor/latex/tags.ts) inherit st
 highlight tags. There is no TextMate scope mapper.
 [ThemeProvider](../apps/app/src/providers/theme-provider.tsx) applies workspace
 variables and separates committed appearance, draft selection, and live preview.
-The [bootstrap](../apps/app/src/lib/theme-bootstrap.ts) accepts cached colors only
+The [bootstrap](../apps/app/src/features/theme/theme-bootstrap.ts) accepts cached colors only
 for known v2 selections. Its constrained color grammar supports hex, numeric RGB
 and RGBA, transparent, and the derived color mixes. Unknown properties are ignored
 and unsafe snapshots fall back to the system theme.
@@ -63,7 +63,7 @@ The stylesheet and Dockview utility continue to consume the existing CSS variabl
 Run unit checks and the browser test from the repository root:
 
 ```sh
-bun test apps/app/src/features/editor/themes/themes.test.ts apps/app/src/lib/theme-bootstrap.test.ts
+bun test apps/app/src/features/editor/themes/themes.test.ts apps/app/src/features/theme/theme-bootstrap.test.ts
 bun run --cwd apps/app test:themes
 ```
 

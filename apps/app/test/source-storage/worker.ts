@@ -23,25 +23,25 @@ import {
   sweepProjectSources,
 } from "#/features/storage/server";
 
-import { compileResync } from "../../src/lib/compile-source.server";
-import { getProjectMetadata } from "../../src/lib/project-metadata.server";
+import { compileResync } from "../../src/features/compile/compile-source.server";
+import { getProjectMetadata } from "../../src/features/projects/project-metadata.server";
 import {
   createProjectNode,
   renameProjectNode,
-} from "../../src/lib/project-node.server";
+} from "../../src/features/projects/project-node.server";
 import {
   collectProjectSources,
   deleteProjectNode,
   readProjectSource,
   saveProjectSource,
-} from "../../src/lib/project-source.server";
+} from "../../src/features/projects/project-source.server";
 import {
   createProject,
   deleteProject,
   getProject,
-} from "../../src/lib/project.server";
+} from "../../src/features/projects/project.server";
 
-export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
 
 export default {
   async fetch(_request: Request, env: Env) {

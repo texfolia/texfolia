@@ -18,16 +18,16 @@ import { eq } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 
-import { lockProject } from "../src/lib/project-access.server";
-import {
-  grantProjectAccess,
-  revokeProjectAccess,
-} from "../src/lib/project-sharing.server";
 import {
   createProject,
   getProjects,
   setProjectTags,
-} from "../src/lib/project.server";
+} from "../src/features/projects/project.server";
+import { lockProject } from "../src/features/sharing/project-access.server";
+import {
+  grantProjectAccess,
+  revokeProjectAccess,
+} from "../src/features/sharing/project-sharing.server";
 import { pdfFixture } from "./pdf-fixture";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;

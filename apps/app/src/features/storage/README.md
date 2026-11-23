@@ -27,8 +27,8 @@ for uploads whose transaction rolled back and for projects removed by cascades.
 
 This feature depends on `@texfolia/db` and `@texfolia/contracts` only. It does
 not check project access, invalidate builds, or clean up collaboration state:
-the app composes those around these primitives (see
-`apps/app/src/lib/project-source.server.ts`). Route wiring and the `SOURCES` R2
+`project-source.server.ts` in `#/features/projects` composes those around
+these primitives. Route wiring and the `SOURCES` R2
 binding stay outside the feature.
 
 ## Checks

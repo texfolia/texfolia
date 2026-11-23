@@ -3,8 +3,8 @@ import { z } from "zod";
 
 import { projectTools } from "#/features/ai/server";
 
-import { assistantWorkspace } from "../../src/lib/assistant.server";
-import { createAuth } from "../../src/lib/auth";
+import { assistantWorkspace } from "../../src/features/ai/assistant.server";
+import { createAuth } from "../../src/features/auth/auth";
 import { Route } from "../../src/routes/api/compile/$projectId";
 
 export default {

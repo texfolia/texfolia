@@ -28,7 +28,7 @@ import {
   projectMetadataVersion,
 } from "#/features/projects";
 
-import { createProject } from "../src/lib/project.server";
+import { createProject } from "../src/features/projects/project.server";
 
 declare global {
   interface Window {

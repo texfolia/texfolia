@@ -8,7 +8,7 @@ import {
   writeWorkspaceLayout,
   type PanelView,
   type WorkspaceChrome,
-} from "#/lib/workspace-layout";
+} from "#/features/workspace/workspace-layout";
 
 const narrowQuery = "(max-width: 767px)";
 

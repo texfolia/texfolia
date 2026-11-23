@@ -11,7 +11,7 @@ import {
 import { toast } from "@texfolia/ui/toast";
 import { useState } from "react";
 
-import type { Project } from "#/lib/project.functions";
+import type { Project } from "#/features/projects/project.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 export function DeleteProjectButton({

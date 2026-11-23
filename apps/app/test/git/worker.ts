@@ -6,10 +6,10 @@ import { z } from "zod";
 import { gitActionSchema } from "#/features/git";
 import { collectGitObjects } from "#/features/git/server";
 
-import { createAuth } from "../../src/lib/auth";
-import { collectProjectSources } from "../../src/lib/project-source.server";
+import { createAuth } from "../../src/features/auth/auth";
+import { collectProjectSources } from "../../src/features/projects/project-source.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
-export { ProjectCollaboration } from "../../src/lib/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
 
 export default {
   async fetch(request: Request, env: Env) {

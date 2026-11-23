@@ -1,14 +1,11 @@
 import { expect, test } from "bun:test";
 import assert from "node:assert/strict";
 
+import type { EmailMessage, SendEmail } from "@texfolia/email";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
-import {
-  createEmailOTPPlugin,
-  type EmailMessage,
-  type SendEmail,
-} from "../src/server";
+import { createEmailOTPPlugin } from "../src/server";
 
 function createTestAuth(deliver?: SendEmail) {
   const emails: EmailMessage[] = [];

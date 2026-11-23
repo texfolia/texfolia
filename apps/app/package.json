@@ -73,6 +73,7 @@
     "@texfolia/auth": "workspace:*",
     "@texfolia/contracts": "workspace:*",
     "@texfolia/db": "workspace:*",
+    "@texfolia/email": "workspace:*",
     "@texfolia/ui": "workspace:*",
     "@uiw/codemirror-theme-abcdef": "4.25.12",
     "@uiw/codemirror-theme-abyss": "4.25.12",

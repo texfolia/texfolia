@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { clearCollaborationCaches } from "#/features/collaboration/browser";
 import { CollaborativeFile } from "#/features/collaboration/browser";
 
-import { signOut } from "../../src/lib/sign-out";
+import { signOut } from "../../src/features/auth/sign-out";
 
 let file: CollaborativeFile | undefined;
 let blocker: IDBDatabase | undefined;

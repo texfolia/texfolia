@@ -20,8 +20,8 @@ client-side table behavior, and verification.
 
 Project CRUD, file-tree nodes, paths, metadata, search, and owner/organization
 access live in [`#/features/projects`](src/features/projects/README.md). The
-app adds collaborator and share-link grants, build invalidation, collaboration
-cleanup, and review-comment versions around those operations.
+feature's bound modules add collaborator and share-link grants, build
+invalidation, collaboration cleanup, and review-comment versions.
 
 ## Public templates
 
@@ -33,9 +33,9 @@ reviewed. Preview generation and retries run independently of moderation,
 including in local development without cron.
 
 The catalog, snapshot, preview, review, and cleanup code lives in
-[`#/features/templates`](src/features/templates/README.md). The app keeps the
-routes, server functions, and create-from-template UI, and passes in its project
-lock and R2 binding.
+[`#/features/templates`](src/features/templates/README.md). Its server functions pass in
+the project lock and R2 binding; the routes and create-from-template UI live under
+`src/routes`.
 
 See [Template lifecycle](../../docs/templates.md) for the design, original Drizzle
 seeds, schema setup, retention, and verification commands.
@@ -46,7 +46,7 @@ Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexe
 by `project_node.object_key` and `size_bytes`. Keys are
 `projects/{projectId}/sources/{sha256}`. Object keys, uploads, limits, and the garbage
 queue live in [`#/features/storage`](src/features/storage/README.md); access
-checks, build invalidation, and collaboration cleanup stay in the app. Collaborative text edits persist automatically.
+checks, build invalidation, and collaboration cleanup live in `#/features/projects`. Collaborative text edits persist automatically.
 **Save** (Cmd/Ctrl+S) waits for merged text to reach R2, then submits the
 acknowledged source snapshot as a cached build while **Compile after saving** is
 on (the default). **Save without compiling** (Cmd/Ctrl+K S) only persists,
@@ -107,7 +107,7 @@ Binary files retain their existing source-storage path.
 
 The room, protocol, browser cache, and drafts live in
 [`#/features/collaboration`](src/features/collaboration/README.md).
-`src/lib/project-collaboration.server.ts` subclasses its `CollaborationRoom`
+`src/features/collaboration/project-collaboration.server.ts` subclasses its `CollaborationRoom`
 with the app's project lock, share links, build invalidation, and Git. The
 `/api/collaboration` route and the `y-codemirror.next` editor binding stay here.
 
@@ -127,7 +127,7 @@ if they differ, it rebuilds the submission from saved R2 sources. This prevents 
 stale session from omitting new files or restoring deleted files in the build.
 
 The compile client lives in [`#/features/compile`](src/features/compile/README.md).
-`src/lib/compile-route.server.ts` and `src/lib/compile-source.server.ts` only
+`src/features/compile/compile-route.server.ts` and `src/features/compile/compile-source.server.ts` only
 bind it to auth, billing, the project aggregate, and Workers bindings.
 
 Compile POSTs reserve `X-Compilation-Id` atomically in Postgres. The stored SHA-256
@@ -412,10 +412,10 @@ during a build. CI runs this check after applying the database schema.
 
 ## Managed AI assistant
 
-The assistant lives in [`#/features/ai`](src/features/ai/README.md). The app keeps
-the `/api/ai/$projectId` route, the secrets read by `src/lib/ai-config.server.ts`,
-and `src/lib/assistant.server.ts`, which binds the assistant to project access,
-node operations, collaboration, Git, and the compile route.
+The assistant lives in [`#/features/ai`](src/features/ai/README.md). In it,
+`ai-config.server.ts` reads the secrets and `assistant.server.ts` binds the
+assistant to project access, node operations, collaboration, Git, and the compile
+route. The `/api/ai/$projectId` route is under `src/routes`.
 
 See [Configure the managed assistant](../../docs/ai-assistant.md) for Gateway
 credentials, the Stripe usage meter, spend controls, reconciliation, and tests.

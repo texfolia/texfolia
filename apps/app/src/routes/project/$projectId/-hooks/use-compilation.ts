@@ -17,8 +17,8 @@ import {
 } from "#/features/compile";
 import type { LatexProblem } from "#/features/editor/latex/analysis";
 import { invalidProjectPaths } from "#/features/projects";
+import type { ProjectNode } from "#/features/projects/project.functions";
 import { InvalidSourcePathError } from "#/features/storage";
-import type { ProjectNode } from "#/lib/project.functions";
 
 import { useSharedPdf } from "./use-shared-pdf";
 

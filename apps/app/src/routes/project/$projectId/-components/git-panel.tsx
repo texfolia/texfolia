@@ -18,7 +18,7 @@ import {
   type GitAction,
   type GitResult,
 } from "#/features/git";
-import { gitAction } from "#/lib/git.functions";
+import { gitAction } from "#/features/git/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 

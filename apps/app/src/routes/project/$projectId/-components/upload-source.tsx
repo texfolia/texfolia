@@ -10,13 +10,13 @@ import {
 import { useId, useRef, useState, useImperativeHandle, type Ref } from "react";
 
 import { newProjectNodePath } from "#/features/projects";
+import type { ProjectNode } from "#/features/projects/project.functions";
 import {
   encodeSource,
   maxSourceFileBytes,
   sourceFileKind,
 } from "#/features/storage";
 import { readDroppedFiles, type DroppedFile } from "#/features/storage/browser";
-import type { ProjectNode } from "#/lib/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 export type UploadSourceHandle = {

@@ -10,11 +10,11 @@ import {
   refreshTemplatePreviews,
 } from "#/features/templates/server";
 
-import { aiConfig } from "./lib/ai-config.server";
-import { collectProjectSources } from "./lib/project-source.server";
+import { aiConfig } from "./features/ai/ai-config.server";
+import { collectProjectSources } from "./features/projects/project-source.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 
-export { ProjectCollaboration } from "./lib/project-collaboration.server";
+export { ProjectCollaboration } from "./features/collaboration/project-collaboration.server";
 
 export default {
   async fetch(request) {

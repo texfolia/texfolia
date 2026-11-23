@@ -152,7 +152,7 @@ Semantic roles follow the selected theme; no fixed editor palette is prescribed.
 - **Chrome:** activity, status, and tab tokens distinguish persistent workspace regions and active files.
 - **Boundaries and focus:** `border`, `input`, and `ring` retain the existing Nova treatments.
 
-**The Theme Authority Rule.** Use semantic CSS variables. `#/features/editor/themes` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/lib/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
+**The Theme Authority Rule.** Use semantic CSS variables. `#/features/editor/themes` derives workspace colors from the UIW CodeMirror theme catalog, and `src/providers/theme-provider.tsx` applies the resulting variables to the document root. `src/features/theme/theme-bootstrap.ts` supplies the initial appearance before paint. The values in `src/styles.css` are fallbacks, not a replacement palette. Frontmatter color values deliberately remain live variable references.
 
 ## Typography
 
@@ -166,7 +166,7 @@ From left to right: separate chat history, Agents, central Dockview, and one rig
 
 The right sidebar switches among Files, Outline, Git, and Collaboration through bottom-right status icons or the View menu. It is one region, not parallel panels or an added activity rail. Git actions remain in the Git view.
 
-Default widths are history (240px), Agents (320px), and right sidebar (288px), bounded by the existing resize range (240–600px). The menu header is (40px) high, the status bar (32px), other sidebar headers (36px), and dock tabs (35px). Source authority is `src/lib/workspace-layout.ts` and `src/routes/project/$projectId/-components/project-workspace.tsx`.
+Default widths are history (240px), Agents (320px), and right sidebar (288px), bounded by the existing resize range (240–600px). The menu header is (40px) high, the status bar (32px), other sidebar headers (36px), and dock tabs (35px). Source authority is `src/features/workspace/workspace-layout.ts` and `src/routes/project/$projectId/-components/project-workspace.tsx`.
 
 Below the existing medium breakpoint (48rem), opening a sidebar closes the others; the sidebars overlay the dock and are capped at (85%) of its width. Layout preferences remain scoped to each user and project.
 

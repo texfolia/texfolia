@@ -16,14 +16,14 @@ import { eq, inArray } from "drizzle-orm";
 import { updateProjectFormattingSchema } from "#/features/projects";
 
 import {
-  getAccountUsage,
-  saveAccountAiSettings,
-} from "../src/lib/account-settings.server";
-import {
   createProject,
   getProject,
   updateProjectFormatting,
-} from "../src/lib/project.server";
+} from "../src/features/projects/project.server";
+import {
+  getAccountUsage,
+  saveAccountAiSettings,
+} from "../src/features/settings/account-settings.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

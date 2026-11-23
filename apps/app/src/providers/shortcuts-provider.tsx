@@ -17,7 +17,7 @@ import {
   type ShortcutAction,
   type ShortcutMap,
   yieldsToKeymap,
-} from "#/lib/shortcuts";
+} from "#/features/shortcuts/shortcuts";
 
 type Registration = {
   action: ShortcutAction;

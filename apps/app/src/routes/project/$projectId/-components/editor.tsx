@@ -58,6 +58,18 @@ import {
 import { documentCachingStopped } from "#/features/collaboration/browser";
 import type { CollaborativeFile } from "#/features/collaboration/browser";
 import {
+  type CommentAnchor,
+  createCommentAnchor,
+  resolveCommentAnchor,
+} from "#/features/comments/anchor";
+import {
+  commentRanges,
+  type CommentRange,
+  setCommentRanges,
+} from "#/features/comments/editor";
+import { commentQuote } from "#/features/comments/project-comments.schema";
+import type { EditorCommand } from "#/features/editor/editor-command";
+import {
   keymapHistory,
   loadKeymapExtension,
   loadedKeymapExtension,
@@ -86,21 +98,9 @@ import {
   personalDictionaryChanged,
   spellcheck,
 } from "#/features/editor/spelling/editor";
+import { personalDictionaryHas } from "#/features/settings/settings.schema";
 import { downloadFile } from "#/features/storage/browser";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
-import {
-  type CommentAnchor,
-  createCommentAnchor,
-  resolveCommentAnchor,
-} from "#/lib/comments/anchor";
-import {
-  commentRanges,
-  type CommentRange,
-  setCommentRanges,
-} from "#/lib/comments/editor";
-import type { EditorCommand } from "#/lib/editor-command";
-import { commentQuote } from "#/lib/project-comments.schema";
-import { personalDictionaryHas } from "#/lib/settings.schema";
 import { useSettings } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";

@@ -2,6 +2,12 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { stripe, type SubscriptionOptions } from "@better-auth/stripe";
 import { type Db } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
+import {
+  codeEmail,
+  deleteAccountEmail,
+  invitationEmail,
+  type SendEmail,
+} from "@texfolia/email";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { captcha, emailOTP, organization } from "better-auth/plugins";
@@ -14,14 +20,6 @@ import { subscriptionPlans } from "./billing";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./client";
 import { parseOrigins } from "./hosts";
 import { isOrgAdmin } from "./roles";
-
-export type EmailMessage = {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-};
-export type SendEmail = (message: EmailMessage) => Promise<void>;
 
 export const enforceBillingScope = createAuthMiddleware(async (ctx) => {
   if (ctx.path !== "/subscription/upgrade") return;
@@ -45,18 +43,7 @@ export function createEmailOTPPlugin(sendOTPEmail: SendEmail) {
     expiresIn: 300,
     changeEmail: { enabled: true },
     async sendVerificationOTP({ email, otp, type }) {
-      const purpose = {
-        "sign-in": "sign-in",
-        "email-verification": "email verification",
-        "forget-password": "password reset",
-        "change-email": "email change",
-      }[type];
-      await sendOTPEmail({
-        to: email,
-        subject: `Your Texfolia ${purpose} code`,
-        text: `Your Texfolia ${purpose} code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
-        html: `<p>Your Texfolia ${purpose} code is:</p><p><strong>${otp}</strong></p><p>It expires in 5 minutes. If you did not request this code, you can ignore this email.</p>`,
-      });
+      await sendOTPEmail(codeEmail({ to: email, code: otp, type }));
     },
   });
 }
@@ -76,12 +63,13 @@ export function createOrganizationPlugin({
         baseURL,
       );
 
-      await sendInvitationEmail({
-        to: email,
-        subject: `You're invited to join ${organization.name} on Texfolia`,
-        text: `You've been invited to join ${organization.name} on Texfolia. Sign in with this email address to review the invitation: ${invitationURL.href}`,
-        html: `<p>You've been invited to join an organization on Texfolia.</p><p>Sign in with this email address to <a href="${invitationURL.href}">review the invitation</a>.</p>`,
-      });
+      await sendInvitationEmail(
+        invitationEmail({
+          to: email,
+          organization: organization.name,
+          url: invitationURL,
+        }),
+      );
     },
   });
 }
@@ -209,12 +197,7 @@ export function createAuth(
       deleteUser: {
         enabled: true,
         async sendDeleteAccountVerification({ user, url }) {
-          await sendEmail({
-            to: user.email,
-            subject: "Confirm deletion of your Texfolia account",
-            text: `Confirm account deletion: ${url}. This permanently deletes your account and personal projects. If you did not request this, ignore this email.`,
-            html: `<p>Confirm deletion of your Texfolia account and personal projects:</p><p><a href="${url.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}">Delete my account</a></p><p>If you did not request this, ignore this email.</p>`,
-          });
+          await sendEmail(deleteAccountEmail({ to: user.email, url }));
         },
       },
     },

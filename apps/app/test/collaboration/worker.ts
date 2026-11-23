@@ -5,21 +5,21 @@ import { eq } from "drizzle-orm";
 
 import { invalidateOrganizationCollaborationAccess } from "#/features/collaboration/server";
 
-import { createAuth } from "../../src/lib/auth";
-import { ProjectCollaboration as Room } from "../../src/lib/project-collaboration.server";
-import {
-  createShareLink,
-  revokeShareLink,
-} from "../../src/lib/project-share-links.server";
-import {
-  grantProjectAccess,
-  revokeProjectAccess,
-} from "../../src/lib/project-sharing.server";
+import { createAuth } from "../../src/features/auth/auth";
+import { ProjectCollaboration as Room } from "../../src/features/collaboration/project-collaboration.server";
 import {
   collectProjectSources,
   deleteProjectNode,
-} from "../../src/lib/project-source.server";
-import { deleteProject } from "../../src/lib/project.server";
+} from "../../src/features/projects/project-source.server";
+import { deleteProject } from "../../src/features/projects/project.server";
+import {
+  createShareLink,
+  revokeShareLink,
+} from "../../src/features/sharing/project-share-links.server";
+import {
+  grantProjectAccess,
+  revokeProjectAccess,
+} from "../../src/features/sharing/project-sharing.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
 import { Route as compileRoute } from "../../src/routes/api/compile/$projectId";
 

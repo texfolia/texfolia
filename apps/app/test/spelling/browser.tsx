@@ -8,7 +8,8 @@ import {
   personalDictionaryChanged,
   spellcheck,
 } from "#/features/editor/spelling/editor";
-import { personalDictionaryHas } from "#/lib/settings.schema";
+
+import { personalDictionaryHas } from "../../src/features/settings/settings.schema";
 
 export type SpellingTest = {
   text: () => string;

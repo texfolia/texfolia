@@ -50,7 +50,7 @@ import {
   autoCompileDelays,
   maxPersonalWords,
   personalWord,
-} from "#/lib/settings.schema";
+} from "#/features/settings/settings.schema";
 import {
   defaultShortcuts,
   eventChord,
@@ -60,7 +60,7 @@ import {
   shortcutIds,
   type ShortcutAction,
   yieldsToKeymap,
-} from "#/lib/shortcuts";
+} from "#/features/shortcuts/shortcuts";
 import {
   type SettingsSection,
   useSettings,

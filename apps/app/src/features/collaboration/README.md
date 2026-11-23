@@ -12,7 +12,8 @@ the localStorage draft cache).
 | `#/features/collaboration/server`  | `collaborationAccess` (the `/api/collaboration` access check), `invalidateCollaborationAccess`, `invalidateOrganizationCollaborationAccess`, `cleanupDeletedCollaboration`, `collectCollaborationSources`. Does not load the Workers runtime, so Bun tests can import it    |
 | `#/features/collaboration/room`    | `CollaborationRoom` (the abstract Durable Object base class) and `CollaborationEnv`. Imports `cloudflare:workers`, so only Worker code loads it                                                                                                                             |
 
-Other features import only these entry points; the remaining files are private.
+The rest of the app imports the core only through these entry points. The
+modules that bind it to the app, named below, are imported by path.
 
 ## Boundaries
 
@@ -23,9 +24,8 @@ The feature depends on `@texfolia/db` (project nodes and the
 owns `yjs`, `y-protocols`, `y-indexeddb`, and `lib0`. It does not depend on
 CodeMirror; the `y-codemirror.next` binding stays in the editor route.
 
-`CollaborationRoom` is abstract. The app subclasses it as `ProjectCollaboration`
-in `apps/app/src/lib/project-collaboration.server.ts` and exports that class
-from its Worker, so Wrangler keeps binding `ProjectCollaboration`. The subclass
+`CollaborationRoom` is abstract. `project-collaboration.server.ts`
+subclasses it as `ProjectCollaboration`, and `src/worker.ts` exports that class, so Wrangler keeps binding `ProjectCollaboration`. The subclass
 supplies what collaboration does not own:
 
 - `lockProject` locks the project and checks access, including collaborator and

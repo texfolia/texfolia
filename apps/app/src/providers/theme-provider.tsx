@@ -20,7 +20,7 @@ import {
   resolveTheme,
   selectedTheme,
 } from "#/features/editor/themes/themes";
-import { appearanceSnapshot } from "#/lib/theme-bootstrap";
+import { appearanceSnapshot } from "#/features/theme/theme-bootstrap";
 
 function readAppearance(userId: string): {
   appearance: Appearance;

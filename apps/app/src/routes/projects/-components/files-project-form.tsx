@@ -5,13 +5,13 @@ import { Input } from "@texfolia/ui/input";
 import { Label } from "@texfolia/ui/label";
 import { useId, useRef, useState } from "react";
 
+import { importProjectFiles } from "#/features/projects/project.functions";
 import {
   sourceFileKind,
   encodeSource,
   maxSourceFileBytes,
   maxSourceProjectBytes,
 } from "#/features/storage";
-import { importProjectFiles } from "#/lib/project.functions";
 
 export function FilesProjectForm({
   onPendingChange,

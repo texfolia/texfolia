@@ -40,6 +40,7 @@
         "@texfolia/auth": "workspace:*",
         "@texfolia/contracts": "workspace:*",
         "@texfolia/db": "workspace:*",
+        "@texfolia/email": "workspace:*",
         "@texfolia/ui": "workspace:*",
         "@uiw/codemirror-theme-abcdef": "4.25.12",
         "@uiw/codemirror-theme-abyss": "4.25.12",
@@ -185,6 +186,7 @@
         "@better-auth/drizzle-adapter": "1.7.15",
         "@better-auth/stripe": "1.7.15",
         "@texfolia/db": "workspace:*",
+        "@texfolia/email": "workspace:*",
         "better-auth": "1.7.15",
         "stripe": "^23.1.0",
         "zod": "^4.6.7",
@@ -226,6 +228,14 @@
         "drizzle-seed": "1.0.0-rc.5",
         "typescript": "^6.0.2",
         "wrangler": "^4.70.0",
+      },
+    },
+    "packages/email": {
+      "name": "@texfolia/email",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "^1.4.4",
+        "typescript": "^6.0.2",
       },
     },
     "packages/ui": {
@@ -944,6 +954,8 @@
     "@texfolia/contracts": ["@texfolia/contracts@workspace:packages/contracts"],
 
     "@texfolia/db": ["@texfolia/db@workspace:packages/db"],
+
+    "@texfolia/email": ["@texfolia/email@workspace:packages/email"],
 
     "@texfolia/ui": ["@texfolia/ui@workspace:packages/ui"],
 

@@ -4,7 +4,7 @@ import { Input } from "@texfolia/ui/input";
 import { useId } from "react";
 
 import type { FormatSettings } from "#/features/editor/latex/format";
-import { formatSettingsSchema as settingsSchema } from "#/lib/settings.schema";
+import { formatSettingsSchema as settingsSchema } from "#/features/settings/settings.schema";
 
 export function LatexFormatSettingsFields({
   settings,

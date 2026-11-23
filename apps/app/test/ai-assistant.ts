@@ -27,7 +27,7 @@ import { threadHistorySchema, threadSchema } from "#/features/ai";
 import { hashSource } from "#/features/compile";
 import { GitRepository } from "#/features/git/server";
 
-import { createProject } from "../src/lib/project.server";
+import { createProject } from "../src/features/projects/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

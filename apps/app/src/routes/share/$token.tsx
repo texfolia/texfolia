@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 
-import { getSharedProject } from "#/lib/project-share-links.functions";
-import { shareTokenSchema } from "#/lib/project-share-links.schema";
+import { getSharedProject } from "#/features/sharing/project-share-links.functions";
+import { shareTokenSchema } from "#/features/sharing/project-share-links.schema";
 import { ThemeProvider } from "#/providers/theme-provider";
 
 import { SharedProjectView } from "./-components/shared-project-view";

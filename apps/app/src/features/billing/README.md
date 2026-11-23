@@ -10,7 +10,8 @@ and [AI metering](../../../../../docs/ai-assistant.md#check-metering).
 | `#/features/billing`        | Client-safe. Plans: `paidPlans` (public names and monthly USD prices) and `subscriptionPlans` (maps price IDs to Better Auth plans). Usage: `nanoDollars`, `markedUpNanos`. `BillingError` (a refusal with an HTTP status)                                                                                                                                                                                                                                                  |
 | `#/features/billing/server` | Checkout, portal and webhooks: `createBillingPlugin`, `authorizeOrganizationBilling`, `enforceBillingScope`. Entitlements: `compilePlan`, `aiEntitlement`. Settings page: `billingOverview`. AI metering: `getAiSettings` (per-user spend cap), `aiSpend`, `reserveAiRequest`, `ensureAiSubscription` (attaches the metered price), `reconcileAiUsage` (prices requests and reports Stripe meter events), and the `MeteringConfig`, `RequestCost` and `MeterReporter` types |
 
-Other features import only these entry points; the remaining files are private. Load
+The rest of the app imports the core only through these entry points. The
+modules that bind it to the app, named below, are imported by path. Load
 `#/features/billing/server` only on the server: it imports the Stripe SDK.
 
 ## Boundaries
@@ -31,7 +32,7 @@ and `@texfolia/auth`. It does not depend on storage, compile or projects.
   API (`gatewayRequestCost` in `#/features/ai/gateway`). Tests
   pass `report` to capture meter events instead of calling Stripe.
 
-The `/settings/billing` route and its server function, the legacy `/billing`
+`billing.functions.ts` is the `/settings/billing` server function. The route, the legacy `/billing`
 redirect, the auth route that serves the webhook, and the billing UI stay
 outside the feature. `apps/web` `/pricing` reads only `paidPlans` from
 `@texfolia/auth/billing`.

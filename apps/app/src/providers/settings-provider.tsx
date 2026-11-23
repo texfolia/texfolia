@@ -15,15 +15,18 @@ import type { SpellingLanguage } from "#/features/editor/spelling/languages";
 import {
   updateProjectFormatting,
   updateProjectSpelling,
-} from "#/lib/project.functions";
-import { rebaseUserDraft, rebaseFormattingDraft } from "#/lib/settings-draft";
-import { createBrowserSettingsStore } from "#/lib/settings.functions";
+} from "#/features/projects/project.functions";
+import {
+  rebaseUserDraft,
+  rebaseFormattingDraft,
+} from "#/features/settings/settings-draft";
+import { createBrowserSettingsStore } from "#/features/settings/settings.functions";
 import {
   defaultSettings,
   settingsSchema,
   type Settings,
-} from "#/lib/settings.schema";
-import { shortcutConflicts } from "#/lib/shortcuts";
+} from "#/features/settings/settings.schema";
+import { shortcutConflicts } from "#/features/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,

@@ -9,12 +9,12 @@ import {
 } from "@texfolia/ui/dialog";
 import { useMemo, useState, type RefObject } from "react";
 
+import { buildFileUrl } from "#/features/compile/build";
 import type { OutlineEntry } from "#/features/editor/latex/outline";
+import type { ProjectNode } from "#/features/projects/project.functions";
 import type { SourceFiles } from "#/features/storage";
 import { downloadFile } from "#/features/storage/browser";
-import { buildFileUrl } from "#/lib/build";
-import type { ProjectNode } from "#/lib/project.functions";
-import { type SidebarView } from "#/lib/workspace-layout";
+import { type SidebarView } from "#/features/workspace/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 

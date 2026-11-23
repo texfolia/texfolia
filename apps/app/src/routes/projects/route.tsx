@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { SidebarProvider, useSidebar } from "@texfolia/ui/sidebar";
 
-import { getProjects } from "#/lib/project.functions";
+import { getProjects } from "#/features/projects/project.functions";
 import {
   createProjectsStore,
   ProjectsProvider,

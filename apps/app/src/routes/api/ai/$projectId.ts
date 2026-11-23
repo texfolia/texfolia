@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
+import { aiConfig } from "#/features/ai/ai-config.server";
+import { assistantWorkspace } from "#/features/ai/assistant.server";
 import { gatewayRequestCost } from "#/features/ai/gateway";
 import {
   aiAccess,
@@ -15,11 +17,9 @@ import {
   startAssistant,
   updateAiPreferences,
 } from "#/features/ai/server";
+import { createAuth } from "#/features/auth/auth";
 import { reconcileAiUsage } from "#/features/billing/server";
-import { aiConfig } from "#/lib/ai-config.server";
-import { assistantWorkspace } from "#/lib/assistant.server";
-import { createAuth } from "#/lib/auth";
-import { lockProject } from "#/lib/project-access.server";
+import { lockProject } from "#/features/sharing/project-access.server";
 
 export const Route = createFileRoute("/api/ai/$projectId")({
   server: {

@@ -4,7 +4,7 @@ import {
   defaultSpellingLanguage,
   spellingLanguageSchema,
 } from "#/features/editor/spelling/languages";
-import { getProject } from "#/lib/project.functions";
+import { getProject } from "#/features/projects/project.functions";
 import {
   createProjectFilesStore,
   ProjectFilesProvider,

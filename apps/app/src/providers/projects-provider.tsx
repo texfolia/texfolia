@@ -11,7 +11,7 @@ import {
   deleteProject,
   getProjects,
   type Project,
-} from "#/lib/project.functions";
+} from "#/features/projects/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
 
 type ProjectsPage = { projects: Project[]; nextCursor: string | null };

@@ -11,7 +11,8 @@ the assistant panel. See [Configure the managed assistant](../../../../../docs/a
 | `#/features/ai/gateway` | Server-only AI Gateway access without the chat stack: `parseAiConfig`, `gatewayModels` (the catalog), `gatewayRequestCost` (prices for reconciliation), and the `AiConfig` and `AiFetch` types                                                                                                                                                                                                      |
 | `#/features/ai/ui`      | `AssistantSidebar` (the chat panel and its history list) and the primitives it uses: `ModelSelector`, `PromptInput`, `Reasoning`, `Sources`, `Suggestion`, `Tool`                                                                                                                                                                                                                                   |
 
-Other features import only these entry points; the remaining files are private. Load
+The rest of the app imports the core only through these entry points. The
+modules that bind it to the app, named below, are imported by path. Load
 `#/features/ai/server` and `#/features/ai/gateway` only on the server.
 
 ## Boundaries
@@ -26,13 +27,13 @@ Usage metering stays in `#/features/billing`. This feature reserves each model
 request before sending it and supplies `gatewayRequestCost`, the price lookup
 that `reconcileAiUsage` takes.
 
-The caller passes in the rest:
+The core takes the rest as arguments:
 
 - `workspace`: an `AssistantWorkspace`, which holds the project lock and the
   node, source, Git, and compile operations. Each operation checks access itself.
-  The app builds it in `apps/app/src/lib/assistant.server.ts`.
-- `config`: the Gateway and meter settings, checked by `parseAiConfig`. The app
-  reads the secrets in `apps/app/src/lib/ai-config.server.ts`.
+  `assistant.server.ts` builds it.
+- `config`: the Gateway and meter settings, checked by `parseAiConfig`. `ai-config.server.ts`
+  reads the secrets.
 - `connectionString` and `createAuth`: `startAssistant` opens its own database
   client, because the reply stream outlives the request handler, and rechecks
   the session before every model request.
