@@ -1,3 +1,4 @@
+import { encodeSource, type SourceFiles } from "@texfolia/storage";
 import { useEffect, useRef, useState } from "react";
 
 import { documentCachingStopped } from "#/lib/collaboration/cache";
@@ -11,7 +12,6 @@ import {
 } from "#/lib/project-drafts";
 import { projectMetadataVersion } from "#/lib/project-metadata";
 import { assertProjectSourcePaths, projectPaths } from "#/lib/project-paths";
-import { encodeSource, type SourceFiles } from "#/lib/project-source";
 import { saveProjectSource } from "#/lib/project-source.functions";
 import type { ProjectDetails, ProjectNode } from "#/lib/project.functions";
 import type { useProjectFiles } from "#/providers/project-files-provider";

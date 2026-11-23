@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createZip } from "./zip";
+import { createZip } from "../src/zip";
 
 test("standard ZIP readers recover Unicode paths and binary build files without changing bytes", async () => {
   const root = await mkdtemp(join(tmpdir(), "project-export-"));

@@ -1,7 +1,6 @@
 import { nodeNameSchema } from "@texfolia/contracts";
+import { sourceContentSchema } from "@texfolia/storage";
 import { z } from "zod";
-
-import { sourceContentSchema } from "./project-source";
 
 export { nodeNameSchema };
 

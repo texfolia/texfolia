@@ -1,6 +1,7 @@
 import { createDb, type Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
 import { formatChanges } from "@texfolia/editor/latex/format";
+import { decodeSource, type saveSourceSchema } from "@texfolia/storage";
 import { DurableObject } from "cloudflare:workers";
 import { and, eq, isNull } from "drizzle-orm";
 import * as Y from "yjs";
@@ -11,7 +12,6 @@ import type { GitAction } from "../git";
 import { runGit } from "../git.server";
 import { liveProjectAccessIntervalMs } from "../live-project.server";
 import { lockProject, shareLinkIdOf } from "../project-access.server";
-import { decodeSource, type saveSourceSchema } from "../project-source";
 import { invalidateSourceBuild } from "../project-source.server";
 import {
   awarenessFrame,

@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
+import {
+  decodeSource,
+  encodeSource,
+  type SourceFiles,
+} from "@texfolia/storage";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
@@ -16,11 +21,6 @@ import {
   renameNodeSchema,
 } from "../src/lib/project-node.schema";
 import { renamedProjectNodes } from "../src/lib/project-paths";
-import {
-  decodeSource,
-  encodeSource,
-  type SourceFiles,
-} from "../src/lib/project-source";
 import type { ProjectDetails } from "../src/lib/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 

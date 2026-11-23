@@ -1,5 +1,6 @@
 import type { Db } from "@texfolia/db";
 import { projectShareLink } from "@texfolia/db/schema";
+import { encodeSource } from "@texfolia/storage";
 import { and, asc, count, eq } from "drizzle-orm";
 import type { z } from "zod";
 
@@ -18,7 +19,6 @@ import {
   type createShareLinkSchema,
   type revokeShareLinkSchema,
 } from "./project-share-links.schema";
-import { encodeSource } from "./project-source";
 
 export async function hashShareToken(token: string) {
   const digest = await crypto.subtle.digest(

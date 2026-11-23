@@ -3,14 +3,13 @@ import {
   nodeNameSchema,
   pathBytes,
 } from "@texfolia/contracts";
-
-import type { ProjectNode } from "#/lib/project.functions";
-
 import {
   InvalidSourcePathError,
   assertSourcePath,
   sourcePathError,
-} from "./source-path.schema";
+} from "@texfolia/storage";
+
+import type { ProjectNode } from "#/lib/project.functions";
 
 type PathNode = Pick<ProjectNode, "id" | "parentId" | "name" | "kind">;
 

@@ -1,16 +1,16 @@
 import { sourcePathSchema } from "@texfolia/contracts";
+import {
+  decodeSource,
+  encodeSource,
+  maxSourceFileBytes,
+  maxSourceProjectBytes,
+} from "@texfolia/storage";
 import { createPatch } from "diff";
 import * as git from "isomorphic-git";
 import { createFsFromVolume, Volume } from "memfs";
 import { z } from "zod";
 
 import type { GitStatus } from "./git";
-import {
-  decodeSource,
-  encodeSource,
-  maxSourceFileBytes,
-  maxSourceProjectBytes,
-} from "./project-source";
 
 const maxRepositoryBytes = 20 * 1024 * 1024;
 const storedGitSchema = z.record(z.string(), z.string());

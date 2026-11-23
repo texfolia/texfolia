@@ -1,9 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { saveSourceSchema } from "@texfolia/storage";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { ensureSession } from "./auth.functions";
-import { saveSourceSchema } from "./project-source";
 
 export const saveProjectSource = createServerFn({ method: "POST" })
   .validator(saveSourceSchema)

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
+import { maxSourceFileBytes } from "@texfolia/storage";
 import * as Y from "yjs";
 
-import { maxSourceFileBytes } from "../project-source";
 import { maxCollaborationBytes } from "./protocol";
 import { checkUpdate, measureUsage } from "./usage";
 

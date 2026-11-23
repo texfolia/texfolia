@@ -8,6 +8,12 @@ import {
   projectGit,
   projectNode,
 } from "@texfolia/db/schema";
+import { encodeSource } from "@texfolia/storage";
+import {
+  putSource,
+  retireSources,
+  type SourceBucket,
+} from "@texfolia/storage/server";
 import { and, eq, isNull, inArray } from "drizzle-orm";
 import * as git from "isomorphic-git";
 
@@ -21,12 +27,6 @@ import {
 import { GitRepository, gitHttp, type GitFiles } from "./git-repository.server";
 import { lockProject, type ProjectTransaction } from "./project-access.server";
 import { projectPaths } from "./project-paths";
-import { encodeSource } from "./project-source";
-import {
-  putSource,
-  retireSources,
-  type SourceBucket,
-} from "./project-source.server";
 
 export async function gitAccount({
   db,

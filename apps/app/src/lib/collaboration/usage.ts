@@ -1,6 +1,6 @@
+import { maxSourceFileBytes } from "@texfolia/storage";
 import * as Y from "yjs";
 
-import { maxSourceFileBytes } from "../project-source";
 import { maxCollaborationBytes } from "./protocol";
 
 export type Usage = { textBytes: number; historyBytes: number };

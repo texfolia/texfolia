@@ -1,11 +1,11 @@
 import type { Db } from "@texfolia/db";
 import { member, organization, template } from "@texfolia/db/schema";
+import type { SourceBucket } from "@texfolia/storage/server";
+import { createZip } from "@texfolia/storage/zip";
 import { and, desc, eq } from "drizzle-orm";
 
 import { projectPaths } from "./project-paths";
-import type { SourceBucket } from "./project-source.server";
 import { templateSnapshotSchema } from "./template.schema";
-import { createZip } from "./zip";
 
 export const publicColumns = {
   id: template.id,

@@ -50,6 +50,7 @@ import {
   personalDictionaryChanged,
   spellcheck,
 } from "@texfolia/editor/spelling/editor";
+import { downloadFile } from "@texfolia/storage/browser";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -97,7 +98,6 @@ import {
   type CommentRange,
   setCommentRanges,
 } from "#/lib/comments/editor";
-import { downloadFile } from "#/lib/download-file";
 import type { EditorCommand } from "#/lib/editor-command";
 import { commentQuote } from "#/lib/project-comments.schema";
 import { personalDictionaryHas } from "#/lib/settings.schema";

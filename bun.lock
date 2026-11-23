@@ -38,6 +38,7 @@
         "@texfolia/contracts": "workspace:*",
         "@texfolia/db": "workspace:*",
         "@texfolia/editor": "workspace:*",
+        "@texfolia/storage": "workspace:*",
         "@texfolia/ui": "workspace:*",
         "@uiw/react-codemirror": "^4.25.12",
         "better-auth": "1.7.15",
@@ -254,6 +255,22 @@
         "dictionary-en": "4.0.0",
         "typescript": "^6.0.2",
         "vite": "^8.3.6",
+      },
+    },
+    "packages/storage": {
+      "name": "@texfolia/storage",
+      "version": "0.0.0",
+      "dependencies": {
+        "@texfolia/contracts": "workspace:*",
+        "@texfolia/db": "workspace:*",
+        "drizzle-orm": "^1.0.0-rc.5",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "5.20261031.1",
+        "@texfolia/config": "workspace:*",
+        "@types/bun": "^1.4.4",
+        "typescript": "^6.0.2",
       },
     },
     "packages/ui": {
@@ -980,6 +997,8 @@
     "@texfolia/db": ["@texfolia/db@workspace:packages/db"],
 
     "@texfolia/editor": ["@texfolia/editor@workspace:packages/editor"],
+
+    "@texfolia/storage": ["@texfolia/storage@workspace:packages/storage"],
 
     "@texfolia/ui": ["@texfolia/ui@workspace:packages/ui"],
 

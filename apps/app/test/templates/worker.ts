@@ -12,15 +12,17 @@ import {
 } from "@texfolia/db/schema";
 import { seedTemplates } from "@texfolia/db/seed-templates";
 import { templateStarters } from "@texfolia/db/template-starters";
+import { encodeSource } from "@texfolia/storage";
+import {
+  type SourceBucket,
+  sweepProjectSources,
+} from "@texfolia/storage/server";
 import { eq, inArray, isNull } from "drizzle-orm";
 
 import { createProjectNode } from "../../src/lib/project-node.server";
-import { encodeSource } from "../../src/lib/project-source";
 import {
   collectProjectSources,
   saveProjectSource,
-  type SourceBucket,
-  sweepProjectSources,
 } from "../../src/lib/project-source.server";
 import {
   createProject,

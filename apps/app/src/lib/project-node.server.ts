@@ -1,16 +1,13 @@
 import type { Db } from "@texfolia/db";
 import { project, projectNode } from "@texfolia/db/schema";
+import { putSource, type SourceBucket } from "@texfolia/storage/server";
 import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 
 import { lockProject } from "./project-access.server";
 import { createNodeSchema, renameNodeSchema } from "./project-node.schema";
 import { newProjectNodePath, renamedProjectNodes } from "./project-paths";
-import {
-  invalidateSourceBuild,
-  putSource,
-  type SourceBucket,
-} from "./project-source.server";
+import { invalidateSourceBuild } from "./project-source.server";
 
 export async function createProjectNode({
   db,

@@ -1,9 +1,9 @@
 import type { Db } from "@texfolia/db";
 import { template } from "@texfolia/db/schema";
+import type { SourceBucket } from "@texfolia/storage/server";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import type { SourceBucket } from "./project-source.server";
 import { templateSnapshotSchema } from "./template.schema";
 
 type Context = { db: Db; bucket: SourceBucket };

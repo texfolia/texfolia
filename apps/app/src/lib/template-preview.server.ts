@@ -1,13 +1,13 @@
 import type { Db } from "@texfolia/db";
 import { template } from "@texfolia/db/schema";
+import { encodeSource } from "@texfolia/storage";
+import { InvalidSourcePathError } from "@texfolia/storage";
+import type { SourceBucket } from "@texfolia/storage/server";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { fetchCompiler } from "./compiler.server";
 import { assertProjectSourcePaths, projectPaths } from "./project-paths";
-import { encodeSource } from "./project-source";
-import type { SourceBucket } from "./project-source.server";
-import { InvalidSourcePathError } from "./source-path.schema";
 import { templateSnapshotSchema } from "./template.schema";
 
 type Context = { db: Db; bucket: SourceBucket };
