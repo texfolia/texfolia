@@ -42,7 +42,7 @@ Secrets, Stripe webhooks, and running each app on its own are covered in the [lo
 
 ## System design
 
-- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `@texfolia/editor`; the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `@texfolia/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `@texfolia/projects`.
+- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `@texfolia/editor`; the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `@texfolia/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `@texfolia/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `@texfolia/compile`.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
 - **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
 - **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered; the templates gallery reads the app's public catalog API.

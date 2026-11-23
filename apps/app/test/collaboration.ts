@@ -5,6 +5,7 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { hashSource } from "@texfolia/compile";
 import { createDb } from "@texfolia/db";
 import {
   projectCollaborator,
@@ -28,7 +29,6 @@ import {
   outdatedClientMessage,
   type ServerMessage,
 } from "../src/lib/collaboration/protocol";
-import { hashSource } from "../src/lib/compile/source-sync";
 import { createProject } from "../src/lib/project.server";
 import type { BrowserApi } from "./collaboration/browser";
 import { checkDeletion } from "./collaboration/deletion";

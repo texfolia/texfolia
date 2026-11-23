@@ -1,10 +1,17 @@
-import type { LatexProblem } from "@texfolia/editor/latex/analysis";
+// Structurally a subset of the editor's `LatexProblem`, so the app can show
+// these with its own analysis without this package depending on the editor.
+export type CompileProblem = {
+  path: string;
+  line: number;
+  message: string;
+  severity: "error" | "warning" | "info";
+};
 
 export function parseCompileLog(
   log: string,
   paths: readonly string[],
   main: string,
-): LatexProblem[] {
+): CompileProblem[] {
   const known = new Set(paths);
   const stems = new Map<string, string | null>();
   for (const path of paths) {
@@ -27,7 +34,7 @@ export function parseCompileLog(
       if (match) return match;
     }
   }
-  const result = new Map<string, LatexProblem>();
+  const result = new Map<string, CompileProblem>();
   const stack: Array<string | undefined> = [];
   let current = main;
   let pendingError: { path: string; message: string } | undefined;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
+import { compileDeltaSchema, hashSource } from "@texfolia/compile";
 import {
   createNodeSchema,
   renameNodeSchema,
@@ -20,7 +21,6 @@ import {
   decodeClientMessage,
   encodeServerMessage,
 } from "../src/lib/collaboration/protocol";
-import { compileDeltaSchema, hashSource } from "../src/lib/compile/source-sync";
 import type { ProjectDetails } from "../src/lib/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 

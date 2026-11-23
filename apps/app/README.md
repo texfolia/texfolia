@@ -115,6 +115,10 @@ The authenticated compile route compares that digest with current database state
 if they differ, it rebuilds the submission from saved R2 sources. This prevents a
 stale session from omitting new files or restoring deleted files in the build.
 
+The compile client lives in [`@texfolia/compile`](../../packages/compile/README.md).
+`src/lib/compile-route.server.ts` and `src/lib/compile-source.server.ts` only
+bind it to auth, billing, the project aggregate, and Workers bindings.
+
 Compile POSTs reserve `X-Compilation-Id` atomically in Postgres. The stored SHA-256
 digest covers the authenticated user, project, parsed delta including content,
 metadata version, clean-build flag, and editor headers. Matching retries return

@@ -5,6 +5,14 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  compileHistoryLimit,
+  compileHistorySchema,
+  hashSource,
+  parseJobTimeline,
+  sessionHistoryParam,
+  timelineRetentionMs,
+} from "@texfolia/compile";
 import { unknownEngineTiming } from "@texfolia/contracts";
 import { buildSnapshotSchema } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
@@ -25,14 +33,6 @@ import { z } from "zod";
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import type { Engine } from "../../compiler/src/types";
-import {
-  compileHistoryLimit,
-  compileHistorySchema,
-  parseJobTimeline,
-  sessionHistoryParam,
-  timelineRetentionMs,
-} from "../src/lib/compile/compile-history";
-import { hashSource } from "../src/lib/compile/source-sync";
 import { lockProject, sharePrincipal } from "../src/lib/project-access.server";
 import { readProjectMetadata } from "../src/lib/project-metadata.server";
 import {

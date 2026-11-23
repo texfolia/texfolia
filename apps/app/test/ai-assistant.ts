@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { hashSource } from "@texfolia/compile";
 import { createDb } from "@texfolia/db";
 import {
   aiRequest,
@@ -24,7 +25,6 @@ import { chromium } from "playwright";
 import { z } from "zod";
 
 import { threadHistorySchema, threadSchema } from "../src/lib/ai/threads";
-import { hashSource } from "../src/lib/compile/source-sync";
 import { GitRepository } from "../src/lib/git-repository.server";
 import { createProject } from "../src/lib/project.server";
 

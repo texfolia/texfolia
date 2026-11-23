@@ -11,7 +11,7 @@ import {
   sharedPdfStep,
   type SharedPdfState,
   shownPdfBuildId,
-} from "./shared-pdf";
+} from "../src/shared-pdf";
 
 const local = { id: "local", revision: 3 } satisfies BuildRef;
 const localPdf = new File(["local"], "output.pdf");

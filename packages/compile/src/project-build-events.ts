@@ -1,7 +1,5 @@
 import { buildSnapshotSchema, type BuildSnapshot } from "@texfolia/contracts";
 
-import { withShareToken } from "../project-share-links.schema";
-
 type BuildEvent =
   | { kind: "snapshot"; snapshot: BuildSnapshot }
   | { kind: "disconnected" };
@@ -15,13 +13,11 @@ export class ProjectBuildEvents {
   constructor(
     projectId: string,
     onSnapshot: (snapshot: BuildSnapshot) => void,
-    shareToken?: string,
+    // Lets a caller add credentials, such as a share token, to the stream URL.
+    decorateUrl: (url: string) => string = (url) => url,
   ) {
     this.source = new EventSource(
-      withShareToken(
-        `/api/compile/${encodeURIComponent(projectId)}?events=1`,
-        shareToken,
-      ),
+      decorateUrl(`/api/compile/${encodeURIComponent(projectId)}?events=1`),
     );
     this.source.onmessage = (event) => {
       let snapshot: BuildSnapshot;
