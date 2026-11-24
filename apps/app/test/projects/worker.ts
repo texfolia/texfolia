@@ -1,33 +1,461 @@
 import assert from "node:assert/strict";
 
-import { createDb } from "@texfolia/db";
+import { createDb, type Db } from "@texfolia/db";
 import {
   member,
   organization,
   project,
   projectCollaborator,
+  projectNode,
+  projectShareLink,
   tag,
   user,
 } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
 
-import { projectPaths, projectTagsSchema } from "#/features/projects";
+import type { CollaborationCleanup } from "#/features/collaboration/server";
+import {
+  projectPaths,
+  projectTagsSchema,
+  trashRetentionDays,
+} from "#/features/projects";
 import { encodeSource, maxSourceFileBytes } from "#/features/storage";
+import {
+  sweepProjectSources,
+  type SourceBucket,
+} from "#/features/storage/server";
 
 import { importProjectFiles } from "../../src/features/projects/project-import.server";
 import {
+  collectProjectSources,
   saveProjectSource,
   readProjectSource,
 } from "../../src/features/projects/project-source.server";
 import {
   createProject,
-  deleteProject,
+  deleteExpiredProjects,
+  deleteTrashedProject,
+  duplicateProject,
+  getProject,
   getProjects,
+  getTrashedProjects,
   renameProject,
+  restoreProject,
   setProjectTags,
+  trashProject,
 } from "../../src/features/projects/project.server";
+import { sharePrincipal } from "../../src/features/sharing/project-access.server";
+import {
+  createShareLink,
+  getSharedProject,
+} from "../../src/features/sharing/project-share-links.server";
+import { transferProject } from "../../src/features/sharing/project-transfer.server";
 
 export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
+
+async function checkLifecycle({
+  db,
+  bucket,
+  collaboration,
+  ownerId,
+  viewerId,
+  editorId,
+  strangerId,
+  organizationId,
+  projectId,
+  orgProjectId,
+}: {
+  db: Db;
+  bucket: SourceBucket;
+  collaboration: CollaborationCleanup;
+  ownerId: string;
+  viewerId: string;
+  editorId: string;
+  strangerId: string;
+  organizationId: string;
+  projectId: string;
+  orgProjectId: string;
+}) {
+  const objects = async (id: string) =>
+    (await bucket.list({ prefix: `projects/${id}/sources/` })).objects.length;
+  const collect = async () => {
+    await collectProjectSources({ db, bucket, collaboration });
+    await sweepProjectSources({ db, bucket });
+  };
+  const listed = async (userId: string, id: string) =>
+    (await getProjects({ db, userId })).projects.find((item) => item.id === id);
+  const sources = async (userId: string, id: string) => {
+    const loaded = await getProject({
+      db,
+      bucket,
+      ownerId: userId,
+      projectId: id,
+    });
+    const result: Record<string, string> = {};
+    for (const [nodeId, path] of projectPaths(loaded.nodes))
+      result[path] = encodeSource(
+        await readProjectSource({
+          db,
+          bucket,
+          userId,
+          projectId: id,
+          nodeId,
+        }),
+      );
+    return result;
+  };
+  await db.insert(projectCollaborator).values([
+    { projectId, userId: viewerId, role: "viewer" },
+    { projectId, userId: editorId, role: "editor" },
+  ]);
+  const link = await createShareLink({
+    db,
+    userId: ownerId,
+    data: { projectId, scope: "project" },
+  });
+  const guest = sharePrincipal(link.id);
+  const outsiders = [viewerId, editorId, strangerId, guest];
+
+  // Trash: only a manager, and everything is kept until the row is deleted.
+  for (const userId of outsiders)
+    await assert.rejects(
+      trashProject({ db, userId, projectId }),
+      /Project not found/,
+    );
+  await assert.rejects(
+    deleteTrashedProject({ db, userId: ownerId, projectId }),
+    /Project not found/,
+    "A live project cannot be permanently deleted",
+  );
+  const before = await sources(ownerId, projectId);
+  await trashProject({ db, userId: ownerId, projectId });
+  for (const userId of [ownerId, viewerId, editorId]) {
+    assert.equal(await listed(userId, projectId), undefined);
+    await assert.rejects(
+      getProject({ db, bucket, ownerId: userId, projectId }),
+      /Project not found/,
+    );
+  }
+  await assert.rejects(
+    getSharedProject({ db, token: link.token }),
+    /Project not found/,
+  );
+  await assert.rejects(
+    trashProject({ db, userId: ownerId, projectId }),
+    /Project not found/,
+  );
+  assert.deepEqual(
+    (await getTrashedProjects({ db, userId: ownerId })).map((item) => item.id),
+    [projectId],
+  );
+  for (const userId of outsiders) {
+    assert.equal((await getTrashedProjects({ db, userId })).length, 0);
+    await assert.rejects(
+      restoreProject({ db, userId, projectId }),
+      /Project not found/,
+    );
+    await assert.rejects(
+      deleteTrashedProject({ db, userId, projectId }),
+      /Project not found/,
+    );
+    await assert.rejects(
+      duplicateProject({ db, bucket, userId, projectId }),
+      /Project not found/,
+    );
+  }
+  await deleteExpiredProjects({ db });
+  await collect();
+
+  // Restoring keeps sources and sharing, and avoids a name that was reused.
+  const trashedName = (
+    await db.query.project.findFirst({ where: { id: projectId } })
+  )?.name;
+  assert(trashedName);
+  await createProject({
+    db,
+    ownerId,
+    data: { id: crypto.randomUUID(), name: trashedName },
+  });
+  assert.deepEqual(await restoreProject({ db, userId: ownerId, projectId }), {
+    id: projectId,
+    name: `${trashedName} (2)`,
+  });
+  assert.deepEqual(await sources(ownerId, projectId), before);
+  assert.equal((await listed(viewerId, projectId))?.canWrite, false);
+  assert.equal(
+    (await getSharedProject({ db, token: link.token })).projectId,
+    projectId,
+  );
+  await assert.rejects(
+    restoreProject({ db, userId: ownerId, projectId }),
+    /Project not found/,
+  );
+
+  // Duplicate: any signed-in reader gets an independent personal copy.
+  await db
+    .update(project)
+    .set({ formatIndent: 4, spellcheckLanguage: "off" })
+    .where(eq(project.id, projectId));
+  for (const userId of [strangerId, guest])
+    await assert.rejects(
+      duplicateProject({ db, bucket, userId, projectId }),
+      /Project not found/,
+    );
+  const copy = await duplicateProject({
+    db,
+    bucket,
+    userId: viewerId,
+    projectId,
+  });
+  assert.equal(copy.name, `${trashedName} (2) copy`);
+  assert.equal(
+    (await duplicateProject({ db, bucket, userId: viewerId, projectId })).name,
+    `${trashedName} (2) copy (2)`,
+  );
+  assert.deepEqual(await sources(viewerId, copy.id), before);
+  const copied = await listed(viewerId, copy.id);
+  assert.equal(copied?.ownerId, viewerId);
+  assert.equal(copied?.canManage, true);
+  assert.equal(copied?.formatIndent, 4);
+  assert.equal(copied?.spellcheckLanguage, "off");
+  assert.equal(copied?.people.length, 1, "Collaborators are not copied");
+  assert.equal(
+    (
+      await db
+        .select()
+        .from(projectShareLink)
+        .where(eq(projectShareLink.projectId, copy.id))
+    ).length,
+    0,
+    "Share links are not copied",
+  );
+  await assert.rejects(
+    getProject({ db, bucket, ownerId, projectId: copy.id }),
+    /Project not found/,
+  );
+  const failing: SourceBucket = {
+    get: bucket.get.bind(bucket),
+    list: bucket.list.bind(bucket),
+    delete: bucket.delete.bind(bucket),
+    put: async () => {
+      throw new Error("Storage unavailable");
+    },
+  };
+  const ownedBefore = (await getProjects({ db, userId: viewerId })).projects
+    .length;
+  await assert.rejects(
+    duplicateProject({ db, bucket: failing, userId: viewerId, projectId }),
+    /Storage unavailable/,
+  );
+  assert.equal(
+    (await getProjects({ db, userId: viewerId })).projects.length,
+    ownedBefore,
+    "A failed copy leaves no project",
+  );
+
+  // Permanent deletion removes the row and the source, but not its copies.
+  await trashProject({ db, userId: viewerId, projectId: copy.id });
+  await assert.rejects(
+    deleteTrashedProject({ db, userId: ownerId, projectId: copy.id }),
+    /Project not found/,
+  );
+  assert((await objects(copy.id)) > 0);
+  await deleteTrashedProject({ db, userId: viewerId, projectId: copy.id });
+  assert.equal(
+    await db.query.project.findFirst({ where: { id: copy.id } }),
+    undefined,
+  );
+  assert.equal(
+    (
+      await db
+        .select()
+        .from(projectNode)
+        .where(eq(projectNode.projectId, copy.id))
+    ).length,
+    0,
+  );
+  await collectProjectSources({ db, bucket, collaboration });
+  assert.equal(await objects(copy.id), 0);
+  assert.deepEqual(await sources(ownerId, projectId), before);
+
+  // Retention deletes only projects whose time is up.
+  const day = 24 * 60 * 60 * 1000;
+  const expiring = await duplicateProject({
+    db,
+    bucket,
+    userId: viewerId,
+    projectId,
+  });
+  await trashProject({ db, userId: viewerId, projectId: expiring.id });
+  const age = (days: number) =>
+    db
+      .update(project)
+      .set({ deletedAt: new Date(Date.now() - days * day) })
+      .where(eq(project.id, expiring.id));
+  await age(trashRetentionDays - 1);
+  await deleteExpiredProjects({ db });
+  assert(await db.query.project.findFirst({ where: { id: expiring.id } }));
+  await age(trashRetentionDays + 1);
+  await deleteExpiredProjects({ db });
+  assert.equal(
+    await db.query.project.findFirst({ where: { id: expiring.id } }),
+    undefined,
+  );
+  await collectProjectSources({ db, bucket, collaboration });
+  assert.equal(await objects(expiring.id), 0);
+
+  // Transfer: a manager to someone with access; the previous owner can edit.
+  for (const userId of outsiders)
+    await assert.rejects(
+      transferProject({ db, userId, data: { projectId, userId: viewerId } }),
+      /Project not found/,
+    );
+  await assert.rejects(
+    transferProject({
+      db,
+      userId: ownerId,
+      data: { projectId, userId: strangerId },
+    }),
+    /Share the project/,
+  );
+  await assert.rejects(
+    transferProject({
+      db,
+      userId: ownerId,
+      data: { projectId, userId: ownerId },
+    }),
+    /someone else/,
+  );
+  const name = (await listed(ownerId, projectId))?.name;
+  assert(name);
+  await createProject({
+    db,
+    ownerId: viewerId,
+    data: { id: crypto.randomUUID(), name },
+  });
+  assert.deepEqual(
+    await transferProject({
+      db,
+      userId: ownerId,
+      data: { projectId, userId: viewerId },
+    }),
+    { name: `${name} (2)` },
+  );
+  const received = await listed(viewerId, projectId);
+  assert.equal(received?.ownerId, viewerId);
+  assert.equal(received?.canManage, true);
+  const former = await listed(ownerId, projectId);
+  assert.equal(former?.canWrite, true);
+  assert.equal(former?.canManage, false);
+  assert.equal((await listed(editorId, projectId))?.canWrite, true);
+  assert.deepEqual(
+    (
+      await db
+        .select({ userId: projectCollaborator.userId })
+        .from(projectCollaborator)
+        .where(eq(projectCollaborator.projectId, projectId))
+    )
+      .map((row) => row.userId)
+      .sort(),
+    [editorId, ownerId].sort(),
+  );
+  await assert.rejects(
+    getSharedProject({ db, token: link.token }),
+    /not found/,
+  );
+  for (const action of [
+    () => trashProject({ db, userId: ownerId, projectId }),
+    () =>
+      transferProject({
+        db,
+        userId: ownerId,
+        data: { projectId, userId: editorId },
+      }),
+    () =>
+      createShareLink({
+        db,
+        userId: ownerId,
+        data: { projectId, scope: "project" },
+      }),
+  ])
+    await assert.rejects(action(), /Project not found|Only the project owner/);
+
+  // Organization projects: owners and admins manage, members receive.
+  await db
+    .insert(projectCollaborator)
+    .values({ projectId: orgProjectId, userId: strangerId, role: "editor" });
+  for (const action of [trashProject, restoreProject, deleteTrashedProject])
+    await assert.rejects(
+      action({ db, userId: strangerId, projectId: orgProjectId }),
+      /Project not found/,
+    );
+  await assert.rejects(
+    trashProject({ db, userId: editorId, projectId: orgProjectId }),
+    /Only organization/,
+  );
+  await trashProject({ db, userId: ownerId, projectId: orgProjectId });
+  assert.equal(
+    (await getTrashedProjects({ db, userId: ownerId }))[0]?.organizationName,
+    "Dashboard org",
+  );
+  assert.equal((await getTrashedProjects({ db, userId: editorId })).length, 0);
+  for (const action of [restoreProject, deleteTrashedProject])
+    await assert.rejects(
+      action({ db, userId: editorId, projectId: orgProjectId }),
+      /Only organization/,
+    );
+  await restoreProject({ db, userId: ownerId, projectId: orgProjectId });
+  const orgCopy = await duplicateProject({
+    db,
+    bucket,
+    userId: editorId,
+    projectId: orgProjectId,
+  });
+  const orgCopied = await listed(editorId, orgCopy.id);
+  assert.equal(orgCopied?.ownerId, editorId);
+  assert.equal(orgCopied?.organizationId, null);
+  await db.insert(member).values({
+    id: crypto.randomUUID(),
+    organizationId,
+    userId: viewerId,
+    role: "member",
+    createdAt: new Date(),
+  });
+  await assert.rejects(
+    transferProject({
+      db,
+      userId: editorId,
+      data: { projectId: orgProjectId, userId: viewerId },
+    }),
+    /Only organization/,
+  );
+  await assert.rejects(
+    transferProject({
+      db,
+      userId: ownerId,
+      data: { projectId: orgProjectId, userId: strangerId },
+    }),
+    /Only organization members/,
+  );
+  await transferProject({
+    db,
+    userId: ownerId,
+    data: { projectId: orgProjectId, userId: editorId },
+  });
+  const moved = await listed(editorId, orgProjectId);
+  assert.equal(moved?.ownerId, editorId);
+  assert.equal(moved?.organizationId, null);
+  assert.equal(moved?.canManage, true);
+  const formerAdmin = await listed(ownerId, orgProjectId);
+  assert.equal(formerAdmin?.canWrite, true);
+  assert.equal(formerAdmin?.canManage, false);
+  for (const userId of [viewerId, strangerId])
+    await assert.rejects(
+      getProject({ db, bucket, ownerId: userId, projectId: orgProjectId }),
+      /Project not found/,
+      "Other members and stale collaborators lose access",
+    );
+}
 
 export default {
   async fetch(_request: Request, env: Env) {
@@ -81,7 +509,7 @@ export default {
       assert(viewer);
       assert.deepEqual(viewer.tags, ["private", "research"]);
       assert.equal(viewer.canWrite, false);
-      assert.equal(viewer.canDelete, false);
+      assert.equal(viewer.canManage, false);
       assert.equal(viewer.people.length, 3);
       assert.equal(
         (await db.select().from(tag).where(eq(tag.name, "research"))).length,
@@ -181,13 +609,13 @@ export default {
       assert.equal(
         (await getProjects({ db, userId: ownerId })).projects.find(
           (item) => item.id === orgProject.id,
-        )?.canDelete,
+        )?.canManage,
         true,
       );
       const orgMember = (
         await getProjects({ db, userId: editorId })
       ).projects.find((item) => item.id === orgProject.id);
-      assert(orgMember?.canWrite && !orgMember.canDelete);
+      assert(orgMember?.canWrite && !orgMember.canManage);
       assert.equal(orgMember.people.length, 2);
 
       const everything = await getProjects({ db, userId: ownerId });
@@ -372,9 +800,20 @@ export default {
           content: source("Updated nested chapter."),
         },
       });
-      await deleteProject({ db, ownerId, projectId: imported.id });
+      await checkLifecycle({
+        db,
+        bucket,
+        collaboration: env.COLLABORATION,
+        ownerId,
+        viewerId,
+        editorId,
+        strangerId,
+        organizationId,
+        projectId: imported.id,
+        orgProjectId: orgProject.id,
+      });
       console.info(
-        "Projects integration passed: private label isolation and revocation, role-aware actions, organization people, nested text/binary uploads, invalid paths/collisions/UTF-8/size, and atomic storage failure rollback",
+        "Projects integration passed: private label isolation and revocation, role-aware actions, organization people, nested text/binary uploads, invalid paths/collisions/UTF-8/size, atomic storage failure rollback, trash, restore, retention, duplication, and ownership transfer",
       );
     } finally {
       await db.delete(organization).where(eq(organization.id, organizationId));

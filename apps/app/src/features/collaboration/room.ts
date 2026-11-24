@@ -206,6 +206,8 @@ export abstract class CollaborationRoom<
       const info = attachmentSchema.parse(ws.deserializeAttachment());
       if (info.projectId === projectId) nodeIds.add(info.nodeId);
     }
+    // A project in the trash keeps its documents, whose CRDT identities comments
+    // and offline edits depend on. Its sockets close when access is re-verified.
     const live = await this.withDb((db) =>
       db
         .select({
@@ -222,7 +224,7 @@ export abstract class CollaborationRoom<
             eq(projectNode.kind, "text"),
           ),
         )
-        .where(and(eq(project.id, projectId), isNull(project.deletedAt))),
+        .where(eq(project.id, projectId)),
     );
     const nodes = new Map<string, SourceNode>();
     for (const { id, objectKey, updatedAt } of live)

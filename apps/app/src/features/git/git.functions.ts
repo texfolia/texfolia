@@ -47,7 +47,7 @@ export const importGitProject = createServerFn({ method: "POST" })
   .validator(z.object({ name: projectNameSchema, remote: gitRemoteSchema }))
   .handler(async ({ data, context }) => {
     const session = await ensureSession();
-    const { createProject, deleteProject } =
+    const { createProject, deleteTrashedProject, trashProject } =
       await import("#/features/projects/project.server");
     const created = await createProject({
       db: context.db,
@@ -66,10 +66,15 @@ export const importGitProject = createServerFn({ method: "POST" })
       });
       return { projectId: created.id };
     } catch (error) {
-      await deleteProject({
+      // A failed import leaves nothing to recover, so it skips the trash.
+      const failed = {
         db: context.db,
-        ownerId: session.user.id,
+        userId: session.user.id,
         projectId: created.id,
+      };
+      await trashProject(failed);
+      await deleteTrashedProject({
+        ...failed,
         collaboration: env.COLLABORATION,
       });
       throw error;

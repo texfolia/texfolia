@@ -2,6 +2,8 @@ import type { Db } from "@texfolia/db";
 import { member, project, projectShareLink } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
+import { isOrgAdmin } from "#/features/auth/roles";
+
 export type ProjectTransaction = Parameters<
   Parameters<Db["transaction"]>[0]
 >[0];
@@ -89,6 +91,59 @@ export async function lockProject({
   }
   if (!granted) throw new Error("Project not found");
   return { ...found, ...granted };
+}
+
+// Only the owner of a personal project, or an owner or admin of the project's
+// organization, may trash, restore, permanently delete, or transfer it. Callers
+// hold the project row's lock. Collaborators and share links never pass.
+export async function requireProjectManager(
+  tx: ProjectTransaction,
+  found: Pick<ProjectRow, "ownerId" | "organizationId">,
+  userId: string,
+) {
+  if (!found.organizationId) {
+    if (found.ownerId !== userId) throw new Error("Project not found");
+    return;
+  }
+  const [membership] = await tx
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(
+        eq(member.organizationId, found.organizationId),
+        eq(member.userId, userId),
+      ),
+    )
+    .for("share");
+  if (!membership) throw new Error("Project not found");
+  if (!isOrgAdmin(membership.role))
+    throw new Error("Only organization owners and admins can manage projects");
+}
+
+// Personal project names are unique per owner, so a project that joins an
+// owner's list takes the first free name. Callers hold the owner's row lock to
+// keep concurrent allocations apart.
+export async function availableProjectName(
+  tx: ProjectTransaction,
+  owner: { ownerId: string } | { organizationId: string },
+  requested: string,
+) {
+  const rows = await tx
+    .select({ name: project.name })
+    .from(project)
+    .where(
+      and(
+        "ownerId" in owner
+          ? eq(project.ownerId, owner.ownerId)
+          : eq(project.organizationId, owner.organizationId),
+        isNull(project.deletedAt),
+      ),
+    );
+  const names = new Set(rows.map((row) => row.name));
+  let name = requested;
+  for (let suffix = 2; names.has(name); suffix++)
+    name = `${requested} (${suffix})`;
+  return name;
 }
 
 export type LockProject = (

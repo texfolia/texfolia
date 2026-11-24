@@ -12,6 +12,7 @@ import {
 
 import { aiConfig } from "./features/ai/ai-config.server";
 import { collectProjectSources } from "./features/projects/project-source.server";
+import { deleteExpiredProjects } from "./features/projects/project.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 
 export { ProjectCollaboration } from "./features/collaboration/project-collaboration.server";
@@ -36,6 +37,7 @@ export default {
     const db = createDb(env.HYPERDRIVE.connectionString);
     try {
       if (controller.cron === "17 * * * *") {
+        await deleteExpiredProjects({ db, collaboration: env.COLLABORATION });
         await collectProjectSources({
           db,
           bucket: env.SOURCES,

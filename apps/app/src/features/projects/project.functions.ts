@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
-import { z } from "zod";
 
 import { ensureSession } from "#/features/auth/auth.functions";
 import {
@@ -11,6 +10,7 @@ import {
   projectTagsSchema,
   importProjectFilesSchema,
   projectsPageSchema,
+  projectIdSchema,
 } from "#/features/projects";
 
 export const createProject = createServerFn({ method: "POST" })
@@ -38,21 +38,74 @@ export const getProjects = createServerFn({ method: "GET" })
     });
   });
 
-export const deleteProject = createServerFn({ method: "POST" })
-  .validator(z.object({ projectId: z.uuid() }))
+export const trashProject = createServerFn({ method: "POST" })
+  .validator(projectIdSchema)
   .handler(async ({ data, context }) => {
     const session = await ensureSession();
     const server = await import("./project.server");
-    return server.deleteProject({
+    return server.trashProject({
       db: context.db,
-      ownerId: session.user.id,
+      userId: session.user.id,
       projectId: data.projectId,
       collaboration: env.COLLABORATION,
     });
   });
 
+export const restoreProject = createServerFn({ method: "POST" })
+  .validator(projectIdSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.restoreProject({
+      db: context.db,
+      userId: session.user.id,
+      projectId: data.projectId,
+    });
+  });
+
+export const deleteTrashedProject = createServerFn({ method: "POST" })
+  .validator(projectIdSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.deleteTrashedProject({
+      db: context.db,
+      userId: session.user.id,
+      projectId: data.projectId,
+      collaboration: env.COLLABORATION,
+    });
+  });
+
+export const duplicateProject = createServerFn({ method: "POST" })
+  .validator(projectIdSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.duplicateProject({
+      db: context.db,
+      userId: session.user.id,
+      projectId: data.projectId,
+      bucket: env.SOURCES,
+    });
+  });
+
+export const getTrashedProjects = createServerFn({ method: "GET" }).handler(
+  async ({ context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.getTrashedProjects({
+      db: context.db,
+      userId: session.user.id,
+    });
+  },
+);
+
+export type TrashedProject = Awaited<
+  ReturnType<typeof getTrashedProjects>
+>[number];
+
 export const getProject = createServerFn({ method: "GET" })
-  .validator(z.object({ projectId: z.uuid() }))
+  .validator(projectIdSchema)
   .handler(async ({ data, context }) => {
     const session = await ensureSession();
     const server = await import("./project.server");

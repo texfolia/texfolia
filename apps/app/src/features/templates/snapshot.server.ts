@@ -7,14 +7,16 @@ import {
   template,
   user,
 } from "@texfolia/db/schema";
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/features/auth/roles";
-import { hashSource } from "#/features/compile";
 import { assertProjectSourcePaths, projectPaths } from "#/features/projects";
-import type { LockProject } from "#/features/projects/server";
-import type { SourceBucket } from "#/features/storage/server";
+import {
+  availableProjectName,
+  type LockProject,
+} from "#/features/projects/server";
+import { copySource, type SourceBucket } from "#/features/storage/server";
 
 import {
   openTemplateSchema,
@@ -24,33 +26,6 @@ import {
 
 type Context = { db: Db; bucket: SourceBucket };
 type Snapshot = z.infer<typeof templateSnapshotSchema>;
-async function copyObject({
-  bucket,
-  from,
-  to,
-  sizeBytes,
-}: {
-  bucket: SourceBucket;
-  from: string | null;
-  to: string;
-  sizeBytes: number;
-}) {
-  const object = from ? await bucket.get(from) : null;
-  if (from && !object)
-    throw new Error("Snapshot source is missing from storage");
-  const bytes = object
-    ? new Uint8Array(await object.arrayBuffer())
-    : new Uint8Array();
-  const hash = await hashSource(bytes);
-  if (bytes.byteLength !== sizeBytes || (from && !from.endsWith(`/${hash}`)))
-    throw new Error("Snapshot source integrity check failed");
-  const objectKey = `${to}/${hash}`;
-  await bucket.put(objectKey, bytes, {
-    httpMetadata: { contentType: "application/octet-stream" },
-  });
-  return objectKey;
-}
-
 export async function publishTemplate({
   db,
   bucket,
@@ -162,7 +137,7 @@ export async function publishTemplate({
         objectKey:
           node.kind === "folder"
             ? null
-            : await copyObject({
+            : await copySource({
                 bucket,
                 from: node.objectKey,
                 to: `templates/${templateId}/sources`,
@@ -222,25 +197,13 @@ export async function openTemplate({
         .for("share");
       if (!membership) throw new Error("Organization not found");
     }
-    const names = new Set(
-      (
-        await tx
-          .select({ name: project.name })
-          .from(project)
-          .where(
-            and(
-              data.organizationId
-                ? eq(project.organizationId, data.organizationId)
-                : eq(project.ownerId, userId),
-              isNull(project.deletedAt),
-            ),
-          )
-      ).map((row) => row.name),
+    const name = await availableProjectName(
+      tx,
+      data.organizationId
+        ? { organizationId: data.organizationId }
+        : { ownerId: userId },
+      data.name ?? source.title,
     );
-    const requestedName = data.name ?? source.title;
-    let name = requestedName;
-    for (let suffix = 2; names.has(name); suffix++)
-      name = `${requestedName} (${suffix})`;
     const projectId = crypto.randomUUID();
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
@@ -270,7 +233,7 @@ export async function openTemplate({
         objectKey:
           node.kind === "folder"
             ? null
-            : await copyObject({
+            : await copySource({
                 bucket,
                 from: node.objectKey,
                 to: `projects/${projectId}/sources`,

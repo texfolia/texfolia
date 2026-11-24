@@ -13,9 +13,9 @@ import { and, eq } from "drizzle-orm";
 import { createProjectNode } from "../src/features/projects/project-node.server";
 import {
   createProject,
-  deleteProject,
   getProject,
   getProjects,
+  trashProject,
 } from "../src/features/projects/project.server";
 import { checkComments } from "./postgres/comments";
 
@@ -254,7 +254,7 @@ try {
     userId: teammateId,
     role: "editor",
   });
-  await deleteProject({ db, ownerId, projectId: created.id });
+  await trashProject({ db, userId: ownerId, projectId: created.id });
   for (const userId of [ownerId, teammateId])
     await assertInaccessible({ userId, projectId: created.id });
 
@@ -278,7 +278,7 @@ try {
     1,
   );
 
-  await deleteProject({ db, ownerId, projectId: recreated.id });
+  await trashProject({ db, userId: ownerId, projectId: recreated.id });
   const competing = await Promise.allSettled(
     [crypto.randomUUID(), crypto.randomUUID()].map((id) =>
       createProject({ db, ownerId, data: { id, name: created.name } }),

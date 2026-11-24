@@ -57,7 +57,7 @@ export async function collectCollaborationSources({
             .where(
               and(
                 eq(projectCollaboration.projectId, projectId),
-                sql`NOT EXISTS (SELECT 1 FROM ${project} WHERE ${project.id} = ${projectId} AND ${project.deletedAt} IS NULL)`,
+                sql`NOT EXISTS (SELECT 1 FROM ${project} WHERE ${project.id} = ${projectId})`,
               ),
             );
       } catch (error) {

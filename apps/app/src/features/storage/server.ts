@@ -15,6 +15,41 @@ export type SourceBucket = Pick<R2Bucket, "get" | "put" | "list" | "delete">;
 // transaction so the node change and the stored object commit together.
 export type SourceTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
+async function contentHash(bytes: Uint8Array<ArrayBuffer>) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+// Copies a stored source under another prefix, checking that it is intact. A
+// null `from` stands for an empty file.
+export async function copySource({
+  bucket,
+  from,
+  to,
+  sizeBytes,
+}: {
+  bucket: SourceBucket;
+  from: string | null;
+  to: string;
+  sizeBytes: number;
+}) {
+  const object = from ? await bucket.get(from) : null;
+  if (from && !object) throw new Error("Source is missing from storage");
+  const bytes = object
+    ? new Uint8Array(await object.arrayBuffer())
+    : new Uint8Array();
+  const hash = await contentHash(bytes);
+  if (bytes.byteLength !== sizeBytes || (from && !from.endsWith(`/${hash}`)))
+    throw new Error("Source integrity check failed");
+  const objectKey = `${to}/${hash}`;
+  await bucket.put(objectKey, bytes, {
+    httpMetadata: { contentType: "application/octet-stream" },
+  });
+  return objectKey;
+}
+
 export async function putSource({
   tx,
   bucket,
@@ -47,11 +82,7 @@ export async function putSource({
     BigInt(maxSourceProjectBytes)
   )
     throw new Error("Project exceeds 50 MiB");
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const hash = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-  const objectKey = `projects/${projectId}/sources/${hash}`;
+  const objectKey = `projects/${projectId}/sources/${await contentHash(bytes)}`;
   await bucket.put(objectKey, bytes, {
     httpMetadata: { contentType: "application/octet-stream" },
   });
@@ -82,12 +113,13 @@ async function lockProjectForCollection(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
   );
+  // Projects in the trash keep their sources; only a deleted row releases them.
   const [found] = await tx
-    .select({ deletedAt: project.deletedAt })
+    .select({ id: project.id })
     .from(project)
     .where(eq(project.id, projectId))
     .for("update");
-  return Boolean(found && !found.deletedAt);
+  return Boolean(found);
 }
 
 async function liveSourceKeys(

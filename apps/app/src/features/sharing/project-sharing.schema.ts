@@ -8,3 +8,6 @@ export const grantProjectAccessSchema = projectAccessSchema.extend({
 export const revokeProjectAccessSchema = projectAccessSchema.extend({
   userId: z.string().min(1),
 });
+export const transferProjectSchema = projectAccessSchema.extend({
+  userId: z.string().min(1),
+});

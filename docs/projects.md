@@ -34,9 +34,14 @@ The TanStack Table filters the loaded set by name and private tag, and sorts
 by project name, collaborator count, tags, or update time in the browser.
 Collaborators include the personal owner and explicit collaborators, or the
 organization's members. Row menus provide Open, Rename, Your tags, Share,
-Download ZIP, and Delete. Rename uses existing write access, sharing retains
-its existing owner rules, and deletion is available to personal owners and
-organization owners or admins. Downloads contain saved sources.
+Download ZIP, Duplicate, Transfer ownership, and Move to trash. Rename uses
+existing write access, and sharing retains its existing owner rules. Transfer
+and trash are available to personal owners and organization owners or admins.
+Downloads and duplicates contain saved sources.
+
+**Trash** in the sidebar opens `/projects?view=trash`, which lists the trashed
+projects the viewer can restore or permanently delete. The rules for trash,
+duplicates, and transfers are in [Project controls](project-controls.md#trash).
 
 Schema changes use local `db:push` during development. Deployment requirements
 are in [Database deployment](database-deployment.md).
@@ -50,7 +55,7 @@ Apply the schema to an isolated local database whose name includes `test`:
 DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:push
 ```
 
-Run the upload and permission regression checks:
+Run the upload, permission, trash, duplication, and transfer regression checks:
 
 ```sh
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/projects.ts

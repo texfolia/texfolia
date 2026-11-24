@@ -564,13 +564,13 @@ export async function collectGitObjects({
           .from(project)
           .where(eq(project.id, projectId))
           .for("update");
-        const [linked] =
-          found && !found.deletedAt
-            ? await tx
-                .select()
-                .from(projectGit)
-                .where(eq(projectGit.projectId, projectId))
-            : [];
+        // A project in the trash keeps its clone, so it can be restored.
+        const [linked] = found
+          ? await tx
+              .select()
+              .from(projectGit)
+              .where(eq(projectGit.projectId, projectId))
+          : [];
         const garbage = page.objects.filter(
           (object) =>
             object.key.startsWith(`git/${projectId}/`) &&

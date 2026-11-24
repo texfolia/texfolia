@@ -61,8 +61,9 @@ retry handling. Jobs created before this change keep a null digest and remain
 readable, but their IDs cannot be reused for submissions.
 
 Personal project names are case-sensitive and unique per owner among rows with
-`deleted_at IS NULL`. Deleting a project releases its name and retains the row
-and its nodes. Organization project names keep their existing policy, which
+`deleted_at IS NULL`. A row with `deleted_at` is in the trash: its name is
+released, and the row and everything it owns are retained until it is restored
+or the row is deleted. Organization project names keep their existing policy, which
 allows duplicates.
 
 1. Edit `src/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`.
@@ -95,7 +96,7 @@ Create an isolated database with `test` in its name, apply the schema to it with
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/postgres.ts
 ```
 
-This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, constraint rollback, ownership checks, create/delete/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
+This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, constraint rollback, ownership checks, create/trash/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.
 
 ## Assistant billing records
 

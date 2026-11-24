@@ -8,6 +8,7 @@ import {
   IconPlus,
   IconSearch,
   IconSettings,
+  IconTrash,
 } from "@tabler/icons-react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { Link } from "@tanstack/react-router";
@@ -63,11 +64,14 @@ import { NewProjectDialog } from "./new-project-dialog";
 import { ProjectAccountMenu } from "./project-account-menu";
 import { columns } from "./project-columns";
 import { features } from "./project-table-features";
+import { ProjectTrash } from "./project-trash";
 
 export function ProjectList({
   user,
+  view,
 }: {
   user: { id: string; name: string; email: string; image?: string | null };
+  view?: "trash";
 }) {
   const [creating, setCreating] = useState(false);
   const store = useProjects();
@@ -121,9 +125,21 @@ export function ProjectList({
           <SidebarGroup>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton isActive render={<Link to="/projects" />}>
+                <SidebarMenuButton
+                  isActive={view !== "trash"}
+                  render={<Link to="/projects" />}
+                >
                   <IconLayoutGrid />
                   Projects
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={view === "trash"}
+                  render={<Link to="/projects" search={{ view: "trash" }} />}
+                >
+                  <IconTrash />
+                  Trash
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -178,185 +194,193 @@ export function ProjectList({
           id="main-content"
           className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-7 px-4 py-7 sm:px-8 sm:py-9"
         >
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Projects
-              </h1>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Your papers, ideas, and works in progress.
-              </p>
-            </div>
-            <Tooltip>
-              <TooltipTrigger
-                render={<Button onClick={() => setCreating(true)} />}
-              >
-                <IconPlus />
-                New project
-              </TooltipTrigger>
-              <TooltipContent role="tooltip">
-                New project{" "}
-                <Kbd>{shortcuts.newProject.replaceAll(" ", " then ")}</Kbd>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          {projects.length === 0 ? (
-            <Empty className="min-h-[55svh] border-0">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <IconFolderOpen />
-                </EmptyMedia>
-                <EmptyTitle className="text-2xl">No projects yet</EmptyTitle>
-                <EmptyDescription className="max-w-sm">
-                  Make room for your next idea. Start with a blank document,
-                  choose a template, or bring your existing work.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={() => setCreating(true)}>
-                  <IconPlus />
-                  Create your first project
-                </Button>
-                <p className="text-muted-foreground text-xs">
-                  Template, Git repository, or files and folders
-                </p>
-              </EmptyContent>
-            </Empty>
+          {view === "trash" ? (
+            <ProjectTrash />
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-3">
-                <InputGroup className="w-full sm:max-w-sm">
-                  <InputGroupInput
-                    ref={search}
-                    aria-label="Search projects"
-                    placeholder="Search projects…"
-                    value={typeof query === "string" ? query : ""}
-                    onChange={(event) =>
-                      nameFilter?.setFilterValue(event.target.value)
-                    }
-                  />
-                  <InputGroupAddon>
-                    <IconSearch />
-                  </InputGroupAddon>
-                  <InputGroupAddon align="inline-end">
-                    <Kbd>{shortcuts.search}</Kbd>
-                  </InputGroupAddon>
-                </InputGroup>
-                <NativeSelect
-                  aria-label="Filter by tag"
-                  value={typeof selectedTag === "string" ? selectedTag : ""}
-                  onChange={(event) =>
-                    tagFilter?.setFilterValue(
-                      event.target.value ? [event.target.value] : undefined,
-                    )
-                  }
-                >
-                  <NativeSelectOption value="">All tags</NativeSelectOption>
-                  {tags.map((tag) => (
-                    <NativeSelectOption key={tag} value={tag}>
-                      {tag}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                {Boolean(query || selectedTag) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => table.resetColumnFilters()}
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-semibold tracking-tight">
+                    Projects
+                  </h1>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    Your papers, ideas, and works in progress.
+                  </p>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<Button onClick={() => setCreating(true)} />}
                   >
-                    Clear filters
-                  </Button>
-                )}
-                <span
-                  className="text-muted-foreground ml-auto text-xs tabular-nums"
-                  role="status"
-                >
-                  {table.getRowModel().rows.length} of {projects.length}
-                  {pagination.nextCursor ? "+" : ""} projects
-                </span>
+                    <IconPlus />
+                    New project
+                  </TooltipTrigger>
+                  <TooltipContent role="tooltip">
+                    New project{" "}
+                    <Kbd>{shortcuts.newProject.replaceAll(" ", " then ")}</Kbd>
+                  </TooltipContent>
+                </Tooltip>
               </div>
-              <div className="overflow-hidden rounded-xl border">
-                <Table>
-                  <TableHeader>
-                    {table.getHeaderGroups().map((group) => (
-                      <TableRow key={group.id}>
-                        {group.headers.map((header) => {
-                          const sorted = header.column.getIsSorted();
-                          return (
-                            <TableHead
-                              key={header.id}
-                              aria-sort={
-                                sorted === "asc"
-                                  ? "ascending"
-                                  : sorted === "desc"
-                                    ? "descending"
-                                    : undefined
-                              }
-                              className="bg-muted/40 px-4"
-                            >
-                              {header.column.getCanSort() ? (
-                                <button
-                                  type="button"
-                                  className="hover:text-foreground focus-visible:ring-ring -mx-1 flex items-center gap-2 rounded px-1 py-3 text-xs font-medium outline-none focus-visible:ring-2"
-                                  onClick={header.column.getToggleSortingHandler()}
-                                >
-                                  <table.FlexRender header={header} />
-                                  {sorted === "asc" ? (
-                                    <IconArrowUp className="size-3.5" />
-                                  ) : sorted === "desc" ? (
-                                    <IconArrowDown className="size-3.5" />
-                                  ) : (
-                                    <IconArrowsSort className="size-3.5 opacity-50" />
-                                  )}
-                                </button>
-                              ) : (
-                                <table.FlexRender header={header} />
-                              )}
-                            </TableHead>
-                          );
-                        })}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id}>
-                        {row.getAllCells().map((cell) => (
-                          <TableCell key={cell.id} className="px-4">
-                            <table.FlexRender cell={cell} />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                    {!table.getRowModel().rows.length && (
-                      <TableRow>
-                        <TableCell colSpan={columns.length}>
-                          <Empty className="py-14">
-                            <EmptyHeader>
-                              <EmptyMedia variant="icon">
-                                <IconSearch />
-                              </EmptyMedia>
-                              <EmptyTitle>No matching projects</EmptyTitle>
-                              <EmptyDescription>
-                                Try a different name or tag.
-                              </EmptyDescription>
-                            </EmptyHeader>
-                            <EmptyContent>
-                              <Button
-                                variant="outline"
-                                onClick={() => table.resetColumnFilters()}
-                              >
-                                Clear filters
-                              </Button>
-                            </EmptyContent>
-                          </Empty>
-                        </TableCell>
-                      </TableRow>
+              {projects.length === 0 ? (
+                <Empty className="min-h-[55svh] border-0">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <IconFolderOpen />
+                    </EmptyMedia>
+                    <EmptyTitle className="text-2xl">
+                      No projects yet
+                    </EmptyTitle>
+                    <EmptyDescription className="max-w-sm">
+                      Make room for your next idea. Start with a blank document,
+                      choose a template, or bring your existing work.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button onClick={() => setCreating(true)}>
+                      <IconPlus />
+                      Create your first project
+                    </Button>
+                    <p className="text-muted-foreground text-xs">
+                      Template, Git repository, or files and folders
+                    </p>
+                  </EmptyContent>
+                </Empty>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <InputGroup className="w-full sm:max-w-sm">
+                      <InputGroupInput
+                        ref={search}
+                        aria-label="Search projects"
+                        placeholder="Search projects…"
+                        value={typeof query === "string" ? query : ""}
+                        onChange={(event) =>
+                          nameFilter?.setFilterValue(event.target.value)
+                        }
+                      />
+                      <InputGroupAddon>
+                        <IconSearch />
+                      </InputGroupAddon>
+                      <InputGroupAddon align="inline-end">
+                        <Kbd>{shortcuts.search}</Kbd>
+                      </InputGroupAddon>
+                    </InputGroup>
+                    <NativeSelect
+                      aria-label="Filter by tag"
+                      value={typeof selectedTag === "string" ? selectedTag : ""}
+                      onChange={(event) =>
+                        tagFilter?.setFilterValue(
+                          event.target.value ? [event.target.value] : undefined,
+                        )
+                      }
+                    >
+                      <NativeSelectOption value="">All tags</NativeSelectOption>
+                      {tags.map((tag) => (
+                        <NativeSelectOption key={tag} value={tag}>
+                          {tag}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    {Boolean(query || selectedTag) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => table.resetColumnFilters()}
+                      >
+                        Clear filters
+                      </Button>
                     )}
-                  </TableBody>
-                </Table>
-              </div>
-              {pagination.nextCursor && <LoadMoreSentinel />}
+                    <span
+                      className="text-muted-foreground ml-auto text-xs tabular-nums"
+                      role="status"
+                    >
+                      {table.getRowModel().rows.length} of {projects.length}
+                      {pagination.nextCursor ? "+" : ""} projects
+                    </span>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border">
+                    <Table>
+                      <TableHeader>
+                        {table.getHeaderGroups().map((group) => (
+                          <TableRow key={group.id}>
+                            {group.headers.map((header) => {
+                              const sorted = header.column.getIsSorted();
+                              return (
+                                <TableHead
+                                  key={header.id}
+                                  aria-sort={
+                                    sorted === "asc"
+                                      ? "ascending"
+                                      : sorted === "desc"
+                                        ? "descending"
+                                        : undefined
+                                  }
+                                  className="bg-muted/40 px-4"
+                                >
+                                  {header.column.getCanSort() ? (
+                                    <button
+                                      type="button"
+                                      className="hover:text-foreground focus-visible:ring-ring -mx-1 flex items-center gap-2 rounded px-1 py-3 text-xs font-medium outline-none focus-visible:ring-2"
+                                      onClick={header.column.getToggleSortingHandler()}
+                                    >
+                                      <table.FlexRender header={header} />
+                                      {sorted === "asc" ? (
+                                        <IconArrowUp className="size-3.5" />
+                                      ) : sorted === "desc" ? (
+                                        <IconArrowDown className="size-3.5" />
+                                      ) : (
+                                        <IconArrowsSort className="size-3.5 opacity-50" />
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <table.FlexRender header={header} />
+                                  )}
+                                </TableHead>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableHeader>
+                      <TableBody>
+                        {table.getRowModel().rows.map((row) => (
+                          <TableRow key={row.id}>
+                            {row.getAllCells().map((cell) => (
+                              <TableCell key={cell.id} className="px-4">
+                                <table.FlexRender cell={cell} />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                        {!table.getRowModel().rows.length && (
+                          <TableRow>
+                            <TableCell colSpan={columns.length}>
+                              <Empty className="py-14">
+                                <EmptyHeader>
+                                  <EmptyMedia variant="icon">
+                                    <IconSearch />
+                                  </EmptyMedia>
+                                  <EmptyTitle>No matching projects</EmptyTitle>
+                                  <EmptyDescription>
+                                    Try a different name or tag.
+                                  </EmptyDescription>
+                                </EmptyHeader>
+                                <EmptyContent>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => table.resetColumnFilters()}
+                                  >
+                                    Clear filters
+                                  </Button>
+                                </EmptyContent>
+                              </Empty>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {pagination.nextCursor && <LoadMoreSentinel />}
+                </>
+              )}
             </>
           )}
         </div>

@@ -76,7 +76,7 @@ that was not uploaded. The same lock serializes node/project deletion and GC.
 
 Each write that replaces or deletes a source also records the old key in the
 `source_garbage` table, in the same transaction. This covers saves, collaboration
-saves, Git checkouts and pulls, node deletion, and project deletion. The web
+saves, Git checkouts and pulls, node deletion, and permanent project deletion. The web
 Worker's hourly scheduled handler reads only that table. For each queued key, it
 locks the project and deletes the object if no live node references it, so the
 run's cost depends on recent changes, not bucket size. Shared hashes are retained
@@ -184,7 +184,10 @@ dirty in SQLite and retry. Save waits for this write, and compile uses the
 acknowledged merged text. The existing ProjectCoordinator stays in the compiler
 Worker and receives source-change notifications through its existing endpoint.
 
-Project and recursive file deletion notify the collaboration object after the SQL
+Moving a project to the trash closes its sockets and keeps its documents, so a
+restored project has the CRDT identities that comments and offline edits use.
+Edits accepted before that are still saved.
+Permanent project deletion and recursive file deletion notify the collaboration object after the SQL
 transaction commits. Cleanup removes snapshots, journals, and their chunks,
 destroys cached documents, and closes affected sockets. Accepted dirty edits are
 discarded when their source is deleted; they cannot recreate the source.
@@ -223,8 +226,9 @@ cursor updates do not query Postgres. Paths that change access notify the room
 through `invalidateAccess`. Sharing changes notify it inside the revoking
 transaction. The next delivery to that user then waits on the revocation's locks
 and sees the committed change. Organization member removal and leaving notify
-every registered room of the organization after Better Auth commits. Project and
-file deletion close sockets through source cleanup. Eviction clears the cache.
+every registered room of the organization after Better Auth commits. Moving a
+project to the trash and transferring it notify its room too. Permanent project
+and file deletion close sockets through source cleanup. Eviction clears the cache.
 
 Idle subscriptions and collaboration rooms recheck access every five seconds.
 If a notification fails, this check is the backstop: a revoked user can receive

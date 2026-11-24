@@ -11,7 +11,11 @@ import {
   collectProjectSources,
   deleteProjectNode,
 } from "../../src/features/projects/project-source.server";
-import { deleteProject } from "../../src/features/projects/project.server";
+import {
+  deleteTrashedProject,
+  restoreProject,
+  trashProject,
+} from "../../src/features/projects/project.server";
 import {
   createShareLink,
   revokeShareLink,
@@ -56,6 +60,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/cleanup/")) {
       const db = createDb(env.HYPERDRIVE.connectionString);
+      const userId = request.headers.get("X-Owner") ?? "";
       const [, , action, projectId = "", nodeId = ""] = url.pathname.split("/");
       try {
         if (action === "collect")
@@ -76,33 +81,37 @@ export default {
                       id,
                     );
                   if (id === projectId)
-                    await db
-                      .update(project)
-                      .set({ deletedAt: new Date() })
-                      .where(eq(project.id, id));
+                    await db.delete(project).where(eq(project.id, id));
                   return result;
                 },
               }),
             },
           });
         // Deletes without purging the room, as when the purge call fails.
-        else if (action === "project-only")
-          await deleteProject({
+        else if (action === "project-only") {
+          await trashProject({ db, userId, projectId });
+          await deleteTrashedProject({ db, userId, projectId });
+        } else if (action === "project") {
+          await trashProject({ db, userId, projectId });
+          await deleteTrashedProject({
             db,
-            ownerId: request.headers.get("X-Owner") ?? "",
-            projectId,
-          });
-        else if (action === "project")
-          await deleteProject({
-            db,
-            ownerId: request.headers.get("X-Owner") ?? "",
+            userId,
             projectId,
             collaboration: env.COLLABORATION,
           });
+        } else if (action === "trash")
+          await trashProject({
+            db,
+            userId,
+            projectId,
+            collaboration: env.COLLABORATION,
+          });
+        else if (action === "restore")
+          await restoreProject({ db, userId, projectId });
         else if (action === "node")
           await deleteProjectNode({
             db,
-            userId: request.headers.get("X-Owner") ?? "",
+            userId,
             projectId,
             nodeId,
             collaboration: env.COLLABORATION,
