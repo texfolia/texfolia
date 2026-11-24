@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
 
 import { ensureSession } from "#/features/auth/auth.functions";
+import { createEmailDelivery } from "#/features/email";
 
 import {
   createShareLinkSchema,
@@ -31,6 +32,7 @@ export const createShareLink = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
+      email: createEmailDelivery(env.EMAIL, process.env.BETTER_AUTH_URL),
     });
   });
 

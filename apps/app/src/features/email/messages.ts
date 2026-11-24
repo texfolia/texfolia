@@ -8,6 +8,27 @@ const codePurposes = {
 };
 export type EmailCodeType = keyof typeof codePurposes;
 
+export type ProjectCollaboratorEmailRole = "viewer" | "editor";
+export type ProjectShareLinkEmailScope = "project" | "pdf";
+
+const shareLinkScopeAccess: Record<ProjectShareLinkEmailScope, string> = {
+  project: "view its sources and PDF",
+  pdf: "view its PDF",
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function cleanSubjectText(value: string) {
+  return value.replaceAll(/[\r\n]+/g, " ").trim();
+}
+
 export function codeEmail({
   to,
   code,
@@ -40,6 +61,59 @@ export function invitationEmail({
     subject: `You're invited to join ${organization} on Texfolia`,
     text: `You've been invited to join ${organization} on Texfolia. Sign in with this email address to review the invitation: ${url.href}`,
     html: `<p>You've been invited to join an organization on Texfolia.</p><p>Sign in with this email address to <a href="${url.href}">review the invitation</a>.</p>`,
+  };
+}
+
+export function projectCollaboratorEmail({
+  to,
+  projectName,
+  inviterName,
+  role,
+  url,
+}: {
+  to: string;
+  projectName: string;
+  inviterName: string;
+  role: ProjectCollaboratorEmailRole;
+  url: URL;
+}): EmailMessage {
+  const access = role === "editor" ? "edit" : "view";
+  const safeProjectSubject = cleanSubjectText(projectName);
+  const safeInviter = escapeHtml(inviterName);
+  const safeProject = escapeHtml(projectName);
+  const safeUrl = escapeHtml(url.href);
+  return {
+    to,
+    subject: `You were added to ${safeProjectSubject} on Texfolia`,
+    text: `${inviterName} shared "${projectName}" with you on Texfolia so you can ${access} it. Sign in with this email address to open the project: ${url.href}`,
+    html: `<p>${safeInviter} shared <strong>${safeProject}</strong> with you on Texfolia so you can ${access} it.</p><p>Sign in with this email address to <a href="${safeUrl}">open the project</a>.</p>`,
+  };
+}
+
+export function projectShareLinkEmail({
+  to,
+  projectName,
+  senderName,
+  scope,
+  url,
+}: {
+  to: string;
+  projectName: string;
+  senderName: string;
+  scope: ProjectShareLinkEmailScope;
+  url: URL;
+}): EmailMessage {
+  const access = shareLinkScopeAccess[scope];
+  const safeSenderSubject = cleanSubjectText(senderName);
+  const safeProjectSubject = cleanSubjectText(projectName);
+  const safeSender = escapeHtml(senderName);
+  const safeProject = escapeHtml(projectName);
+  const safeUrl = escapeHtml(url.href);
+  return {
+    to,
+    subject: `${safeSenderSubject} shared ${safeProjectSubject} on Texfolia`,
+    text: `${senderName} shared a read-only link to "${projectName}" on Texfolia so you can ${access} without signing in: ${url.href}`,
+    html: `<p>${safeSender} shared a read-only link to <strong>${safeProject}</strong> on Texfolia so you can ${access} without signing in.</p><p><a href="${safeUrl}">Open shared link</a></p>`,
   };
 }
 

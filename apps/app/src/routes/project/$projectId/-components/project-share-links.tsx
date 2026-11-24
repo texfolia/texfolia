@@ -10,6 +10,7 @@ import {
   revokeShareLink,
 } from "#/features/sharing/project-share-links.functions";
 import {
+  createShareLinkSchema,
   shareLinkScopeSchema,
   sharePath,
   type ShareLinkScope,
@@ -25,6 +26,7 @@ type Links = Awaited<ReturnType<typeof listShareLinks>>["links"];
 export function ProjectShareLinks({ projectId }: { projectId: string }) {
   const [links, setLinks] = useState<Links>();
   const [scope, setScope] = useState<ShareLinkScope>("project");
+  const [recipientEmail, setRecipientEmail] = useState("");
   // The full link is only available right after creation.
   const [created, setCreated] = useState<{ id: string; url: string }>();
   const [busy, setBusy] = useState(false);
@@ -136,37 +138,74 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
       )}
       <form
         aria-label="Create share link"
-        className="flex gap-1"
+        className="space-y-2"
         onSubmit={(event) => {
           event.preventDefault();
+          const trimmedEmail = recipientEmail.trim();
+          const parsed = createShareLinkSchema.safeParse({
+            projectId,
+            scope,
+            ...(trimmedEmail ? { recipientEmail: trimmedEmail } : {}),
+          });
+          if (!parsed.success) {
+            setError(
+              "Enter a valid email address, or leave it blank to create a link without emailing anyone.",
+            );
+            return;
+          }
           void run(async () => {
-            const link = await createShareLink({ data: { projectId, scope } });
+            const link = await createShareLink({ data: parsed.data });
             const url = new URL(sharePath(link.token), window.location.origin)
               .href;
             setCreated({ id: link.id, url });
+            setRecipientEmail("");
             await navigator.clipboard.writeText(url).catch(() => {});
+            if (link.notification === "sent")
+              return `Link created and emailed to ${parsed.data.recipientEmail}. Copy it now if you also need it; it won’t be shown again.`;
+            if (link.notification === "failed")
+              return "Link created, but the email could not be sent. Copy it now; it won’t be shown again.";
             return "Link created. Copy it now; it won’t be shown again.";
           });
         }}
       >
-        <NativeSelect
-          aria-label="Share link access"
-          value={scope}
-          disabled={busy}
-          onChange={(event) => {
-            const parsed = shareLinkScopeSchema.safeParse(event.target.value);
-            if (parsed.success) setScope(parsed.data);
-          }}
-          className="min-w-0 flex-1"
-        >
-          <NativeSelectOption value="project">
-            {scopeLabels.project}
-          </NativeSelectOption>
-          <NativeSelectOption value="pdf">{scopeLabels.pdf}</NativeSelectOption>
-        </NativeSelect>
-        <Button type="submit" size="sm" disabled={busy}>
-          {busy ? "Working…" : "Create link"}
-        </Button>
+        <label className="block space-y-1">
+          <span>Email link to (optional)</span>
+          <Input
+            name="recipientEmail"
+            type="email"
+            placeholder="reviewer@example.com"
+            autoComplete="email"
+            value={recipientEmail}
+            disabled={busy}
+            onChange={(event) => setRecipientEmail(event.target.value)}
+          />
+        </label>
+        <div className="flex gap-1">
+          <NativeSelect
+            aria-label="Share link access"
+            value={scope}
+            disabled={busy}
+            onChange={(event) => {
+              const parsed = shareLinkScopeSchema.safeParse(event.target.value);
+              if (parsed.success) setScope(parsed.data);
+            }}
+            className="min-w-0 flex-1"
+          >
+            <NativeSelectOption value="project">
+              {scopeLabels.project}
+            </NativeSelectOption>
+            <NativeSelectOption value="pdf">
+              {scopeLabels.pdf}
+            </NativeSelectOption>
+          </NativeSelect>
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy
+              ? "Working…"
+              : recipientEmail.trim()
+                ? "Create & email"
+                : "Create link"}
+          </Button>
+        </div>
       </form>
       {error && (
         <p role="alert" className="text-destructive wrap-anywhere">

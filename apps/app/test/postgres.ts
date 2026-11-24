@@ -18,6 +18,7 @@ import {
   trashProject,
 } from "../src/features/projects/project.server";
 import { checkComments } from "./postgres/comments";
+import { checkSharingNotifications } from "./postgres/sharing-notifications";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -313,9 +314,10 @@ try {
   assert.equal(otherOwnerProject.name, created.name);
 
   await checkComments(db);
+  await checkSharingNotifications(db);
 
   console.log(
-    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, deleted project name reuse, concurrent active name uniqueness, transaction rollback, and review comments",
+    "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, deleted project name reuse, concurrent active name uniqueness, transaction rollback, review comments, and sharing notifications",
   );
 } finally {
   await db.delete(organization).where(eq(organization.id, organizationId));

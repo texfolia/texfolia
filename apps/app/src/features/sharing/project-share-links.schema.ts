@@ -8,6 +8,7 @@ export type ShareLinkScope = z.infer<typeof shareLinkScopeSchema>;
 export const shareLinksSchema = z.object({ projectId: z.uuid() });
 export const createShareLinkSchema = shareLinksSchema.extend({
   scope: shareLinkScopeSchema,
+  recipientEmail: z.string().trim().toLowerCase().pipe(z.email()).optional(),
 });
 export const revokeShareLinkSchema = shareLinksSchema.extend({
   linkId: z.uuid(),
