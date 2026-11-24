@@ -1,17 +1,16 @@
 import type { Db } from "@texfolia/db";
 import {
-  member,
   project,
   projectNode,
   projectTag,
   tag,
   user,
 } from "@texfolia/db/schema";
-import { and, eq, isNull, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/features/auth/roles";
-import { retireSources, type SourceBucket } from "#/features/storage/server";
+import type { SourceBucket } from "#/features/storage/server";
 
 import type { LockProject } from "./access";
 import type {
@@ -125,7 +124,7 @@ export async function createProject({
       people: owner ? [{ ...owner, role: "owner" }] : [],
       tags: [],
       canWrite: true,
-      canDelete: true,
+      canManage: true,
     };
   });
 }
@@ -229,7 +228,7 @@ export async function getProjects({
         row.collaborators.some(
           (person) => person.userId === userId && person.role === "editor",
         ),
-      canDelete:
+      canManage:
         row.ownerId === userId ||
         !!organization?.members.some(
           (person) => person.userId === userId && isOrgAdmin(person.role),
@@ -302,59 +301,6 @@ export async function setProjectTags({
         selected.map((item) => ({ projectId: data.projectId, tagId: item.id })),
       );
   });
-}
-
-// Soft-deletes the project and queues its sources for collection. Only the
-// owner, or an organization owner or admin, may delete. Collaboration and
-// build cleanup are the caller's: run them after this resolves.
-export async function deleteProject({
-  db,
-  ownerId,
-  projectId,
-  lock,
-}: ProjectOwner & { projectId: string }) {
-  const deletedProject = await db.transaction(async (tx) => {
-    const found = await lock({ tx, projectId, userId: ownerId });
-    if (found.organizationId) {
-      const [membership] = await tx
-        .select()
-        .from(member)
-        .where(
-          and(
-            eq(member.organizationId, found.organizationId),
-            eq(member.userId, ownerId),
-          ),
-        )
-        .for("share");
-      if (!membership || !isOrgAdmin(membership.role))
-        throw new Error(
-          "Only organization owners and admins can delete projects",
-        );
-    } else if (found.ownerId !== ownerId) throw new Error("Project not found");
-    const sources = await tx
-      .select({ key: projectNode.objectKey })
-      .from(projectNode)
-      .where(
-        and(
-          eq(projectNode.projectId, projectId),
-          isNull(projectNode.deletedAt),
-        ),
-      );
-    await retireSources(
-      tx,
-      projectId,
-      sources.map((source) => source.key),
-    );
-    const [deleted] = await tx
-      .update(project)
-      .set({ deletedAt: new Date() })
-      .where(and(eq(project.id, projectId), isNull(project.deletedAt)))
-      .returning({ id: project.id });
-    return deleted;
-  });
-
-  if (!deletedProject) throw new Error("Project not found");
-  return deletedProject.id;
 }
 
 export async function getProject({

@@ -187,11 +187,69 @@ export async function checkDeletion({
       .length,
     0,
   );
-  assert(
-    (await db.query.project.findFirst({ where: { id: idle.projectId } }))
-      ?.deletedAt,
+  assert.equal(
+    await db.query.project.findFirst({ where: { id: idle.projectId } }),
+    undefined,
   );
   await cleanup("collect");
+
+  console.log("Checking that the trash keeps documents and unsaved edits");
+  const trashed = await create();
+  const trashedRoom = await connect(trashed.projectId, trashed.node.id);
+  await trashedRoom.edit("saved before trash", true);
+  await trashedRoom.edit("unsaved ");
+  const identity = Y.encodeStateVector(trashedRoom.doc);
+  await cleanup(`trash/${trashed.projectId}`);
+  await eventually(
+    () => trashedRoom.closeCode() === 1008,
+    "Trashed project socket stayed open",
+  );
+  const trashedStorage = await storageFor(trashed.projectId);
+  await eventually(
+    async () =>
+      (
+        await trashedStorage.exec<{ dirty: number }>(
+          "SELECT dirty FROM documents",
+        )
+      )[0]?.dirty === 0,
+    "Edits accepted before the trash were not saved",
+  );
+  await cleanup("collect");
+  await cleanup(`purge/${trashed.projectId}`);
+  assert(
+    await registered(trashed.projectId),
+    "Collection must keep a trashed project's room",
+  );
+  const trashedNode = await db.query.projectNode.findFirst({
+    where: { id: trashed.node.id },
+  });
+  assert(trashedNode?.objectKey);
+  assert.equal(
+    await (await bucket.get(trashedNode.objectKey))?.text(),
+    "unsaved saved before trash",
+  );
+  await cleanup(`restore/${trashed.projectId}`);
+  const restoredRoom = await connect(trashed.projectId, trashed.node.id);
+  assert.equal(
+    restoredRoom.doc.getText("source").toString(),
+    "unsaved saved before trash",
+  );
+  assert.deepEqual(
+    Y.decodeStateVector(Y.encodeStateVector(restoredRoom.doc)),
+    Y.decodeStateVector(identity),
+    "Restored documents keep the CRDT identities comments anchor to",
+  );
+  await cleanup(`project/${trashed.projectId}`);
+  await empty(trashed.projectId);
+  await cleanup("collect");
+  assert.equal(await registered(trashed.projectId), false);
+  assert.equal(
+    (await bucket.list({ prefix: `projects/${trashed.projectId}/` })).objects
+      .length,
+    0,
+  );
+  trashedRoom.doc.destroy();
+  restoredRoom.doc.destroy();
 
   console.log("Checking deletion between DO cleanup and SQL acknowledgement");
   const racing = await create();
@@ -494,10 +552,7 @@ export async function checkDeletion({
   const retentionRoom = await connect(retention.projectId, retention.node.id);
   await retentionRoom.edit("alarm cleanup", true);
   retentionRoom.socket.close();
-  await db
-    .update(project)
-    .set({ deletedAt: new Date() })
-    .where(eq(project.id, retention.projectId));
+  await db.delete(project).where(eq(project.id, retention.projectId));
   const retentionStorage = await storageFor(retention.projectId);
   await eventually(
     async () =>

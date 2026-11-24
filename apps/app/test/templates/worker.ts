@@ -45,9 +45,10 @@ import {
 } from "../../src/features/projects/project-source.server";
 import {
   createProject,
-  deleteProject,
+  deleteTrashedProject,
   getProject,
   getProjects,
+  trashProject,
 } from "../../src/features/projects/project.server";
 import { lockProject } from "../../src/features/sharing/project-access.server";
 
@@ -446,7 +447,7 @@ export default {
           userId: editorId,
           data: { templateId: published.id, organizationId: null },
         }),
-        /Snapshot source is missing/,
+        /Source is missing/,
       );
       assert.equal(
         (await getProjects({ db, userId: editorId })).projects.length,
@@ -551,7 +552,9 @@ export default {
           content: encode("changed original"),
         },
       });
-      await deleteProject({ db, ownerId: publisherId, projectId: original.id });
+      const trashed = { db, userId: publisherId, projectId: original.id };
+      await trashProject(trashed);
+      await deleteTrashedProject(trashed);
       await collectProjectSources({
         db,
         bucket,
@@ -637,7 +640,7 @@ export default {
         /Project not found/,
       );
       await assert.rejects(
-        deleteProject({ db, ownerId: editorId, projectId: team.id }),
+        trashProject({ db, userId: editorId, projectId: team.id }),
         /Only organization/,
       );
       await assert.rejects(

@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { SidebarProvider, useSidebar } from "@texfolia/ui/sidebar";
+import { z } from "zod";
 
 import { getProjects } from "#/features/projects/project.functions";
 import {
@@ -14,6 +15,9 @@ import { ProjectList } from "./-components/project-list";
 
 export const Route = createFileRoute("/projects")({
   ssr: false,
+  validateSearch: z.object({
+    view: z.literal("trash").optional().catch(undefined),
+  }),
   head: () => ({
     meta: [
       {
@@ -48,13 +52,14 @@ export const Route = createFileRoute("/projects")({
 function ProjectsPage() {
   const { store } = Route.useLoaderData();
   const { user } = Route.useRouteContext();
+  const { view } = Route.useSearch();
   return (
     <ThemeProvider userId={user.id}>
       <ProjectsProvider store={store}>
         <SettingsProvider userId={user.id}>
           <SidebarProvider>
             <SidebarShortcut />
-            <ProjectList user={user} />
+            <ProjectList user={user} view={view} />
           </SidebarProvider>
         </SettingsProvider>
       </ProjectsProvider>

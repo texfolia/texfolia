@@ -1,10 +1,12 @@
 import {
   IconArrowUpRight,
+  IconCopy,
   IconDots,
   IconDownload,
   IconPencil,
   IconTag,
   IconTrash,
+  IconUserShare,
   IconUsers,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
@@ -34,6 +36,7 @@ import {
   renameProjectSchema,
 } from "#/features/projects";
 import {
+  duplicateProject,
   getProject,
   renameProject,
   setProjectTags,
@@ -45,8 +48,9 @@ import { useProjects } from "#/providers/projects-provider";
 import { ProjectAccessPanel } from "#/routes/project/$projectId/-components/project-collaboration";
 
 import { DeleteProjectButton } from "./delete-project-button";
+import { TransferProject } from "./transfer-project";
 
-type Action = "rename" | "tags" | "share" | "delete";
+type Action = "rename" | "tags" | "share" | "transfer" | "delete";
 function EditProject({
   project,
   mode,
@@ -182,6 +186,34 @@ export function ProjectActions({ project }: { project: Project }) {
       setPending(false);
     }
   }
+  async function duplicate() {
+    if (pending) return;
+    setPending(true);
+    const id = toast.add({
+      title: `Duplicating “${project.name}”…`,
+      type: "loading",
+      timeout: 0,
+    });
+    try {
+      const copy = await duplicateProject({ data: { projectId: project.id } });
+      toast.update(id, {
+        title: `Created “${copy.name}”`,
+        type: "success",
+        timeout: 5000,
+      });
+    } catch {
+      toast.update(id, {
+        title: "Could not duplicate project",
+        description: "Please try again.",
+        type: "error",
+        timeout: 5000,
+      });
+      return;
+    } finally {
+      setPending(false);
+    }
+    await store.refresh().catch(() => {});
+  }
   return (
     <>
       <DropdownMenu>
@@ -222,15 +254,23 @@ export function ProjectActions({ project }: { project: Project }) {
             <IconDownload />
             Download ZIP
           </DropdownMenuItem>
-          {project.canDelete && (
+          <DropdownMenuItem onClick={() => void duplicate()}>
+            <IconCopy />
+            Duplicate
+          </DropdownMenuItem>
+          {project.canManage && (
             <>
+              <DropdownMenuItem onClick={() => setAction("transfer")}>
+                <IconUserShare />
+                Transfer ownership
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 onClick={() => setAction("delete")}
               >
                 <IconTrash />
-                Delete
+                Move to trash
               </DropdownMenuItem>
             </>
           )}
@@ -263,6 +303,9 @@ export function ProjectActions({ project }: { project: Project }) {
             <ProjectAccessPanel projectId={project.id} />
           </DialogContent>
         </Dialog>
+      )}
+      {action === "transfer" && (
+        <TransferProject project={project} onClose={() => setAction(null)} />
       )}
       <DeleteProjectButton
         project={project}

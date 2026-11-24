@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
-import { createDb } from "@texfolia/db";
+import { createDb, type Db } from "@texfolia/db";
 import {
   projectCollaboration,
   projectCollaborator,
@@ -37,11 +37,17 @@ import {
 } from "../../src/features/projects/project-source.server";
 import {
   createProject,
-  deleteProject,
+  deleteTrashedProject,
   getProject,
+  trashProject,
 } from "../../src/features/projects/project.server";
 
 export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
+
+async function deleteForever(db: Db, userId: string, projectId: string) {
+  await trashProject({ db, userId, projectId });
+  await deleteTrashedProject({ db, userId, projectId });
+}
 
 export default {
   async fetch(_request: Request, env: Env) {
@@ -289,7 +295,7 @@ export default {
         }),
         /subtree/,
       );
-      await deleteProject({ db, ownerId, projectId: pathProject.id });
+      await deleteForever(db, ownerId, pathProject.id);
       await db
         .insert(projectCollaboration)
         .values({ projectId: pathProject.id });
@@ -794,8 +800,8 @@ export default {
           ] ?? "",
         ),
       );
-      await deleteProject({ db, ownerId, projectId: quotaProject.id });
-      await deleteProject({ db, ownerId, projectId });
+      await deleteForever(db, ownerId, quotaProject.id);
+      await deleteForever(db, ownerId, projectId);
       await collectProjectSources({
         db,
         bucket,

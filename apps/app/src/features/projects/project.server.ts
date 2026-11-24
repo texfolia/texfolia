@@ -1,5 +1,7 @@
 import {
   cleanupDeletedCollaboration,
+  invalidateCollaborationAccess,
+  type CollaborationAccess,
   type CollaborationCleanup,
 } from "#/features/collaboration/server";
 import { fetchCompiler } from "#/features/compile/server";
@@ -16,8 +18,10 @@ export {
   accessibleProjects,
   createProject,
   getProjects,
+  getTrashedProjects,
   maxProjectPageSize,
   projectPageSize,
+  restoreProject,
 } from "./server";
 
 export function updateProjectFormatting(
@@ -50,17 +54,21 @@ export function getProject(
   return projects.getProject({ ...args, lock: lockProject });
 }
 
-export async function deleteProject({
+export function duplicateProject(
+  args: Locked<Parameters<typeof projects.duplicateProject>[0]>,
+) {
+  return projects.duplicateProject({ ...args, lock: lockProject });
+}
+
+export async function trashProject({
   collaboration,
   ...args
-}: Locked<Parameters<typeof projects.deleteProject>[0]> & {
-  collaboration?: CollaborationCleanup;
+}: Locked<Parameters<typeof projects.trashProject>[0]> & {
+  collaboration?: CollaborationAccess;
 }) {
-  const projectId = await projects.deleteProject({
-    ...args,
-    lock: lockProject,
-  });
-  await cleanupDeletedCollaboration(collaboration, projectId);
+  const { projectId } = args;
+  await projects.trashProject({ ...args, lock: lockProject });
+  await invalidateCollaborationAccess(collaboration, projectId);
   try {
     const response = await fetchCompiler(`/projects/${projectId}/build`, {
       method: "DELETE",
@@ -69,7 +77,27 @@ export async function deleteProject({
       throw new Error(`Build cleanup returned ${response.status}`);
   } catch (error) {
     // The coordinator's retention alarm also removes artifacts if immediate cleanup is unavailable.
-    console.error("Deleted project build cleanup failed", { projectId, error });
+    console.error("Trashed project build cleanup failed", { projectId, error });
   }
-  return projectId;
+}
+
+export async function deleteTrashedProject({
+  collaboration,
+  ...args
+}: Parameters<typeof projects.deleteTrashedProject>[0] & {
+  collaboration?: CollaborationCleanup;
+}) {
+  await projects.deleteTrashedProject(args);
+  await cleanupDeletedCollaboration(collaboration, args.projectId);
+}
+
+export async function deleteExpiredProjects({
+  collaboration,
+  ...args
+}: Parameters<typeof projects.deleteExpiredProjects>[0] & {
+  collaboration?: CollaborationCleanup;
+}) {
+  const projectIds = await projects.deleteExpiredProjects(args);
+  for (const projectId of projectIds)
+    await cleanupDeletedCollaboration(collaboration, projectId);
 }

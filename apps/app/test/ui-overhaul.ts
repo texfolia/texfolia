@@ -9,6 +9,8 @@ import {
   invitation,
   member,
   organization,
+  project as projectTable,
+  projectCollaborator,
   projectNode,
   session,
   template,
@@ -1137,7 +1139,9 @@ try {
     .getByRole("button", { name: `Actions for ${project.name}`, exact: true })
     .click();
   assert.equal(
-    await reader.getByRole("menuitem", { name: "Delete", exact: true }).count(),
+    await reader
+      .getByRole("menuitem", { name: "Move to trash", exact: true })
+      .count(),
     0,
   );
   assert.equal(
@@ -1519,11 +1523,122 @@ try {
   await owner
     .getByRole("button", { name: "Actions for A new beginning", exact: true })
     .click();
-  await owner.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await owner.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
   await owner
-    .getByRole("button", { name: "Delete project", exact: true })
-    .click();
+    .getByRole("table")
+    .getByRole("link", { name: "A new beginning copy", exact: true })
+    .waitFor();
+  const trash = async (name: string) => {
+    await owner
+      .getByRole("button", { name: `Actions for ${name}`, exact: true })
+      .click();
+    await owner
+      .getByRole("menuitem", { name: "Move to trash", exact: true })
+      .click();
+    await owner
+      .getByRole("button", { name: "Move to trash", exact: true })
+      .click();
+    await owner
+      .getByRole("table")
+      .getByRole("link", { name, exact: true })
+      .waitFor({ state: "detached" });
+  };
+  await trash("A new beginning copy");
+  await owner.getByRole("button", { name: "Undo", exact: true }).click();
+  await owner
+    .getByRole("table")
+    .getByRole("link", { name: "A new beginning copy", exact: true })
+    .waitFor();
+  await trash("A new beginning copy");
+  await trash("A new beginning");
   await owner.getByText("No matching projects", { exact: true }).waitFor();
+  await owner.goto(`${origin}/projects?view=trash`);
+  await owner.getByRole("heading", { name: "Trash", exact: true }).waitFor();
+  await owner
+    .getByRole("button", { name: "Restore A new beginning", exact: true })
+    .waitFor();
+  await capture(owner, "projects-trash-mobile");
+  await owner
+    .getByRole("button", { name: "Restore A new beginning", exact: true })
+    .click();
+  await owner
+    .getByRole("button", {
+      name: "Permanently delete A new beginning copy",
+      exact: true,
+    })
+    .click();
+  await owner
+    .getByRole("button", { name: "Delete permanently", exact: true })
+    .last()
+    .click();
+  await owner.getByText("Trash is empty", { exact: true }).waitFor();
+  assert.deepEqual(
+    (
+      await db.query.project.findMany({
+        columns: { name: true, deletedAt: true },
+        where: { ownerId, name: { like: "A new beginning%" } },
+      })
+    ).map((row) => [row.name, row.deletedAt]),
+    [["A new beginning", null]],
+  );
+  await owner.goto(`${origin}/projects`);
+  await owner
+    .getByRole("button", { name: "Actions for A new beginning", exact: true })
+    .click();
+  await owner
+    .getByRole("menuitem", { name: "Transfer ownership", exact: true })
+    .click();
+  await owner
+    .getByText(
+      "Share the project with the new owner first, then transfer it.",
+      { exact: true },
+    )
+    .waitFor();
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("dialog").waitFor({ state: "detached" });
+  const transferred = await db.query.project.findFirst({
+    where: { ownerId, name: "A new beginning" },
+  });
+  assert(transferred);
+  await db
+    .insert(projectCollaborator)
+    .values({ projectId: transferred.id, userId: readerId, role: "viewer" });
+  await owner
+    .getByRole("button", { name: "Actions for A new beginning", exact: true })
+    .click();
+  await owner
+    .getByRole("menuitem", { name: "Transfer ownership", exact: true })
+    .click();
+  await owner.getByLabel("New owner", { exact: true }).selectOption(readerId);
+  await capture(owner, "project-transfer-mobile");
+  await owner
+    .getByRole("button", { name: "Transfer ownership", exact: true })
+    .click();
+  await owner
+    .getByLabel("New owner", { exact: true })
+    .waitFor({ state: "detached" });
+  await owner
+    .getByRole("button", { name: "Actions for A new beginning", exact: true })
+    .click();
+  await owner
+    .getByRole("menuitem", { name: "Duplicate", exact: true })
+    .waitFor();
+  assert.equal(
+    await owner
+      .getByRole("menuitem", { name: "Move to trash", exact: true })
+      .count(),
+    0,
+    "The previous owner keeps only edit access",
+  );
+  await owner.keyboard.press("Escape");
+  assert.equal(
+    (await db.query.project.findFirst({ where: { id: transferred.id } }))
+      ?.ownerId,
+    readerId,
+  );
+  await db.delete(projectTable).where(eq(projectTable.id, transferred.id));
+  await owner.goto(`${origin}/projects`);
+  await owner.getByRole("heading", { name: "Projects", exact: true }).waitFor();
   await owner
     .getByRole("button", { name: "Toggle Sidebar", exact: true })
     .click();
@@ -1657,7 +1772,7 @@ try {
     ),
   );
   console.info(
-    "Invitation acceptance, project creation/search/deletion, and sign-out passed",
+    "Invitation acceptance, project creation/search/duplication/trash/restore/deletion/transfer, and sign-out passed",
   );
   assert.deepEqual(errors, [], "No browser or hydration errors");
   console.info(`UI overhaul checks passed. Screenshots: ${screenshots}`);

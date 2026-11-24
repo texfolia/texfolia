@@ -11,7 +11,11 @@ import {
 import { toast } from "@texfolia/ui/toast";
 import { useState } from "react";
 
-import type { Project } from "#/features/projects/project.functions";
+import { trashRetentionDays } from "#/features/projects";
+import {
+  restoreProject,
+  type Project,
+} from "#/features/projects/project.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 export function DeleteProjectButton({
@@ -35,17 +39,41 @@ export function DeleteProjectButton({
       await projects.remove(project.id);
     } catch {
       toast.add({
-        title: "Project was not deleted",
-        description: "Your project has been restored. Please try again.",
+        title: "Project was not moved to the trash",
+        description: "Please try again.",
         type: "error",
       });
-      setError("Unable to delete your project. Please try again.");
+      setError("Unable to move your project to the trash. Please try again.");
       setIsDeleting(false);
       return;
     }
 
     onOpenChange(false);
     setIsDeleting(false);
+    const id = toast.add({
+      title: `“${project.name}” moved to the trash`,
+      type: "success",
+      actionProps: {
+        children: "Undo",
+        onClick: () => {
+          toast.close(id);
+          void undo();
+        },
+      },
+    });
+  }
+
+  async function undo() {
+    try {
+      await restoreProject({ data: { projectId: project.id } });
+      await projects.refresh();
+    } catch {
+      toast.add({
+        title: "Could not restore project",
+        description: "Restore it from the trash.",
+        type: "error",
+      });
+    }
   }
 
   return (
@@ -59,10 +87,11 @@ export function DeleteProjectButton({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete project?</AlertDialogTitle>
+          <AlertDialogTitle>Move project to trash?</AlertDialogTitle>
           <AlertDialogDescription>
-            “{project.name}” will be removed from your projects. You won’t be
-            able to open it again.
+            “{project.name}” will be closed for everyone, and its share links
+            will stop working. You can restore it from the trash for{" "}
+            {trashRetentionDays} days. After that it is permanently deleted.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && (
@@ -77,7 +106,7 @@ export function DeleteProjectButton({
             disabled={isDeleting}
             onClick={() => void handleDelete()}
           >
-            {isDeleting ? "Deleting…" : "Delete project"}
+            {isDeleting ? "Moving…" : "Move to trash"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

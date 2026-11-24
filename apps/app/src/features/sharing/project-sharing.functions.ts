@@ -7,6 +7,7 @@ import {
   grantProjectAccessSchema,
   projectAccessSchema,
   revokeProjectAccessSchema,
+  transferProjectSchema,
 } from "./project-sharing.schema";
 
 export const getProjectAccess = createServerFn({ method: "GET" })
@@ -38,6 +39,18 @@ export const revokeProjectAccess = createServerFn({ method: "POST" })
     const session = await ensureSession();
     const server = await import("./project-sharing.server");
     return server.revokeProjectAccess({
+      db: context.db,
+      userId: session.user.id,
+      data,
+      collaboration: env.COLLABORATION,
+    });
+  });
+export const transferProject = createServerFn({ method: "POST" })
+  .validator(transferProjectSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-transfer.server");
+    return server.transferProject({
       db: context.db,
       userId: session.user.id,
       data,

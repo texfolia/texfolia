@@ -8,8 +8,8 @@ import {
 import { projectNameSchema } from "#/features/projects";
 import {
   createProject,
-  deleteProject,
   getProjects,
+  trashProject,
   type Project,
 } from "#/features/projects/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
@@ -26,7 +26,7 @@ export function createProjectsStore({
   const projects = createRpcCollection({
     initial: initial.projects,
     insert: (row) => createProject({ data: { id: row.id, name: row.name } }),
-    remove: (row) => deleteProject({ data: { projectId: row.id } }),
+    remove: (row) => trashProject({ data: { projectId: row.id } }),
   });
   // Pagination state lives outside the collection, so components subscribe to
   // it separately through useProjectsPagination. A failed page stops infinite
@@ -102,11 +102,12 @@ export function createProjectsStore({
           people: [],
           tags: [],
           canWrite: true,
-          canDelete: true,
+          canManage: true,
         })
         .when("settled");
       return id;
     },
+    // Moves the project to the trash.
     async remove(id: string) {
       await projects.delete(id).when("settled");
     },

@@ -80,7 +80,8 @@ export async function sourceNode(
   return node;
 }
 
-// Accepted edits remain durable even if their author's access is later revoked.
+// Accepted edits remain durable even if their author's access is later revoked
+// or the project moves to the trash.
 export async function persistMergedSource(options: {
   db: Db;
   bucket: SourceBucket;
@@ -94,7 +95,7 @@ export async function persistMergedSource(options: {
     const [found] = await tx
       .select()
       .from(project)
-      .where(and(eq(project.id, projectId), isNull(project.deletedAt)))
+      .where(eq(project.id, projectId))
       .for("update");
     if (!found) return null;
     const node = await tx.query.projectNode.findFirst({

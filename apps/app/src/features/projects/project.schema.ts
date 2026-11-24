@@ -21,6 +21,11 @@ export const projectsPageSchema = z
   })
   .optional();
 
+export const projectIdSchema = z.object({ projectId: z.uuid() });
+
+// How long a project stays in the trash before it is permanently deleted.
+export const trashRetentionDays = 30;
+
 export const renameProjectSchema = z.object({
   projectId: z.uuid(),
   name: projectNameSchema,
