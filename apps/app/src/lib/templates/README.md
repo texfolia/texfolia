@@ -12,7 +12,7 @@ catalog entry, so catalog and publishing share one feature.
 The rest of the app imports the core only through these entry points. The
 modules that bind it to the app, named below, are imported by path.
 
-See [Template lifecycle](../../../../../docs/templates.md) for storage, moderation,
+See [Template lifecycle](../../../../docs/src/content/docs/templates.md) for storage, moderation,
 preview, and retention rules.
 
 ## Boundaries

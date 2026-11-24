@@ -1,4 +1,6 @@
-# Settings
+---
+title: Settings
+---
 
 Settings opens as a dialog inside a project. Outside the editor, Settings opens
 `/settings/preferences`. The settings area contains Account, Preferences,
@@ -67,7 +69,7 @@ after project formatting.
 The User tab's Spelling section edits the personal dictionary, stored as
 `spelling.words` in `texfolia.settings.v2:<userId>`. Changes there take effect
 on Apply or Save. The editor's **Add to dictionary** saves immediately. See
-[Spelling](editor-workspace.md#spelling).
+[Spelling](/editor-workspace/#spelling).
 
 ## Keyboard shortcuts
 

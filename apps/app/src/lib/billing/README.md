@@ -2,8 +2,8 @@
 
 Stripe billing for the product app: subscription plans, checkout, the customer
 portal and webhooks (through the Better Auth Stripe plugin), plan entitlements,
-and AI usage metering. See [Configure subscription billing](../../../../../docs/billing.md)
-and [AI metering](../../../../../docs/ai-assistant.md#check-metering).
+and AI usage metering. See [Configure subscription billing](../../../../docs/src/content/docs/billing.md)
+and [AI metering](../../../../docs/src/content/docs/ai-assistant.md#check-metering).
 
 | Entry point            | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -34,11 +34,12 @@ bun run db:push
 bun run dev
 ```
 
-Open the product app at [localhost:3000](http://localhost:3000) and the marketing
-site at [localhost:4321](http://localhost:4321). Create a project and press
+Open the product app at [localhost:3000](http://localhost:3000), the marketing
+site at [localhost:4321](http://localhost:4321), and the docs site at
+[localhost:4322](http://localhost:4322). Create a project and press
 Cmd/Ctrl+S to save and compile.
 
-Secrets, Stripe webhooks, and running each app on its own are covered in the [local development guide](docs/local-development.md).
+Secrets, Stripe webhooks, and running each app on its own are covered in the [local development guide](apps/docs/src/content/docs/local-development.md).
 
 ## System design
 
@@ -96,7 +97,7 @@ sequenceDiagram
     B->>W: Fetch job status or saved PDF
 ```
 
-More detail: [product app](apps/app/README.md), [marketing site](apps/web/README.md), [compiler](apps/compiler/README.md), and the [docs](docs) folder.
+More detail: [product app](apps/app/README.md), [marketing site](apps/web/README.md), [compiler](apps/compiler/README.md), and the [docs](apps/docs/README.md) app.
 
 ## Repository layout
 
@@ -107,12 +108,12 @@ apps/
                        compile, editor, email, git, projects, references, settings,
                        sharing, shortcuts, storage, templates, theme, workspace
   compiler/            Hono compiler API, job processing, and the LaTeX engine
+  docs/                Astro + Starlight + React documentation site
   web/                 React marketing site: landing, pricing, policies, templates gallery
 packages/
   contracts/           Schemas, hosts, and plan prices shared by the apps
   db/                  Drizzle schema, PostgreSQL client, and migrations
   ui/                  shadcn/Base UI React primitives for the app and the site
-docs/                  Feature and operations guides
 tsconfig.base.json     TypeScript settings every workspace extends
 ```
 

@@ -1,11 +1,13 @@
-# Web security headers
+---
+title: Web security headers
+---
 
-The [web Worker](../apps/app/src/worker.ts) applies security headers to every
+The [web Worker](../../../../app/src/worker.ts) applies security headers to every
 TanStack Start HTTP response, including HTML, APIs, redirects, and errors.
 It passes response bodies through as streams and leaves WebSocket upgrades intact.
 Static assets served directly by Cloudflare do not pass through this wrapper.
 
-The [policy](../apps/app/src/lib/security-headers.ts) enforces CSP in production.
+The [policy](../../../../app/src/lib/security-headers.ts) enforces CSP in production.
 It sets `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`,
 `Referrer-Policy: strict-origin-when-cross-origin`, and
 `X-Content-Type-Options: nosniff`. Development retains the baseline headers but

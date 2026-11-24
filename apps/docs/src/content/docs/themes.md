@@ -1,4 +1,6 @@
-# Themes
+---
+title: Themes
+---
 
 Settings > Appearance controls workspace colors and the CodeMirror editor together.
 The theme list contains every theme exported by `@uiw/codemirror-themes-all`.
@@ -18,7 +20,7 @@ Selecting a theme changes the appearance draft without writing storage.
 Closing Settings with unsaved appearance changes prompts for **Apply**,
 **Discard**, or **Keep editing**. Apply in that prompt also keeps Settings open.
 Editor preferences and project formatting follow the same draft rules. The
-editor toolbar Wrap lines control still saves immediately. See [Settings](settings.md).
+editor toolbar Wrap lines control still saves immediately. See [Settings](/settings/).
 
 PDFs retain their original page colors by default. **Match PDF preview to theme**
 in Settings joins the appearance draft. The PDF viewer's separate control saves
@@ -41,19 +43,19 @@ VS Code theme documents.
 
 ## Implementation and verification
 
-[themes.ts](../apps/app/src/lib/editor/themes/themes.ts) builds the catalog from the package's
+[themes.ts](../../../../app/src/lib/editor/themes/themes.ts) builds the catalog from the package's
 `defaultSettings*` exports and pairs each with its native theme extension. The
 extension's CodeMirror dark-theme facet supplies its light or dark mode. Workspace
 tokens derive from the settings' background, foreground, caret, and selection.
 Supporting surfaces and borders mix foreground with background. Gutter border
 shorthands supply a color when present; otherwise workspace borders use a mix.
 
-[theme-editor.ts](../apps/app/src/lib/editor/themes/theme-editor.ts) uses the package's extension
-directly. [LaTeX tags](../apps/app/src/lib/editor/latex/tags.ts) inherit standard CodeMirror
+[theme-editor.ts](../../../../app/src/lib/editor/themes/theme-editor.ts) uses the package's extension
+directly. [LaTeX tags](../../../../app/src/lib/editor/latex/tags.ts) inherit standard CodeMirror
 highlight tags. There is no TextMate scope mapper.
-[ThemeProvider](../apps/app/src/providers/theme-provider.tsx) applies workspace
+[ThemeProvider](../../../../app/src/providers/theme-provider.tsx) applies workspace
 variables and separates committed appearance, draft selection, and live preview.
-The [bootstrap](../apps/app/src/lib/theme/theme-bootstrap.ts) accepts cached colors only
+The [bootstrap](../../../../app/src/lib/theme/theme-bootstrap.ts) accepts cached colors only
 for known v2 selections. Its constrained color grammar supports hex, numeric RGB
 and RGBA, transparent, and the derived color mixes. Unknown properties are ignored
 and unsafe snapshots fall back to the system theme.

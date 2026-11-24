@@ -1,9 +1,11 @@
-# Set up Neon and Hyperdrive
+---
+title: Set up Neon and Hyperdrive
+---
 
 Use this guide at the first production deploy. Cloud provisioning and baseline
 migration generation remain deferred under
 [NAT-198](https://linear.app/nbaby/issue/NAT-198).
-For daily development, follow the [local setup](local-development.md).
+For daily development, follow the [local setup](/local-development/).
 Local development and CI continue to use plain Postgres and `db:push`.
 
 ## Prepare the baseline at launch
@@ -15,9 +17,9 @@ Local development and CI continue to use plain Postgres and `db:push`.
    directory, including its snapshots, before deploying.
 3. Apply `bun run db:migrate` to an empty, isolated local Postgres database with
    `DATABASE_URL` set to that database. Run the integration checks in the
-   [database guide](../packages/db/README.md#verify-plain-postgres),
-   [source-storage guide](../apps/app/README.md#local-development-and-rollout),
-   and [template guide](templates.md#verification).
+   [database guide](../../../../../packages/db/README.md#verify-plain-postgres),
+   [source-storage guide](../../../../app/README.md#local-development-and-rollout),
+   and [template guide](/templates/#verification).
 4. On that disposable database, run `bun run db:push` and confirm it reports no
    schema changes. Investigate any difference before proceeding.
 5. Add `db:migrate` to the deployment workflow before either Worker deploys.
@@ -74,7 +76,7 @@ Edit `apps/app/wrangler.jsonc` before building the production deployment artifac
    Never copy production secrets into local environment files.
 4. Provision the existing production source bucket `texfolia-sources`. Provision
    the compiler's existing bucket, queues, and container infrastructure using the
-   [compiler deployment guide](../apps/compiler/README.md#deploy-to-cloudflare).
+   [compiler deployment guide](../../../../compiler/README.md#deploy-to-cloudflare).
    The production web service binds `COMPILER` to `texfolia-compiler`.
 5. Run `bun run cf:typegen` after changing bindings.
 
@@ -102,7 +104,7 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
    [Cloudflare Vite environments](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/).
 4. Seed the original templates from the production deployment context using the
    production database and source bucket as described in
-   [Seed original templates](templates.md#seed-original-templates).
+   [Seed original templates](/templates/#seed-original-templates).
 5. Check the deployed production app and inspect Worker logs for database and
    binding errors. Confirm saved writes are visible immediately and Hyperdrive
    query caching remains disabled.

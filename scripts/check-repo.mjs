@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import postcss from "postcss";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const docsContentRoot = resolve(root, "apps/docs/src/content/docs");
 const files = execFileSync(
   "git",
   ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
@@ -18,9 +19,26 @@ const files = execFileSync(
   .filter(Boolean);
 const errors = [];
 
+function starlightRouteExists(target) {
+  const slug = target.replace(/^\/+|\/+$/g, "");
+  const candidates = slug
+    ? [
+        resolve(docsContentRoot, `${slug}.md`),
+        resolve(docsContentRoot, `${slug}.mdx`),
+        resolve(docsContentRoot, slug, "index.md"),
+        resolve(docsContentRoot, slug, "index.mdx"),
+      ]
+    : [
+        resolve(docsContentRoot, "index.md"),
+        resolve(docsContentRoot, "index.mdx"),
+      ];
+  return candidates.some((candidate) => existsSync(candidate));
+}
+
 for (const file of files) {
+  const isDocsContent = file.startsWith("apps/docs/src/content/docs/");
   if (
-    !file.endsWith(".md") ||
+    !(file.endsWith(".md") || (isDocsContent && file.endsWith(".mdx"))) ||
     file.startsWith(".agents/") ||
     !existsSync(resolve(root, file))
   )
@@ -34,6 +52,11 @@ for (const file of files) {
   )) {
     const target = match[1].split(/[?#]/)[0];
     if (!target || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(target)) continue;
+    if (isDocsContent && target.startsWith("/")) {
+      if (!starlightRouteExists(target))
+        errors.push(`${file}: broken local link ${match[1]}`);
+      continue;
+    }
     const path = target.startsWith("/")
       ? resolve(root, `.${target}`)
       : resolve(root, dirname(file), decodeURIComponent(target));

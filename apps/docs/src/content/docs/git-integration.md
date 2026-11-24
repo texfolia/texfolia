@@ -1,4 +1,6 @@
-# Git integration
+---
+title: Git integration
+---
 
 Projects can import a public or private GitHub or gitlab.com repository. The Git
 view in the switchable right sidebar links an existing project to an empty remote, shows
@@ -24,7 +26,7 @@ bar shows no branch for these repositories.
 
 ## Platform adapters
 
-The core Git module lives in [`#/lib/git`](../apps/app/src/lib/git/README.md)
+The core Git module lives in [`#/lib/git`](../../../../app/src/lib/git/README.md)
 (`schema.ts`, `actions.ts`, `repository.ts`) and speaks plain Git smart HTTP
 through isomorphic-git. Each platform is an adapter in
 `apps/app/src/lib/git/providers/` that supplies:

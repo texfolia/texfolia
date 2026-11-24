@@ -1,7 +1,7 @@
 # Git integrations
 
 Git integrations for the product app. Texfolia does not host Git (see
-[Git integration](../../../../../docs/git-integration.md)): every action runs against a
+[Git integration](../../../../docs/src/content/docs/git-integration.md)): every action runs against a
 remote linked on an integrated platform. The project's working clone is kept
 in R2 as a cache that holds unpushed commits.
 

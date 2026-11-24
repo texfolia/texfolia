@@ -55,6 +55,11 @@
       "persistent": true,
       "passThroughEnv": ["*"]
     },
+    "docs#dev": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
     "db:push": {
       "cache": false,
       "passThroughEnv": ["DATABASE_URL"]
@@ -92,6 +97,11 @@
       "cache": false,
       "passThroughEnv": ["*"]
     },
+    "docs#deploy": {
+      "dependsOn": ["docs#build"],
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
     "lint": {
       "outputs": [],
       "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"]
@@ -124,6 +134,10 @@
       "outputs": ["dist/**"],
       "env": ["CLOUDFLARE_ENV", "PUBLIC_*"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
+    },
+    "docs#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
     },
     "generate-routes": {
       "cache": false

@@ -1,0 +1,33 @@
+{
+  "name": "docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "astro": "astro",
+    "build": "astro build",
+    "deploy": "wrangler deploy --env production",
+    "dev": "astro dev --port 4322",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "preview": "astro preview --port 4322",
+    "start": "astro dev --port 4322",
+    "typecheck": "astro sync && astro check"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.9",
+    "@astrojs/starlight": "^0.43.1",
+    "astro": "^7.4.13",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^6.0.2",
+    "wrangler": "^4.70.0"
+  }
+}
