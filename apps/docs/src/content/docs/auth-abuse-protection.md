@@ -1,4 +1,6 @@
-# Public auth abuse protection
+---
+title: Public auth abuse protection
+---
 
 Auth is configured in `apps/app/src/features/auth/auth.ts`; only the product app
 uses it. The login page supports

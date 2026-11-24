@@ -53,7 +53,9 @@ function matches(path, input) {
 function documentation(path) {
   return (
     /(^|\/)README\.md$/.test(path) ||
-    ["docs/", ".agents/", ".zed/"].some((input) => path.startsWith(input)) ||
+    ["apps/docs/src/content/docs/", ".agents/", ".zed/"].some((input) =>
+      path.startsWith(input),
+    ) ||
     path === "LICENSE"
   );
 }

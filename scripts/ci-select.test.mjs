@@ -20,7 +20,10 @@ function selectedSuites(plan) {
 }
 
 test("documentation keeps repository checks but skips package tests and browsers", () => {
-  const plan = selectChecks(["docs/projects.md", "apps/compiler/README.md"]);
+  const plan = selectChecks([
+    "apps/docs/src/content/docs/projects.md",
+    "apps/compiler/README.md",
+  ]);
   for (const key of [
     "full",
     "compiler",
@@ -262,7 +265,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       turbo().tasks.map((task) => [task.taskId, task.hash]),
     );
     for (const [path, expectedPackages, invalidated] of [
-      ["docs/ci.md", [], []],
+      ["apps/docs/src/content/docs/ci.md", [], []],
       [
         "apps/compiler/engine/compile.go",
         ["@texfolia/contracts", "@texfolia/db", "compiler"],

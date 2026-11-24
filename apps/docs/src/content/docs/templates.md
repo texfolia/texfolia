@@ -1,11 +1,13 @@
-# Template lifecycle
+---
+title: Template lifecycle
+---
 
 NAT-287 keeps the public gallery, stable snapshot URLs, unlisted sharing, source
 ZIPs, licenses, and reviewer reports. Each published snapshot now requires
 review. Previous approval of a publisher does not approve their future uploads.
 The UI overhaul remains in NAT-286.
 
-The implementation lives in [`#/features/templates`](../apps/app/src/features/templates/README.md).
+The implementation lives in [`#/features/templates`](../../../../app/src/features/templates/README.md).
 The public gallery stays in `apps/web`. Template routes, server functions, and the
 create-from-template UI stay in `apps/app`.
 
@@ -102,7 +104,7 @@ It also accepts `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` when
 `DATABASE_URL` is unset. It does not start Postgres or apply the schema.
 To use an isolated R2 directory, run
 `bun run --cwd packages/db templates:seed --local --persist-to /absolute/path`.
-Start the [snapshot engine](../apps/compiler/README.md#run-locally), then visit
+Start the [snapshot engine](../../../../compiler/README.md#run-locally), then visit
 the gallery to generate previews. No local scheduled event is required.
 
 For a deployed database, set `DATABASE_URL` and `TEMPLATE_SEED_BUCKET` to matching

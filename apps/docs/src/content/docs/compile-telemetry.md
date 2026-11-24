@@ -1,4 +1,6 @@
-# Compile telemetry
+---
+title: Compile telemetry
+---
 
 Compile events are structured log objects with `telemetryVersion: 1` and a
 `jobId`. Join events by that ID. Each new compile action gets its own ID;
@@ -38,9 +40,9 @@ fields mean unmeasured, not zero.
 
 `engine`, `plan`, `temperature`, `artifactReused`, and `cacheUsed` identify the
 cohort. `temperature` counts TeX runs in a process; it does not prove that the
-container was cold. See [cold-start measurements](../apps/compiler/cold-start-measurements.md)
+container was cold. See [cold-start measurements](../../../../compiler/cold-start-measurements.md)
 for boot, prewarm, and archive timing fields and the limits of the historical
-local measurements. [Container pool](../apps/compiler/docs/container-pool.md)
+local measurements. [Container pool](../../../../compiler/docs/container-pool.md)
 defines pool hit-rate accounting.
 
 ## Persisted timelines
@@ -103,4 +105,4 @@ timings. Compare equivalent projects, plans, cache states, and runtime locations
 The query describes reporting, not a production latency claim.
 
 The authoritative schemas for compiler and browser preview timing are in
-[`packages/contracts`](../packages/contracts/src/telemetry.ts).
+[`packages/contracts`](../../../../../packages/contracts/src/telemetry.ts).

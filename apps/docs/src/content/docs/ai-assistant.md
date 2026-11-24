@@ -1,4 +1,6 @@
-# Configure the managed assistant
+---
+title: Configure the managed assistant
+---
 
 The editor’s left **Agents** sidebar contains saved project chats. Open it from
 **View → Agents sidebar** or the status bar. Pro users and members of an active
@@ -8,7 +10,7 @@ The history button in the bottom-left status bar opens a separate sidebar to
 the left of Agents, hidden by default. Its list creates, renames, deletes, and
 switches conversations. The active chat keeps its own panel beside history.
 
-The implementation lives in [`#/features/ai`](../apps/app/src/features/ai/README.md): chat runs,
+The implementation lives in [`#/features/ai`](../../../../app/src/features/ai/README.md): chat runs,
 tools, saved threads, skills, and the panel UI. The app keeps the `/api/ai` route,
 the Gateway secrets, and the workspace panel that hosts the UI.
 
@@ -33,7 +35,7 @@ user’s default model for new chats and the existing monthly spending cap.
 ## Set up Cloudflare and Stripe
 
 1. Apply the schema locally with `bun run db:push`. For production, follow the
-   [baseline migration setup](database-deployment.md#prepare-the-baseline-at-launch).
+   [baseline migration setup](/database-deployment/#prepare-the-baseline-at-launch).
 2. Create a Cloudflare AI Gateway, enable persistent logs, enable Unified Billing,
    and fund its credits. Create an account token with **Workers AI Read**,
    **AI Gateway Read**, and **AI Gateway Run** permissions. Models are fetched
@@ -82,7 +84,7 @@ Git tools can inspect status and diffs, commit, push, pull, create branches, and
 switch branches. The assistant instructions require an explicit user request before
 git mutations. The **Generate message** button in the Git panel uses the same
 subscription, Gateway, spending cap, and usage meter. It suggests an editable
-message and creates no commit. See [Git integration](git-integration.md).
+message and creates no commit. See [Git integration](/git-integration/).
 
 ## Agent instructions, skills, and snippets
 
@@ -121,7 +123,7 @@ user's role changes while it is in progress.
 
 ## Check metering
 
-Metering lives in [`#/features/billing`](../apps/app/src/features/billing/README.md). The app
+Metering lives in [`#/features/billing`](../../../../app/src/features/billing/README.md). The app
 only binds the Gateway log lookup from `#/features/ai` that prices each request.
 
 Each model request first creates an `ai_request` row. Its reservation includes

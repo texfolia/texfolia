@@ -1,4 +1,6 @@
-# Projects dashboard
+---
+title: Projects dashboard
+---
 
 The authenticated `/projects` page uses the app theme and an inset sidebar.
 Recent projects are the six accessible projects with the latest `updatedAt`.
@@ -41,10 +43,10 @@ Downloads and duplicates contain saved sources.
 
 **Trash** in the sidebar opens `/projects?view=trash`, which lists the trashed
 projects the viewer can restore or permanently delete. The rules for trash,
-duplicates, and transfers are in [Project controls](project-controls.md#trash).
+duplicates, and transfers are in [Project controls](/project-controls/#trash).
 
 Schema changes use local `db:push` during development. Deployment requirements
-are in [Database deployment](database-deployment.md).
+are in [Database deployment](/database-deployment/).
 The optional PDF cover preview is not part of this implementation.
 
 ## Verification

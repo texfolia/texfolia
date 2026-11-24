@@ -20,6 +20,7 @@
     "dev": "turbo run dev",
     "dev:app": "turbo run dev --filter=app",
     "dev:compiler": "turbo run dev --filter=compiler",
+    "dev:docs": "turbo run dev --filter=docs",
     "dev:web": "turbo run dev --filter=web",
     "format": "oxfmt && turbo run format",
     "format:check": "oxfmt --check && turbo run format:check",
