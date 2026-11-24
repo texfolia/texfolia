@@ -52,6 +52,7 @@ const compiler = createLocalRuntime({
   path: join(directory, "compiler.sqlite"),
   projectEngine: () => engine,
 });
+const compilerStreams = new Set<AbortController>();
 const mf = new Miniflare({
   ...convertV4MiniflareOptions({
     name: "template-lifecycle-test",
@@ -62,7 +63,7 @@ const mf = new Miniflare({
       )
       .map((path) => ({ type: "ESModule", path: join(root, path) })),
     modulesRoot: root,
-    compatibilityDate: "2025-09-02",
+    compatibilityDate: "2026-10-30",
     compatibilityFlags: ["nodejs_compat"],
     assets: {
       directory: new URL("../dist/client/", import.meta.url).pathname,
@@ -87,13 +88,28 @@ const mf = new Miniflare({
     },
     serviceBindings: {
       COMPILER: async (request) => {
+        const streamController = new AbortController();
+        const isEvents = new URL(request.url).pathname.endsWith("/events");
+        if (isEvents) compilerStreams.add(streamController);
+        const signal = isEvents
+          ? AbortSignal.any([request.signal, streamController.signal])
+          : request.signal;
         const response = await compiler.fetch(
           new Request(request.url, {
             method: request.method,
             headers: [...request.headers.entries()],
             body: request.method === "POST" ? await request.text() : undefined,
+            signal,
           }),
         );
+        if (
+          response.headers.get("Content-Type")?.startsWith("text/event-stream")
+        )
+          return new Response(response.body, {
+            status: response.status,
+            headers: response.headers,
+          });
+        compilerStreams.delete(streamController);
         return new Response(await response.arrayBuffer(), {
           status: response.status,
           headers: response.headers,
@@ -263,6 +279,8 @@ try {
   );
 } finally {
   await browser.close();
+  for (const controller of compilerStreams) controller.abort();
+  compilerStreams.clear();
   await mf.dispose();
   await compiler.close();
   if (ids.length) await db.delete(template).where(inArray(template.id, ids));

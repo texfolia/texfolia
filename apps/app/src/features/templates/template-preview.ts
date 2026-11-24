@@ -2,11 +2,9 @@ import { useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import {
-  pollTemplatePreviews,
   queuedTemplatePreviews,
+  subscribeTemplatePreviews,
 } from "#/features/templates";
-
-import { refreshTemplatePreview } from "./template.functions";
 
 export function useTemplatePreviews(
   templates: Parameters<typeof queuedTemplatePreviews>[0],
@@ -15,11 +13,9 @@ export function useTemplatePreviews(
   const queued = queuedTemplatePreviews(templates).join(",");
   useEffect(() => {
     if (!queued) return;
-    return pollTemplatePreviews({
+    return subscribeTemplatePreviews({
       templateIds: queued.split(","),
-      refresh: (templateId) =>
-        refreshTemplatePreview({ data: { templateId, retry: false } }),
-      refreshed: () => router.invalidate(),
+      onSettled: () => void router.invalidate(),
     });
   }, [queued, router]);
 }

@@ -1,4 +1,5 @@
-import type { Db } from "@texfolia/db";
+import { buildSnapshotSchema, type BuildSnapshot } from "@texfolia/contracts";
+import { createDb, type Db } from "@texfolia/db";
 import { template } from "@texfolia/db/schema";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -118,6 +119,7 @@ export async function refreshTemplatePreviews({
     // Each template renders in a temporary compiler project named by its ID.
     const previewProject = `/projects/${found.id}`;
     let settled = false;
+    let backoffMs = 2000;
     try {
       if (Date.now() - found.previewStartedAt.getTime() > 60 * 60_000)
         throw new TemplatePreviewError(
@@ -160,7 +162,12 @@ export async function refreshTemplatePreviews({
         throw new TemplatePreviewError(
           "Preview compilation failed. Retry the preview, or publish corrected sources as a new snapshot.",
         );
-      if (result.status !== "succeeded") continue;
+      if (result.status !== "succeeded") {
+        // The 60s lease already serialized this attempt; release immediately so
+        // an SSE completion event can promote the preview without waiting.
+        backoffMs = 0;
+        continue;
+      }
       const png = await fetchCompiler(
         `${previewProject}/compilations/${found.previewJobId}.png`,
         undefined,
@@ -213,7 +220,7 @@ export async function refreshTemplatePreviews({
     } finally {
       await db
         .update(template)
-        .set({ previewNextAttemptAt: new Date(Date.now() + 2000) })
+        .set({ previewNextAttemptAt: new Date(Date.now() + backoffMs) })
         .where(currentAttempt);
       // The PNG is promoted or the attempt is over. Compiler retention removes
       // the temporary project a day later if this cleanup fails.
@@ -262,4 +269,243 @@ export async function refreshTemplatePreview({
     await retryTemplatePreview({ db, templateId });
   }
   await refreshTemplatePreviews({ db, bucket, compiler, templateId });
+}
+
+type PreviewRowState = Pick<StoredTemplate, "previewStatus" | "previewJobId">;
+
+const sseHeaders = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "private, no-store",
+  "X-Accel-Buffering": "no",
+  "X-Robots-Tag": "noindex, nofollow",
+};
+
+function sseEvent(previewStatus: "ready" | "failed") {
+  return `data: ${JSON.stringify({ previewStatus })}\n\n`;
+}
+
+function settledPreviewResponse(previewStatus: "ready" | "failed") {
+  return new Response(sseEvent(previewStatus), { headers: sseHeaders });
+}
+
+function shouldCheckPreview(snapshot: BuildSnapshot, jobId: string) {
+  const matching =
+    snapshot.current?.id === jobId
+      ? snapshot.current
+      : snapshot.latestBuild?.id === jobId
+        ? snapshot.latestBuild
+        : null;
+  if (matching)
+    return matching.status === "succeeded" || matching.status === "failed";
+  // If the temporary project was cleared or a retry replaced the job, re-check
+  // the database so concurrent tabs receive the settled status.
+  return !snapshot.current && !snapshot.latestBuild
+    ? true
+    : snapshot.current !== null && snapshot.current.id !== jobId;
+}
+
+// Subscribes to the compiler's project SSE stream for a queued template preview
+// and pushes a single terminal event (`ready` or `failed`) once settled.
+export function createTemplatePreviewStream({
+  templateId,
+  initialJobId,
+  advance,
+  compiler,
+  signal,
+}: {
+  templateId: string;
+  initialJobId: string;
+  advance: () => Promise<PreviewRowState | null>;
+  compiler?: Pick<Fetcher, "fetch">;
+  signal: AbortSignal;
+}) {
+  const encoder = new TextEncoder();
+  const upstream = new AbortController();
+  let closed = false;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        signal.removeEventListener("abort", close);
+        upstream.abort();
+        void reader?.cancel().catch(() => {});
+        try {
+          controller.close();
+        } catch {
+          // Already closed or cancelled by the consumer.
+        }
+      };
+      const send = (chunk: string) => {
+        if (closed) return;
+        controller.enqueue(encoder.encode(chunk));
+      };
+      signal.addEventListener("abort", close, { once: true });
+      if (signal.aborted) {
+        close();
+        return;
+      }
+      void (async () => {
+        let jobId = initialJobId;
+        const trySettle = async () => {
+          const next = await advance();
+          if (closed) return true;
+          if (!next) {
+            close();
+            return true;
+          }
+          if (
+            next.previewStatus === "ready" ||
+            next.previewStatus === "failed"
+          ) {
+            send(sseEvent(next.previewStatus));
+            close();
+            return true;
+          }
+          jobId = next.previewJobId;
+          return false;
+        };
+        try {
+          const response = await fetchCompiler(
+            `/projects/${encodeURIComponent(templateId)}/events`,
+            { signal: upstream.signal },
+            compiler,
+          );
+          if (!response.ok || !response.body) {
+            if (!closed) send("retry: 3000\n: unavailable\n\n");
+            close();
+            return;
+          }
+          reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let dataLines: string[] = [];
+          while (!closed) {
+            const { value, done } = await reader.read();
+            if (closed) return;
+            buffer += done
+              ? decoder.decode()
+              : decoder.decode(value, { stream: true });
+            const lines = buffer.split(/\r?\n/);
+            buffer = done ? "" : (lines.pop() ?? "");
+            for (const line of lines) {
+              if (line === "") {
+                if (dataLines.length) {
+                  const raw = dataLines.join("\n");
+                  dataLines = [];
+                  try {
+                    const parsed = buildSnapshotSchema.safeParse(
+                      JSON.parse(raw),
+                    );
+                    if (
+                      parsed.success &&
+                      shouldCheckPreview(parsed.data, jobId) &&
+                      (await trySettle())
+                    )
+                      return;
+                  } catch {
+                    // Ignore malformed compiler event payloads.
+                  }
+                }
+                continue;
+              }
+              if (line.startsWith(":")) {
+                send(": heartbeat\n\n");
+              } else if (line.startsWith("data:")) {
+                const payload = line.slice(5);
+                dataLines.push(
+                  payload.startsWith(" ") ? payload.slice(1) : payload,
+                );
+              }
+            }
+            if (done) {
+              if (!(await trySettle())) {
+                send("retry: 3000\n\n");
+                close();
+              }
+              return;
+            }
+          }
+        } catch {
+          if (!closed) {
+            send("retry: 3000\n\n");
+            close();
+          }
+        }
+      })();
+    },
+    cancel() {
+      closed = true;
+      upstream.abort();
+      return reader?.cancel().catch(() => {});
+    },
+  });
+
+  return new Response(body, { headers: sseHeaders });
+}
+
+async function readPreviewRow(db: Db, templateId: string) {
+  const [row] = await db
+    .select({
+      previewStatus: template.previewStatus,
+      previewJobId: template.previewJobId,
+    })
+    .from(template)
+    .where(eq(template.id, templateId));
+  return row ?? null;
+}
+
+// Starts or advances a queued preview and streams readiness over SSE until the
+// preview is promoted to R2 (`ready`) or reaches a terminal failure (`failed`).
+export async function streamTemplatePreview({
+  db,
+  connectionString,
+  bucket,
+  compiler,
+  found,
+  signal,
+}: Context & {
+  connectionString: string;
+  compiler?: Pick<Fetcher, "fetch">;
+  found: Pick<StoredTemplate, "id" | "previewStatus" | "previewJobId">;
+  signal: AbortSignal;
+}) {
+  if (found.previewStatus === "ready" || found.previewStatus === "failed")
+    return settledPreviewResponse(found.previewStatus);
+
+  // Kick off or settle before returning headers while the request DB is open.
+  await refreshTemplatePreviews({
+    db,
+    bucket,
+    compiler,
+    templateId: found.id,
+  });
+  const current = await readPreviewRow(db, found.id);
+  if (!current) return new Response("Not found", { status: 404 });
+  if (current.previewStatus === "ready" || current.previewStatus === "failed")
+    return settledPreviewResponse(current.previewStatus);
+
+  return createTemplatePreviewStream({
+    templateId: found.id,
+    initialJobId: current.previewJobId,
+    compiler,
+    signal,
+    advance: async () => {
+      // Request middleware closes its pool once the response headers return.
+      const liveDb = createDb(connectionString);
+      try {
+        await refreshTemplatePreviews({
+          db: liveDb,
+          bucket,
+          compiler,
+          templateId: found.id,
+        });
+        return await readPreviewRow(liveDb, found.id);
+      } finally {
+        await liveDb.$client.end();
+      }
+    },
+  });
 }

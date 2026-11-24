@@ -63,7 +63,7 @@ const runtime = new Miniflare({
       )
       .map((path) => ({ type: "ESModule", path: join(root, path) })),
     modulesRoot: root,
-    compatibilityDate: "2025-09-02",
+    compatibilityDate: "2026-10-30",
     compatibilityFlags: ["nodejs_compat"],
     assets: {
       directory: client.pathname,

@@ -14,6 +14,7 @@ export { collectTemplateObjects } from "./cleanup.server";
 export {
   refreshTemplatePreview,
   refreshTemplatePreviews,
+  streamTemplatePreview,
 } from "./preview.server";
 export {
   reportTemplate,
