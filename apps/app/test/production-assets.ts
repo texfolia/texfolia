@@ -182,7 +182,7 @@ window[new URL(document.currentScript.src).searchParams.get("onload")]?.();`,
   );
   await page.goto(origin);
   const fonts = await page.evaluate(async () => {
-    const loaded = await document.fonts.load('16px "Inter Variable"');
+    const loaded = await document.fonts.load('16px "Geist Variable"');
     const code = document.createElement("code");
     code.className = "font-mono";
     code.textContent = "LaTeX";
@@ -193,8 +193,8 @@ window[new URL(document.currentScript.src).searchParams.get("onload")]?.();`,
       mono: getComputedStyle(code).fontFamily,
     };
   });
-  assert(fonts.loaded > 0, "Inter font did not load");
-  assert.match(fonts.sans, /Inter Variable/);
+  assert(fonts.loaded > 0, "Geist font did not load");
+  assert.match(fonts.sans, /Geist Variable/);
   assert.match(fonts.mono, /monospace/);
 
   const source = "\\begin{itemize}\n\\item Hello\n\\end{itemize}\n";

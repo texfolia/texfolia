@@ -37,19 +37,19 @@ colors:
   tab-border: "var(--tab-border)"
 typography:
   body:
-    fontFamily: '"Inter Variable", sans-serif'
+    fontFamily: '"Geist Variable", sans-serif'
     fontSize: "0.875rem"
     lineHeight: "1.25rem"
   label:
-    fontFamily: '"Inter Variable", sans-serif'
+    fontFamily: '"Geist Variable", sans-serif'
     fontSize: "0.75rem"
     lineHeight: "1rem"
     fontWeight: 500
   tab:
-    fontFamily: '"Inter Variable", sans-serif'
+    fontFamily: '"Geist Variable", sans-serif'
     fontSize: "13px"
   file-row:
-    fontFamily: '"Inter Variable", sans-serif'
+    fontFamily: '"Geist Variable", sans-serif'
     fontSize: "0.75rem"
     lineHeight: "1rem"
     fontWeight: 400
@@ -156,7 +156,7 @@ Semantic roles follow the selected theme; no fixed editor palette is prescribed.
 
 ## Typography
 
-Inter Variable supplies interface text and headings. The inherited Tailwind monospace stack supplies source text through `--font-mono`; editor preferences control its size. There is no separate display face in the editor.
+Geist Variable supplies interface text and headings. The inherited Tailwind monospace stack supplies source text through `--font-mono`; editor preferences control its size. There is no separate display face in the editor.
 
 Body controls use the body role. Panel headings and status controls use the label role. Dockview tabs use the tab role. File rows use the label size at regular weight, with medium weight for the active row. Preview tab titles are italic; pinned titles are upright.
 
@@ -206,7 +206,7 @@ Settings opens as a standard dialog with a dimmed backdrop, User and Project tab
 
 Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems remains a dock panel.
 
-The functional reference is [Editor workspace](../../docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, neutral base, CSS variables, Tabler icons) and the primitives in [`packages/ui`](../../packages/ui/README.md).
+The functional reference is [Editor workspace](../../docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, zinc base, CSS variables, Tabler icons) and the primitives in [`packages/ui`](../../packages/ui/README.md).
 
 ## Do's and Don'ts
 
