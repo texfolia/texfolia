@@ -375,6 +375,13 @@ export function ProjectWorkspace({
       value={{
         collaboration: collaboration.snapshot,
         holdDocument: hold,
+        editDocument: (id, run) => {
+          if (!writable)
+            return Promise.reject(
+              new Error("You do not have permission to edit this project."),
+            );
+          return collaboration.edit(id, run);
+        },
         projectId,
         canWrite: writable,
         build: compilation.build,
