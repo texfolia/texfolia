@@ -4,9 +4,12 @@ import {
   codeEmail,
   createEmailDelivery,
   deleteAccountEmail,
+  emailJobSchema,
+  invitationEmail,
   projectCollaboratorEmail,
   projectShareLinkEmail,
   sendEmail,
+  type EmailJob,
 } from "./index";
 
 const message = codeEmail({
@@ -26,6 +29,22 @@ test("the deletion link is escaped in HTML only", () => {
   const email = deleteAccountEmail({ to: "writer@example.com", url });
   expect(email.text).toContain(url);
   expect(email.html).toContain("?a=1&amp;b=&quot;2&quot;");
+});
+
+test("invitation emails clean and escape the organization name", () => {
+  const email = invitationEmail({
+    to: "writer@example.com",
+    organization: "Lab <b>\r\nBcc: x@example.com",
+    url: new URL("https://app.texfolia.com/accept-invitation/1?a=1&b=2"),
+  });
+  expect(email.subject).toBe(
+    "You're invited to join Lab <b> Bcc: x@example.com on Texfolia",
+  );
+  expect(email.text).not.toContain("\n");
+  expect(email.html).toContain(
+    "<strong>Lab &lt;b&gt; Bcc: x@example.com</strong>",
+  );
+  expect(email.html).toContain("?a=1&amp;b=2");
 });
 
 test("project collaborator emails include role, project link, and escape HTML", () => {
@@ -95,27 +114,43 @@ test("project share-link emails describe the scope and link without requiring si
   expect(pdfMail.html).toContain("view its PDF without signing in");
 });
 
-test("messages go out from the Texfolia address and delivery errors reject", async () => {
+test("messages go out from the configured address and delivery errors reject", async () => {
   const sent: unknown[] = [];
-  await sendEmail({ send: async (email) => sent.push(email) }, message);
-  expect(sent).toEqual([{ from: "noreply@texfolia.com", ...message }]);
+  const env = (send: SendEmail["send"]) => ({
+    EMAIL: { send },
+    EMAIL_FROM: "mail@example.com",
+  });
+  await sendEmail(
+    env(async (email: unknown) => {
+      sent.push(email);
+      return { messageId: "1" };
+    }),
+    message,
+  );
+  expect(sent).toEqual([{ from: "mail@example.com", ...message }]);
   await expect(
     sendEmail(
-      { send: () => Promise.reject(new Error("unavailable")) },
+      env(() => Promise.reject(new Error("unavailable"))),
       message,
     ),
   ).rejects.toThrow("unavailable");
 });
 
-test("createEmailDelivery requires both binding and baseURL", async () => {
+test("createEmailDelivery queues emails and requires a queue and baseURL", async () => {
   const sent: unknown[] = [];
-  const binding = { send: async (email: unknown) => sent.push(email) };
+  const queue = {
+    async send(job: EmailJob) {
+      sent.push(job);
+      return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
+    },
+  };
   expect(createEmailDelivery(undefined, "https://app.texfolia.com")).toBe(
     undefined,
   );
-  expect(createEmailDelivery(binding, undefined)).toBe(undefined);
-  const delivery = createEmailDelivery(binding, "https://app.texfolia.com");
+  expect(createEmailDelivery(queue, undefined)).toBe(undefined);
+  const delivery = createEmailDelivery(queue, "https://app.texfolia.com");
   expect(delivery?.baseURL).toBe("https://app.texfolia.com");
   await delivery?.send(message);
-  expect(sent).toEqual([{ from: "noreply@texfolia.com", ...message }]);
+  expect(sent).toEqual([{ kind: "email", message }]);
+  expect(emailJobSchema.parse(sent[0])).toEqual({ kind: "email", message });
 });

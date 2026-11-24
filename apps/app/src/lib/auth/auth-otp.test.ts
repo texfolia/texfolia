@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
-import type { EmailMessage, SendEmail } from "#/lib/email";
+import type { DeliverEmail, EmailMessage } from "#/lib/email";
 
 import { createEmailOTPPlugin } from "./auth";
 
-function createTestAuth(deliver?: SendEmail) {
+function createTestAuth(deliver?: DeliverEmail) {
   const emails: EmailMessage[] = [];
   const auth = betterAuth({
     baseURL: "http://localhost:3000",
@@ -52,6 +52,11 @@ test("the emailed sign-in code creates a verified session and can only be used o
     body: { email: "person@example.com", type: "sign-in" },
   });
   const otp = deliveredCode(emails, "sign-in");
+  const context = await auth.$context;
+  const stored = await context.internalAdapter.findVerificationValue(
+    "sign-in-otp-person@example.com",
+  );
+  expect(stored?.value).not.toContain(otp);
   const result = await auth.api.signInEmailOTP({
     body: { email: "person@example.com", otp },
   });

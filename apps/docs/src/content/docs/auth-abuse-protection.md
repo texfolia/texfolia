@@ -12,26 +12,25 @@ account would also trigger Stripe customer creation.
 All paths below are relative to `/api/auth`. This inventory covers the
 unauthenticated HTTP routes in Better Auth 1.7.15 and the configured plugins.
 
-| Method and path                                                                                        | Side effects and controls                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST `/email-otp/send-verification-otp`                                                                | Sends sign-in, email-verification, or password-reset OTPs. Requires Turnstile. Limited to three requests per IP and path in 60 seconds, shared across OTP purposes.                                                     |
-| POST `/email-otp/request-password-reset`                                                               | Sends a reset OTP for an existing account. Requires Turnstile; three requests per IP and path in 60 seconds.                                                                                                            |
-| POST `/forget-password/email-otp`                                                                      | Deprecated reset alias, retained for compatibility. Same CAPTCHA and rate policy as the canonical reset sender.                                                                                                         |
-| POST `/sign-in/email-otp`                                                                              | Requires a valid, expiring OTP before creating a verified account or session. Three requests per IP and path in 60 seconds; each OTP also has an attempt limit. New verified accounts trigger the Stripe customer hook. |
-| POST `/email-otp/check-verification-otp`, `/email-otp/verify-email`, `/email-otp/reset-password`       | Require an OTP; do not send email. Three requests per IP and path in 60 seconds, plus the OTP attempt limit.                                                                                                            |
-| POST `/sign-in/email`                                                                                  | Password verification and session creation for existing credentials. Three requests per IP and path in 10 seconds. No signup or outbound email.                                                                         |
-| POST `/sign-in/social`                                                                                 | Starts OAuth or verifies a provider ID token. Three requests per IP and path in 10 seconds.                                                                                                                             |
-| GET/POST `/callback/:id`                                                                               | Completes OAuth using provider proof and the OAuth state flow. Creating a user triggers the Stripe customer hook. Uses the default rate limit.                                                                          |
-| GET `/get-session`, POST `/sign-out`, GET `/error`                                                     | Session lookup/refresh, session removal, or error redirect. No email or customer creation. Uses the default rate limit.                                                                                                 |
-| GET `/verify-email`, GET `/reset-password/:token`, POST `/reset-password`, GET `/delete-user/callback` | Legacy token completion routes. Require signed or stored tokens before changing account state. Link email senders and account deletion are not configured. Uses the default rate limit.                                 |
-| POST `/stripe/webhook`                                                                                 | Requires a valid Stripe webhook signature. Uses the default rate limit.                                                                                                                                                 |
+| Method and path                                                                                        | Side effects and controls                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST `/email-otp/send-verification-otp`                                                                | Sends sign-in, email-verification, or password-reset OTPs. Requires Turnstile. Limited to three requests per IP and path in 60 seconds, shared across OTP purposes.                                                                     |
+| POST `/email-otp/request-password-reset`                                                               | Sends a reset OTP for an existing account. Requires Turnstile; three requests per IP and path in 60 seconds.                                                                                                                            |
+| POST `/forget-password/email-otp`                                                                      | Deprecated reset alias, retained for compatibility. Same CAPTCHA and rate policy as the canonical reset sender.                                                                                                                         |
+| POST `/sign-in/email-otp`                                                                              | Requires a valid, expiring OTP, stored hashed, before creating a verified account or session. Three requests per IP and path in 60 seconds; each OTP also has an attempt limit. New verified accounts trigger the Stripe customer hook. |
+| POST `/email-otp/check-verification-otp`, `/email-otp/verify-email`, `/email-otp/reset-password`       | Require an OTP; do not send email. Three requests per IP and path in 60 seconds, plus the OTP attempt limit.                                                                                                                            |
+| POST `/sign-in/email`                                                                                  | Password verification and session creation for existing credentials. Requires Turnstile. Three requests per IP and path in 10 seconds. No signup or outbound email.                                                                     |
+| POST `/sign-in/social`                                                                                 | Starts OAuth or verifies a provider ID token. Three requests per IP and path in 10 seconds.                                                                                                                                             |
+| GET/POST `/callback/:id`                                                                               | Completes OAuth using provider proof and the OAuth state flow. Creating a user triggers the Stripe customer hook. Uses the default rate limit.                                                                                          |
+| GET `/get-session`, POST `/sign-out`, GET `/error`                                                     | Session lookup/refresh, session removal, or error redirect. No email or customer creation. Uses the default rate limit, except that `/get-session` has none.                                                                            |
+| GET `/verify-email`, GET `/reset-password/:token`, POST `/reset-password`, GET `/delete-user/callback` | Legacy token completion routes. Require signed or stored tokens before changing account state. Link email senders and account deletion are not configured. Uses the default rate limit.                                                 |
+| POST `/stripe/webhook`                                                                                 | Requires a valid Stripe webhook signature. Has no rate limit.                                                                                                                                                                           |
 
 The default rate limit is 100 requests per IP and path in 10 seconds. Limits run
 before CAPTCHA verification, including on invalid and missing-token requests.
 The reset alias has its own bucket; it does not share the canonical sender's
-bucket. Limits use Better Auth's in-memory store, so they apply within a Worker
-isolate, not globally across isolates or deployments. Turnstile is the required
-control for every public email sender even when requests reach different isolates.
+bucket. Counters live in the `rate_limit` Postgres table, so every Worker isolate
+shares them. Turnstile is also required for every public email sender.
 
 `cf-connecting-ip` is the only configured client IP header. Cloudflare supplies
 this header in deployed Workers; caller-supplied `x-forwarded-for` values cannot
@@ -42,7 +41,8 @@ The remaining organization, billing, account, and session-management endpoints
 require a session and their applicable authorization checks. In particular,
 `/organization/invite-member` requires organization permission before sending an
 invitation. Subscription changes require account ownership or an organization
-owner/admin role. OTP email change is disabled by plugin configuration.
+owner/admin role. `/email-otp/request-email-change` also requires Turnstile, which
+runs before the session check, and allows three requests per IP in 60 seconds.
 
 These unused routes cannot send email or create accounts:
 
@@ -61,7 +61,8 @@ malformed lists fail during auth configuration. Local development allows
 `apps/app/wrangler.jsonc`.
 
 Every token must report an allowed hostname and action `auth-email`. The login
-widget and server share the action constant in `auth-captcha.ts`. Missing tokens,
+and account settings widgets and the server share the action constant in
+`captcha.ts`. Missing tokens,
 failed verification, missing/mismatched hostname or action, duplicate/expired
 tokens, and provider outages fail before OTP delivery. Turnstile's Siteverify
 service enforces token expiry and single use.

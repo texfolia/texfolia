@@ -1,6 +1,8 @@
 import { jobIdSchema } from "@texfolia/contracts";
 import { DurableObject } from "cloudflare:workers";
 
+import { sendEmail } from "#/lib/email";
+
 import { createCompilerEngine, fetchCompiler } from "./compiler";
 import { cacheKey, ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
@@ -164,7 +166,7 @@ export class ProjectBuilds extends DurableObject<Env> {
   }
 }
 
-/** Consumes the compile overflow, dead-letter, and maintenance queues. */
+/** Consumes the compile overflow, dead-letter, and background queues. */
 export async function handleBuildQueue(batch: MessageBatch, env: Env) {
   for (const message of batch.messages) {
     try {
@@ -174,6 +176,7 @@ export async function handleBuildQueue(batch: MessageBatch, env: Env) {
           body: message.body,
           attempts: message.attempts,
           coordinator: (projectId) => env.BUILDS.getByName(projectId),
+          deliverEmail: (email) => sendEmail(env, email),
         })
       )
         message.ack();

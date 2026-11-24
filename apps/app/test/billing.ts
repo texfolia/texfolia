@@ -193,7 +193,7 @@ try {
   const owner = await signup();
   const teammate = await signup();
   assert.equal(await compilePlan(db, teammate.id), "free");
-  await assert.rejects(aiEntitlement(db, teammate.id));
+  await assert.rejects(aiEntitlement(db, teammate.id, null));
   const personal = await checkout(owner.headers, {
     plan: "pro",
     customerType: "user",
@@ -205,7 +205,7 @@ try {
   );
   assert.equal(await compilePlan(db, owner.id), "pro");
   assert.equal(
-    (await aiEntitlement(db, owner.id)).subscriptionId,
+    (await aiEntitlement(db, owner.id, null)).subscriptionId,
     personalSub.id,
   );
 
@@ -288,8 +288,12 @@ try {
   assert.equal(saved[0]?.plan, "team");
   assert.equal(await compilePlan(db, teammate.id), "team");
   assert.equal(
-    (await aiEntitlement(db, teammate.id)).customerId,
+    (await aiEntitlement(db, teammate.id, org.id)).customerId,
     shared.customerId,
+  );
+  await assert.rejects(
+    aiEntitlement(db, teammate.id, null),
+    "The organization never pays for a member's personal projects",
   );
   await assert.rejects(
     auth.api.createBillingPortal({
@@ -312,7 +316,7 @@ try {
     "Removing a member updates Stripe seats",
   );
   assert.equal(await compilePlan(db, teammate.id), "free");
-  await assert.rejects(aiEntitlement(db, teammate.id));
+  await assert.rejects(aiEntitlement(db, teammate.id, null));
   await stripe.subscriptions.cancel(teamSub.id);
   await webhook(
     "customer.subscription.deleted",
@@ -324,7 +328,7 @@ try {
     "Personal subscription survives Team cancellation",
   );
   assert.equal(
-    (await aiEntitlement(db, owner.id)).customerId,
+    (await aiEntitlement(db, owner.id, null)).customerId,
     personal.customerId,
   );
   await stripe.subscriptions.cancel(personalSub.id);
@@ -333,7 +337,7 @@ try {
     await stripe.subscriptions.retrieve(personalSub.id),
   );
   assert.equal(await compilePlan(db, owner.id), "free");
-  await assert.rejects(aiEntitlement(db, owner.id));
+  await assert.rejects(aiEntitlement(db, owner.id, null));
   console.info(
     "Billing passed: real sandbox checkout and subscriptions, signed webhook processing, seat additions/removals, payer isolation, compile/AI entitlement and cancellation.",
   );

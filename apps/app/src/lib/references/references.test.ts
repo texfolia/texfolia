@@ -199,6 +199,130 @@ test("retries a dropped connection once, but not a timeout", async () => {
   assert.equal(attempts, 1);
 });
 
+test("follows bounded redirects to public HTTPS hosts only", async () => {
+  const redirect = (location: string) => () =>
+    new Response("", { status: 302, headers: { Location: location } });
+  const id = { kind: "doi", id: "10.1145/x" } as const;
+  const calls: Array<{ url: string; headers: Headers }> = [];
+  const result = await lookupReference(
+    id,
+    fakeFetch(
+      {
+        "https://doi.org/": redirect("https://api.crossref.org/v1/works/x"),
+        "https://api.crossref.org/v1/": redirect("/v2/works/x"),
+        "https://api.crossref.org/v2/": () => Response.json(crossref),
+      },
+      calls,
+    ),
+  );
+  assert.equal(result.key, "gu2020efficient");
+  assert.deepEqual(
+    calls.map((call) => call.url),
+    [
+      "https://doi.org/10.1145/x",
+      "https://api.crossref.org/v1/works/x",
+      "https://api.crossref.org/v2/works/x",
+    ],
+  );
+  assert.equal(
+    calls[2]?.headers.get("Accept"),
+    "application/vnd.citationstyles.csl+json",
+  );
+
+  for (const location of [
+    "http://api.crossref.org/x",
+    "https://127.0.0.1/x",
+    "https://2130706433/x",
+    "https://[::1]/x",
+    "https://localhost/x",
+    "https://metadata.google.internal/x",
+    "https://printer.local./x",
+    "https://api.crossref.org:8443/x",
+    "https://user:secret@api.crossref.org/x",
+    "file:///etc/passwd",
+    "https://",
+  ]) {
+    const seen: typeof calls = [];
+    await assert.rejects(
+      lookupReference(
+        id,
+        fakeFetch({ "https://doi.org/": redirect(location) }, seen),
+      ),
+      ReferenceSourceError,
+      location,
+    );
+    assert.equal(seen.length, 1, location);
+  }
+
+  const loop: typeof calls = [];
+  await assert.rejects(
+    lookupReference(
+      id,
+      fakeFetch({ "https://": redirect("https://api.crossref.org/x") }, loop),
+    ),
+    ReferenceSourceError,
+  );
+  assert.equal(loop.length, 6);
+});
+
+test("stops reading bodies over 1 MiB", async () => {
+  const id = { kind: "doi", id: "10.1145/x" } as const;
+  let sent = 0;
+  let cancelled = false;
+  await assert.rejects(
+    lookupReference(
+      id,
+      fakeFetch({
+        "https://doi.org/": () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                sent += 64 * 1024;
+                controller.enqueue(new Uint8Array(64 * 1024).fill(0x20));
+              },
+              cancel() {
+                cancelled = true;
+              },
+            }),
+          ),
+      }),
+    ),
+    ReferenceSourceError,
+  );
+  assert.equal(cancelled, true);
+  assert.ok(sent < 2 * 1024 * 1024);
+  await assert.rejects(
+    lookupReference(
+      id,
+      fakeFetch({
+        "https://doi.org/": () =>
+          new Response("{}", {
+            headers: { "Content-Length": String(1024 * 1024 + 1) },
+          }),
+      }),
+    ),
+    ReferenceSourceError,
+  );
+});
+
+test("keeps invalid character references and drops invalid years", () => {
+  const item = (year: string | number) => ({
+    type: "book",
+    title: "A &#x110000; &#99999999; &#xD800; &#x1F600; title",
+    issued: { "date-parts": [[year]] },
+  });
+  assert.match(
+    cslToBibtex(item(2020)),
+    /A \\&\\#x110000; \\&\\#99999999; \\&\\#xD800; \u{1f600} title/u,
+  );
+  assert.match(cslToBibtex(item(" 2020 ")), /year = \{2020\}/);
+  for (const year of ["2020},\n  note = {x", "2020{", "", 20201, 1.5, NaN]) {
+    const bibtex = cslToBibtex(item(year));
+    assert.doesNotMatch(bibtex, /year|note/);
+    assert.doesNotMatch(citationKey(item(year)), /[^a-z0-9]/);
+  }
+});
+
 test("escapes LaTeX specials and strips markup", () => {
   const bibtex = cslToBibtex({
     type: "article-journal",

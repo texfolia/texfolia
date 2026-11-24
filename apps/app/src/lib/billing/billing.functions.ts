@@ -14,3 +14,20 @@ export const getBilling = createServerFn({ method: "GET" })
       organizationId: data.organizationId,
     });
   });
+
+export const saveOrganizationCap = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      organizationId: z.string().min(1),
+      dollars: z.number().finite().min(0).max(10_000).multipleOf(0.01),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const { saveOrganizationAiCap } = await import("./server");
+    await saveOrganizationAiCap(context.db, {
+      userId: session.user.id,
+      organizationId: data.organizationId,
+      dollars: data.dollars,
+    });
+  });

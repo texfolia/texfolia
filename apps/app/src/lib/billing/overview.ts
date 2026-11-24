@@ -1,6 +1,10 @@
 import type { Db } from "@texfolia/db";
+import { aiOrganizationSettings } from "@texfolia/db/schema";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
+
+import { getOrganizationAiSettings, payerAiSpend } from "./metering";
+import { BillingError, nanoDollars } from "./usage";
 
 /**
  * The billing settings page: the user's organizations, the selected
@@ -54,6 +58,10 @@ export async function billingOverview(
         orderBy: { periodEnd: "desc" },
       })
     : [];
+  const ai =
+    selected && canManage
+      ? await organizationAi(db, selected.id, subscriptions)
+      : null;
   return {
     organizations: organizations.map(({ id, name }) => ({ id, name })),
     selected: selected
@@ -67,6 +75,7 @@ export async function billingOverview(
         }
       : null,
     canManage,
+    ai,
     subscriptions: subscriptions.map(
       ({ plan, status, periodEnd, cancelAtPeriodEnd }) => ({
         plan,
@@ -77,5 +86,52 @@ export async function billingOverview(
     ),
     userId,
   };
+}
+
+async function organizationAi(
+  db: Db,
+  organizationId: string,
+  subscriptions: { stripeCustomerId: string | null }[],
+) {
+  const customerIds = [
+    ...new Set(subscriptions.flatMap((s) => s.stripeCustomerId ?? [])),
+  ];
+  const [settings, spend] = await Promise.all([
+    getOrganizationAiSettings(db, organizationId),
+    payerAiSpend(db, customerIds),
+  ]);
+  return {
+    monthlyCapDollars: settings.monthlyCapNanos / nanoDollars,
+    spentDollars: spend.spent / nanoDollars,
+    reservedDollars: spend.reserved / nanoDollars,
+  };
+}
+
+/** Sets an organization's shared AI spend cap. Owners and admins only. */
+export async function saveOrganizationAiCap(
+  db: Db,
+  {
+    userId,
+    organizationId,
+    dollars,
+  }: { userId: string; organizationId: string; dollars: number },
+) {
+  const membership = await db.query.member.findFirst({
+    columns: { role: true },
+    where: { userId, organizationId },
+  });
+  if (!membership || !isOrgAdmin(membership.role))
+    throw new BillingError(
+      "Only an organization owner or admin can change its AI spend cap.",
+      403,
+    );
+  const monthlyCapNanos = Math.round(dollars * nanoDollars);
+  await db
+    .insert(aiOrganizationSettings)
+    .values({ organizationId, monthlyCapNanos })
+    .onConflictDoUpdate({
+      target: aiOrganizationSettings.organizationId,
+      set: { monthlyCapNanos },
+    });
 }
 export type BillingOverview = Awaited<ReturnType<typeof billingOverview>>;

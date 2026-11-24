@@ -1,5 +1,10 @@
 import type { Db } from "@texfolia/db";
-import { aiRequest, aiRun, aiSettings } from "@texfolia/db/schema";
+import {
+  aiOrganizationSettings,
+  aiRequest,
+  aiRun,
+  aiSettings,
+} from "@texfolia/db/schema";
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import Stripe from "stripe";
 
@@ -105,6 +110,42 @@ export async function getAiSettings(db: Db, userId: string) {
   return settings;
 }
 
+/** An organization's shared AI spend cap, created with its default on first use. */
+export async function getOrganizationAiSettings(
+  db: Db,
+  organizationId: string,
+) {
+  await db
+    .insert(aiOrganizationSettings)
+    .values({ organizationId })
+    .onConflictDoNothing();
+  const [settings] = await db
+    .select()
+    .from(aiOrganizationSettings)
+    .where(eq(aiOrganizationSettings.organizationId, organizationId));
+  if (!settings) throw new Error("Organization AI settings not found");
+  return settings;
+}
+
+const thisMonth = sql`${aiRequest.createdAt} >= date_trunc('month', now() at time zone 'UTC') at time zone 'UTC'`;
+
+/** This month's AI spend billed to one Stripe customer, across every user. */
+export async function payerAiSpend(db: Db, customerIds: string[]) {
+  if (!customerIds.length) return { spent: 0, reserved: 0 };
+  const [row] = await db
+    .select({
+      spent: sql<string>`coalesce(sum(${aiRequest.chargedNanos}), 0)`,
+      reserved: sql<string>`coalesce(sum(case when ${aiRequest.chargedNanos} is null then ${aiRequest.reservedNanos} else 0 end), 0)`,
+    })
+    .from(aiRequest)
+    .innerJoin(aiRun, eq(aiRun.id, aiRequest.runId))
+    .where(and(inArray(aiRun.stripeCustomerId, customerIds), thisMonth));
+  return {
+    spent: Number(row?.spent ?? 0),
+    reserved: Number(row?.reserved ?? 0),
+  };
+}
+
 export async function aiSpend(db: Db, userId: string) {
   const [row] = await db
     .select({
@@ -134,16 +175,22 @@ export async function reserveAiRequest({
   db,
   runId,
   userId,
+  payer,
   model,
   reservedNanos,
 }: {
   db: Db;
   runId: string;
   userId: string;
+  payer: AiPayer;
   model: string;
   reservedNanos: number;
 }) {
+  if (payer.organizationId)
+    await getOrganizationAiSettings(db, payer.organizationId);
   return db.transaction(async (tx) => {
+    // Always lock the user's row before the organization's, so concurrent
+    // reservations cannot deadlock.
     const [settings] = await tx
       .select()
       .from(aiSettings)
@@ -156,17 +203,43 @@ export async function reserveAiRequest({
       })
       .from(aiRequest)
       .innerJoin(aiRun, eq(aiRun.id, aiRequest.runId))
-      .where(
-        and(
-          eq(aiRun.userId, userId),
-          sql`${aiRequest.createdAt} >= date_trunc('month', now() at time zone 'UTC') at time zone 'UTC'`,
-        ),
-      );
+      .where(and(eq(aiRun.userId, userId), thisMonth));
     if (Number(usage?.total ?? 0) + reservedNanos > settings.monthlyCapNanos)
       throw new BillingError(
         "Your monthly AI spend cap has been reached, or there is not enough remaining for this request. Adjust the cap or choose a less expensive model.",
         402,
       );
+    if (payer.organizationId) {
+      // The organization's cap bounds every member's usage billed to it.
+      const [organizationSettings] = await tx
+        .select()
+        .from(aiOrganizationSettings)
+        .where(eq(aiOrganizationSettings.organizationId, payer.organizationId))
+        .for("update");
+      if (!organizationSettings)
+        throw new Error("Organization AI settings not found");
+      const [payerUsage] = await tx
+        .select({
+          total: sql<string>`coalesce(sum(coalesce(${aiRequest.chargedNanos}, ${aiRequest.reservedNanos})), 0)`,
+        })
+        .from(aiRequest)
+        .innerJoin(aiRun, eq(aiRun.id, aiRequest.runId))
+        .where(and(eq(aiRun.stripeCustomerId, payer.customerId), thisMonth));
+      if (
+        Number(payerUsage?.total ?? 0) + reservedNanos >
+        organizationSettings.monthlyCapNanos
+      )
+        throw new BillingError(
+          "Your organization's monthly AI spend cap has been reached. Ask an organization owner or admin to raise it.",
+          402,
+        );
+    }
+    const [run] = await tx
+      .select({ stripeCustomerId: aiRun.stripeCustomerId })
+      .from(aiRun)
+      .where(and(eq(aiRun.id, runId), eq(aiRun.userId, userId)));
+    if (run?.stripeCustomerId !== payer.customerId)
+      throw new BillingError("Your access changed. Refresh the project.", 409);
     const [request] = await tx
       .insert(aiRequest)
       .values({ runId, model, reservedNanos })

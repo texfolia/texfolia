@@ -335,6 +335,25 @@ export const projectComment = pgTable(
   ],
 );
 
+export const sharingLimitWindow = pgEnum("sharing_limit_window", [
+  "minute",
+  "day",
+]);
+
+/** Counts a user's outbound sharing emails in the current minute and day. */
+export const sharingLimit = pgTable(
+  "sharing_limit",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    window: sharingLimitWindow("window").notNull(),
+    count: integer("count").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.window] })],
+);
+
 export const relations = defineRelations(
   {
     project,
@@ -552,6 +571,29 @@ export const aiSettings = pgTable(
   ],
 );
 
+/**
+ * An organization's shared monthly AI spend cap. Only organization owners and
+ * admins change it; it bounds every member's usage billed to the organization,
+ * on top of each member's own cap.
+ */
+export const aiOrganizationSettings = pgTable(
+  "ai_organization_settings",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    monthlyCapNanos: money("monthly_cap_nanos")
+      .notNull()
+      .default(100_000_000_000),
+  },
+  (t) => [
+    check(
+      "ai_organization_cap_nonnegative",
+      sql`${t.monthlyCapNanos} between 0 and 10000000000000`,
+    ),
+  ],
+);
+
 export const aiThread = pgTable(
   "ai_thread",
   {
@@ -614,6 +656,8 @@ export const aiRun = pgTable(
   },
   (t) => [
     index("ai_run_user_created_idx").on(t.userId, t.createdAt),
+    // Payer-keyed spend: an organization's cap sums every run billed to it.
+    index("ai_run_customer_created_idx").on(t.stripeCustomerId, t.createdAt),
     uniqueIndex("ai_run_user_client_idx").on(t.userId, t.clientRunId),
   ],
 );

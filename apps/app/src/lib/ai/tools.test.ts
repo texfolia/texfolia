@@ -29,6 +29,7 @@ function toolNames(canWrite: boolean) {
     projectId: crypto.randomUUID(),
     userId: "user",
     canWrite,
+    organizationId: null,
     headers: new Headers(),
     signal: new AbortController().signal,
   }).map((tool): string => tool.name);

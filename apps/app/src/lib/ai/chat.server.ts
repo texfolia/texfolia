@@ -105,7 +105,12 @@ export async function aiAccess({
     session.user.id,
     project.organizationId,
   );
-  return { userId: session.user.id, canWrite: project.canWrite, payer };
+  return {
+    userId: session.user.id,
+    canWrite: project.canWrite,
+    organizationId: project.organizationId,
+    payer,
+  };
 }
 
 export function checkAiOrigin(request: Request) {
@@ -203,6 +208,7 @@ export function meteredGatewayFetch({
   db,
   runId,
   userId,
+  payer,
   model,
   checkAccess,
   fetcher = fetch,
@@ -210,6 +216,7 @@ export function meteredGatewayFetch({
   db: Db;
   runId: string;
   userId: string;
+  payer: AiPayer;
   model: AiModel;
   checkAccess: () => Promise<void>;
   fetcher?: AiFetch;
@@ -242,6 +249,7 @@ export function meteredGatewayFetch({
       db,
       runId,
       userId,
+      payer,
       model: model.id,
       reservedNanos,
     });
@@ -287,6 +295,7 @@ export async function startAssistant({
   workspace,
   userId,
   canWrite,
+  organizationId,
   payer,
   body,
   purpose,
@@ -301,6 +310,8 @@ export async function startAssistant({
   workspace: AssistantWorkspace;
   userId: string;
   canWrite: boolean;
+  /** The project's organization, which the tools re-check entitlement against. */
+  organizationId: string | null;
   payer: AiPayer;
   body: unknown;
 }) {
@@ -538,6 +549,7 @@ export async function startAssistant({
       if (
         access.userId !== userId ||
         access.canWrite !== canWrite ||
+        access.organizationId !== organizationId ||
         access.payer.subscriptionId !== payer.subscriptionId
       )
         throw new AiError("Your access changed. Refresh the project.", 403);
@@ -584,6 +596,7 @@ export async function startAssistant({
         db,
         runId: run.id,
         userId,
+        payer,
         model,
         checkAccess,
       }),
@@ -618,6 +631,7 @@ export async function startAssistant({
               projectId,
               userId,
               canWrite,
+              organizationId,
               headers: request.headers,
               signal: abort.signal,
             }),

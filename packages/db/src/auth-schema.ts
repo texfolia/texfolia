@@ -1,11 +1,12 @@
 import { defineRelationsPart } from "drizzle-orm";
 import {
-  boolean,
-  index,
-  integer,
   pgTable,
   text,
+  bigint,
   timestamp,
+  boolean,
+  integer,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -156,6 +157,13 @@ export const subscription = pgTable("subscription", {
   stripeScheduleId: text("stripe_schedule_id"),
 });
 
+export const rateLimit = pgTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
+
 export const authRelations = defineRelationsPart(
   {
     user,
@@ -166,6 +174,7 @@ export const authRelations = defineRelationsPart(
     member,
     invitation,
     subscription,
+    rateLimit,
   },
   (r) => ({
     user: {

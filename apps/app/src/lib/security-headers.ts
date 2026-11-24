@@ -21,6 +21,11 @@ export function withSecurityHeaders({
 
   // Vite's refresh preamble uses inline scripts without a nonce in development.
   if (!development) {
+    // Browsers ignore this over plain HTTP, so local production builds still work.
+    secured.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains",
+    );
     const websocket = new URL(url);
     websocket.protocol = websocket.protocol === "https:" ? "wss:" : "ws:";
     secured.headers.set(
