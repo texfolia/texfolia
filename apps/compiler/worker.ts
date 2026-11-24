@@ -1,424 +1,165 @@
 import { Container, getContainer } from "@cloudflare/containers";
-import { jobIdSchema, planSchema } from "@texfolia/contracts";
 import { DurableObject } from "cloudflare:workers";
-import { z } from "zod";
+import { Effect, Layer, ManagedRuntime } from "effect";
 
-import { ProjectCoordinatorCore } from "./src/coordinator";
-import { createCoordinatorApp } from "./src/coordinator-api";
-import {
-  CompileUsageCore,
-  checkCompileAdmission,
-  compilePolicy,
-  withCompileUsage,
-} from "./src/limits";
-import { PoolCore, poolClaimSchema, type PoolClaim } from "./src/pool";
-import { createPooledEngine } from "./src/pooled-engine";
-import { compileQueue, processQueueMessage } from "./src/queues";
-import type { ObjectStore } from "./src/types";
+import { Background, handle } from "./src/compile";
+import { PoolConfig, poolSettings } from "./src/config";
+import { Containers } from "./src/containers";
+import { ContainerError } from "./src/errors";
+import { Pool, PoolManagerService, PoolStore } from "./src/pool";
+import { poolClient, serveClaim } from "./src/pool-rpc";
 
+const maintenanceMs = 60_000;
+
+/** One compile container. Its pool decides when it runs. */
 export class TectonicContainer extends Container<Env> {
   override defaultPort = 8080;
-  override sleepAfter: string | number = "10m";
+  override sleepAfter: string | number;
+  override envVars: Record<string, string>;
 
-  override async fetch(request: Request) {
-    if (
-      request.method === "POST" &&
-      new URL(request.url).pathname === "/compile"
-    ) {
-      const plan = planSchema
-        .catch("unknown")
-        .parse(request.headers.get("X-Compile-Plan"));
-      this.sleepAfter = compilePolicy(plan).idleMs / 1000;
-      await this.ctx.storage.put("compilePlan", plan);
-    } else {
-      this.sleepAfter =
-        compilePolicy(
-          (await this.ctx.storage.get<"free" | "pro" | "team" | "unknown">(
-            "compilePlan",
-          )) ?? "free",
-        ).idleMs / 1000;
-    }
-    return super.fetch(request);
+  constructor(ctx: DurableObjectState<{}>, env: Env) {
+    super(ctx, env);
+    const settings = poolSettings(env);
+    this.sleepAfter = settings.idleMs / 1000;
+    this.envVars = { COMPILE_SLOTS: String(settings.concurrency) };
   }
 }
 
-export class UserCompileUsage extends DurableObject<Env> {
-  private usage: CompileUsageCore;
+const cloudflareContainers = (env: Env) => {
+  const attempt = <A>(
+    operation: string,
+    container: string,
+    run: (signal: AbortSignal) => Promise<A>,
+  ) =>
+    Effect.tryPromise({
+      try: run,
+      catch: (cause) => new ContainerError({ operation, container, cause }),
+    });
+  const stub = (name: string) => getContainer(env.COMPILER, name);
+  const health = (operation: string, name: string) =>
+    attempt(operation, name, async (signal) => {
+      const response = await stub(name).fetch(
+        new Request("http://container/health", { signal }),
+      );
+      await response.body?.cancel();
+      if (!response.ok)
+        throw new Error(`Container health returned ${response.status}`);
+    });
+  return Containers.of({
+    start: (name) =>
+      attempt("start", name, () => stub(name).startAndWaitForPorts()).pipe(
+        Effect.andThen(health("start", name)),
+      ),
+    probe: (name) => health("probe", name),
+    stop: (name) => attempt("stop", name, () => stub(name).destroy()),
+    fetch: (name, request) =>
+      attempt("fetch", name, (signal) =>
+        stub(name).fetch(new Request(request, { signal })),
+      ),
+  });
+};
+
+/** Owns the container pool: leases, the waiting queue, and autoscaling. */
+export class PoolManager extends DurableObject<Env> {
+  private runtime: ManagedRuntime.ManagedRuntime<PoolManagerService, never>;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS usage (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS pool (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
     );
-    this.usage = new CompileUsageCore({
-      read: () =>
-        [
-          ...ctx.storage.sql.exec<{ value: string }>(
-            "SELECT value FROM usage WHERE id = 1",
-          ),
-        ][0]?.value ?? null,
-      write: (value) => {
+    const store = PoolStore.of({
+      load: () =>
+        ctx.storage.sql
+          .exec<{ value: string }>("SELECT value FROM pool WHERE id = 1")
+          .toArray()[0]?.value ?? null,
+      save: (value) => {
         ctx.storage.sql.exec(
-          "INSERT OR REPLACE INTO usage VALUES (1, ?)",
+          "INSERT OR REPLACE INTO pool VALUES (1, ?)",
           value,
         );
       },
     });
-  }
-
-  async check(plan: z.infer<typeof planSchema>) {
-    return this.usage.check(plan);
-  }
-  async start(plan: z.infer<typeof planSchema>) {
-    return this.usage.start(plan);
-  }
-  async finish(id: string, compileMs: number) {
-    this.usage.finish(id, compileMs);
-  }
-}
-
-const usageFor = (env: Env) => (userId: string) =>
-  env.COMPILE_USAGE.getByName(userId);
-const admit = (env: Env) => (request: Request) =>
-  checkCompileAdmission(request, env.COMPILE_LIMIT, usageFor(env));
-
-export class PoolManager extends DurableObject<Env> {
-  private pool: PoolCore;
-  private pendingAssignment: { key: string; claim: PoolClaim } | undefined;
-
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS pool_state (id INTEGER PRIMARY KEY, value TEXT NOT NULL)",
-    );
-    ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
-    );
-    const saved = ctx.storage.sql
-      .exec<{ value: string }>("SELECT value FROM pool_state WHERE id = 1")
-      .toArray()[0];
-    this.pool = new PoolCore({
-      saved: saved?.value ?? null,
-      save: (value) =>
-        ctx.storage.transactionSync(() => {
-          if (this.pendingAssignment) {
-            ctx.storage.sql.exec(
-              "INSERT INTO claims VALUES (?, ?)",
-              this.pendingAssignment.key,
-              JSON.stringify(this.pendingAssignment.claim),
-            );
-            this.pendingAssignment = undefined;
-          }
-          ctx.storage.sql.exec(
-            "INSERT OR REPLACE INTO pool_state VALUES (1, ?)",
-            value,
-          );
-        }),
-      lookup: (key) => {
-        const row = ctx.storage.sql
-          .exec<{ value: string }>(
-            "SELECT value FROM claims WHERE key = ?",
-            key,
-          )
-          .toArray()[0];
-        return row ? poolClaimSchema.parse(JSON.parse(row.value)) : undefined;
-      },
-      assign: (key, claim) => {
-        this.pendingAssignment = { key, claim };
-      },
-      start: async (name) => {
-        const container = getContainer(env.COMPILER, name);
-        await container.startAndWaitForPorts();
-        const response = await container.fetch(
-          new Request("http://container/health"),
-        );
-        await response.body?.cancel();
-        if (!response.ok) throw new Error("Spare health check failed");
-      },
-      stop: async (name) => {
-        await getContainer(env.COMPILER, name).destroy();
-      },
-      reset: async (name, token) => {
-        const container = getContainer(env.COMPILER, name);
-        const response = await container.fetch(
-          new Request("http://container/lease", {
-            method: "DELETE",
-            headers: { "X-Container-Lease": token },
-            signal: AbortSignal.timeout(90_000),
-          }),
-        );
-        await response.body?.cancel();
-        if (!response.ok)
-          throw new Error(`Container reset failed (${response.status})`);
-      },
-      now: Date.now,
-      pause: () => new Promise((resolve) => setTimeout(resolve, 25)),
-    });
-  }
-
-  async ensure() {
-    const at = Date.now() + 100;
-    const scheduled = await this.ctx.storage.getAlarm();
-    if (scheduled === null || scheduled > at)
-      await this.ctx.storage.setAlarm(at);
-  }
-
-  async claim(
-    projectId: string,
-    plan: z.infer<typeof planSchema>,
-    claimId: string,
-  ) {
-    jobIdSchema.parse(projectId);
-    jobIdSchema.parse(claimId);
-    planSchema.parse(plan);
-    try {
-      return await this.pool.claim(projectId, plan, claimId);
-    } finally {
-      // Schedule after the lease exists so an idle alarm cannot stop before it.
-      await this.ensure();
-    }
-  }
-
-  async release(projectId: string, claimId: string) {
-    jobIdSchema.parse(projectId);
-    jobIdSchema.parse(claimId);
-    await this.ensure();
-    await this.pool.release(projectId, claimId);
-  }
-
-  async touch() {
-    this.pool.touch();
-  }
-
-  override async alarm() {
-    // Schedule first so failures cannot leave the pool permanently asleep.
-    await this.ctx.storage.setAlarm(Date.now() + 60_000);
-    await this.pool.maintain();
-    console.info({ event: "compile_pool", ...this.pool.snapshot() });
-    // Nothing is running or owed cleanup. The next claim schedules maintenance again.
-    if (this.pool.idle()) await this.ctx.storage.deleteAlarm();
-  }
-}
-
-export class ProjectCoordinator extends DurableObject<Env> {
-  private core: ProjectCoordinatorCore | undefined;
-
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS identity (projectId TEXT PRIMARY KEY)",
-    );
-    ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS state_chunks (part INTEGER PRIMARY KEY, value TEXT NOT NULL)",
-    );
-  }
-
-  private async retireLegacyAssignment() {
-    const legacy = this.ctx.storage.sql
-      .exec(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'container_assignment'",
-      )
-      .toArray()[0];
-    if (!legacy) return;
-    const assignment = this.ctx.storage.sql
-      .exec<{ name: string | null }>(
-        "SELECT name FROM container_assignment WHERE id = 1",
-      )
-      .toArray()[0];
-    // Free this project's old instance before claiming against the same 20-instance cap.
-    if (assignment?.name)
-      await getContainer(this.env.COMPILER, assignment.name).destroy();
-    this.ctx.storage.sql.exec("DROP TABLE IF EXISTS container_assignment");
-  }
-
-  private coordinator(projectId: string) {
-    if (this.core) return this.core;
-    const saved = [
-      ...this.ctx.storage.sql.exec<{ value: string }>(
-        "SELECT value FROM state_chunks ORDER BY part",
+    this.runtime = ManagedRuntime.make(
+      PoolManagerService.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            PoolConfig.layer(env),
+            Layer.succeed(PoolStore, store),
+            Layer.succeed(Containers, cloudflareContainers(env)),
+          ),
+        ),
       ),
-    ]
-      .map((row) => row.value)
-      .join("");
-    const pool = this.env.POOL.getByName("global");
-    const compile = createPooledEngine({
-      projectId,
-      store: r2Store(this.env.PDFS),
-      claim: async (plan, claimId) => {
-        await this.retireLegacyAssignment();
-        return pool.claim(projectId, plan, claimId);
-      },
-      release: (claimId) => pool.release(projectId, claimId),
-      fetch: (name, request) =>
-        getContainer(this.env.COMPILER, name).fetch(request),
-      discard: (name) => getContainer(this.env.COMPILER, name).destroy(),
-      prewarm: async () => {
-        await this.retireLegacyAssignment();
-        await pool.touch();
-      },
-    });
-    this.core = new ProjectCoordinatorCore({
-      projectId,
-      saved: saved || null,
-      save: (value) => {
-        // Chunk snapshots below SQLite's per-row limit, including binary assets.
-        this.ctx.storage.transactionSync(() => {
-          this.ctx.storage.sql.exec("DELETE FROM state_chunks");
-          for (let offset = 0; offset < value.length;) {
-            let end = Math.min(offset + 64_000, value.length);
-            const last = value.charCodeAt(end - 1);
-            if (last >= 0xd800 && last <= 0xdbff) end--;
-            this.ctx.storage.sql.exec(
-              "INSERT INTO state_chunks VALUES (?, ?)",
-              offset,
-              value.slice(offset, end),
-            );
-            offset = end;
-          }
-          this.ctx.storage.sql.exec(
-            "CREATE TABLE IF NOT EXISTS identity (projectId TEXT PRIMARY KEY)",
-          );
-          this.ctx.storage.sql.exec(
-            "INSERT OR IGNORE INTO identity VALUES (?)",
-            projectId,
-          );
-        });
-      },
-      schedule: (at) => this.ctx.storage.setAlarm(at),
-      overflow: async (message, plan) => {
-        await (
-          compileQueue(plan) === "compile-pro"
-            ? this.env.COMPILE_PRO
-            : this.env.COMPILE_FREE
-        ).send(message);
-      },
-      background: async (message, delaySeconds) => {
-        await this.env.BACKGROUND.send(message, { delaySeconds });
-      },
-      store: r2Store(this.env.PDFS),
-      waitUntil: (promise) => this.ctx.waitUntil(promise),
-      engine: withCompileUsage(compile, usageFor(this.env)),
-    });
-    return this.core;
+    );
   }
 
-  override fetch(request: Request) {
-    const id = jobIdSchema.parse(new URL(request.url).pathname.split("/")[2]);
-    return createCoordinatorApp(this.coordinator(id), admit(this.env)).fetch(
-      request,
+  private async schedule() {
+    if ((await this.ctx.storage.getAlarm()) === null)
+      await this.ctx.storage.setAlarm(Date.now() + maintenanceMs);
+  }
+
+  async claim(request: unknown) {
+    // Scheduled first: a claim that never returns is still maintained.
+    await this.schedule();
+    return this.runtime.runPromise(
+      PoolManagerService.use((pool) => serveClaim(pool, request)),
+    );
+  }
+
+  async release(id: string, reusable: boolean) {
+    await this.runtime.runPromise(
+      PoolManagerService.use((pool) => pool.release(id, { reusable })),
+    );
+  }
+
+  async locate(id: string) {
+    return this.runtime.runPromise(
+      PoolManagerService.use((pool) => pool.locate(id)),
     );
   }
 
   override async alarm() {
-    await this.run();
+    // Schedule first so a failure cannot leave the pool unattended.
+    await this.ctx.storage.setAlarm(Date.now() + maintenanceMs);
+    const idle = await this.runtime.runPromise(
+      PoolManagerService.use((pool) =>
+        Effect.gen(function* () {
+          yield* pool.maintain;
+          const { containers, ...state } = yield* pool.snapshot;
+          yield* Effect.sync(() =>
+            console.info({
+              event: "compile_pool",
+              telemetryVersion: 2,
+              ...state,
+              starting: containers.filter((c) => c.status === "starting")
+                .length,
+              ready: containers.filter((c) => c.status === "ready").length,
+              stopping: containers.filter((c) => c.status === "stopping")
+                .length,
+              leased: containers.filter((c) => c.slots.some((s) => s.lease))
+                .length,
+            }),
+          );
+          return yield* pool.idle;
+        }),
+      ),
+    );
+    // The next claim schedules maintenance again.
+    if (idle) await this.ctx.storage.deleteAlarm();
   }
-
-  private project() {
-    const projectId = this.ctx.storage.sql
-      .exec<{ projectId: string }>("SELECT projectId FROM identity LIMIT 1")
-      .one().projectId;
-    return this.coordinator(projectId);
-  }
-
-  async run() {
-    await this.project().wake();
-  }
-
-  async consume(revision: number) {
-    return this.project().consume(revision);
-  }
-
-  async fail(revision: number) {
-    await this.project().fail(revision);
-  }
-
-  async maintain(at: number) {
-    await this.project().maintain(at);
-  }
-}
-
-function r2Store(bucket: R2Bucket): ObjectStore {
-  return {
-    async read(key) {
-      const object = await bucket.get(key);
-      return object?.body ?? null;
-    },
-    async head(key) {
-      const object = await bucket.head(key);
-      return object
-        ? { size: object.size, metadata: object.customMetadata?.job }
-        : null;
-    },
-    async create(key, value, metadata) {
-      return (
-        (await bucket.put(
-          key,
-          typeof value === "string" ? value : new Uint8Array(value),
-          {
-            onlyIf: new Headers({ "If-None-Match": "*" }),
-            customMetadata: metadata ? { job: metadata } : undefined,
-            httpMetadata: key.endsWith(".pdf")
-              ? { contentType: "application/pdf" }
-              : undefined,
-          },
-        )) !== null
-      );
-    },
-    async write(key, value) {
-      await bucket.put(key, value);
-    },
-    remove: (key) => bucket.delete(key),
-    async *keys(prefix, before) {
-      let cursor: string | undefined;
-      do {
-        const page = await bucket.list({ prefix, cursor });
-        for (const object of page.objects)
-          if (before === undefined || object.uploaded.getTime() < before)
-            yield object.key;
-        cursor = page.truncated ? page.cursor : undefined;
-      } while (cursor);
-    },
-  };
 }
 
 export default {
-  fetch(request, env) {
-    const path = new URL(request.url).pathname;
-    if (path.startsWith("/projects/")) {
-      const id = jobIdSchema.safeParse(path.split("/")[2]);
-      if (!id.success)
-        return Response.json({ error: "Invalid project ID" }, { status: 400 });
-      return env.PROJECTS.getByName(id.data).fetch(request);
-    }
-    return path === "/health"
-      ? Response.json(
-          { status: "ready" },
-          { headers: { "Cache-Control": "no-store" } },
-        )
-      : Response.json({ error: "Not found" }, { status: 404 });
-  },
-  async queue(batch, env) {
-    for (const message of batch.messages) {
-      try {
-        if (
-          await processQueueMessage({
-            queue: batch.queue,
-            body: message.body,
-            attempts: message.attempts,
-            coordinator: (projectId) => env.PROJECTS.getByName(projectId),
-          })
-        )
-          message.ack();
-        else message.retry({ delaySeconds: 5 });
-      } catch (error) {
-        console.error("Compile queue processing failed", {
-          queue: batch.queue,
-          messageId: message.id,
-          attempts: message.attempts,
-          error,
-        });
-        message.retry({ delaySeconds: 5 });
-      }
-    }
+  fetch(request, env, ctx) {
+    const layer = Layer.mergeAll(
+      Layer.succeed(Pool, poolClient(env.POOL.getByName("autoscaler"))),
+      Layer.succeed(Containers, cloudflareContainers(env)),
+      Layer.succeed(Background, {
+        run: (effect) => ctx.waitUntil(Effect.runPromise(effect)),
+      }),
+    );
+    return Effect.runPromise(handle(request).pipe(Effect.provide(layer)), {
+      signal: request.signal,
+    });
   },
 } satisfies ExportedHandler<Env>;

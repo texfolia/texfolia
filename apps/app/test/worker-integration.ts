@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build } from "esbuild";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { Miniflare } from "miniflare";
+
+import { withBuildsFixture } from "./builds/miniflare";
 
 export async function runWorkerIntegration({
   name,
@@ -45,34 +47,34 @@ export async function runWorkerIntegration({
   const script = bundled.outputFiles[0]?.text;
   assert(script);
   const directory = await mkdtemp(join(tmpdir(), `texfolia-${name}-`));
-  const compilerRequests: { method: string; path: string }[] = [];
+  const buildRequests: { method: string; path: string }[] = [];
   const runtime = new Miniflare({
-    ...convertV4MiniflareOptions({
-      name: `${name}-test`,
-      modules: true,
-      script,
-      compatibilityDate: "2026-10-30",
-      compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
-      durableObjects: {
-        COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
-      },
-      r2Buckets: ["SOURCES"],
-      hyperdrives: { HYPERDRIVE: connectionString },
-      serviceBindings: {
-        COMPILER: (request: Request) => {
-          const path = new URL(request.url).pathname;
-          assert(
-            (request.method === "POST" &&
-              /^\/projects\/[^/]+\/changed$/.test(path)) ||
-              (request.method === "DELETE" &&
-                /^\/projects\/[^/]+\/build$/.test(path)),
-            `Unexpected compiler request: ${request.method} ${path}`,
-          );
-          compilerRequests.push({ method: request.method, path });
-          return new Response(null, { status: 204 });
+    ...withBuildsFixture(
+      {
+        name: `${name}-test`,
+        modules: true,
+        script,
+        compatibilityDate: "2026-10-30",
+        compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
+        durableObjects: {
+          COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
         },
+        r2Buckets: ["SOURCES"],
+        hyperdrives: { HYPERDRIVE: connectionString },
       },
-    }),
+      (request: Request) => {
+        const path = new URL(request.url).pathname;
+        assert(
+          (request.method === "POST" &&
+            /^\/projects\/[^/]+\/changed$/.test(path)) ||
+            (request.method === "DELETE" &&
+              /^\/projects\/[^/]+\/build$/.test(path)),
+          `Unexpected build request: ${request.method} ${path}`,
+        );
+        buildRequests.push({ method: request.method, path });
+        return new Response(null, { status: 204 });
+      },
+    ),
     resourcePersistencePath: directory,
   });
   try {
@@ -82,12 +84,12 @@ export async function runWorkerIntegration({
     const result = await response.text();
     assert.equal(response.status, 200, result);
     assert(
-      compilerRequests.some((request) => request.method === "POST"),
-      "Source changes must invalidate compiler state through the binding",
+      buildRequests.some((request) => request.method === "POST"),
+      "Source changes must invalidate builds through the binding",
     );
     assert(
-      compilerRequests.some((request) => request.method === "DELETE"),
-      "Project deletion must clean compiler state through the binding",
+      buildRequests.some((request) => request.method === "DELETE"),
+      "Project deletion must clean builds through the binding",
     );
     console.log(result);
   } finally {

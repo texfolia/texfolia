@@ -4,9 +4,9 @@ import { template } from "@texfolia/db/schema";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { fetchCompiler } from "#/lib/compile/server";
+import { fetchBuilds } from "#/lib/builds/client";
 import { assertProjectSourcePaths, projectPaths } from "#/lib/projects";
-import { encodeSource, InvalidSourcePathError } from "#/lib/storage";
+import { InvalidSourcePathError } from "#/lib/storage";
 import type { SourceBucket } from "#/lib/storage/server";
 
 import { findTemplate, isTemplateReviewer } from "./catalog.server";
@@ -18,36 +18,24 @@ class TemplatePreviewError extends Error {}
 const compilerStatusSchema = z.object({
   status: z.enum(["queued", "running", "succeeded", "failed"]),
 });
-async function compileSnapshot(found: StoredTemplate, bucket: SourceBucket) {
+// The saved objects the preview build compiles, by key.
+function compileSnapshot(found: StoredTemplate) {
   const snapshot = templateSnapshotSchema.parse(found.snapshot);
   assertProjectSourcePaths(snapshot);
   const paths = projectPaths(snapshot);
-  const files: Record<string, string | { base64: string }> = {};
+  const files: Record<string, { hash: string; size: number; key: string }> = {};
   for (const node of snapshot) {
     const path = paths.get(node.id);
     if (!path) continue;
-    const object = node.objectKey ? await bucket.get(node.objectKey) : null;
-    if (!object)
+    const hash = node.objectKey?.split("/").at(-1);
+    if (!node.objectKey || !hash)
       throw new TemplatePreviewError("Snapshot source is missing from storage");
-    const bytes = new Uint8Array(await object.arrayBuffer());
     Object.defineProperty(files, path, {
       enumerable: true,
-      value:
-        node.kind === "text"
-          ? new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-          : { base64: encodeSource(bytes) },
+      value: { hash, size: node.sizeBytes, key: node.objectKey },
     });
   }
-  const body = JSON.stringify({
-    mainFile: found.mainFile,
-    files,
-    preview: true,
-  });
-  if (new TextEncoder().encode(body).byteLength > 10 * 1024 * 1024)
-    throw new TemplatePreviewError(
-      "Encoded template exceeds the compiler's 10 MiB request limit",
-    );
-  return body;
+  return JSON.stringify({ mainFile: found.mainFile, files, preview: true });
 }
 
 async function retryTemplatePreview({
@@ -81,9 +69,9 @@ async function retryTemplatePreview({
 export async function refreshTemplatePreviews({
   db,
   bucket,
-  compiler,
+  builds,
   templateId,
-}: Context & { compiler?: Pick<Fetcher, "fetch">; templateId?: string }) {
+}: Context & { builds?: Pick<Fetcher, "fetch">; templateId?: string }) {
   const queued = await db
     .select({ id: template.id, previewJobId: template.previewJobId })
     .from(template)
@@ -116,7 +104,7 @@ export async function refreshTemplatePreviews({
       eq(template.previewStatus, "queued"),
       eq(template.previewNextAttemptAt, found.previewNextAttemptAt),
     );
-    // Each template renders in a temporary compiler project named by its ID.
+    // Each template renders in a temporary project named by its ID.
     const previewProject = `/projects/${found.id}`;
     let settled = false;
     let backoffMs = 2000;
@@ -125,13 +113,13 @@ export async function refreshTemplatePreviews({
         throw new TemplatePreviewError(
           "Preview generation expired. Retry this snapshot's preview.",
         );
-      let response = await fetchCompiler(
+      let response = await fetchBuilds(
         `${previewProject}/jobs/${found.previewJobId}`,
         undefined,
-        compiler,
+        builds,
       );
       if (response.status === 404) {
-        response = await fetchCompiler(
+        response = await fetchBuilds(
           `${previewProject}/compile`,
           {
             method: "POST",
@@ -141,9 +129,9 @@ export async function refreshTemplatePreviews({
               "X-Compile-User": `template-preview:${found.id}`,
               "X-Compile-Plan": "pro",
             },
-            body: await compileSnapshot(found, bucket),
+            body: compileSnapshot(found),
           },
-          compiler,
+          builds,
         );
         if (response.status === 400 || response.status === 413)
           throw new TemplatePreviewError(
@@ -168,10 +156,10 @@ export async function refreshTemplatePreviews({
         backoffMs = 0;
         continue;
       }
-      const png = await fetchCompiler(
+      const png = await fetchBuilds(
         `${previewProject}/compilations/${found.previewJobId}.png`,
         undefined,
-        compiler,
+        builds,
       );
       if (!png.ok) throw new Error("Preview image was not available");
       const bytes = new Uint8Array(await png.arrayBuffer());
@@ -222,13 +210,13 @@ export async function refreshTemplatePreviews({
         .update(template)
         .set({ previewNextAttemptAt: new Date(Date.now() + backoffMs) })
         .where(currentAttempt);
-      // The PNG is promoted or the attempt is over. Compiler retention removes
+      // The PNG is promoted or the attempt is over. Build retention removes
       // the temporary project a day later if this cleanup fails.
       if (settled)
-        await fetchCompiler(
+        await fetchBuilds(
           `${previewProject}/build`,
           { method: "DELETE" },
-          compiler,
+          builds,
         )
           .then((response) => response.body?.cancel())
           .catch((error) => {
@@ -246,13 +234,13 @@ export async function refreshTemplatePreviews({
 export async function refreshTemplatePreview({
   db,
   bucket,
-  compiler,
+  builds,
   templateId,
   retry,
   userId,
   reviewers = "",
 }: Context & {
-  compiler?: Pick<Fetcher, "fetch">;
+  builds?: Pick<Fetcher, "fetch">;
   templateId: string;
   retry: boolean;
   userId?: string;
@@ -268,7 +256,7 @@ export async function refreshTemplatePreview({
       throw new Error("Template not found");
     await retryTemplatePreview({ db, templateId });
   }
-  await refreshTemplatePreviews({ db, bucket, compiler, templateId });
+  await refreshTemplatePreviews({ db, bucket, builds, templateId });
 }
 
 type PreviewRowState = Pick<StoredTemplate, "previewStatus" | "previewJobId">;
@@ -304,19 +292,19 @@ function shouldCheckPreview(snapshot: BuildSnapshot, jobId: string) {
     : snapshot.current !== null && snapshot.current.id !== jobId;
 }
 
-// Subscribes to the compiler's project SSE stream for a queued template preview
+// Subscribes to the project's build stream for a queued template preview
 // and pushes a single terminal event (`ready` or `failed`) once settled.
 export function createTemplatePreviewStream({
   templateId,
   initialJobId,
   advance,
-  compiler,
+  builds,
   signal,
 }: {
   templateId: string;
   initialJobId: string;
   advance: () => Promise<PreviewRowState | null>;
-  compiler?: Pick<Fetcher, "fetch">;
+  builds?: Pick<Fetcher, "fetch">;
   signal: AbortSignal;
 }) {
   const encoder = new TextEncoder();
@@ -368,10 +356,10 @@ export function createTemplatePreviewStream({
           return false;
         };
         try {
-          const response = await fetchCompiler(
+          const response = await fetchBuilds(
             `/projects/${encodeURIComponent(templateId)}/events`,
             { signal: upstream.signal },
-            compiler,
+            builds,
           );
           if (!response.ok || !response.body) {
             if (!closed) send("retry: 3000\n: unavailable\n\n");
@@ -406,7 +394,7 @@ export function createTemplatePreviewStream({
                     )
                       return;
                   } catch {
-                    // Ignore malformed compiler event payloads.
+                    // Ignore malformed build event payloads.
                   }
                 }
                 continue;
@@ -463,12 +451,12 @@ export async function streamTemplatePreview({
   db,
   connectionString,
   bucket,
-  compiler,
+  builds,
   found,
   signal,
 }: Context & {
   connectionString: string;
-  compiler?: Pick<Fetcher, "fetch">;
+  builds?: Pick<Fetcher, "fetch">;
   found: Pick<StoredTemplate, "id" | "previewStatus" | "previewJobId">;
   signal: AbortSignal;
 }) {
@@ -479,7 +467,7 @@ export async function streamTemplatePreview({
   await refreshTemplatePreviews({
     db,
     bucket,
-    compiler,
+    builds,
     templateId: found.id,
   });
   const current = await readPreviewRow(db, found.id);
@@ -490,7 +478,7 @@ export async function streamTemplatePreview({
   return createTemplatePreviewStream({
     templateId: found.id,
     initialJobId: current.previewJobId,
-    compiler,
+    builds,
     signal,
     advance: async () => {
       // Request middleware closes its pool once the response headers return.
@@ -499,7 +487,7 @@ export async function streamTemplatePreview({
         await refreshTemplatePreviews({
           db: liveDb,
           bucket,
-          compiler,
+          builds,
           templateId: found.id,
         });
         return await readPreviewRow(liveDb, found.id);

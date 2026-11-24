@@ -13,10 +13,17 @@
       "bucket_name": "texfolia-sources-local",
       "remote": false,
     },
+    {
+      "binding": "BUILD_ARTIFACTS",
+      "bucket_name": "texfolia-compilations-local",
+      "remote": false,
+    },
   ],
   "durable_objects": {
     "bindings": [
       { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
+      { "name": "BUILDS", "class_name": "ProjectBuilds" },
+      { "name": "COMPILE_USAGE", "class_name": "CompileUsage" },
     ],
   },
   "migrations": [
@@ -24,7 +31,57 @@
       "tag": "v1-collaboration",
       "new_sqlite_classes": ["ProjectCollaboration"],
     },
+    {
+      "tag": "v2-builds",
+      "new_sqlite_classes": ["ProjectBuilds", "CompileUsage"],
+    },
   ],
+  // Builds the direct path could not run, by plan, and delayed cleanup.
+  "queues": {
+    "producers": [
+      {
+        "binding": "COMPILE_PRO",
+        "queue": "compile-pro-local",
+        "remote": false,
+      },
+      {
+        "binding": "COMPILE_FREE",
+        "queue": "compile-free-local",
+        "remote": false,
+      },
+      { "binding": "BACKGROUND", "queue": "background-local", "remote": false },
+    ],
+    "consumers": [
+      {
+        "queue": "compile-pro-local",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 4,
+        "max_retries": 1,
+        "dead_letter_queue": "compile-dlq-local",
+      },
+      {
+        "queue": "compile-free-local",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+        "max_retries": 1,
+        "dead_letter_queue": "compile-dlq-local",
+      },
+      {
+        "queue": "compile-dlq-local",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_concurrency": 2,
+      },
+      {
+        "queue": "background-local",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_concurrency": 1,
+      },
+    ],
+  },
   // Per-user budget for citation metadata lookups (Crossref, DataCite, Open
   // Library), so one account cannot exhaust the shared upstream rate limits.
   "ratelimits": [
@@ -32,6 +89,12 @@
       "name": "REFERENCE_LOOKUPS",
       "namespace_id": "1001",
       "simple": { "limit": 30, "period": 60 },
+    },
+    // Free compile submissions per user.
+    {
+      "name": "COMPILE_LIMIT",
+      "namespace_id": "244",
+      "simple": { "limit": 2, "period": 10 },
     },
   ],
   "triggers": { "crons": ["17 * * * *", "41 3 * * *", "* * * * *"] },
@@ -70,10 +133,53 @@
       "name": "texfolia-app",
       "r2_buckets": [
         { "binding": "SOURCES", "bucket_name": "texfolia-sources" },
+        {
+          "binding": "BUILD_ARTIFACTS",
+          "bucket_name": "texfolia-compilations",
+        },
       ],
       "durable_objects": {
         "bindings": [
           { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
+          { "name": "BUILDS", "class_name": "ProjectBuilds" },
+          { "name": "COMPILE_USAGE", "class_name": "CompileUsage" },
+        ],
+      },
+      "queues": {
+        "producers": [
+          { "binding": "COMPILE_PRO", "queue": "compile-pro" },
+          { "binding": "COMPILE_FREE", "queue": "compile-free" },
+          { "binding": "BACKGROUND", "queue": "background" },
+        ],
+        "consumers": [
+          {
+            "queue": "compile-pro",
+            "max_batch_size": 1,
+            "max_batch_timeout": 0,
+            "max_concurrency": 4,
+            "max_retries": 1,
+            "dead_letter_queue": "compile-dlq",
+          },
+          {
+            "queue": "compile-free",
+            "max_batch_size": 1,
+            "max_batch_timeout": 0,
+            "max_concurrency": 1,
+            "max_retries": 1,
+            "dead_letter_queue": "compile-dlq",
+          },
+          {
+            "queue": "compile-dlq",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_concurrency": 2,
+          },
+          {
+            "queue": "background",
+            "max_batch_size": 20,
+            "max_batch_timeout": 5,
+            "max_concurrency": 1,
+          },
         ],
       },
       "hyperdrive": [
@@ -85,6 +191,11 @@
           "name": "REFERENCE_LOOKUPS",
           "namespace_id": "1001",
           "simple": { "limit": 30, "period": 60 },
+        },
+        {
+          "name": "COMPILE_LIMIT",
+          "namespace_id": "243",
+          "simple": { "limit": 2, "period": 10 },
         },
       ],
       "send_email": [{ "name": "EMAIL" }],

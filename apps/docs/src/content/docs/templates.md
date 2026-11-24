@@ -40,18 +40,18 @@ Preview state is independently `queued`, `ready`, or `failed`. Review and copyin
 can proceed without an image. An approved template with a failed preview remains
 usable. A reviewer checks the source archive when an image is unavailable.
 
-Each preview attempt has its own compiler job ID. The detail page subscribes to
+Each preview attempt has its own build job ID. The detail page subscribes to
 `/api/templates/{id}/preview?events=1`, which starts the compile if needed,
-follows the compiler's project SSE stream, promotes the PNG (or records a
+follows the temporary project's build stream, promotes the PNG (or records a
 failure), and pushes readiness to the client without polling. The minute cron
 is a fallback for pages nobody has open. Processing claims a one-minute database
-lease before compiler I/O. Updates compare the job ID and lease so stale
+lease before build I/O. Updates compare the job ID and lease so stale
 attempts cannot replace newer work. Failed attempts can be retried by the owner
 or a reviewer after one minute, without changing the snapshot, URL, moderation,
 or publishing allowance. Attempts expire after one hour. Fixing the source still
 requires a new snapshot.
 
-Preview compiles use the Pro timeout and a separate compiler usage identity per
+Preview compiles use the Pro timeout and a separate usage identity per
 snapshot, `template-preview:{templateId}`.
 This gives previews a five-minute timeout and a ten-minute rolling hourly budget
 without charging the publisher's interactive compile allowance. Separate identities
@@ -59,8 +59,10 @@ prevent concurrent starter previews from exhausting a shared reservation budget.
 Publication retains the three-per-hour and ten-per-day limits. Retrying an attempt consumes
 the same snapshot's preview budget.
 
-Each template compiles in a temporary compiler project named by its template ID.
-The compiler stores the build and PNG there. After success, the web service
+Each template compiles in a temporary build project named by its template ID.
+The submission names the snapshot's saved objects by key and copies no bytes. The
+compiler renders the first page as a stateless artifact, and the build coordinator
+stores the build and PNG. After success, the web service
 copies the PNG into `templates/{id}/previews/{jobId}.png` and atomically records its
 key and ready state. The sources and metadata remain immutable.
 
@@ -73,11 +75,11 @@ organization cascades, removed templates, partial uploads, and superseded previe
 objects all use this path.
 
 After the web service records a ready or failed attempt, it deletes the temporary
-compiler project. A project whose latest build requested a preview also expires
+project. A project whose latest build requested a preview also expires
 one day after its last activity, so a failed delete, an abandoned attempt, or a
-removed template still leaves nothing behind. Other compiler projects keep their
+removed template still leaves nothing behind. Other projects keep their
 30-day retention. The permanent template PNG remains available after the
-compiler's copy is gone.
+temporary copy is gone.
 
 ## Seed original templates
 
@@ -104,8 +106,8 @@ It also accepts `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` when
 `DATABASE_URL` is unset. It does not start Postgres or apply the schema.
 To use an isolated R2 directory, run
 `bun run --cwd packages/db templates:seed --local --persist-to /absolute/path`.
-Start the [snapshot engine](../../../../compiler/README.md#run-locally), then visit
-the gallery to generate previews. No local scheduled event is required.
+Start the local compiler with `bun run dev:compiler`, then visit the gallery to
+generate previews. No local scheduled event is required.
 
 For a deployed database, set `DATABASE_URL` and `TEMPLATE_SEED_BUCKET` to matching
 targets. Configure Wrangler authentication with access to that bucket. Then run:
@@ -135,12 +137,12 @@ INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test b
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/templates.ts
 INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:template-lifecycle
 bun test apps/app/src/lib/templates
-bun test apps/compiler/test/queues.test.ts
-ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/template-preview.integration.ts
+bun test apps/app/src/lib/builds
+ENGINE_URL=http://127.0.0.1:8081 bun run apps/compiler/test/preview.integration.ts
 ```
 
-The storage suite runs real Postgres and local R2 with a compiler fixture. The
-browser suite runs the production build and the real local compiler coordinator with a
-fixture engine. It verifies automatic previews without cron, failure, source
+The storage suite runs real Postgres and local R2 with a builds fixture. The
+browser suite runs the production build and the real build coordinator with a
+compiler fixture. It verifies automatic previews without cron, failure, source
 access, permissions, and reviewer retries. The final command compiles all three
 original starters through a real LaTeX container and checks the PDF and PNG.

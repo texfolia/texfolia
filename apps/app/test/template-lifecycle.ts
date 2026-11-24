@@ -4,7 +4,6 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { unknownEngineTiming } from "@texfolia/contracts";
 import { localHosts } from "@texfolia/contracts/hosts";
 import { createDb } from "@texfolia/db";
 import { session, template, user } from "@texfolia/db/schema";
@@ -13,8 +12,8 @@ import { eq, inArray } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 
-import { createLocalRuntime } from "../../compiler/src/local";
-import { HttpError } from "../../compiler/src/project";
+import { createCompilerFixture } from "./builds/compiler-fixture";
+import { buildsBindings } from "./builds/miniflare";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -35,24 +34,15 @@ const png = new Uint8Array(
 );
 let failOnce = true;
 let runs = 0;
-const engine = async () => {
+const compiler = createCompilerFixture(({ manifest }) => {
   runs++;
+  assert.equal(manifest.preview, true);
   if (failOnce) {
     failOnce = false;
-    throw new HttpError(422, "Fixture TeX failure");
+    return { status: 422, error: "Fixture TeX failure" };
   }
-  return {
-    pdf: new TextEncoder().encode("%PDF-fixture"),
-    preview: png,
-    log: "Compiled",
-    timing: unknownEngineTiming,
-  };
-};
-const compiler = createLocalRuntime({
-  path: join(directory, "compiler.sqlite"),
-  projectEngine: () => engine,
+  return { pdf: "%PDF-fixture", preview: png, log: "Compiled" };
 });
-const compilerStreams = new Set<AbortController>();
 const mf = new Miniflare({
   ...convertV4MiniflareOptions({
     name: "template-lifecycle-test",
@@ -69,10 +59,11 @@ const mf = new Miniflare({
       directory: new URL("../dist/client/", import.meta.url).pathname,
       routerConfig: { has_user_worker: true },
     },
+    ...buildsBindings,
     durableObjects: {
+      ...buildsBindings.durableObjects,
       COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
     },
-    r2Buckets: ["SOURCES"],
     hyperdrives: { HYPERDRIVE: connectionString },
     bindings: {
       BETTER_AUTH_SECRET: secret,
@@ -87,34 +78,13 @@ const mf = new Miniflare({
       ),
     },
     serviceBindings: {
-      COMPILER: async (request) => {
-        const streamController = new AbortController();
-        const isEvents = new URL(request.url).pathname.endsWith("/events");
-        if (isEvents) compilerStreams.add(streamController);
-        const signal = isEvents
-          ? AbortSignal.any([request.signal, streamController.signal])
-          : request.signal;
-        const response = await compiler.fetch(
-          new Request(request.url, {
-            method: request.method,
-            headers: [...request.headers.entries()],
-            body: request.method === "POST" ? await request.text() : undefined,
-            signal,
-          }),
-        );
-        if (
-          response.headers.get("Content-Type")?.startsWith("text/event-stream")
-        )
-          return new Response(response.body, {
-            status: response.status,
-            headers: response.headers,
-          });
-        compilerStreams.delete(streamController);
-        return new Response(await response.arrayBuffer(), {
-          status: response.status,
-          headers: response.headers,
-        });
-      },
+      COMPILER: async (request) =>
+        compiler.fetch(request.url, {
+          method: request.method,
+          headers: [...request.headers.entries()],
+          body:
+            request.method === "POST" ? await request.arrayBuffer() : undefined,
+        }),
     },
   }),
   resourcePersistencePath: directory,
@@ -279,10 +249,7 @@ try {
   );
 } finally {
   await browser.close();
-  for (const controller of compilerStreams) controller.abort();
-  compilerStreams.clear();
   await mf.dispose();
-  await compiler.close();
   if (ids.length) await db.delete(template).where(inArray(template.id, ids));
   await db.delete(user).where(eq(user.id, reviewer));
   await db.$client.end();

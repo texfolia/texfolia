@@ -85,7 +85,7 @@ test("pushes ready once the compiler event stream reports job completion", async
   const response = createTemplatePreviewStream({
     templateId,
     initialJobId: jobId,
-    compiler,
+    builds: compiler,
     signal: new AbortController().signal,
     advance: async () => {
       advances++;
@@ -147,7 +147,7 @@ test("settles when another viewer clears the temporary compiler project", async 
   const response = createTemplatePreviewStream({
     templateId,
     initialJobId: jobId,
-    compiler,
+    builds: compiler,
     signal: new AbortController().signal,
     advance: async () => {
       checks++;
@@ -197,7 +197,7 @@ test("aborts the upstream compiler stream when the client disconnects", async ()
   const response = createTemplatePreviewStream({
     templateId,
     initialJobId: jobId,
-    compiler,
+    builds: compiler,
     signal: controller.signal,
     advance: async () => ({ previewStatus: "queued", previewJobId: jobId }),
   });
@@ -217,7 +217,7 @@ test("sends retry backoff and closes cleanly when the compiler event stream is u
   const response = createTemplatePreviewStream({
     templateId: crypto.randomUUID(),
     initialJobId: crypto.randomUUID(),
-    compiler,
+    builds: compiler,
     signal: new AbortController().signal,
     advance: async () => null,
   });

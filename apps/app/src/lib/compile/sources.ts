@@ -2,9 +2,6 @@ import type { Db } from "@texfolia/db";
 import type { projectNode } from "@texfolia/db/schema";
 import type { z } from "zod";
 
-import { encodeSource } from "#/lib/storage";
-import type { SourceBucket } from "#/lib/storage/server";
-
 import { compileDeltaSchema, hashSource } from "./source-sync";
 
 // A transaction on the app database.
@@ -41,14 +38,22 @@ export type CompileProject = {
 
 export type CompileSourceOptions = {
   db: Db;
-  bucket: SourceBucket;
   projectId: string;
   userId: string;
   mainFile: string;
   sourceRevision: number;
   client?: { version: string; delta: z.infer<typeof compileDeltaSchema> };
 };
-export type CompileSnapshot = z.infer<typeof compileDeltaSchema> & {
+// A server-side resync names each saved source by its content hash. The
+// coordinator reads the bytes from the same bucket when it compiles them.
+export type CompileSnapshot = Omit<
+  z.infer<typeof compileDeltaSchema>,
+  "files"
+> & {
+  files: Record<
+    string,
+    z.infer<typeof compileDeltaSchema>["files"][string] & { size?: number }
+  >;
   resync: boolean;
 };
 
@@ -60,7 +65,7 @@ export function createCompileSources(project: CompileProject) {
       submit: (sources: CompileSnapshot) => Promise<T>;
     },
   ) {
-    const { db, bucket, projectId, userId, mainFile, sourceRevision } = options;
+    const { db, projectId, userId, mainFile, sourceRevision } = options;
     return db.transaction(async (tx) => {
       await project.lock({ tx, projectId, userId });
       if (
@@ -84,31 +89,22 @@ export function createCompileSources(project: CompileProject) {
         10n * 1024n * 1024n
       )
         throw new Error("Project exceeds the compiler's 10 MiB source limit");
-      const files: z.infer<typeof compileDeltaSchema>["files"] = {};
+      const files: CompileSnapshot["files"] = {};
       for (const node of nodes) {
         const path = paths.get(node.id);
         if (!path) continue;
-        const object = node.objectKey ? await bucket.get(node.objectKey) : null;
-        if (node.objectKey && !object)
-          throw new Error("Saved source is missing from storage");
-        const bytes = object
-          ? new Uint8Array(await object.arrayBuffer())
-          : new Uint8Array();
-        const hash = await hashSource(bytes);
-        if (
-          node.objectKey &&
-          node.objectKey !== `projects/${projectId}/sources/${hash}`
-        )
+        // Saved objects are content addressed, so no bytes are read here.
+        const prefix = `projects/${projectId}/sources/`;
+        const hash = node.objectKey?.startsWith(prefix)
+          ? node.objectKey.slice(prefix.length)
+          : null;
+        if (node.objectKey && (!hash || !/^[0-9a-f]{64}$/.test(hash)))
           throw new Error("Saved source hash mismatch");
         Object.defineProperty(files, path, {
           enumerable: true,
-          value: {
-            hash,
-            content:
-              node.kind === "text"
-                ? new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-                : { base64: encodeSource(bytes) },
-          },
+          value: hash
+            ? { hash, size: Number(node.sizeBytes) }
+            : { hash: await hashSource(new Uint8Array()), content: "" },
         });
       }
       return options.submit({

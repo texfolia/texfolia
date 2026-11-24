@@ -17,7 +17,7 @@ import {
 } from "@texfolia/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { build } from "esbuild";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { Miniflare } from "miniflare";
 import * as Y from "yjs";
 import { z } from "zod";
 
@@ -32,6 +32,7 @@ import { GitRepository, gitHttp } from "#/lib/git/server";
 import { gitServer, gitCommand } from "#/lib/git/testing";
 
 import { createProject } from "../src/lib/projects/project.server";
+import { withBuildsFixture } from "./builds/miniflare";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -73,61 +74,63 @@ const worker = await build({
 const script = worker.outputFiles[0]?.text;
 assert(script);
 const options = {
-  ...convertV4MiniflareOptions({
-    name: "git-test",
-    modules: true,
-    script,
-    compatibilityDate: "2026-10-30",
-    compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
-    durableObjects: {
-      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+  ...withBuildsFixture(
+    {
+      name: "git-test",
+      modules: true,
+      script,
+      compatibilityDate: "2026-10-30",
+      compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
+      durableObjects: {
+        COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+      },
+      r2Buckets: ["SOURCES"],
+      hyperdrives: { HYPERDRIVE: connection },
+      unsafeInspectDurableObjects: true,
+      bindings: {
+        BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: "http://localhost",
+        STRIPE_SECRET_KEY: "sk_test_git",
+        GITHUB_CLIENT_ID: "fixture",
+        GITHUB_CLIENT_SECRET: "fixture",
+        GITLAB_CLIENT_ID: "fixture",
+        GITLAB_CLIENT_SECRET: "fixture",
+        GOOGLE_CLIENT_ID: "fixture",
+        GOOGLE_CLIENT_SECRET: "fixture",
+        MICROSOFT_CLIENT_ID: "fixture",
+        MICROSOFT_CLIENT_SECRET: "fixture",
+      },
+      outboundService: async (request: Request) => {
+        const url = new URL(request.url);
+        assert(
+          ["github.com", "gitlab.com"].includes(url.hostname),
+          `Unexpected outbound request ${url.hostname}`,
+        );
+        const projectId = currentProject;
+        if (projectId)
+          await db
+            .transaction((tx) =>
+              tx
+                .select()
+                .from(project)
+                .where(eq(project.id, projectId))
+                .for("update", { noWait: true }),
+            )
+            .catch(() => lockedRequests.push(url.pathname));
+        const hook = duringRemote;
+        duringRemote = undefined;
+        await hook?.();
+        const target = new URL(`${url.pathname}${url.search}`, host.origin);
+        return fetch(target, {
+          method: request.method,
+          headers: request.headers,
+          body:
+            request.method === "GET" ? undefined : await request.arrayBuffer(),
+        });
+      },
     },
-    r2Buckets: ["SOURCES"],
-    hyperdrives: { HYPERDRIVE: connection },
-    unsafeInspectDurableObjects: true,
-    bindings: {
-      BETTER_AUTH_SECRET: secret,
-      BETTER_AUTH_URL: "http://localhost",
-      STRIPE_SECRET_KEY: "sk_test_git",
-      GITHUB_CLIENT_ID: "fixture",
-      GITHUB_CLIENT_SECRET: "fixture",
-      GITLAB_CLIENT_ID: "fixture",
-      GITLAB_CLIENT_SECRET: "fixture",
-      GOOGLE_CLIENT_ID: "fixture",
-      GOOGLE_CLIENT_SECRET: "fixture",
-      MICROSOFT_CLIENT_ID: "fixture",
-      MICROSOFT_CLIENT_SECRET: "fixture",
-    },
-    serviceBindings: { COMPILER: () => new Response(null, { status: 204 }) },
-    outboundService: async (request: Request) => {
-      const url = new URL(request.url);
-      assert(
-        ["github.com", "gitlab.com"].includes(url.hostname),
-        `Unexpected outbound request ${url.hostname}`,
-      );
-      const projectId = currentProject;
-      if (projectId)
-        await db
-          .transaction((tx) =>
-            tx
-              .select()
-              .from(project)
-              .where(eq(project.id, projectId))
-              .for("update", { noWait: true }),
-          )
-          .catch(() => lockedRequests.push(url.pathname));
-      const hook = duringRemote;
-      duringRemote = undefined;
-      await hook?.();
-      const target = new URL(`${url.pathname}${url.search}`, host.origin);
-      return fetch(target, {
-        method: request.method,
-        headers: request.headers,
-        body:
-          request.method === "GET" ? undefined : await request.arrayBuffer(),
-      });
-    },
-  }),
+    () => new Response(null, { status: 204 }),
+  ),
   resourcePersistencePath: directory,
 };
 let mf = new Miniflare(options);

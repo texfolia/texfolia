@@ -13,8 +13,12 @@ import {
   renameNodeSchema,
   renamedProjectNodes,
 } from "#/lib/projects";
-import { decodeSource, encodeSource, type SourceFiles } from "#/lib/storage";
+import { decodeSource } from "#/lib/storage";
 
+import {
+  compileOnEngine,
+  type Files,
+} from "../../compiler/scripts/engine-client";
 import type { ProjectDetails } from "../src/lib/projects/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 
@@ -232,7 +236,7 @@ const backend = Bun.serve({
           { status: 503 },
         );
       }
-      const files: SourceFiles = {};
+      const files: Files = {};
       for (const [path, source] of Object.entries(delta.files)) {
         if (path.endsWith(".png")) {
           assert.deepEqual(
@@ -242,27 +246,22 @@ const backend = Bun.serve({
           );
           const bytes = sourceObjects.get(source.hash);
           assert(bytes, "Compile referenced an unacknowledged object");
-          files[path] = { base64: encodeSource(bytes) };
+          files[path] = new Uint8Array(bytes);
         } else {
           const bytes = sourceObjects.get(source.hash);
           assert(source.content !== undefined || bytes);
-          files[path] = source.content ?? new TextDecoder().decode(bytes);
+          const { content } = source;
+          assert(typeof content !== "object", "Text is sent as text");
+          files[path] = content ?? new TextDecoder().decode(bytes);
         }
       }
       jobId = request.headers.get("X-Compilation-Id") ?? "";
-      const response = await fetch(new URL("/compile", engineUrl), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Compilation-Id": jobId,
-        },
-        body: JSON.stringify({ mainFile: delta.mainFile, files }),
-      });
-      assert(response.ok, await response.clone().text());
-      const form = await response.formData();
-      const artifact = form.get("pdf");
-      assert(artifact instanceof Blob);
-      pdf = artifact;
+      const output = await compileOnEngine(
+        { mainFile: delta.mainFile, files },
+        engineUrl,
+      );
+      assert(output.pdf, output.result.error);
+      pdf = new Blob([output.pdf]);
       for (const subscriber of subscribers) subscriber.enqueue(event());
       return Response.json({
         id: jobId,

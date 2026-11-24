@@ -18,7 +18,7 @@ import {
 } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
 import { build } from "esbuild";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
@@ -26,6 +26,7 @@ import { compileDeltaSchema, hashSource } from "#/lib/compile";
 import { projectMetadataSchema, projectMetadataVersion } from "#/lib/projects";
 
 import { createProject } from "../src/lib/projects/project.server";
+import { withBuildsFixture } from "./builds/miniflare";
 
 declare global {
   interface Window {
@@ -71,106 +72,106 @@ function emit() {
   for (const subscriber of subscribers) subscriber.enqueue(data);
 }
 const mf = new Miniflare({
-  ...convertV4MiniflareOptions({
-    name: "workspace-metadata-test",
-    modules: filenames
-      .filter((path) => path.endsWith(".js"))
-      .sort((a, b) =>
-        a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
-      )
-      .map((path) => ({ type: "ESModule", path: join(root, path) })),
-    modulesRoot: root,
-    compatibilityDate: "2026-10-30",
-    compatibilityFlags: ["nodejs_compat"],
-    assets: {
-      directory: new URL("../dist/client/", import.meta.url).pathname,
-      routerConfig: { has_user_worker: true },
-    },
-    durableObjects: {
-      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
-    },
-    r2Buckets: ["SOURCES"],
-    hyperdrives: { HYPERDRIVE: connectionString },
-    bindings: {
-      BETTER_AUTH_SECRET: secret,
-      BETTER_AUTH_URL: "http://localhost",
-      STRIPE_SECRET_KEY: "sk_test_workspace_metadata",
-      ...Object.fromEntries(
-        ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((provider) => [
-          [`${provider}_CLIENT_ID`, "fixture"],
-          [`${provider}_CLIENT_SECRET`, "fixture"],
-        ]),
-      ),
-    },
-    serviceBindings: {
-      COMPILER: async (request) => {
-        const url = new URL(request.url);
-        if (url.pathname.endsWith("/events")) {
-          let subscription: ReadableStreamDefaultController<Uint8Array>;
-          return new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                subscription = controller;
-                subscribers.add(controller);
-                emit();
-              },
-              cancel() {
-                subscribers.delete(subscription);
-              },
-            }),
-            { headers: { "Content-Type": "text/event-stream" } },
-          );
-        }
-        if (url.pathname.endsWith("/changed")) {
-          snapshot = { ...snapshot, stale: true };
-          emit();
-          return new Response(null, { status: 204 });
-        }
-        if (url.pathname.endsWith("/compile")) {
-          submissions.push(
-            compileDeltaSchema
-              .extend({ resync: z.boolean().optional() })
-              .parse(await request.json()),
-          );
-          const id = request.headers.get("X-Compilation-Id");
-          assert(id);
-          const revision = snapshot.revision + 1;
-          snapshot = {
-            ...snapshot,
-            revision,
-            current: { id, revision, status: "running" },
-            stale: false,
-          };
-          emit();
-          await submissionGate;
-          return Response.json(
-            {
-              id,
-              revision,
-              sourceRevision: submissions.length,
-              createdAt: new Date().toISOString(),
-              status: "running",
-            },
-            { status: 202 },
-          );
-        }
-        if (url.pathname.endsWith("/pdf"))
-          return new Response(null, { status: 404 });
-        if (url.pathname.includes("/jobs/")) {
-          const id = url.pathname.split("/").at(-1);
-          return Response.json({
-            id,
-            revision: snapshot.current?.revision ?? snapshot.revision,
-            createdAt: new Date().toISOString(),
-            status: snapshot.current?.status ?? "running",
-            error: "Fixture compile finished",
-            log: "",
-          });
-        }
-        return Response.json(snapshot);
+  ...withBuildsFixture(
+    {
+      name: "workspace-metadata-test",
+      modules: filenames
+        .filter((path) => path.endsWith(".js"))
+        .sort((a, b) =>
+          a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
+        )
+        .map((path) => ({ type: "ESModule", path: join(root, path) })),
+      modulesRoot: root,
+      compatibilityDate: "2026-10-30",
+      compatibilityFlags: ["nodejs_compat"],
+      assets: {
+        directory: new URL("../dist/client/", import.meta.url).pathname,
+        routerConfig: { has_user_worker: true },
+      },
+      durableObjects: {
+        COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+      },
+      r2Buckets: ["SOURCES"],
+      hyperdrives: { HYPERDRIVE: connectionString },
+      bindings: {
+        BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: "http://localhost",
+        STRIPE_SECRET_KEY: "sk_test_workspace_metadata",
+        ...Object.fromEntries(
+          ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((provider) => [
+            [`${provider}_CLIENT_ID`, "fixture"],
+            [`${provider}_CLIENT_SECRET`, "fixture"],
+          ]),
+        ),
       },
     },
-  }),
+    async (request) => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/events")) {
+        let subscription: ReadableStreamDefaultController<Uint8Array>;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              subscription = controller;
+              subscribers.add(controller);
+              emit();
+            },
+            cancel() {
+              subscribers.delete(subscription);
+            },
+          }),
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
+      }
+      if (url.pathname.endsWith("/changed")) {
+        snapshot = { ...snapshot, stale: true };
+        emit();
+        return new Response(null, { status: 204 });
+      }
+      if (url.pathname.endsWith("/compile")) {
+        submissions.push(
+          compileDeltaSchema
+            .extend({ resync: z.boolean().optional() })
+            .parse(await request.json()),
+        );
+        const id = request.headers.get("X-Compilation-Id");
+        assert(id);
+        const revision = snapshot.revision + 1;
+        snapshot = {
+          ...snapshot,
+          revision,
+          current: { id, revision, status: "running" },
+          stale: false,
+        };
+        emit();
+        await submissionGate;
+        return Response.json(
+          {
+            id,
+            revision,
+            sourceRevision: submissions.length,
+            createdAt: new Date().toISOString(),
+            status: "running",
+          },
+          { status: 202 },
+        );
+      }
+      if (url.pathname.endsWith("/pdf"))
+        return new Response(null, { status: 404 });
+      if (url.pathname.includes("/jobs/")) {
+        const id = url.pathname.split("/").at(-1);
+        return Response.json({
+          id,
+          revision: snapshot.current?.revision ?? snapshot.revision,
+          createdAt: new Date().toISOString(),
+          status: snapshot.current?.status ?? "running",
+          error: "Fixture compile finished",
+          log: "",
+        });
+      }
+      return Response.json(snapshot);
+    },
+  ),
   resourcePersistencePath: directory,
 });
 const browser = await chromium.launch({ headless: true });

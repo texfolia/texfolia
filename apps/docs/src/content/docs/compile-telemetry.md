@@ -14,10 +14,16 @@ compilation, so a successful backend job can have no preview event.
 | Event                    | Boundary                                                                                                                                          |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `compile_web_submission` | Authenticated web POST through compiler acceptance or rejection. `submissionMs` includes web-side source reconciliation and the compiler request. |
-| `compile_pool_claim`     | Cloudflare container assignment, with `hit`, `miss`, `reused`, or `error`. A hit describes spare readiness, not the project's auxiliary cache.    |
-| `compile_engine_request` | Engine transport and engine timing for an attempt.                                                                                                |
-| `compile_backend`        | Completed compiler attempt, including failures. `attempt` distinguishes retries.                                                                  |
+| `compile_engine_request` | The app's whole compiler request for an attempt, with its engine timing.                                                                          |
+| `compile_backend`        | Completed build attempt, including failures. `attempt` distinguishes retries.                                                                     |
 | `compile_preview`        | Browser render result plus available backend timing. `outcome` is `rendered` or `preview_failed`.                                                 |
+
+The compiler Worker knows no jobs or projects. It emits two events of its own with
+`telemetryVersion: 2`. `compile_placement` records each compile's container, its
+`outcome`, and `waitMs`. `affinity` and `spare` found a warm container, with and
+without the caller's sources; `cold` waited for one. `compile_pool` reports pool
+size, leases, queue depth, spare capacity, and the current window's hits and misses
+every minute while containers exist.
 
 ## Timing fields
 
@@ -28,7 +34,7 @@ fields mean unmeasured, not zero.
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `queueWaitMs`                             | Time from job creation to the attempt starting. For project revisions this includes debounce and scheduling, even though the normal path uses no queue. |
 | `inputReadMs`                             | Always zero for project revisions, because their engine client owns source loading. Kept for timeline compatibility.                                    |
-| `engineRequestMs`                         | Engine client call, including readiness, source synchronization, cache restoration when needed, and the engine response.                                |
+| `engineRequestMs`                         | Compiler request, including the wait for a container, source transfer, cache restoration when needed, and the response.                                 |
 | `inputPrepMs`, `compileMs`, `outputMs`    | Engine source preparation, TeX execution, and output processing. These are portions of engine work, not additional backend stages to sum.               |
 | `publishMs`                               | Artifact and cache publication phase.                                                                                                                   |
 | `backendMs`                               | Job creation through backend result preparation. Overlaps the stages above.                                                                             |
@@ -40,10 +46,12 @@ fields mean unmeasured, not zero.
 
 `engine`, `plan`, `temperature`, `artifactReused`, and `cacheUsed` identify the
 cohort. `temperature` counts TeX runs in a process; it does not prove that the
-container was cold. See [cold-start measurements](../../../../compiler/cold-start-measurements.md)
-for boot, prewarm, and archive timing fields and the limits of the historical
-local measurements. [Container pool](../../../../compiler/docs/container-pool.md)
-defines pool hit-rate accounting.
+container was cold. `containerStartMs` is the wait for a container, including any
+cold start or queue. `prewarmed` marks a warm container that had no sources of this
+project. `archiveStatus` says whether the build cache was already in the container
+(`warm`), came with the request (`restored`), or was `missing`, `invalid`, or
+`unavailable`. `archiveFetchMs` is the app's storage read and `archiveUnpackMs` the
+engine's unpacking.
 
 ## Persisted timelines
 

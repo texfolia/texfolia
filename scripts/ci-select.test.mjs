@@ -22,7 +22,7 @@ function selectedSuites(plan) {
 test("documentation keeps repository checks but skips package tests and browsers", () => {
   const plan = selectChecks([
     "apps/docs/src/content/docs/projects.md",
-    "apps/compiler/README.md",
+    "apps/app/src/lib/builds/README.md",
   ]);
   for (const key of [
     "full",

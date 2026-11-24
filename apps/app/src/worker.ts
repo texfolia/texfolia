@@ -3,6 +3,7 @@ import { createDb } from "@texfolia/db";
 
 import { gatewayRequestCost } from "#/lib/ai/gateway";
 import { reconcileAiUsage } from "#/lib/billing/server";
+import { handleBuildQueue } from "#/lib/builds/server";
 import { collectGitObjects } from "#/lib/git/server";
 import { sweepProjectSources } from "#/lib/storage/server";
 import {
@@ -15,6 +16,7 @@ import { collectProjectSources } from "./lib/projects/project-source.server";
 import { deleteExpiredProjects } from "./lib/projects/project.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 
+export { CompileUsage, ProjectBuilds } from "./lib/builds/server";
 export { ProjectCollaboration } from "./lib/collaboration/project-collaboration.server";
 
 export default {
@@ -33,6 +35,7 @@ export default {
       development: import.meta.env.DEV,
     });
   },
+  queue: handleBuildQueue,
   async scheduled(controller, env) {
     const db = createDb(env.HYPERDRIVE.connectionString);
     try {

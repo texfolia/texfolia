@@ -19,7 +19,7 @@ import {
   user,
 } from "@texfolia/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import * as Y from "yjs";
 import { z } from "zod";
@@ -30,6 +30,7 @@ import { hashSource } from "#/lib/compile";
 import { GitRepository } from "#/lib/git/server";
 
 import { createProject } from "../src/lib/projects/project.server";
+import { withBuildsFixture } from "./builds/miniflare";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -77,346 +78,347 @@ portReservation.stop(true);
 assert(port);
 const origin = `http://127.0.0.1:${port}`;
 const mf = new Miniflare({
-  ...convertV4MiniflareOptions({
-    name: "ai-assistant-test",
-    modules: filenames
-      .filter((p) => p.endsWith(".js"))
-      .sort((a, b) =>
-        a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
-      )
-      .map((p) => ({ type: "ESModule", path: join(root, p) })),
-    modulesRoot: root,
-    compatibilityDate: "2026-10-30",
-    compatibilityFlags: ["nodejs_compat"],
-    assets: {
-      directory: new URL("../dist/client/", import.meta.url).pathname,
-      routerConfig: { has_user_worker: true },
-    },
-    durableObjects: {
-      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
-    },
-    r2Buckets: ["SOURCES"],
-    hyperdrives: { HYPERDRIVE: connection },
-    bindings: {
-      BETTER_AUTH_SECRET: secret,
-      BETTER_AUTH_URL: origin,
-      STRIPE_SECRET_KEY: "sk_test_fixture",
-      STRIPE_AI_PRICE_ID: "price_ai",
-      STRIPE_AI_METER_EVENT_NAME: "ai_nanos",
-      CLOUDFLARE_ACCOUNT_ID: accountId,
-      CLOUDFLARE_AI_GATEWAY_ID: "test",
-      CLOUDFLARE_AI_API_TOKEN: "fixture-ai-token",
-      ...Object.fromEntries(
-        ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((p) => [
-          [`${p}_CLIENT_ID`, "fixture"],
-          [`${p}_CLIENT_SECRET`, "fixture"],
-        ]),
-      ),
-    },
-    outboundService: async (request) => {
-      const url = new URL(request.url);
-      if (url.hostname === "api.stripe.com") {
-        if (url.pathname === "/v1/prices/price_ai")
-          return Response.json({
-            id: "price_ai",
-            currency: "usd",
-            unit_amount_decimal: "0.0000001",
-            recurring: {
-              interval: "month",
-              interval_count: 1,
-              usage_type: "metered",
-              meter: "mtr_ai",
-            },
-          });
-        const subscriber = /^\/v1\/subscriptions\/sub_(pro|viewer)$/.exec(
-          url.pathname,
-        )?.[1];
-        if (subscriber)
-          return Response.json({
-            id: `sub_${subscriber}`,
-            customer: `cus_${subscriber}`,
-            status: "active",
-            items: { data: [{ id: "si_ai", price: { id: "price_ai" } }] },
-          });
-        if (url.pathname === "/v1/billing/meters/mtr_ai")
-          return Response.json({
-            id: "mtr_ai",
-            event_name: "ai_nanos",
-            status: "active",
-            default_aggregation: { formula: "sum" },
-            customer_mapping: {
-              type: "by_id",
-              event_payload_key: "stripe_customer_id",
-            },
-            value_settings: { event_payload_key: "value" },
-          });
-        if (url.pathname === "/v1/billing/meter_events") {
-          const body = new URLSearchParams(await request.text());
-          meterEvents.push(body);
-          assert.equal(body.get("payload[value]"), "12000000");
-          assert(
-            ["cus_pro", "cus_viewer"].includes(
-              body.get("payload[stripe_customer_id]") ?? "",
-            ),
-          );
+  ...withBuildsFixture(
+    {
+      name: "ai-assistant-test",
+      modules: filenames
+        .filter((p) => p.endsWith(".js"))
+        .sort((a, b) =>
+          a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
+        )
+        .map((p) => ({ type: "ESModule", path: join(root, p) })),
+      modulesRoot: root,
+      compatibilityDate: "2026-10-30",
+      compatibilityFlags: ["nodejs_compat"],
+      assets: {
+        directory: new URL("../dist/client/", import.meta.url).pathname,
+        routerConfig: { has_user_worker: true },
+      },
+      durableObjects: {
+        COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+      },
+      r2Buckets: ["SOURCES"],
+      hyperdrives: { HYPERDRIVE: connection },
+      bindings: {
+        BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: origin,
+        STRIPE_SECRET_KEY: "sk_test_fixture",
+        STRIPE_AI_PRICE_ID: "price_ai",
+        STRIPE_AI_METER_EVENT_NAME: "ai_nanos",
+        CLOUDFLARE_ACCOUNT_ID: accountId,
+        CLOUDFLARE_AI_GATEWAY_ID: "test",
+        CLOUDFLARE_AI_API_TOKEN: "fixture-ai-token",
+        ...Object.fromEntries(
+          ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((p) => [
+            [`${p}_CLIENT_ID`, "fixture"],
+            [`${p}_CLIENT_SECRET`, "fixture"],
+          ]),
+        ),
+      },
+      outboundService: async (request) => {
+        const url = new URL(request.url);
+        if (url.hostname === "api.stripe.com") {
+          if (url.pathname === "/v1/prices/price_ai")
+            return Response.json({
+              id: "price_ai",
+              currency: "usd",
+              unit_amount_decimal: "0.0000001",
+              recurring: {
+                interval: "month",
+                interval_count: 1,
+                usage_type: "metered",
+                meter: "mtr_ai",
+              },
+            });
+          const subscriber = /^\/v1\/subscriptions\/sub_(pro|viewer)$/.exec(
+            url.pathname,
+          )?.[1];
+          if (subscriber)
+            return Response.json({
+              id: `sub_${subscriber}`,
+              customer: `cus_${subscriber}`,
+              status: "active",
+              items: { data: [{ id: "si_ai", price: { id: "price_ai" } }] },
+            });
+          if (url.pathname === "/v1/billing/meters/mtr_ai")
+            return Response.json({
+              id: "mtr_ai",
+              event_name: "ai_nanos",
+              status: "active",
+              default_aggregation: { formula: "sum" },
+              customer_mapping: {
+                type: "by_id",
+                event_payload_key: "stripe_customer_id",
+              },
+              value_settings: { event_payload_key: "value" },
+            });
+          if (url.pathname === "/v1/billing/meter_events") {
+            const body = new URLSearchParams(await request.text());
+            meterEvents.push(body);
+            assert.equal(body.get("payload[value]"), "12000000");
+            assert(
+              ["cus_pro", "cus_viewer"].includes(
+                body.get("payload[stripe_customer_id]") ?? "",
+              ),
+            );
+            assert.equal(
+              request.headers.get("Idempotency-Key"),
+              body.get("identifier"),
+            );
+            return Response.json({
+              object: "billing.meter_event",
+              identifier: body.get("identifier"),
+            });
+          }
+        }
+        if (url.hostname === "api.cloudflare.com") {
           assert.equal(
-            request.headers.get("Idempotency-Key"),
-            body.get("identifier"),
+            request.headers.get("Authorization"),
+            "Bearer fixture-ai-token",
           );
-          return Response.json({
-            object: "billing.meter_event",
-            identifier: body.get("identifier"),
-          });
-        }
-      }
-      if (url.hostname === "api.cloudflare.com") {
-        assert.equal(
-          request.headers.get("Authorization"),
-          "Bearer fixture-ai-token",
-        );
-        if (url.pathname.endsWith("/ai/models/search"))
-          return Response.json({
-            data: [
-              model,
-              { ...model, id: "@cf/test/second", name: "Second model" },
-            ],
-          });
-        if (url.pathname.includes("/logs/")) {
-          logCalls++;
-          return Response.json({
-            success: true,
-            result: {
-              id: url.pathname.split("/").at(-1),
-              model: model.id,
-              cost: 0.01,
-              tokens_in: 80,
-              tokens_out: 20,
-            },
-          });
-        }
-        if (url.pathname.endsWith("/ai/v1/chat/completions")) {
-          inference.push({
-            headers: request.headers,
-            body: await request.json(),
-          });
-          assert.equal(request.headers.get("cf-aig-gateway-id"), "test");
-          assert.equal(request.headers.get("cf-aig-max-attempts"), "1");
-          const metadata = z
-            .object({ runId: z.uuid(), requestId: z.uuid() })
-            .parse(JSON.parse(request.headers.get("cf-aig-metadata") ?? "{}"));
-          const [reserved] = await db
-            .select()
-            .from(aiRequest)
-            .where(eq(aiRequest.id, metadata.requestId));
-          assert(reserved, "Usage reservation is durable before inference");
-          const headers = {
-            "Content-Type": "text/event-stream",
-            "cf-aig-log-id": crypto.randomUUID(),
-          };
-          if (mode === "error")
-            return Response.json(
+          if (url.pathname.endsWith("/ai/models/search"))
+            return Response.json({
+              data: [
+                model,
+                { ...model, id: "@cf/test/second", name: "Second model" },
+              ],
+            });
+          if (url.pathname.includes("/logs/")) {
+            logCalls++;
+            return Response.json({
+              success: true,
+              result: {
+                id: url.pathname.split("/").at(-1),
+                model: model.id,
+                cost: 0.01,
+                tokens_in: 80,
+                tokens_out: 20,
+              },
+            });
+          }
+          if (url.pathname.endsWith("/ai/v1/chat/completions")) {
+            inference.push({
+              headers: request.headers,
+              body: await request.json(),
+            });
+            assert.equal(request.headers.get("cf-aig-gateway-id"), "test");
+            assert.equal(request.headers.get("cf-aig-max-attempts"), "1");
+            const metadata = z
+              .object({ runId: z.uuid(), requestId: z.uuid() })
+              .parse(
+                JSON.parse(request.headers.get("cf-aig-metadata") ?? "{}"),
+              );
+            const [reserved] = await db
+              .select()
+              .from(aiRequest)
+              .where(eq(aiRequest.id, metadata.requestId));
+            assert(reserved, "Usage reservation is durable before inference");
+            const headers = {
+              "Content-Type": "text/event-stream",
+              "cf-aig-log-id": crypto.randomUUID(),
+            };
+            if (mode === "error")
+              return Response.json(
+                {
+                  error: {
+                    message: "Provider fixture failed",
+                    type: "provider_error",
+                  },
+                },
+                { status: 500, headers },
+              );
+            const toolCalls = [
+              { name: "list_files", args: {} },
+              { name: "read_file", args: { path: "main.tex" } },
               {
-                error: {
-                  message: "Provider fixture failed",
-                  type: "provider_error",
+                name: "edit_file",
+                args: {
+                  path: "main.tex",
+                  version: objectKey,
+                  edits: [
+                    { oldText: "Original text.", newText: "Revised text." },
+                  ],
                 },
               },
-              { status: 500, headers },
-            );
-          const toolCalls = [
-            { name: "list_files", args: {} },
-            { name: "read_file", args: { path: "main.tex" } },
-            {
-              name: "edit_file",
-              args: {
-                path: "main.tex",
-                version: objectKey,
-                edits: [
-                  { oldText: "Original text.", newText: "Revised text." },
-                ],
+              { name: "compile", args: { mainFile: "main.tex" } },
+              {
+                name: "read_compile_logs",
+                args: {
+                  jobId: [...compileJobs.keys()].at(-1) ?? crypto.randomUUID(),
+                  mainFile: "main.tex",
+                },
               },
-            },
-            { name: "compile", args: { mainFile: "main.tex" } },
-            {
-              name: "read_compile_logs",
-              args: {
-                jobId: [...compileJobs.keys()].at(-1) ?? crypto.randomUUID(),
-                mainFile: "main.tex",
-              },
-            },
-          ];
-          const fileToolCalls = [
-            { name: "search_project", args: { query: "revised TEXT" } },
-            {
-              name: "edit_file",
-              args: {
-                path: "main.tex",
-                version: objectKey,
-                // Out of order: replacements apply by position in one save.
-                edits: [
-                  { oldText: "Revised text.", newText: "Final text." },
-                  {
-                    oldText: "\\documentclass{article}",
-                    newText: "\\documentclass[11pt]{article}",
-                  },
-                ],
-              },
-            },
-            {
-              name: "create_file",
-              args: { path: "chapters/intro.tex", content: "Intro." },
-            },
-            {
-              name: "rename_file",
-              args: {
-                path: "chapters/intro.tex",
-                newPath: "sections/intro.tex",
-              },
-            },
-            { name: "delete_file", args: { path: "sections" } },
-          ];
-          const scratchpadCalls = [{ name: "read_scratchpad", args: {} }];
-          const tool =
-            mode === "tools"
-              ? toolCalls[call++]
-              : mode === "files"
-                ? fileToolCalls[call++]
-                : mode === "scratchpad"
-                  ? scratchpadCalls[call++]
-                  : undefined;
-          const chunk = (delta: unknown, finish: string | null = null) => ({
-            id: "completion-fixture",
-            object: "chat.completion.chunk",
-            created: 1,
-            model: model.id,
-            choices: [{ index: 0, delta, finish_reason: finish }],
-          });
-          const chunks: Array<
-            ReturnType<typeof chunk> & {
-              usage?: {
-                prompt_tokens: number;
-                completion_tokens: number;
-                total_tokens: number;
-              };
-            }
-          > = tool
-            ? [
-                chunk({
-                  role: "assistant",
-                  tool_calls: [
+            ];
+            const fileToolCalls = [
+              { name: "search_project", args: { query: "revised TEXT" } },
+              {
+                name: "edit_file",
+                args: {
+                  path: "main.tex",
+                  version: objectKey,
+                  // Out of order: replacements apply by position in one save.
+                  edits: [
+                    { oldText: "Revised text.", newText: "Final text." },
                     {
-                      index: 0,
-                      id: `call-${call}`,
-                      type: "function",
-                      function: {
-                        name: tool.name,
-                        arguments: JSON.stringify(tool.args),
-                      },
+                      oldText: "\\documentclass{article}",
+                      newText: "\\documentclass[11pt]{article}",
                     },
                   ],
-                }),
-                chunk({}, "tool_calls"),
-              ]
-            : [
-                chunk({
-                  role: "assistant",
-                  content: "Updated main.tex and submitted a compile.",
-                }),
-                chunk({}, "stop"),
-              ];
-          chunks.push({
-            ...chunk({}),
-            choices: [],
-            usage: {
-              prompt_tokens: 80,
-              completion_tokens: 20,
-              total_tokens: 100,
-            },
-          });
-          const data =
-            chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
-            "data: [DONE]\n\n";
-          if (mode === "slow") {
-            // Keep streaming until Stop; a fixed end time races slower CI browsers.
-            const encoder = new TextEncoder();
-            let timer: ReturnType<typeof setInterval>;
-            return new Response(
-              new ReadableStream({
-                start(controller) {
-                  controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify(chunk({ role: "assistant", content: "Working…" }))}\n\n`,
-                    ),
-                  );
-                  timer = setInterval(() => {
+                },
+              },
+              {
+                name: "create_file",
+                args: { path: "chapters/intro.tex", content: "Intro." },
+              },
+              {
+                name: "rename_file",
+                args: {
+                  path: "chapters/intro.tex",
+                  newPath: "sections/intro.tex",
+                },
+              },
+              { name: "delete_file", args: { path: "sections" } },
+            ];
+            const scratchpadCalls = [{ name: "read_scratchpad", args: {} }];
+            const tool =
+              mode === "tools"
+                ? toolCalls[call++]
+                : mode === "files"
+                  ? fileToolCalls[call++]
+                  : mode === "scratchpad"
+                    ? scratchpadCalls[call++]
+                    : undefined;
+            const chunk = (delta: unknown, finish: string | null = null) => ({
+              id: "completion-fixture",
+              object: "chat.completion.chunk",
+              created: 1,
+              model: model.id,
+              choices: [{ index: 0, delta, finish_reason: finish }],
+            });
+            const chunks: Array<
+              ReturnType<typeof chunk> & {
+                usage?: {
+                  prompt_tokens: number;
+                  completion_tokens: number;
+                  total_tokens: number;
+                };
+              }
+            > = tool
+              ? [
+                  chunk({
+                    role: "assistant",
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: `call-${call}`,
+                        type: "function",
+                        function: {
+                          name: tool.name,
+                          arguments: JSON.stringify(tool.args),
+                        },
+                      },
+                    ],
+                  }),
+                  chunk({}, "tool_calls"),
+                ]
+              : [
+                  chunk({
+                    role: "assistant",
+                    content: "Updated main.tex and submitted a compile.",
+                  }),
+                  chunk({}, "stop"),
+                ];
+            chunks.push({
+              ...chunk({}),
+              choices: [],
+              usage: {
+                prompt_tokens: 80,
+                completion_tokens: 20,
+                total_tokens: 100,
+              },
+            });
+            const data =
+              chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("") +
+              "data: [DONE]\n\n";
+            if (mode === "slow") {
+              // Keep streaming until Stop; a fixed end time races slower CI browsers.
+              const encoder = new TextEncoder();
+              let timer: ReturnType<typeof setInterval>;
+              return new Response(
+                new ReadableStream({
+                  start(controller) {
                     controller.enqueue(
                       encoder.encode(
-                        `data: ${JSON.stringify(chunk({ content: "." }))}\n\n`,
+                        `data: ${JSON.stringify(chunk({ role: "assistant", content: "Working…" }))}\n\n`,
                       ),
                     );
-                  }, 100);
-                  streamingTimers.add(timer);
-                },
-                cancel() {
-                  clearInterval(timer);
-                  streamingTimers.delete(timer);
-                },
-              }),
-              { headers },
-            );
+                    timer = setInterval(() => {
+                      controller.enqueue(
+                        encoder.encode(
+                          `data: ${JSON.stringify(chunk({ content: "." }))}\n\n`,
+                        ),
+                      );
+                    }, 100);
+                    streamingTimers.add(timer);
+                  },
+                  cancel() {
+                    clearInterval(timer);
+                    streamingTimers.delete(timer);
+                  },
+                }),
+                { headers },
+              );
+            }
+            return new Response(data, { headers });
           }
-          return new Response(data, { headers });
         }
-      }
-      throw new Error(
-        `Unexpected external request: ${url.hostname}${url.pathname}`,
-      );
-    },
-    serviceBindings: {
-      COMPILER: async (request) => {
-        const path = new URL(request.url).pathname;
-        if (path.endsWith("/changed"))
-          return new Response(null, { status: 204 });
-        if (path.endsWith("/compile")) {
-          const id = request.headers.get("X-Compilation-Id");
-          assert(id);
-          compileJobs.set(id, path);
-          return Response.json(
-            {
-              id,
-              status: "queued",
-              revision: 1,
-              sourceRevision: 1,
-              createdAt: new Date().toISOString(),
-            },
-            { status: 202 },
-          );
-        }
-        if (path.includes("/jobs/"))
-          return Response.json({
-            id: path.split("/").at(-1),
-            revision: 1,
-            createdAt: new Date().toISOString(),
-            status: "failed",
-            error: "Fixture diagnostic",
-            log: "main.tex:3: Undefined control sequence.",
-          });
-        if (path.endsWith("/events"))
-          return new Response(
-            `data: ${JSON.stringify({ revision: 0, current: null, latestBuild: null, stale: false, artifacts: null })}\n\n`,
-            { headers: { "Content-Type": "text/event-stream" } },
-          );
-        if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
-        return Response.json({
-          revision: 0,
-          current: null,
-          latestBuild: null,
-          stale: false,
-          artifacts: null,
-        });
+        throw new Error(
+          `Unexpected external request: ${url.hostname}${url.pathname}`,
+        );
       },
     },
-  }),
+    async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path.endsWith("/changed")) return new Response(null, { status: 204 });
+      if (path.endsWith("/compile")) {
+        const id = request.headers.get("X-Compilation-Id");
+        assert(id);
+        compileJobs.set(id, path);
+        return Response.json(
+          {
+            id,
+            status: "queued",
+            revision: 1,
+            sourceRevision: 1,
+            createdAt: new Date().toISOString(),
+          },
+          { status: 202 },
+        );
+      }
+      if (path.includes("/jobs/"))
+        return Response.json({
+          id: path.split("/").at(-1),
+          revision: 1,
+          createdAt: new Date().toISOString(),
+          status: "failed",
+          error: "Fixture diagnostic",
+          log: "main.tex:3: Undefined control sequence.",
+        });
+      if (path.endsWith("/events"))
+        return new Response(
+          `data: ${JSON.stringify({ revision: 0, current: null, latestBuild: null, stale: false, artifacts: null })}\n\n`,
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
+      if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
+      return Response.json({
+        revision: 0,
+        current: null,
+        latestBuild: null,
+        stale: false,
+        artifacts: null,
+      });
+    },
+  ),
   port,
   resourcePersistencePath: directory,
 });

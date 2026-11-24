@@ -22,7 +22,7 @@ import {
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
-import type { SourceBucket } from "#/lib/storage/server";
+import { fetchBuilds } from "#/lib/builds/client";
 
 import {
   compileHistoryLimit,
@@ -31,7 +31,6 @@ import {
   sessionHistoryParam,
   timelineRetentionMs,
 } from "./compile-history";
-import { fetchCompiler } from "./compiler";
 import { compileDeltaSchema, hashSource } from "./source-sync";
 import { createCompileSources, type CompileProject } from "./sources";
 
@@ -51,11 +50,9 @@ export type CompileRouteOptions<Context extends { db: Db }> = {
     context: Context;
   }): Promise<CompilePrincipal | null>;
   project: CompileProject;
-  // Read per request, so Workers bindings can be resolved lazily.
-  bucket(): SourceBucket;
-  // The billing plan sent to the compiler as `X-Compile-Plan`.
+  // The billing plan the build is admitted and limited by.
   compilePlan(db: Db, userId: string): Promise<string>;
-  // Wraps a long-lived compiler response so it closes when the caller loses
+  // Wraps a long-lived build response so it closes when the caller loses
   // access to the project.
   streamLive(options: {
     response: Response;
@@ -327,7 +324,7 @@ async function readPreviewTiming(request: Request) {
 }
 
 async function isLatestPdf(projectId: string, path: string) {
-  const response = await fetchCompiler(`/projects/${projectId}`);
+  const response = await fetchBuilds(`/projects/${projectId}`);
   if (!response.ok) return false;
   const snapshot = buildSnapshotSchema.safeParse(
     await response.json().catch(() => null),
@@ -361,7 +358,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
       if (new URL(request.url).searchParams.get("changed") === "1") {
         const body = await readPreviewBody(request);
         if (!body) return json({ error: "Invalid editor revision" }, 400);
-        return fetchCompiler(`/projects/${params.projectId}/changed`, {
+        return fetchBuilds(`/projects/${params.projectId}/changed`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -412,7 +409,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
       try {
         const send = (sources: object) => {
           submitted = true;
-          return fetchCompiler(`/projects/${params.projectId}/compile`, {
+          return fetchBuilds(`/projects/${params.projectId}/compile`, {
             method: "POST",
             // Source synchronization can outlast the default 15-second timeout.
             signal: request.signal,
@@ -436,11 +433,10 @@ export function createCompileHandlers<Context extends { db: Db }>(
             body: JSON.stringify(sources),
           });
         };
-        // Keep metadata writes behind the project lock until the compiler
+        // Keep metadata writes behind the project lock until the coordinator
         // accepts this snapshot. Later changes then invalidate that build.
         let response = await withCompileSources({
           db,
-          bucket: options.bucket(),
           projectId: params.projectId,
           userId: denied.userId,
           mainFile: body.mainFile,
@@ -467,7 +463,6 @@ export function createCompileHandlers<Context extends { db: Db }>(
             submitted = false;
             response = await withCompileSources({
               db,
-              bucket: options.bucket(),
               projectId: params.projectId,
               userId: denied.userId,
               mainFile: body.mainFile,
@@ -583,7 +578,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
       if (!body) return json({ error: "Invalid preview timing" }, 400);
       let timing: JobTiming | undefined;
       try {
-        const response = await fetchCompiler(
+        const response = await fetchBuilds(
           `/projects/${params.projectId}/jobs/${id.data}`,
         );
         const result = compileJobSchema.safeParse(await response.json());
@@ -687,11 +682,11 @@ export function createCompileHandlers<Context extends { db: Db }>(
           )
             return json({ error: "File not found" }, 404);
           if (file !== null)
-            return await fetchCompiler(
+            return await fetchBuilds(
               `/projects/${params.projectId}/build/files?path=${encodeURIComponent(file)}&version=${encodeURIComponent(url.searchParams.get("version") ?? "")}`,
             );
           const events = url.searchParams.get("events") === "1";
-          const response = await fetchCompiler(
+          const response = await fetchBuilds(
             `/projects/${params.projectId}${events ? "/events" : ""}`,
             events ? { signal: request.signal } : undefined,
           );
@@ -719,7 +714,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
       const pdfPath = `/projects/${params.projectId}/compilations/${id}.pdf`;
       try {
         if (url.searchParams.get("preview") === "pdf") {
-          const response = await fetchCompiler(
+          const response = await fetchBuilds(
             `/projects/${params.projectId}/jobs/${id}/pdf`,
             {
               signal: AbortSignal.any([
@@ -744,7 +739,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
         if (url.searchParams.get("artifact") === "pdf") {
           if (job.status !== "succeeded")
             return json({ error: "PDF not found" }, 404);
-          const pdf = await fetchCompiler(pdfPath);
+          const pdf = await fetchBuilds(pdfPath);
           if (pdf.status === 404) return json({ error: "PDF not found" }, 404);
           if (!pdf.ok || pdf.headers.get("Content-Type") !== "application/pdf")
             throw new Error("Invalid compiler PDF response");
@@ -753,7 +748,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
           });
         }
 
-        const response = await fetchCompiler(
+        const response = await fetchBuilds(
           `/projects/${params.projectId}/jobs/${id}`,
         );
         if (response.status === 404) {

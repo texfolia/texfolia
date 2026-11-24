@@ -39,27 +39,28 @@ checks project access, reserves a job using `compileRequestDigest`, reconciles
 sources, and forwards the request to the private compiler. Its digest includes
 the submitted source delta and clean-build flag, but no engine choice.
 
-The [coordinator API](../../../../compiler/src/coordinator-api.ts) accepts either a
-snapshot or a source delta. [ProjectCoordinatorCore](../../../../compiler/src/coordinator.ts)
+The [coordinator API](../../../../app/src/lib/builds/coordinator-api.ts) accepts
+either a snapshot or a source delta.
+[ProjectCoordinatorCore](../../../../app/src/lib/builds/coordinator.ts)
 persists the build, serializes revisions, cancels superseded work, and recovers
 pending attempts after a restart. Neither the saved build nor the `Engine`
-context in [types.ts](../../../../compiler/src/types.ts) identifies a selected engine.
-The source schemas in [project.ts](../../../../compiler/src/project.ts) and
-[source-sync.ts](../../../../compiler/src/source-sync.ts) also have no engine field.
-Adding an unchecked field to a source body would not carry a selection through
-these parsers.
+context in [types.ts](../../../../app/src/lib/builds/types.ts) identifies a selected
+engine. The schemas in [source-sync.ts](../../../../app/src/lib/builds/source-sync.ts)
+also have no engine field. Adding an unchecked field to a source body would not
+carry a selection through these parsers.
 
-Each attempt uses [createPooledEngine](../../../../compiler/src/pooled-engine.ts) to
-claim a container, acquire a fenced lease, restore the project cache, synchronize
-sources, and compile. The client consumes the complete multipart response before
-releasing the lease. The Go handler wipes project state on release. A project
-retains its coordinator and durable archive, not a container between builds.
-See [Container pool](../../../../compiler/docs/container-pool.md).
+Each attempt uses the [compiler client](../../../../app/src/lib/builds/compiler.ts) to
+send one archive to the compiler Worker. The Worker leases a container, streams the
+archive to it, and returns the response archive as it arrives. A container keeps
+one caller's sources and cache between compiles and wipes them before it serves
+another caller. The wire in
+[contracts](../../../../../packages/contracts/src/compiler.ts) has no engine field.
 
 The [Go runner](../../../../compiler/engine/compile.go) invokes `tectonic` directly.
 Its cache placement and environment are Tectonic-specific.
-[main.go](../../../../compiler/engine/main.go) checks Tectonic at startup and labels
-attempt timing as `tectonic`. The [Dockerfile](../../../../compiler/Dockerfile)
+[main.go](../../../../compiler/engine/main.go) checks Tectonic at startup, and
+[handler.go](../../../../compiler/engine/handler.go) labels attempt timing as
+`tectonic`. The [Dockerfile](../../../../compiler/Dockerfile)
 builds patched Tectonic, warms its formats, and installs Poppler. It installs
 neither TeX Live nor latexmk.
 
@@ -67,17 +68,16 @@ Cache reuse spans several owners:
 
 - The coordinator checks `manifest?.engine === "tectonic"` and one project-wide
   `cacheValid` flag before allowing reuse.
-- The [project engine client](../../../../compiler/src/project-engine.ts) restores
-  `projects/<projectId>/cache.tar.zst`. A successful build overwrites that same
+- The compiler client restores `projects/<projectId>/cache.tar.zst`. A successful build overwrites that same
   archive, regardless of engine.
-- The Go handler keeps one cache map and a `cacheReady` boolean for the lease.
+- The Go engine keeps one cache map and a `cacheReady` boolean per slot.
   Neither identifies an engine. [cache.go](../../../../compiler/engine/cache.go)
   validates archive paths, entry types, and size limits, but no engine identity.
-- The [artifact manifest](../../../../compiler/src/artifacts.ts) records the engine
+- The [artifact manifest](../../../../app/src/lib/builds/artifacts.ts) records the engine
   family from output timing. It describes downloadable build files, rather than
   independently tracking caches for several engines.
 
-The [Worker](../../../../compiler/worker.ts) uses `POOL.getByName("global")` and one
+The [Worker](../../../../compiler/worker.ts) uses `POOL.getByName("autoscaler")` and one
 `COMPILER` container binding. [Wrangler configuration](../../../../compiler/wrangler.jsonc)
 maps `TectonicContainer` to the Dockerfile, with `basic` instances and a cap of 20.
 The [local pool](../../../../compiler/src/local-containers.ts) also uses one image,
@@ -217,7 +217,7 @@ deployment has moved to the new protocol.
 ## Proposed telemetry
 
 Telemetry currently records `engine: "tectonic" | "unknown"` in
-[compiler telemetry](../../../../compiler/src/telemetry.ts) and the web timing parser.
+[build telemetry](../../../../app/src/lib/builds/telemetry.ts) and the web timing parser.
 Older records that say `texlive` parse as `unknown` (NAT-381). Restore a
 `texlive` value only when a TeX Live mode actually ships. Add `engineId` and
 `cacheVersion` to distinguish actual compile modes and toolchains. Old timing
@@ -299,13 +299,13 @@ unavailable to callers until their images and verification are ready.
 
 Extend the existing suites rather than testing only registry lookups:
 
-- [builds.test.ts](../../../../compiler/test/builds.test.ts) and
-  [coordinator.test.ts](../../../../compiler/test/coordinator.test.ts) need A-to-B-to-A
+- [builds.test.ts](../../../../app/src/lib/builds/builds.test.ts) and
+  [coordinator.test.ts](../../../../app/src/lib/builds/coordinator.test.ts) need A-to-B-to-A
   cache reuse, engine-only freshness changes, restart and queue recovery, and
   same-ID engine conflicts. A failed B build must retain A's successful PDF and
   cache while reporting B's failure log and actual engine.
-- [project-engine.test.ts](../../../../compiler/test/project-engine.test.ts),
-  [engine.test.ts](../../../../compiler/test/engine.test.ts), and the pool suites need
+- [compiler.test.ts](../../../../app/src/lib/builds/compiler.test.ts),
+  [compile.test.ts](../../../../compiler/test/compile.test.ts), and the pool suites need
   tagged restore, wrong-image rejection, actual-identity mismatch, clean retry,
   fallback routing, and handoff between projects and modes.
 - The [Go tests](../../../../compiler/engine) need real driver output and cancellation,

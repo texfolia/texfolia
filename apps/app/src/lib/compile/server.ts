@@ -1,6 +1,5 @@
-// Server-only compile integration: the compiler service client, saved-source
-// snapshots, and the `/api/compile` handlers.
-export { fetchCompiler } from "./compiler";
+// Server-only compile integration: saved-source snapshots and the
+// `/api/compile` handlers. #/lib/builds runs the builds.
 export {
   createCompileSources,
   type CompileProject,

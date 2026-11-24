@@ -3,7 +3,13 @@ import { createInterface } from "node:readline";
 import { previewTimingSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
-import { decodeTelemetry } from "../src/telemetry";
+function decodeTelemetry(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 
 const sampleSchema = previewTimingSchema.extend({
   event: z.literal("compile_preview"),

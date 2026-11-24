@@ -1,6 +1,6 @@
 import { createDb } from "@texfolia/db";
 import { project } from "@texfolia/db/schema";
-import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import { DurableObject } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 
 import { invalidateOrganizationCollaborationAccess } from "#/lib/collaboration/server";
@@ -213,7 +213,7 @@ export default {
       );
     if (url.pathname === "/client.js") return env.CLIENT.fetch(request);
     if (url.pathname.startsWith("/fixture/"))
-      return env.COMPILER.fetch(
+      return env.BUILDS.getByName(url.pathname.split("/")[3] ?? "").fetch(
         new Request(url.href.replace("/fixture", ""), request),
       );
     if (!url.pathname.startsWith("/api/"))
@@ -264,16 +264,8 @@ export default {
   },
 };
 
-export class CompilerServiceFixture extends WorkerEntrypoint<{
-  COMPILER_STREAMS: DurableObjectNamespace<CompilerFixture>;
-}> {
-  override fetch(request: Request) {
-    const projectId = new URL(request.url).pathname.split("/")[2] ?? "";
-    return this.env.COMPILER_STREAMS.getByName(projectId).fetch(request);
-  }
-}
-
-export class CompilerFixture extends DurableObject {
+// Stands in for a project's build coordinator.
+export class BuildsFixture extends DurableObject {
   private recipients = new Set<ReadableStreamDefaultController<Uint8Array>>();
   override async fetch(request: Request) {
     const url = new URL(request.url);

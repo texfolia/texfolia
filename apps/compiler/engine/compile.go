@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"io"
 	"os"
@@ -130,17 +129,12 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 			}
 		}
 	}
-	for path, content := range p.files {
+	for path, blob := range p.files {
 		target := filepath.Join(source, path)
 		if err = os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 			return nil, err
 		}
-		if p.sourceDir != "" {
-			err = os.Link(filepath.Join(p.sourceDir, path), target)
-		} else {
-			err = os.WriteFile(target, content, 0600)
-		}
-		if err != nil {
+		if err = os.Link(blob, target); err != nil {
 			return nil, err
 		}
 	}
@@ -189,7 +183,7 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 		if readErr != nil || len(raw) > maxArtifactBytes {
 			return nil
 		}
-		return &logArtifact{Path: name + ".log", Base64: base64.StdEncoding.EncodeToString(raw)}
+		return &logArtifact{path: name + ".log", content: raw}
 	}
 	if ctx.Err() != nil {
 		return nil, &httpError{status: 408, message: "Compilation timed out", log: log, logFile: failureLog()}

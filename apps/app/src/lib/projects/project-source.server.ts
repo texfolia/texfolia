@@ -3,12 +3,12 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
+import { fetchBuilds } from "#/lib/builds/client";
 import {
   cleanupDeletedCollaboration,
   collectCollaborationSources,
   type CollaborationCleanup,
 } from "#/lib/collaboration/server";
-import { fetchCompiler } from "#/lib/compile/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
 import type { saveSourceSchema } from "#/lib/storage";
 import {
@@ -20,17 +20,17 @@ import {
 
 export async function invalidateSourceBuild(
   projectId: string,
-  compiler?: Fetcher,
+  builds?: Pick<Fetcher, "fetch">,
 ) {
   try {
-    const response = await fetchCompiler(
+    const response = await fetchBuilds(
       `/projects/${projectId}/changed`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ editorId: crypto.randomUUID(), sequence: 0 }),
       },
-      compiler,
+      builds,
     );
     if (!response.ok)
       throw new Error(`Build invalidation returned ${response.status}`);

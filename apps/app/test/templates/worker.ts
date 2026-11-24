@@ -13,6 +13,7 @@ import {
 import { seedTemplates } from "@texfolia/db/seed-templates";
 import { templateStarters } from "@texfolia/db/template-starters";
 import { eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 import { encodeSource } from "#/lib/storage";
 import { type SourceBucket, sweepProjectSources } from "#/lib/storage/server";
@@ -77,7 +78,7 @@ export default {
     const cleared: string[] = [];
     let seededIds: string[] = [];
     let serviceDown = false;
-    const compiler = {
+    const builds = {
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init);
         if (serviceDown)
@@ -86,7 +87,7 @@ export default {
         const match = new URL(request.url).pathname.match(
           /^\/projects\/([^/]+)(\/.*)$/,
         );
-        if (!match) throw new Error(`Unexpected compiler path ${request.url}`);
+        if (!match) throw new Error(`Unexpected builds path ${request.url}`);
         const [, projectId, path] = match as unknown as [
           string,
           string,
@@ -128,7 +129,7 @@ export default {
             headers: { "Content-Type": "image/png" },
           });
         }
-        throw new Error(`Unexpected compiler path ${request.url}`);
+        throw new Error(`Unexpected builds path ${request.url}`);
       },
     } satisfies Pick<Fetcher, "fetch">;
     const refresh = async (templateId: string) => {
@@ -136,7 +137,7 @@ export default {
         .update(template)
         .set({ previewNextAttemptAt: new Date(0) })
         .where(eq(template.id, templateId));
-      await refreshTemplatePreviews({ db, bucket, compiler, templateId });
+      await refreshTemplatePreviews({ db, bucket, builds, templateId });
     };
 
     try {
@@ -339,14 +340,35 @@ export default {
         })
       )?.previewJobId;
       assert(firstAttempt);
-      assert.deepEqual(submissions.get(firstAttempt), {
-        mainFile: "main.tex",
-        preview: true,
-        files: {
-          "main.tex": sourceText,
-          "assets/data.bin": { base64: "AAEC/w==" },
-        },
-      });
+      // The submission names saved snapshot objects and copies no bytes.
+      const submitted = z
+        .object({
+          mainFile: z.literal("main.tex"),
+          preview: z.literal(true),
+          files: z.record(
+            z.string(),
+            z.object({ hash: z.string(), size: z.number(), key: z.string() }),
+          ),
+        })
+        .parse(submissions.get(firstAttempt));
+      assert.deepEqual(Object.keys(submitted.files).sort(), [
+        "assets/data.bin",
+        "main.tex",
+      ]);
+      for (const [path, expected] of [
+        ["main.tex", new TextEncoder().encode(sourceText)],
+        ["assets/data.bin", new Uint8Array([0, 1, 2, 255])],
+      ] as const) {
+        const file = submitted.files[path];
+        assert.equal(
+          file?.key,
+          `templates/${published.id}/sources/${file?.hash}`,
+        );
+        assert.equal(file.size, expected.length);
+        const object = await bucket.get(file.key);
+        assert(object);
+        assert.deepEqual(new Uint8Array(await object.arrayBuffer()), expected);
+      }
       await refresh(published.id);
       assert.equal(
         (
@@ -707,7 +729,7 @@ export default {
         refreshTemplatePreview({
           db,
           bucket,
-          compiler,
+          builds,
           templateId: republished.id,
           retry: true,
           userId,
@@ -735,7 +757,7 @@ export default {
       assert.equal(
         cleared.filter((id) => id === republished.id).length,
         1,
-        "A failed attempt clears its temporary compiler project",
+        "A failed attempt clears its temporary project",
       );
       await assert.rejects(retryAs(viewerId), /Wait a minute/);
 
@@ -788,7 +810,7 @@ export default {
       assert.equal(
         cleared.filter((id) => id === republished.id).length,
         2,
-        "A ready attempt clears its temporary compiler project",
+        "A ready attempt clears its temporary project",
       );
       assert.equal(
         (await getTemplate({ db, templateId: republished.id }))?.status,

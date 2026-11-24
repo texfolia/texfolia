@@ -68,7 +68,8 @@ flowchart TD
     App <-->|Read and write saved sources| R2
     App <-->|Accounts, file tree, source versions, and compile records| DB[("PostgreSQL")]
     App <-->|Optional social sign-in and billing| Services["OAuth providers and Stripe"]
-    App <-->|Submit jobs, check status, and fetch PDFs| Compiler["Hono compiler API"]
+    App <-->|Submit jobs, follow status, and fetch PDFs| Builds["ProjectBuilds Durable Object"]
+    Builds <-->|Sources in, artifacts out| Compiler["Compiler Worker and container pool"]
 ```
 
 ### How a compile becomes a PDF
@@ -78,7 +79,7 @@ sequenceDiagram
     participant B as Browser
     participant W as Product app
     participant P as Project coordinator
-    participant T as Project container
+    participant T as Compiler
     participant R as Artifact storage
 
     B->>W: Open project event stream
@@ -97,17 +98,17 @@ sequenceDiagram
     B->>W: Fetch job status or saved PDF
 ```
 
-More detail: [product app](apps/app/README.md), [marketing site](apps/web/README.md), [compiler](apps/compiler/README.md), and the [docs](apps/docs/README.md) app.
+More detail: [product app](apps/app/README.md), [marketing site](apps/web/README.md), [project builds](apps/app/src/lib/builds/README.md), and the [docs](apps/docs/README.md) app.
 
 ## Repository layout
 
 ```text
 apps/
   app/                 React product app: auth, projects, and the compile endpoint
-    src/lib/      App features: ai, auth, billing, collaboration, comments,
+    src/lib/      App features: ai, auth, billing, builds, collaboration, comments,
                        compile, editor, email, git, projects, references, settings,
                        sharing, shortcuts, storage, templates, theme, workspace
-  compiler/            Hono compiler API, job processing, and the LaTeX engine
+  compiler/            Compile service: Effect Worker, autoscaler, and the Go LaTeX engine
   docs/                Astro + Starlight + React documentation site
   web/                 React marketing site: landing, pricing, policies, templates gallery
 packages/
