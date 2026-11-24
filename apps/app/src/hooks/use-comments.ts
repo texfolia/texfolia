@@ -7,8 +7,8 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import type { CommentAnchor } from "#/features/comments/anchor";
-import { listComments } from "#/features/comments/project-comments.functions";
+import type { CommentAnchor } from "#/lib/comments/anchor";
+import { listComments } from "#/lib/comments/project-comments.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 export type CommentThreads = Awaited<ReturnType<typeof listComments>>;

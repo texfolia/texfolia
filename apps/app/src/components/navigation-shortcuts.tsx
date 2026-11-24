@@ -2,8 +2,8 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { createBrowserSettingsStore } from "#/features/settings/settings.functions";
-import { defaultShortcuts } from "#/features/shortcuts/shortcuts";
+import { createBrowserSettingsStore } from "#/lib/settings/settings.functions";
+import { defaultShortcuts } from "#/lib/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,

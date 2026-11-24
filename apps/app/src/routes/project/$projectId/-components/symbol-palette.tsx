@@ -7,7 +7,7 @@ import {
   latexPreamble,
   type LatexSymbol,
   searchLatexSymbols,
-} from "#/features/editor/latex/symbols";
+} from "#/lib/editor/latex/symbols";
 
 export type SymbolPreamble = {
   source: string;

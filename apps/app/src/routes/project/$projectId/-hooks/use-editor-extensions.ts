@@ -21,20 +21,20 @@ import {
   yUndoManagerKeymap,
 } from "y-codemirror.next";
 
-import type { CollaborativeFile } from "#/features/collaboration/browser";
+import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import {
   loadKeymapExtension,
   loadedKeymapExtension,
-} from "#/features/editor/keymaps/extension";
+} from "#/lib/editor/keymaps/extension";
 import {
   type EditorKeymap,
   editorKeymapLabels,
-} from "#/features/editor/keymaps/keymaps";
-import type { LatexProblem } from "#/features/editor/latex/analysis";
+} from "#/lib/editor/keymaps/keymaps";
+import type { LatexProblem } from "#/lib/editor/latex/analysis";
 import {
   editorLanguage,
   projectProblemsChanged,
-} from "#/features/editor/latex/language";
+} from "#/lib/editor/latex/language";
 
 export type ScrollAnchor = { pos: number; margin: number };
 

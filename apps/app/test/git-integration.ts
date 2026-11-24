@@ -26,12 +26,12 @@ import {
   decodeServerMessage,
   encodeClientMessage,
   protocolSearchParam,
-} from "#/features/collaboration";
-import { gitProvider, type GitProvider } from "#/features/git";
-import { GitRepository, gitHttp } from "#/features/git/server";
-import { gitServer, gitCommand } from "#/features/git/testing";
+} from "#/lib/collaboration";
+import { gitProvider, type GitProvider } from "#/lib/git";
+import { GitRepository, gitHttp } from "#/lib/git/server";
+import { gitServer, gitCommand } from "#/lib/git/testing";
 
-import { createProject } from "../src/features/projects/project.server";
+import { createProject } from "../src/lib/projects/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

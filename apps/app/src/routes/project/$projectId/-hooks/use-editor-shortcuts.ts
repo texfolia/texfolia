@@ -5,7 +5,7 @@ import {
   applyLatexHeading,
   headingCommands,
   toggleLatexCommand,
-} from "#/features/editor/latex/editor-commands";
+} from "#/lib/editor/latex/editor-commands";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 
 /**

@@ -2,14 +2,14 @@ import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { editorLanguage } from "#/features/editor/latex/language";
-import { browserSpellChecker } from "#/features/editor/spelling/checker";
+import { editorLanguage } from "#/lib/editor/latex/language";
+import { browserSpellChecker } from "#/lib/editor/spelling/checker";
 import {
   personalDictionaryChanged,
   spellcheck,
-} from "#/features/editor/spelling/editor";
+} from "#/lib/editor/spelling/editor";
 
-import { personalDictionaryHas } from "../../src/features/settings/settings.schema";
+import { personalDictionaryHas } from "../../src/lib/settings/settings.schema";
 
 export type SpellingTest = {
   text: () => string;

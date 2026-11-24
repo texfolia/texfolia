@@ -11,11 +11,11 @@ import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { toast } from "@texfolia/ui/toast";
 import { useEffect, useId, useState } from "react";
 
-import type { Project } from "#/features/projects/project.functions";
+import type { Project } from "#/lib/projects/project.functions";
 import {
   getProjectAccess,
   transferProject,
-} from "#/features/sharing/project-sharing.functions";
+} from "#/lib/sharing/project-sharing.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 type Person = Awaited<ReturnType<typeof getProjectAccess>>["people"][number];

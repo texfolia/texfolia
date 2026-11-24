@@ -8,13 +8,13 @@ import {
   createShareLink,
   listShareLinks,
   revokeShareLink,
-} from "#/features/sharing/project-share-links.functions";
+} from "#/lib/sharing/project-share-links.functions";
 import {
   createShareLinkSchema,
   shareLinkScopeSchema,
   sharePath,
   type ShareLinkScope,
-} from "#/features/sharing/project-share-links.schema";
+} from "#/lib/sharing/project-share-links.schema";
 
 const scopeLabels: Record<ShareLinkScope, string> = {
   project: "Sources and PDF",

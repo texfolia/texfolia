@@ -7,8 +7,8 @@ import {
 import { Button } from "@texfolia/ui/button";
 import { type ReactNode, useState } from "react";
 
-import { authClient } from "#/features/auth/auth-client";
-import { getOrganizationInvitation } from "#/features/auth/organization.functions";
+import { authClient } from "#/lib/auth/auth-client";
+import { getOrganizationInvitation } from "#/lib/auth/organization.functions";
 import { ThemeProvider } from "#/providers/theme-provider";
 
 export const Route = createFileRoute("/accept-invitation/$invitationId")({

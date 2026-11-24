@@ -5,9 +5,9 @@ import * as Y from "yjs";
 import {
   collaborationProtocol,
   encodeClientMessage,
-} from "#/features/collaboration";
-import { CollaborativeFile } from "#/features/collaboration/browser";
-import { formatChanges } from "#/features/editor/latex/format";
+} from "#/lib/collaboration";
+import { CollaborativeFile } from "#/lib/collaboration/browser";
+import { formatChanges } from "#/lib/editor/latex/format";
 
 const parameters = new URLSearchParams(location.search);
 const file = new CollaborativeFile({

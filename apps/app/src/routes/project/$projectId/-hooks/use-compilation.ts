@@ -14,11 +14,11 @@ import {
   ProjectBuildEvents,
   requestCompilation,
   type CompileSources,
-} from "#/features/compile";
-import type { LatexProblem } from "#/features/editor/latex/analysis";
-import { invalidProjectPaths } from "#/features/projects";
-import type { ProjectNode } from "#/features/projects/project.functions";
-import { InvalidSourcePathError } from "#/features/storage";
+} from "#/lib/compile";
+import type { LatexProblem } from "#/lib/editor/latex/analysis";
+import { invalidProjectPaths } from "#/lib/projects";
+import type { ProjectNode } from "#/lib/projects/project.functions";
+import { InvalidSourcePathError } from "#/lib/storage";
 
 import { useSharedPdf } from "./use-shared-pdf";
 

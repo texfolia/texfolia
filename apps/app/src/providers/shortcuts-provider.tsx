@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from "react";
 
-import type { EditorKeymap } from "#/features/editor/keymaps/keymaps";
+import type { EditorKeymap } from "#/lib/editor/keymaps/keymaps";
 import {
   createSequenceMatcher,
   eventChord,
@@ -17,7 +17,7 @@ import {
   type ShortcutAction,
   type ShortcutMap,
   yieldsToKeymap,
-} from "#/features/shortcuts/shortcuts";
+} from "#/lib/shortcuts/shortcuts";
 
 type Registration = {
   action: ShortcutAction;

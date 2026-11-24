@@ -2,11 +2,8 @@ import { isolateHistory } from "@codemirror/commands";
 import type { EditorView } from "@uiw/react-codemirror";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  FormatResponse,
-  FormatSettings,
-} from "#/features/editor/latex/format";
-import { createFormatWorker } from "#/features/editor/latex/workers";
+import type { FormatResponse, FormatSettings } from "#/lib/editor/latex/format";
+import { createFormatWorker } from "#/lib/editor/latex/workers";
 
 export function useLatexFormatter(settings: FormatSettings) {
   const worker = useRef<Worker | null>(null);

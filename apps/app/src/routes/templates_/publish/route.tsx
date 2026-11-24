@@ -8,18 +8,18 @@ import { useState } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
-import { getSession } from "#/features/auth/auth.functions";
-import { getProjects } from "#/features/projects/project.functions";
+import { getSession } from "#/lib/auth/auth.functions";
+import { webPath } from "#/lib/origins";
+import { getProjects } from "#/lib/projects/project.functions";
 import {
   publishTemplateSchema,
   templateLicenseLabels,
   templateLicenses,
-} from "#/features/templates";
+} from "#/lib/templates";
 import {
   listMyTemplates,
   publishTemplate,
-} from "#/features/templates/template.functions";
-import { webPath } from "#/lib/origins";
+} from "#/lib/templates/template.functions";
 
 export const Route = createFileRoute("/templates_/publish")({
   beforeLoad: async () => {

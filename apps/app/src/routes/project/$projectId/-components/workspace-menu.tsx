@@ -10,12 +10,12 @@ import {
   MenubarCheckboxItem,
 } from "@texfolia/ui/menubar";
 
-import type { EditorCommand } from "#/features/editor/editor-command";
+import type { EditorCommand } from "#/lib/editor/editor-command";
 import type {
   PanelView,
   SidebarView,
   WorkspaceChrome,
-} from "#/features/workspace/workspace-layout";
+} from "#/lib/workspace/workspace-layout";
 
 export function WorkspaceMenu({
   name,

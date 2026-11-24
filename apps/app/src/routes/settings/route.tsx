@@ -6,7 +6,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 
-import { settingsLinks } from "#/features/settings/settings-navigation";
+import { settingsLinks } from "#/lib/settings/settings-navigation";
 import { SettingsProvider } from "#/providers/settings-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
 

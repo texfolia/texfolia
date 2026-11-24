@@ -28,24 +28,24 @@ import {
   parseJobTimeline,
   sessionHistoryParam,
   timelineRetentionMs,
-} from "#/features/compile";
-import { projectMetadataVersion } from "#/features/projects";
+} from "#/lib/compile";
+import { projectMetadataVersion } from "#/lib/projects";
 
 import { createLocalRuntime } from "../../compiler/src/local";
 import { sourceDeltaSchema } from "../../compiler/src/source-sync";
 import type { Engine } from "../../compiler/src/types";
-import { readProjectMetadata } from "../src/features/projects/project-metadata.server";
-import { createProject } from "../src/features/projects/project.server";
+import { readProjectMetadata } from "../src/lib/projects/project-metadata.server";
+import { createProject } from "../src/lib/projects/project.server";
 import {
   lockProject,
   sharePrincipal,
-} from "../src/features/sharing/project-access.server";
+} from "../src/lib/sharing/project-access.server";
 import {
   createShareLink,
   getSharedProject,
   listShareLinks,
   revokeShareLink,
-} from "../src/features/sharing/project-share-links.server";
+} from "../src/lib/sharing/project-share-links.server";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(

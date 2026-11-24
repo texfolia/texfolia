@@ -27,8 +27,8 @@ import {
 } from "@texfolia/ui/sidebar";
 import { useState } from "react";
 
-import { signOut } from "#/features/auth/sign-out";
-import { settingsLinks } from "#/features/settings/settings-navigation";
+import { signOut } from "#/lib/auth/sign-out";
+import { settingsLinks } from "#/lib/settings/settings-navigation";
 
 import { initials } from "./project-columns";
 

@@ -15,12 +15,12 @@ import { useLayoutEffect } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
-import { getSession } from "#/features/auth/auth.functions";
+import { getSession } from "#/lib/auth/auth.functions";
 import {
   clearAppTheme,
   isAppPath,
   themeBootstrap,
-} from "#/features/theme/theme-bootstrap";
+} from "#/lib/theme/theme-bootstrap";
 
 import appCss from "../styles.css?url";
 

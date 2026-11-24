@@ -8,20 +8,17 @@ import CodeMirror, {
 } from "@uiw/react-codemirror";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { documentCachingStopped } from "#/features/collaboration/browser";
-import type { CollaborativeFile } from "#/features/collaboration/browser";
-import type { EditorCommand } from "#/features/editor/editor-command";
-import type { LatexProblem } from "#/features/editor/latex/analysis";
+import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+import { documentCachingStopped } from "#/lib/collaboration/browser";
+import type { CollaborativeFile } from "#/lib/collaboration/browser";
+import type { EditorCommand } from "#/lib/editor/editor-command";
+import type { LatexProblem } from "#/lib/editor/latex/analysis";
 import {
   defaultFormatSettings,
   type FormatSettings,
-} from "#/features/editor/latex/format";
-import {
-  addLatexPackage,
-  insertLatexSymbol,
-} from "#/features/editor/latex/symbols";
-import { downloadFile } from "#/features/storage/browser";
-import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+} from "#/lib/editor/latex/format";
+import { addLatexPackage, insertLatexSymbol } from "#/lib/editor/latex/symbols";
+import { downloadFile } from "#/lib/storage/browser";
 import { useSettings } from "#/providers/settings-provider";
 import { useTheme } from "#/providers/theme-provider";
 

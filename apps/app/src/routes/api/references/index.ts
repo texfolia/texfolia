@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 
-import { referenceResponse } from "#/features/references/references.server";
+import { referenceResponse } from "#/lib/references/references.server";
 
 export const Route = createFileRoute("/api/references/")({
   server: {

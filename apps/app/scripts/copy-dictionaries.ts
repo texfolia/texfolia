@@ -8,7 +8,7 @@ import {
   dictionaryPath,
   spellingDictionaries,
   type SpellingDictionary,
-} from "#/features/editor/spelling/languages";
+} from "#/lib/editor/spelling/languages";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const target = join(root, "public");

@@ -19,10 +19,10 @@ import {
   encodeClientMessage,
   type ClientMessage,
   type ServerMessage,
-} from "#/features/collaboration";
-import { hashSource } from "#/features/compile";
+} from "#/lib/collaboration";
+import { hashSource } from "#/lib/compile";
 
-import { createProject } from "../../src/features/projects/project.server";
+import { createProject } from "../../src/lib/projects/project.server";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,

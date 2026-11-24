@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { createRoot } from "react-dom/client";
 
-import type { ProjectDetails } from "../../src/features/projects/project.functions";
+import type { ProjectDetails } from "../../src/lib/projects/project.functions";
 import {
   createProjectFilesStore,
   ProjectFilesProvider,

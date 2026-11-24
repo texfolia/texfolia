@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@texfolia/ui/dropdown-menu";
 
-import type { WordCount, WordCounts } from "#/features/editor/latex/word-count";
+import type { WordCount, WordCounts } from "#/lib/editor/latex/word-count";
 
 const format = new Intl.NumberFormat();
 const total = (counts: WordCounts) =>

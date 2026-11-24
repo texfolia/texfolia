@@ -20,7 +20,7 @@ import {
   encodeClientMessage,
   type ClientMessage,
   type ServerMessage,
-} from "#/features/collaboration";
+} from "#/lib/collaboration";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,

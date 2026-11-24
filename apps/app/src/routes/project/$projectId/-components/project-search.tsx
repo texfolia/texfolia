@@ -10,13 +10,13 @@ import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
 import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 
+import { mapLimit } from "#/lib/map-limit";
 import {
   planSingleReplacement,
   planTextReplacements,
   searchProject,
   type ProjectSearchMatch,
-} from "#/features/projects";
-import { mapLimit } from "#/lib/map-limit";
+} from "#/lib/projects";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export type SearchRequest = { sequence: number; query?: string };

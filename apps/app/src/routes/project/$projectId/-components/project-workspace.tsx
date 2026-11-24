@@ -15,21 +15,18 @@ import {
 } from "react";
 
 import { SettingsDialog } from "#/components/settings-dialog";
-import { entryAppendix } from "#/features/editor/latex/bibtex";
-import { latexCompletion } from "#/features/editor/latex/completion";
-import { projectOutline } from "#/features/editor/latex/outline";
-import {
-  addLatexPackage,
-  packageInsertion,
-} from "#/features/editor/latex/symbols";
-import { sourceToPdf } from "#/features/editor/latex/synctex";
-import { projectPaths, invalidProjectPaths } from "#/features/projects";
-import type { ProjectDetails } from "#/features/projects/project.functions";
-import { encodeSource } from "#/features/storage";
-import { workspaceLayoutKey } from "#/features/workspace/workspace-layout";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
+import { entryAppendix } from "#/lib/editor/latex/bibtex";
+import { latexCompletion } from "#/lib/editor/latex/completion";
+import { projectOutline } from "#/lib/editor/latex/outline";
+import { addLatexPackage, packageInsertion } from "#/lib/editor/latex/symbols";
+import { sourceToPdf } from "#/lib/editor/latex/synctex";
+import { projectPaths, invalidProjectPaths } from "#/lib/projects";
+import type { ProjectDetails } from "#/lib/projects/project.functions";
+import { encodeSource } from "#/lib/storage";
+import { workspaceLayoutKey } from "#/lib/workspace/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
 import {

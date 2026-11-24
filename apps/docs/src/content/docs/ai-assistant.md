@@ -10,7 +10,7 @@ The history button in the bottom-left status bar opens a separate sidebar to
 the left of Agents, hidden by default. Its list creates, renames, deletes, and
 switches conversations. The active chat keeps its own panel beside history.
 
-The implementation lives in [`#/features/ai`](../../../../app/src/features/ai/README.md): chat runs,
+The implementation lives in [`#/lib/ai`](../../../../app/src/lib/ai/README.md): chat runs,
 tools, saved threads, skills, and the panel UI. The app keeps the `/api/ai` route,
 the Gateway secrets, and the workspace panel that hosts the UI.
 
@@ -123,8 +123,8 @@ user's role changes while it is in progress.
 
 ## Check metering
 
-Metering lives in [`#/features/billing`](../../../../app/src/features/billing/README.md). The app
-only binds the Gateway log lookup from `#/features/ai` that prices each request.
+Metering lives in [`#/lib/billing`](../../../../app/src/lib/billing/README.md). The app
+only binds the Gateway log lookup from `#/lib/ai` that prices each request.
 
 Each model request first creates an `ai_request` row. Its reservation includes
 20% markup and conservatively bounds input tokens by UTF-8 request bytes plus

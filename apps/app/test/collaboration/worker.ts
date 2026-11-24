@@ -3,27 +3,27 @@ import { project } from "@texfolia/db/schema";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 
-import { invalidateOrganizationCollaborationAccess } from "#/features/collaboration/server";
+import { invalidateOrganizationCollaborationAccess } from "#/lib/collaboration/server";
 
-import { createAuth } from "../../src/features/auth/auth";
-import { ProjectCollaboration as Room } from "../../src/features/collaboration/project-collaboration.server";
+import { createAuth } from "../../src/lib/auth/auth";
+import { ProjectCollaboration as Room } from "../../src/lib/collaboration/project-collaboration.server";
 import {
   collectProjectSources,
   deleteProjectNode,
-} from "../../src/features/projects/project-source.server";
+} from "../../src/lib/projects/project-source.server";
 import {
   deleteTrashedProject,
   restoreProject,
   trashProject,
-} from "../../src/features/projects/project.server";
+} from "../../src/lib/projects/project.server";
 import {
   createShareLink,
   revokeShareLink,
-} from "../../src/features/sharing/project-share-links.server";
+} from "../../src/lib/sharing/project-share-links.server";
 import {
   grantProjectAccess,
   revokeProjectAccess,
-} from "../../src/features/sharing/project-sharing.server";
+} from "../../src/lib/sharing/project-sharing.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
 import { Route as compileRoute } from "../../src/routes/api/compile/$projectId";
 

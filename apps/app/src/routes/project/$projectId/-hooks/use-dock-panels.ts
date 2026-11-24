@@ -2,10 +2,10 @@ import type { EditorView } from "@uiw/react-codemirror";
 import type { DockviewApi } from "dockview-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { EditorCommand } from "#/features/editor/editor-command";
-import { projectPaths } from "#/features/projects";
-import type { ProjectNode } from "#/features/projects/project.functions";
-import { restoreWorkspaceDock } from "#/features/workspace/workspace-layout";
+import type { EditorCommand } from "#/lib/editor/editor-command";
+import { projectPaths } from "#/lib/projects";
+import type { ProjectNode } from "#/lib/projects/project.functions";
+import { restoreWorkspaceDock } from "#/lib/workspace/workspace-layout";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState, Workspace } from "#/providers/workspace-provider";
 

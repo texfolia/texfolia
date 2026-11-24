@@ -4,9 +4,9 @@ import {
   type AnalyzeRequest,
   type AnalyzeResponse,
   emptyAnalysis,
-} from "#/features/editor/latex/analysis";
-import { emptyWordCount } from "#/features/editor/latex/word-count";
-import { createAnalysisWorker } from "#/features/editor/latex/workers";
+} from "#/lib/editor/latex/analysis";
+import { emptyWordCount } from "#/lib/editor/latex/word-count";
+import { createAnalysisWorker } from "#/lib/editor/latex/workers";
 
 export function useLatexAnalysis(paths: string[], main?: string) {
   const worker = useRef<Worker | null>(null);

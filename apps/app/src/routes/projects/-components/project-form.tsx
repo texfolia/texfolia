@@ -5,8 +5,8 @@ import { Input } from "@texfolia/ui/input";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useId, useState } from "react";
 
-import { projectNameSchema } from "#/features/projects";
-import { openTemplate } from "#/features/templates/template.functions";
+import { projectNameSchema } from "#/lib/projects";
+import { openTemplate } from "#/lib/templates/template.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 export function ProjectForm({

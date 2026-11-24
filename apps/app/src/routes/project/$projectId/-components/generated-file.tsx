@@ -4,8 +4,8 @@ import CodeMirror from "@uiw/react-codemirror";
 import type { IDockviewPanelProps } from "dockview-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
-import { buildFileUrl } from "#/features/compile/build";
-import { downloadFile } from "#/features/storage/browser";
+import { buildFileUrl } from "#/lib/compile/build";
+import { downloadFile } from "#/lib/storage/browser";
 import { useTheme } from "#/providers/theme-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 

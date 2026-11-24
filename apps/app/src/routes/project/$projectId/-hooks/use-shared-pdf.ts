@@ -9,12 +9,12 @@ import {
   sharedPdfReducer,
   sharedPdfStep,
   shownPdfBuildId,
-} from "#/features/compile";
-import { buildFileUrl } from "#/features/compile/build";
+} from "#/lib/compile";
+import { buildFileUrl } from "#/lib/compile/build";
 
 /**
  * Follows the project's shared PDF, showing this tab's own builds until the
- * server has stored them. The transitions live in `#/features/compile` (`shared-pdf`).
+ * server has stored them. The transitions live in `#/lib/compile` (`shared-pdf`).
  */
 export function useSharedPdf({
   projectId,

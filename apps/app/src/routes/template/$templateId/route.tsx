@@ -12,19 +12,16 @@ import { z } from "zod";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
-import {
-  templateLicenseLabels,
-  templateLicenseUrls,
-} from "#/features/templates";
-import { useTemplatePreviews } from "#/features/templates/template-preview";
+import { webPath } from "#/lib/origins";
+import { templateLicenseLabels, templateLicenseUrls } from "#/lib/templates";
+import { useTemplatePreviews } from "#/lib/templates/template-preview";
 import {
   getTemplate,
   getTemplateAccount,
   openTemplate,
   refreshTemplatePreview,
   reportTemplate,
-} from "#/features/templates/template.functions";
-import { webPath } from "#/lib/origins";
+} from "#/lib/templates/template.functions";
 
 export const Route = createFileRoute("/template/$templateId")({
   loader: async ({ params }) => {

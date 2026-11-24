@@ -23,11 +23,11 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
 import { z } from "zod";
 
-import { threadHistorySchema, threadSchema } from "#/features/ai";
-import { hashSource } from "#/features/compile";
-import { GitRepository } from "#/features/git/server";
+import { threadHistorySchema, threadSchema } from "#/lib/ai";
+import { hashSource } from "#/lib/compile";
+import { GitRepository } from "#/lib/git/server";
 
-import { createProject } from "../src/features/projects/project.server";
+import { createProject } from "../src/lib/projects/project.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

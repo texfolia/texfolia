@@ -22,7 +22,7 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
-import type { EditorCommand } from "#/features/editor/editor-command";
+import type { EditorCommand } from "#/lib/editor/editor-command";
 
 import {
   type HistoryStatus,

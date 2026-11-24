@@ -24,12 +24,12 @@ import {
   createProject,
   getProjects,
   setProjectTags,
-} from "../src/features/projects/project.server";
-import { lockProject } from "../src/features/sharing/project-access.server";
+} from "../src/lib/projects/project.server";
+import { lockProject } from "../src/lib/sharing/project-access.server";
 import {
   grantProjectAccess,
   revokeProjectAccess,
-} from "../src/features/sharing/project-sharing.server";
+} from "../src/lib/sharing/project-sharing.server";
 import { pdfFixture } from "./pdf-fixture";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;

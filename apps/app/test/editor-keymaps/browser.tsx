@@ -8,13 +8,13 @@ import {
   keymapHistory,
   loadKeymapExtension,
   loadedKeymapExtension,
-} from "#/features/editor/keymaps/extension";
-import type { EditorKeymap } from "#/features/editor/keymaps/keymaps";
+} from "#/lib/editor/keymaps/extension";
+import type { EditorKeymap } from "#/lib/editor/keymaps/keymaps";
 
 import {
   defaultShortcuts,
   type ShortcutAction,
-} from "../../src/features/shortcuts/shortcuts";
+} from "../../src/lib/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,

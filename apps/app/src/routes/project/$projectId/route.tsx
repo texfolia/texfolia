@@ -3,8 +3,8 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import {
   defaultSpellingLanguage,
   spellingLanguageSchema,
-} from "#/features/editor/spelling/languages";
-import { getProject } from "#/features/projects/project.functions";
+} from "#/lib/editor/spelling/languages";
+import { getProject } from "#/lib/projects/project.functions";
 import {
   createProjectFilesStore,
   ProjectFilesProvider,

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
-import type { LatexProblem } from "#/features/editor/latex/analysis";
+import type { LatexProblem } from "#/lib/editor/latex/analysis";
 
 function sameProblem(a: LatexProblem, b: LatexProblem) {
   return (

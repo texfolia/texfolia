@@ -26,17 +26,17 @@ bar shows no branch for these repositories.
 
 ## Platform adapters
 
-The core Git module lives in [`#/features/git`](../../../../app/src/features/git/README.md)
+The core Git module lives in [`#/lib/git`](../../../../app/src/lib/git/README.md)
 (`schema.ts`, `actions.ts`, `repository.ts`) and speaks plain Git smart HTTP
 through isomorphic-git. Each platform is an adapter in
-`apps/app/src/features/git/providers/` that supplies:
+`apps/app/src/lib/git/providers/` that supplies:
 its Better Auth provider ID, label, HTTPS host, OAuth repository scopes, the
 username sent with the token, which URL paths name a repository, and an example
 URL. Remote URL validation, account checks, the remote form, the Git view and
 Settings → Connections all read the registry in `providers/index.ts`.
 
 To add a platform, such as Cursor Origin or Bitbucket: register its OAuth
-provider in `apps/app/src/features/auth/auth.ts`, write an adapter, and add it to `gitProviders`.
+provider in `apps/app/src/lib/auth/auth.ts`, write an adapter, and add it to `gitProviders`.
 Platforms whose Git HTTP differs from GitHub and GitLab (for example, a token
 that is not sent as basic authentication) need a new adapter field.
 
@@ -109,7 +109,7 @@ and metering as chat, with no mutation tools. The suggested message remains edit
 
 ## Verification
 
-`bun test apps/app/src/features/git` runs real git HTTP transport
+`bun test apps/app/src/lib/git` runs real git HTTP transport
 against the installed `git-http-backend`, including authentication, binary imports,
 ignore rules, commits, push/pull, branches, conflicts, and persisted repository data.
 

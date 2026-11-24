@@ -15,11 +15,11 @@ import {
 } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 
-import type { WordCount } from "#/features/editor/latex/word-count";
+import type { WordCount } from "#/lib/editor/latex/word-count";
 import type {
   PanelView,
   WorkspaceChrome,
-} from "#/features/workspace/workspace-layout";
+} from "#/lib/workspace/workspace-layout";
 
 import type { CompileStatus } from "../-hooks/use-compilation";
 import type { GitBranchState } from "../-hooks/use-workspace-session";

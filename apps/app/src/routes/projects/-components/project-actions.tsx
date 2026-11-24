@@ -34,16 +34,16 @@ import {
   projectPaths,
   projectTagsSchema,
   renameProjectSchema,
-} from "#/features/projects";
+} from "#/lib/projects";
 import {
   duplicateProject,
   getProject,
   renameProject,
   setProjectTags,
   type Project,
-} from "#/features/projects/project.functions";
-import { downloadFile } from "#/features/storage/browser";
-import { createZip } from "#/features/storage/zip";
+} from "#/lib/projects/project.functions";
+import { downloadFile } from "#/lib/storage/browser";
+import { createZip } from "#/lib/storage/zip";
 import { useProjects } from "#/providers/projects-provider";
 import { ProjectAccessPanel } from "#/routes/project/$projectId/-components/project-collaboration";
 

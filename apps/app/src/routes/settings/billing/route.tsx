@@ -9,10 +9,10 @@ import { Input } from "@texfolia/ui/input";
 import { useRef, useState } from "react";
 import { z } from "zod";
 
-import { authClient } from "#/features/auth/auth-client";
-import { getSession } from "#/features/auth/auth.functions";
-import { paidPlans } from "#/features/billing";
-import { getBilling } from "#/features/billing/billing.functions";
+import { authClient } from "#/lib/auth/auth-client";
+import { getSession } from "#/lib/auth/auth.functions";
+import { paidPlans } from "#/lib/billing";
+import { getBilling } from "#/lib/billing/billing.functions";
 import { webPath } from "#/lib/origins";
 
 export const Route = createFileRoute("/settings/billing")({

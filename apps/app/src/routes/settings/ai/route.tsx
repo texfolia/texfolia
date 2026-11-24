@@ -11,7 +11,7 @@ import { useState } from "react";
 import {
   getAccountAiSettings,
   saveAccountAiSettings,
-} from "#/features/settings/account-settings.functions";
+} from "#/lib/settings/account-settings.functions";
 export const Route = createFileRoute("/settings/ai")({
   loader: () => getAccountAiSettings(),
   component: AiSettingsPage,

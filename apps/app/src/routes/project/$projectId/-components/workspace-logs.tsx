@@ -16,7 +16,7 @@ import {
   sessionHistoryLimit,
   sessionHistoryParam,
   type TimelineEvent,
-} from "#/features/compile";
+} from "#/lib/compile";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 const logSchema = z.object({ log: z.string() });

@@ -10,13 +10,13 @@ import {
 } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
 
-import { createProjectNode } from "../src/features/projects/project-node.server";
+import { createProjectNode } from "../src/lib/projects/project-node.server";
 import {
   createProject,
   getProject,
   getProjects,
   trashProject,
-} from "../src/features/projects/project.server";
+} from "../src/lib/projects/project.server";
 import { checkComments } from "./postgres/comments";
 import { checkSharingNotifications } from "./postgres/sharing-notifications";
 

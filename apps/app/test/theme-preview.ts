@@ -7,16 +7,13 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "#/features/collaboration";
+import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
 import {
   appearanceStorageKey,
   legacyAppearanceStorageKey,
-} from "#/features/editor/themes/themes";
+} from "#/lib/editor/themes/themes";
 
-import type { ProjectDetails } from "../src/features/projects/project.functions";
+import type { ProjectDetails } from "../src/lib/projects/project.functions";
 
 const projectId = crypto.randomUUID();
 const rootId = crypto.randomUUID();
@@ -77,7 +74,7 @@ const backend = Bun.serve({
       if (rejectFormatting)
         return new Response("Project settings unavailable", { status: 503 });
       const data = (
-        await import("#/features/projects")
+        await import("#/lib/projects")
       ).updateProjectFormattingSchema.parse(await request.json());
       formattingSaves++;
       project.formatIndent = data.formatting.indent;
@@ -132,11 +129,11 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
-      "#/features/projects/project.functions": rpc,
-      "#/features/projects/project-node.functions": rpc,
-      "#/features/projects/project-source.functions": rpc,
-      "#/features/git/git.functions": rpc,
-      "#/features/sharing/project-sharing.functions": rpc,
+      "#/lib/projects/project.functions": rpc,
+      "#/lib/projects/project-node.functions": rpc,
+      "#/lib/projects/project-source.functions": rpc,
+      "#/lib/git/git.functions": rpc,
+      "#/lib/sharing/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },

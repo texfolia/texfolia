@@ -20,13 +20,13 @@ import {
 import { toast } from "@texfolia/ui/toast";
 import { useEffect, useState } from "react";
 
-import { trashRetentionDays } from "#/features/projects";
+import { trashRetentionDays } from "#/lib/projects";
 import {
   deleteTrashedProject,
   getTrashedProjects,
   restoreProject,
   type TrashedProject,
-} from "#/features/projects/project.functions";
+} from "#/lib/projects/project.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 function TrashDate({ date }: { date: Date }) {
