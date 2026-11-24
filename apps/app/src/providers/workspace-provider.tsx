@@ -19,6 +19,11 @@ export type Workspace = {
   collaboration: ReadonlyMap<string, CollaborativeFile>;
   /** Connects a text file's document until the returned function is called. */
   holdDocument: (id: string) => () => void;
+  /** Edits a text file's collaborative document, connecting it if needed. */
+  editDocument: (
+    id: string,
+    run: (file: CollaborativeFile) => void,
+  ) => Promise<void>;
   projectId: string;
   canWrite: boolean;
   build: BuildSnapshot | null;

@@ -399,6 +399,30 @@ export class CollaborativeFile {
     });
   }
 
+  /**
+   * Applies non-overlapping UTF-16 range edits as one undoable collaborative
+   * transaction. Returns false when nothing changed.
+   */
+  applyEdits(edits: readonly { from: number; to: number; insert: string }[]) {
+    if (!this.status.ready || !this.status.canWrite)
+      throw new Error("Wait for this file to synchronize before editing.");
+    const current = this.text.toString();
+    const effective = edits.filter(
+      (edit) => current.slice(edit.from, edit.to) !== edit.insert,
+    );
+    if (!effective.length) return false;
+    this.undoManager.stopCapturing();
+    this.doc.transact(() => {
+      for (const edit of [...effective].sort((a, b) => b.from - a.from)) {
+        if (edit.to > edit.from)
+          this.text.delete(edit.from, edit.to - edit.from);
+        if (edit.insert) this.text.insert(edit.from, edit.insert);
+      }
+    });
+    this.undoManager.stopCapturing();
+    return true;
+  }
+
   private acknowledge(localRevision: number) {
     this.acknowledgedRevision = Math.max(
       this.acknowledgedRevision,
