@@ -38,6 +38,7 @@ export function ProjectSidebar({
   nodes,
   activeId,
   ready,
+  open,
   onOpen,
   onOpenGenerated,
   sources,
@@ -54,6 +55,7 @@ export function ProjectSidebar({
   nodes: ProjectNode[];
   activeId: string | undefined;
   ready: boolean;
+  open: boolean;
   onOpen: (node: ProjectNode, permanent: boolean) => void;
   onOpenGenerated: (path: string, permanent: boolean) => void;
   sources: () => Promise<SourceFiles>;
@@ -205,7 +207,7 @@ export function ProjectSidebar({
       </div>
       {view === "git" && (
         <div className="min-h-0 flex-1 overflow-auto">
-          {ready && <GitPanel />}
+          {ready && <GitPanel visible={open} />}
         </div>
       )}
       {view === "comments" && (

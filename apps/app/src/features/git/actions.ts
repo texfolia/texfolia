@@ -108,6 +108,8 @@ function nodeVersions(nodes: GitNode[]) {
 
 const readConcurrency = 8;
 
+class MissingObjectError extends Error {}
+
 async function readFiles(bucket: SourceBucket, nodes: GitNode[]) {
   const paths = projectPaths(nodes);
   const files: GitFiles = {};
@@ -120,7 +122,7 @@ async function readFiles(bucket: SourceBucket, nodes: GitNode[]) {
       const { node, path } = next;
       const object = node.objectKey ? await bucket.get(node.objectKey) : null;
       if (node.objectKey && !object)
-        throw new Error("Saved project source is missing.");
+        throw new MissingObjectError("Saved project source is missing.");
       files[path] = object
         ? new Uint8Array(await object.arrayBuffer())
         : new Uint8Array();
@@ -289,6 +291,16 @@ export async function gitBranch({
   });
 }
 
+// Cheap signal for the workspace metadata poll: changes whenever the linked
+// repository is created, updated, or unlinked.
+export async function gitVersion(tx: ProjectTransaction, projectId: string) {
+  const [linked] = await tx
+    .select({ objectKey: projectGit.objectKey })
+    .from(projectGit)
+    .where(eq(projectGit.projectId, projectId));
+  return linked?.objectKey ?? "";
+}
+
 // Repositories created by the removed "initialize" action have no remote. They can
 // still be read, linked to an empty remote (keeping history) or unlinked.
 const hostedRepositoryMessage =
@@ -323,38 +335,54 @@ export async function runGit({
   };
   let host = "the host";
   try {
-    // Short snapshot transaction: no Git host requests while the project row is locked.
-    const snapshot = await db.transaction(async (tx) => {
-      const found = await lock({
-        tx,
-        projectId,
-        userId: user.id,
-        access,
+    const readSnapshot = () =>
+      db.transaction(async (tx) => {
+        const found = await lock({
+          tx,
+          projectId,
+          userId: user.id,
+          access,
+        });
+        if (action.kind === "link" || action.kind === "unlink")
+          await requireRemoteManager(tx, found, user.id);
+        if (action.kind === "unlink") {
+          await tx
+            .delete(projectGit)
+            .where(eq(projectGit.projectId, projectId));
+          return null;
+        }
+        const [linked] = await tx
+          .select()
+          .from(projectGit)
+          .where(eq(projectGit.projectId, projectId));
+        if (!linked && readOnly) return null;
+        const nodes = await readNodes(tx, projectId);
+        return { linked, nodes };
       });
-      if (action.kind === "link" || action.kind === "unlink")
-        await requireRemoteManager(tx, found, user.id);
-      if (action.kind === "unlink") {
-        await tx.delete(projectGit).where(eq(projectGit.projectId, projectId));
-        return null;
-      }
-      const [linked] = await tx
-        .select()
-        .from(projectGit)
-        .where(eq(projectGit.projectId, projectId));
-      if (!linked && readOnly) return null;
-      const object = linked ? await bucket.get(linked.objectKey) : null;
-      if (linked && !object)
-        throw new Error("Saved git repository is missing.");
-      const nodes = await readNodes(tx, projectId);
-      return {
-        linked,
-        saved: object ? await object.text() : null,
-        nodes,
-        files: await readFiles(bucket, nodes),
-      };
-    });
+    const loadSnapshotObjects = async (
+      linked: typeof projectGit.$inferSelect | undefined,
+      nodes: GitNode[],
+    ) => {
+      const [saved, files] = await Promise.all([
+        linked
+          ? bucket.get(linked.objectKey).then(async (object) => {
+              if (!object)
+                throw new MissingObjectError(
+                  "Saved git repository is missing.",
+                );
+              return object.text();
+            })
+          : Promise.resolve(null),
+        action.kind === "import"
+          ? Promise.resolve<GitFiles>({})
+          : readFiles(bucket, nodes),
+      ]);
+      return { saved, files };
+    };
+    // Short snapshot transaction: no R2 reads or Git host requests while the project row is locked.
+    const snapshot = await readSnapshot();
     if (!snapshot) return { status: empty };
-    const { linked, saved, nodes, files } = snapshot;
+    let { linked, nodes } = snapshot;
     const connecting = action.kind === "link" || action.kind === "import";
     if (connecting && linked?.url)
       throw new Error(
@@ -366,12 +394,35 @@ export async function runGit({
           ? hostedRepositoryMessage
           : "Link a repository first, or import one as a new project.",
       );
-    const remote = connecting
+    let remote = connecting
       ? action.remote
       : linked?.url
         ? gitRemoteSchema.parse(linked.url)
         : null;
     if (remote) host = gitProvider(remote.provider).label;
+    let saved: string | null;
+    let files: GitFiles;
+    try {
+      ({ saved, files } = await loadSnapshotObjects(linked, nodes));
+    } catch (error) {
+      if (!(error instanceof MissingObjectError)) throw error;
+      // An object may have been retired and garbage-collected after the
+      // snapshot lock was released. Re-check the DB before reporting corruption.
+      const latest = await readSnapshot();
+      const changed =
+        latest?.linked?.objectKey !== linked?.objectKey ||
+        nodeVersions(latest?.nodes ?? []) !== nodeVersions(nodes);
+      if (!changed) throw error;
+      if (!readOnly)
+        throw new Error(
+          "The project changed while Git was syncing. Nothing was applied; try again.",
+        );
+      if (!latest) return { status: empty };
+      ({ linked, nodes } = latest);
+      remote = linked?.url ? gitRemoteSchema.parse(linked.url) : null;
+      if (remote) host = gitProvider(remote.provider).label;
+      ({ saved, files } = await loadSnapshotObjects(linked, nodes));
+    }
     const repo = saved ? GitRepository.restore(saved) : new GitRepository();
     let http: git.HttpClient | undefined;
     if (

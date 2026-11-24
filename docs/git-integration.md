@@ -66,10 +66,11 @@ content-addressed R2 sources are the working tree. Project locks serialize git
 with metadata and source writes; the collaboration Durable Object serializes git
 with Yjs updates and flushes accepted live edits before reading sources.
 
-Git actions snapshot the project in a short locked transaction, talk to the Git
-host with no database lock held, then apply results in a second short transaction.
-If the repository pointer, or for import, pull, and checkout any project node,
-changed in between, nothing is applied and the action asks the user to retry.
+Git actions snapshot the project rows in a short locked transaction, read
+repository and source objects from R2 and talk to the Git host with no database
+lock held, then apply results in a second short transaction. If the repository
+pointer, or for import, pull, and checkout any project node, changed in between,
+nothing is applied and the action asks the user to retry.
 
 Pull and checkout replace sources atomically with the repository pointer. File
 IDs survive for unchanged paths. Open text documents receive a new CRDT edit; a

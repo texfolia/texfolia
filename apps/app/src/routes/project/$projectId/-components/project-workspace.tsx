@@ -552,6 +552,7 @@ export function ProjectWorkspace({
               nodes={nodes}
               activeId={activeId}
               ready={ready}
+              open={chrome.rightOpen}
               onOpen={panels.openFile}
               onOpenGenerated={panels.openGenerated}
               sources={sources.sourceFiles}

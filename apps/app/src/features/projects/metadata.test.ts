@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
-import { projectMetadataVersion, type ProjectMetadata } from "./metadata";
+import {
+  projectMetadataSchema,
+  projectMetadataVersion,
+  projectSourcesFingerprint,
+  type ProjectMetadata,
+} from "./metadata";
 
 const main = {
   id: "main",
@@ -90,4 +95,28 @@ test("live text exports detect created, deleted, renamed, and moved files", asyn
       await projectMetadataVersion({ ...metadata, nodes, textSource: "live" }),
     ).not.toBe(before);
   }
+});
+
+test("projectSourcesFingerprint is deterministic across node order and reflects saved object changes", () => {
+  const reversed = { ...metadata, nodes: [...metadata.nodes].reverse() };
+  expect(projectSourcesFingerprint(reversed)).toBe(
+    projectSourcesFingerprint(metadata),
+  );
+  expect(
+    projectSourcesFingerprint({
+      ...metadata,
+      sourceVersions: {
+        ...metadata.sourceVersions,
+        main: { objectKey: "sources/after.tex" },
+      },
+    }),
+  ).not.toBe(projectSourcesFingerprint(metadata));
+  expect(
+    projectMetadataSchema.parse({
+      nodes: [],
+      sourceVersions: {},
+      canWrite: true,
+      gitVersion: "git/p/1.json",
+    }).gitVersion,
+  ).toBe("git/p/1.json");
 });
