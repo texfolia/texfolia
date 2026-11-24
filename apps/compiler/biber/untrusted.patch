@@ -1,0 +1,502 @@
+diff --git a/bin/biber b/bin/biber
+index ffc55ea..c426aa3 100755
+--- a/bin/biber
++++ b/bin/biber
+@@ -1,3 +1,3 @@
+-#!/usr/bin/env perl
++#!/usr/bin/perl -T
+ 
+ use v5.24;
+@@ -13,4 +13,10 @@ use Carp;
+ use IPC::Cmd qw( can_run run );
+ use Log::Log4perl qw(:no_extra_logdie_message);
++use Log::Log4perl::Config;
++use XML::LibXML;
++# Texfolia: the document chooses every input. Log settings are never code, and
++# XML never loads anything else.
++Log::Log4perl::Config->allow_code(0);
++XML::LibXML::externalEntityLoader(sub { return '' });
+ use Log::Log4perl::Level;
+ use POSIX qw(strftime);
+@@ -22,115 +28,19 @@ use Pod::Usage;
+ use List::AllUtils qw( first );
+ 
+-use Getopt::Long qw/:config no_ignore_case/;
+ my $opts = {};
+-GetOptions(
+-           $opts,
+-           'annotation_marker|annotation-marker=s',
+-           'bibencoding=s', # legacy alias for input_encoding
+-           'bblencoding=s', # legacy alias for output_encoding
+-           'bblsafechars',  # legacy alias for output_safechars
+-           'bblsafecharsset=s', # legacy alias for output_safecharsset
+-           'cache',
+-           'clrmacros',
+-           'collate_options|collate-options|c=s',
+-           'configfile|g=s',
+-           'convert_control|convert-control',
+-           'debug|D',
+-           'decodecharsset=s',
+-           'dieondatamodel',
+-           'dot_include|dot-include:s@',
+-           'fastsort|f', # does nothing now
+-           'fixinits',
+-           'glob_datasources|glob-datasources',
+-           'help|h|?',
+-           'input_directory|input-directory=s',
+-           'input_encoding|input-encodinge=s',
+-           'input_format|input-format=s',
+-           'isbn10',
+-           'isbn13',
+-           'isbn_normalise|isbn-normalise',
+-           'listsep=s',
+-           'logfile=s',
+-           'mincrossrefs|m=s',
+-           'named_annotation_marker|named-annotation-marker=s',
+-           'namesep=s',
+-           'no_bblxml_schema|no-bblxml-schema',
+-           'no_bltxml_schema|no-bltxml-schema',
+-           'noconf',
+-           'no_default_datamodel|no-default-datamodel',
+-           'nodieonerror',
+-           'nolog',
+-           'nostdmacros',
+-           'onlylog',
+-           'others_string|others-string=s',
+-           'outfile=s',           # legacy alias for output_file
+-           'outformat=s',         # legacy alias for output_format
+-           'output_align|output-align',
+-           'output_all_macrodefs|output-all-macrodefs',
+-           'output_annotation_marker|output-annotation-marker=s',
+-           'output_directory|output-directory=s',
+-           'output_encoding|output-encoding|E=s',
+-           'output_fieldcase|output-fieldcase=s',
+-           'output_field_order|output-field-order=s',
+-           'output_field_replace|output-field-replace=s',
+-           'output_file|output-file|O=s',
+-           'output_format|output-format=s',
+-           'output_indent|output-indent=s',
+-           'output_legacy_dates|output-legacy-dates',
+-           'output_listsep|output-listsep=s',
+-           'output_macro_fields|output-macro-fields=s',
+-           'output_named_annotation_marker|output-named-annotation-marker=s',
+-           'output_namesep|output-namesep=s',
+-           'output_no_macrodefs|output-no-macrodefs',
+-           'output_resolve|output-resolve',
+-           'output_resolve_xdata|output-resolve-xdata',
+-           'output_resolve_crossrefs|output-resolve-crossrefs',
+-           'output_resolve_sets|output-resolve-sets',
+-           'output_safechars|output-safechars',
+-           'output_safecharsset|output-safecharsset=s',
+-           'output_xdatamarker|output-xdatamarker=s',
+-           'output_xdatasep|output-xdatasep=s',
+-           'output_xname|output-xname',
+-           'output_xnamesep|output-xnamesep=s',
+-           'quiet|q+',
+-           'recodedata=s',
+-           'noremove_tmp_dir|noremove-tmp-dir',
+-           'noskipduplicates',
+-           'noxname',
+-           'show_tmp_dir|show-tmp-dir',
+-           'sortdebug',
+-           'sortcase=s',
+-           'sortlocale|l=s',
+-           'sortupper=s',
+-           'ssl-nointernalca',
+-           'ssl-noverify-host',
+-           'strip_comments|strip-comments',
+-           'tool',
+-           'tool_align|tool-align',                 # legacy alias for output_align
+-           'tool_config|tool-config',
+-           'tool_fieldcase|tool-fieldcase=s',       # legacy alias for output_fieldcase
+-           'tool_noremove_missing_dependants|tool-noremove-missing-dependants',
+-           'tool_indent|tool-indent=s',             # legacy alias for output_indent
+-           'tool_resolve|tool-resolve',             # legacy alias for output_resolve
+-           'trace|T',
+-           'u',                   # alias for input_encoding=UTF-8
+-           'U',                   # alias for output_encoding=UTF-8
+-           'validate_bblxml|validate-bblxml',
+-           'validate_bltxml|validate-bltxml',
+-           'validate_config|validate-config',
+-           'validate_control|validate-control',
+-           'validate_datamodel|validate-datamodel|V',
+-           'version|v',
+-           'winunicode|W',
+-           'wraplines|w',
+-           'xdatamarker=s',
+-           'xdatasep=s',
+-           'xnamesep=s',
+-           'xsvsep=s',
+-          ) or pod2usage(-verbose => 0,
+-                         -exitval => EXIT_ERROR);
+-
+-# verbose > 1 uses external perldoc, this doesn't work with PAR::Packer binaries
+-# so use "-noperldoc" to use built-in POD::Text
++# Texfolia: the document also writes these arguments, through its run.xml file.
++# Only the control file's name is taken from them.
++{
++  my @names = grep { !/\A-/ } @ARGV;
++  unless (@names == 1 and $names[0] =~ m{\A([^/\\\$\{\}\x00-\x1f]+)\z}) {
++    say STDERR "Biber: expected one control file in the current directory";
++    exit EXIT_ERROR;
++  }
++  @ARGV = ($1);
++  $opts = { noconf => 1 };
++  # The engine sets this one. Temporary files go away with the compile.
++  $ENV{TMPDIR} = $1 if ($ENV{TMPDIR} // '') =~ m{\A(/[A-Za-z0-9._/-]+)\z};
++}
++
+ if (exists $opts->{'help'}) {
+   pod2usage(-verbose => 2, -noperldoc => 1, -exitval => EXIT_OK);
+@@ -381,7 +291,6 @@ if (my $outdir = Biber::Config->getoption('output_directory')) {
+ 
+ # Set the output class. Should be a subclass of Biber::Output::base
+-my $package = 'Biber::Output::' . Biber::Config->getoption('output_format');
+-eval "require $package" or biber_error("Error loading data source package '$package': $@");
+-$biber->set_output_obj(eval "${package}->new()");
++require Biber::Output::bbl;
++$biber->set_output_obj(Biber::Output::bbl->new());
+ 
+ # Get reference to output object
+diff --git a/lib/Biber.pm b/lib/Biber.pm
+index 7912913..6da2358 100644
+--- a/lib/Biber.pm
++++ b/lib/Biber.pm
+@@ -144,4 +144,18 @@ sub display_end {
+ =cut
+ 
++sub input_package {
++  my ($type, $datatype) = @_;
++  return undef unless $type eq 'file';
++  if ($datatype eq 'bibtex') {
++    require Biber::Input::file::bibtex;
++    return 'Biber::Input::file::bibtex';
++  }
++  if ($datatype eq 'biblatexml') {
++    require Biber::Input::file::biblatexml;
++    return 'Biber::Input::file::biblatexml';
++  }
++  return undef;
++}
++
+ sub biber_tempdir {
+   my $self = shift;
+@@ -364,5 +378,5 @@ sub parse_ctrlfile {
+ 
+   $checkbuf = NFD($checkbuf);# Unicode NFD boundary
+-  unless (eval "XML::LibXML->load_xml(string => \$checkbuf)") {
++  unless (eval { XML::LibXML->load_xml(string => $checkbuf) }) {
+     my $output = $self->get_output_obj->get_output_target_file;
+     unlink($output) unless $output eq '-';# ignore deletion of STDOUT marker
+@@ -529,4 +543,7 @@ sub parse_ctrlfile {
+       if ($bcfopts->{type} eq 'global') {
+         foreach my $bcfopt ($bcfopts->{option}->@*) {
++          # Texfolia: only what biblatex itself sets. Others choose paths and formats.
++          next unless $bcfopt->{key}{content} =~
++            /\A(?:output_encoding|input_encoding|debug|mincrossrefs|minxrefs|sortcase|sortupper|sortlocale)\z/;
+           # unless already explicitly set from cmdline/config file
+           unless (Biber::Config->isexplicitoption($bcfopt->{key}{content})) {
+@@ -4222,5 +4239,4 @@ sub sort_list {
+   # Construct data needed for sort key extractor
+   foreach my $sortset ($sortingtemplate->{spec}->@*) {
+-    my $fc = '';
+     my @fc;
+ 
+@@ -4230,8 +4246,8 @@ sub sort_list {
+     my $sl = locale2bcp47($sortset->[0]{locale});
+     if (defined($sl) and $sl ne $thislocale) {
+-      $cobj = 'Biber::UCollate->new(' . "'$sl'" . ",'" . join("','", $collopts->%*) . "')";
++      $cobj = Biber::UCollate->new($sl, $collopts->%*);
+     }
+     else {
+-      $cobj = '$Collator';
++      $cobj = $Collator;
+     }
+ 
+@@ -4240,34 +4256,24 @@ sub sort_list {
+     my $sc = $sortset->[0]{sortcase};
+     if (defined($sc) and $sc != Biber::Config->getoption('sortcase')) {
+-      push @fc, $sc ? 'level => 4' : 'level => 2';
++      push @fc, level => $sc ? 4 : 2;
+     }
+     my $su = $sortset->[0]{sortupper};
+     if (defined($su) and $su != Biber::Config->getoption('sortupper')) {
+-      push @fc, $su ? 'upper_before_lower => 1' : 'upper_before_lower => 0';
++      push @fc, upper_before_lower => $su ? 1 : 0;
+     }
+ 
+-    if (@fc) {
+-      # This field has custom collation options
+-      $fc = '->change(' . join(',', @fc) . ')';
+-    }
+-    else {
++    unless (@fc) {
+       # Reset collation options to global defaults if there are no field options
+       # We have to do this as ->change modifies the Collation object
+-      $fc = '->change(level => '
+-        . $collopts->{level}
+-          . ' ,upper_before_lower => '
+-            . $collopts->{upper_before_lower}
+-              . ')';
++      @fc = (level => $collopts->{level},
++             upper_before_lower => $collopts->{upper_before_lower});
+     }
+ 
+-    push @collateobjs, $cobj . $fc;
++    push @collateobjs, sub { $cobj->change(@fc); $cobj->getSortKey($_[0]) };
+   }
+ 
+   # Sort::Key sort key extractor called on each element of array to be sorted and
+-  # returns an array of the sorting keys for each sorting field. We have to construct
+-  # the collator strings and then eval() because passing the collation
+-  # objects in directly by reference means that the wrong settings are present on some of them
+-  # since they point to the same object and the ->change() calls in later references
+-  # therefore change earlier sorting field sorts. So, we have to defer until actual use time.
++  # returns an array of the sorting keys for each sorting field. The collation
++  # objects share settings, so each is configured when it is used.
+   my $extract = sub {
+     my @d;
+@@ -4290,9 +4296,6 @@ sub sort_list {
+       }
+       else {
+-        # Don't do '$sortfield' or "$sortfield" because it might contain quotes
+-        my $a = $collateobjs[$i] . "->getSortKey(q{$sortfield})";
+-        # Cache index is just the collation object opts and key gen call in string form
+-        # since this should be unique for a key/collopts combination
+-        push @d, $cache->{$a} ||= eval $a;
++        # Texfolia: sort fields are document text and are never evaluated.
++        push @d, $cache->{$i}{$sortfield // ''} //= $collateobjs[$i]->($sortfield // '');
+       }
+     }
+@@ -4541,28 +4544,7 @@ sub fetch_data {
+       }
+     }
+-    my $package = 'Biber::Input::' . $type . '::' . $datatype;
+-    unless(eval "require $package") {
+-
+-      my ($vol, $dir, undef) = File::Spec->splitpath( $INC{"Biber.pm"} );
+-      $dir =~ s/\/$//;          # splitpath sometimes leaves a trailing '/'
+-
+-      # Use Windows style globbing on Windows
+-      if ($^O =~ /Win/) {
+-        $logger->debug("Enabling Windows-style globbing");
+-        require File::DosGlob;
+-        File::DosGlob->import('glob');
+-      }
+-
+-      my @vts;
+-      foreach my $t (glob("$vol$dir/Biber/Input/*")) {
+-        my (undef, undef, $tleaf) = File::Spec->splitpath($t);
+-        foreach my $dt (map {s/\.pm$//r} glob("$vol$dir/Biber/Input/$tleaf/*.pm")) {
+-          my (undef, undef, $dtleaf) = File::Spec->splitpath($dt);
+-          push @vts, "$tleaf/$dtleaf";
+-        }
+-      }
+-
+-      biber_error("Error loading data source package '$package' for '$datatype' '$type' datasource. Valid type/datatypes are: " . join(',', @vts));
+-
++    my $package = input_package($type, $datatype);
++    unless ($package) {
++      biber_error("Unknown data source '$datatype' '$type'");
+     }
+ 
+@@ -4741,7 +4723,6 @@ sub get_dependents {
+         my $encoding = $datasource->{encoding};
+         my $datatype = $datasource->{datatype};
+-        my $package = 'Biber::Input::' . $type . '::' . $datatype;
+-        eval "require $package" or
+-          biber_error("Error loading data source package '$package': $@");
++        my $package = input_package($type, $datatype) or
++          biber_error("Unknown data source '$datatype' '$type'");
+         $missing->@* = "${package}::extract_entries"->(locate_data_file($name), $encoding, $missing);
+       }
+diff --git a/lib/Biber/Config.pm b/lib/Biber/Config.pm
+index 205dbbe..9bd202b 100644
+--- a/lib/Biber/Config.pm
++++ b/lib/Biber/Config.pm
+@@ -164,5 +164,6 @@ sub _initopts {
+     if (lc($copt) eq 'collate_options') {
+       my $collopts = Biber::Config->getoption('collate_options');
+-      my $copt_h = eval "{ $opts->{$copt} }" or croak('Bad command-line collation options');
++      croak('Command-line collation options are not supported');
++      my $copt_h = {};
+       # Override defaults with any cmdline settings
+       foreach my $co (keys $copt_h->%*) {
+diff --git a/lib/Biber/LaTeX/Recode.pm b/lib/Biber/LaTeX/Recode.pm
+index 9ebe8b4..d09ec5a 100644
+--- a/lib/Biber/LaTeX/Recode.pm
++++ b/lib/Biber/LaTeX/Recode.pm
+@@ -211,7 +211,7 @@ sub latex_decode {
+ 
+     # Deal with raw TeX \char macros.
+-    $text =~ s/\\char"(\p{ASCII_Hex_Digit}+)/"chr(0x$1)"/gee; # hex chars
+-    $text =~ s/\\char'(\d+)/"chr(0$1)"/gee;  # octal chars
+-    $text =~ s/\\char(\d+)/"chr($1)"/gee;    # decimal chars
++    $text =~ s/\\char"(\p{ASCII_Hex_Digit}+)/chr(hex($1))/ge; # hex chars
++    $text =~ s/\\char'([0-7]+)/chr(oct($1))/ge;  # octal chars
++    $text =~ s/\\char([0-9]+)/chr($1)/ge;    # decimal chars
+ 
+     $text =~ s/(\\[a-zA-Z]+)\\(\s+)/$1\{\}$2/g;    # \foo\ bar -> \foo{} bar
+diff --git a/lib/Biber/Section.pm b/lib/Biber/Section.pm
+index 03ed69a..a78942f 100644
+--- a/lib/Biber/Section.pm
++++ b/lib/Biber/Section.pm
+@@ -430,5 +430,5 @@ sub add_everykey {
+ sub del_everykeys {
+   my $self = shift;
+-  $self->{everykey} = undef
++  $self->{everykey} = undef;
+   $self->{everykey_lc} = undef;
+   return;
+diff --git a/lib/Biber/Utils.pm b/lib/Biber/Utils.pm
+index e821cd4..390bcb9 100644
+--- a/lib/Biber/Utils.pm
++++ b/lib/Biber/Utils.pm
+@@ -71,4 +71,11 @@ our @EXPORT = qw{ check_empty check_exists slurp_switchr slurp_switchw
+ =cut
+ 
++# Texfolia: the project's own files are copied beside the control file.
++sub local_data_file {
++  my $source = shift;
++  biber_error("Data source '$source' is not in the project")
++    if File::Spec->file_name_is_absolute($source) or $source =~ m{(?:\A|/)(?:\.\.|~)}xms;
++}
++
+ sub glob_data_file {
+   my ($source, $globflag) = @_;
+@@ -82,4 +89,6 @@ sub glob_data_file {
+   }
+ 
++  local_data_file($source);
++
+   $logger->info("Globbing data source '$source'");
+ 
+@@ -108,4 +117,7 @@ sub slurp_switchr {
+   my $slurp;
+   $encoding //= 'UTF-8';
++  # Texfolia: an encoding must not add other PerlIO layers.
++  $encoding =~ /\A([A-Za-z0-9_.-]+)\z/ or biber_error("Invalid encoding '$encoding'");
++  $encoding = $1;
+   if ($^O =~ /Win/ and not Biber::Config->getoption('winunicode')) {
+     require Win32::Unicode::File;
+@@ -165,79 +177,9 @@ sub locate_data_file {
+ 
+   if ($source =~ m/\A(?:http|ftp)(s?):\/\//xms) {
+-    $logger->info("Data source '$source' is a remote BibTeX data source - fetching ...");
+-    if (my $cf = $REMOTE_MAP{$source}) {
+-      $logger->info("Found '$source' in remote source cache");
+-      $sourcepath = $cf;
+-    }
+-    else {
+-      if ($1) { # HTTPS/FTPS
+-        # use IO::Socket::SSL qw(debug99); # useful for debugging SSL issues
+-        # We have to explicitly set the cert path because otherwise the https module
+-        # can't find the .pem when PAR::Packer'ed
+-        # Have to explicitly try to require Mozilla::CA here to get it into %INC below
+-        # It may, however, have been removed by some biber unpacked dists
+-        if (not exists($ENV{PERL_LWP_SSL_CA_FILE}) and
+-            not exists($ENV{PERL_LWP_SSL_CA_PATH}) and
+-            not defined(Biber::Config->getoption('ssl-nointernalca')) and
+-            eval {require Mozilla::CA}) {
+-          # we assume that the default CA file is in .../Mozilla/CA/cacert.pem
+-          (my $vol, my $dir, undef) = File::Spec->splitpath( $INC{"Mozilla/CA.pm"} );
+-          $dir =~ s/\/$//;      # splitpath sometimes leaves a trailing '/'
+-          $ENV{PERL_LWP_SSL_CA_FILE} = File::Spec->catpath($vol, "$dir/CA", 'cacert.pem');
+-        }
+-
+-        # fallbacks for, e.g., linux
+-        unless (exists($ENV{PERL_LWP_SSL_CA_FILE})) {
+-          foreach my $ca_bundle (qw{
+-                                     /etc/ssl/certs/ca-certificates.crt
+-                                     /etc/pki/tls/certs/ca-bundle.crt
+-                                     /etc/ssl/ca-bundle.pem
+-                                 }) {
+-            next if ! -e $ca_bundle;
+-            $ENV{PERL_LWP_SSL_CA_FILE} = $ca_bundle;
+-            last;
+-          }
+-          foreach my $ca_path (qw{
+-                                   /etc/ssl/certs/
+-                                   /etc/pki/tls/
+-                               }) {
+-            next if ! -d $ca_path;
+-            $ENV{PERL_LWP_SSL_CA_PATH} = $ca_path;
+-            last;
+-          }
+-        }
+-
+-        if (defined(Biber::Config->getoption('ssl-noverify-host'))) {
+-          $ENV{PERL_LWP_SSL_VERIFY_HOSTNAME} = 0;
+-        }
+-
+-        require LWP::Protocol::https;
+-      }
+-
+-      require LWP::UserAgent;
+-      # no need to unlink file as tempdir will be unlinked. Also, the tempfile
+-      # will be needed after this sub has finished and so it must not be unlinked
+-      # by going out of scope
+-      my $tf = File::Temp->new(TEMPLATE => 'biber_remote_data_source_XXXXX',
+-                               DIR => $Biber::MASTER->biber_tempdir,
+-                               SUFFIX => '.bib',
+-                               UNLINK => 0);
+-
+-      # Pretend to be a browser otherwise some sites refuse the default LWP UA string
+-      my $ua = LWP::UserAgent->new;  # we create a global UserAgent object
+-      $ua->agent('Mozilla/5.0');
+-      $ua->env_proxy;
+-      my $request = HTTP::Request->new('GET', $source, ['Zotero-Allowed-Request' => '1']);
+-      my $response = $ua->request($request, $tf->filename);
+-
+-      unless ($response->is_success) {
+-        biber_error("Could not fetch '$source' (HTTP code: " . $response->code. ")");
+-      }
+-      $sourcepath = $tf->filename;
+-      # cache any remote so it persists and so we don't fetch it again
+-      $REMOTE_MAP{$source} = $sourcepath;
+-    }
++    biber_error("Remote data source '$source' is not supported");
+   }
+ 
++  local_data_file($source);
++
+   # If input_directory is set, perhaps the file can be found there so
+   # construct a path to test later
+@@ -1106,10 +1048,34 @@ sub ireplace {
+     $val_match = qr/$val_match/;
+   }
+-  # Tricky quoting because of later evals
+-  $val_replace = '"' . $val_replace . '"';
+-  $value =~ s/$val_match/$val_replace/eegxms;
++  $value =~ s/$val_match/expand_replacement($val_replace, [map { defined($-[$_]) ? substr($value, $-[$_], $+[$_] - $-[$_]) : '' } 0 .. $#-])/egxms;
+   return $value;
+ }
+ 
++# Texfolia: what a replacement could use from Perl's double-quoted strings
++# (groups, case changes, and escapes), without evaluating it as Perl.
++sub expand_replacement {
++  my ($template, $groups) = @_;
++  my ($result, $case, $next) = ('', '', '');
++  while ($template =~ /\G(?:\\(?<case>[ULulEQ])|\\(?<escape>.)|\$(?:(?<group>[0-9]+|&)|\{(?<group>[0-9]+)\})|(?<text>.))/gcxms) {
++    my %part = %+;
++    if (defined(my $c = $part{case})) {
++      if ($c =~ /[ul]/) { $next = $c }
++      else { $case = $c eq 'E' ? '' : $c }
++      next;
++    }
++    my $text;
++    if (defined(my $g = $part{group})) { $text = $groups->[$g eq '&' ? 0 : $g] // '' }
++    elsif (defined(my $e = $part{escape})) { $text = {n => "\n", t => "\t", r => "\r"}->{$e} // $e }
++    else { $text = $part{text} }
++    $text = $case eq 'U' ? uc($text) : $case eq 'L' ? lc($text) : $case eq 'Q' ? quotemeta($text) : $text;
++    if ($next and length($text)) {
++      $text = $next eq 'u' ? ucfirst($text) : lcfirst($text);
++      $next = '';
++    }
++    $result .= $text;
++  }
++  return $result;
++}
++
+ 
+ =head2 validate_biber_xml

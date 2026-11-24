@@ -19,19 +19,24 @@ See Section~\ref{end}. A citation~\cite{${citation}}.
 \bibliographystyle{${style}}\bibliography{references}
 \end{document}`;
 
-for (const documentClass of ["article", "report", "book", "amsart", "beamer"]) {
-  const body =
-    documentClass === "beamer"
-      ? String.raw`\begin{frame}Ready\end{frame}`
-      : "Ready";
+// Everything the image is warmed with compiles without a download.
+const warmup = `${import.meta.dir}/../warmup`;
+const references = await Bun.file(`${warmup}/references.bib`).text();
+for (const name of [...new Bun.Glob("*.tex").scanSync(warmup)].sort()) {
   const output = await compileSuccessfully({
+    affinity: name,
     files: {
-      "main.tex": String.raw`\documentclass{${documentClass}}\begin{document}${body}\end{document}`,
+      "main.tex": await Bun.file(`${warmup}/${name}`).text(),
+      "references.bib": references,
     },
   });
-  assert.ok(output.pdf.length > 1000, `${documentClass}: missing PDF`);
-  assert.doesNotMatch(output.result.log, /generating format/i, documentClass);
-  console.info(`${documentClass}: compiled using baked format`);
+  assert.ok(output.pdf.length > 1000, `${name}: missing PDF`);
+  assert.doesNotMatch(
+    output.result.log,
+    /generating format|downloading/i,
+    name,
+  );
+  console.info(`${name}: compiled from the image alone`);
 }
 
 async function compile({

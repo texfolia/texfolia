@@ -7,11 +7,20 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
+)
+
+const (
+	// The caller streams sources and the cache archive from its own storage.
+	receiveTimeout    = 60 * time.Second
+	maxCompileTimeout = 300 * time.Second
+	previewTimeout    = 15 * time.Second
+	// The Worker gives up first, after 120 seconds.
+	responseTimeout = 150 * time.Second
+	maxRequestTime  = receiveTimeout + maxCompileTimeout + previewTimeout + responseTimeout
 )
 
 func main() {
@@ -31,8 +40,12 @@ func main() {
 		}
 		return
 	}
-	if err := exec.Command("tectonic", "--version").Run(); err != nil {
+	if err := runLimited(limitedCommand(context.Background(), "tectonic", "--version")); err != nil {
 		log.Fatalf("Tectonic is unavailable: %v", err)
+	}
+	packages, err := newPackageCache(tectonicCache())
+	if err != nil {
+		log.Fatalf("Tectonic's cache is unreadable: %v", err)
 	}
 	host := os.Getenv("HOST")
 	if host == "" {
@@ -46,15 +59,15 @@ func main() {
 		}
 		slots = parsed
 	}
-	handler := newHandler(300*time.Second, slots)
+	handler := newHandler(maxCompileTimeout, slots, packages)
 	defer handler.Close()
 	server := &http.Server{
 		Addr:              net.JoinHostPort(host, port),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
-		// The caller streams sources and the cache archive from its own storage.
-		ReadTimeout:    60 * time.Second,
-		WriteTimeout:   390 * time.Second,
+		// A compile replaces both of these with the limits of its own phases.
+		ReadTimeout:    receiveTimeout,
+		WriteTimeout:   30 * time.Second,
 		IdleTimeout:    120 * time.Second,
 		MaxHeaderBytes: 16 * 1024,
 	}
@@ -64,7 +77,7 @@ func main() {
 	go func() {
 		defer close(shutdownDone)
 		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 390*time.Second)
+		shutdown, cancel := context.WithTimeout(context.Background(), maxRequestTime)
 		defer cancel()
 		if err := server.Shutdown(shutdown); err != nil {
 			log.Printf("Engine shutdown failed: %v", err)

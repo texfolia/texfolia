@@ -4,17 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"time"
 )
 
 func renderPreview(ctx context.Context, pdfPath string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, previewTimeout)
 	defer cancel()
 	prefix := filepath.Join(filepath.Dir(pdfPath), "template-preview")
-	command := exec.CommandContext(ctx, "pdftoppm", "-f", "1", "-singlefile", "-scale-to", "1200", "-png", pdfPath, prefix)
-	if err := command.Run(); err != nil {
+	command := limitedCommand(ctx, "pdftoppm", "-f", "1", "-singlefile", "-scale-to", "1200", "-png", pdfPath, prefix)
+	if err := runLimited(command); err != nil {
 		return nil, fmt.Errorf("render template preview: %w", err)
 	}
 	path := prefix + ".png"

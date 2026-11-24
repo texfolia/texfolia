@@ -178,13 +178,20 @@ text=$(cat "$5")
 case "$text" in
 cache) [ "$(cat out/main.aux)" = "cached aux" ]; mkdir -p "$out/custom"; printf 'cached aux' > "$out/main.aux"; printf '\000\001\002\377' > "$out/custom/data.bin"; printf '%%PDF-1.5' > "$out/$name.pdf"; echo transcript > "$out/$name.log" ;;
 slow) touch '` + marker + `'; exec sleep 5 ;;
+child) sleep 60 & echo $! > '` + marker + `'; wait ;;
+orphan) sleep 60 >/dev/null 2>&1 & echo $! > '` + marker + `'; printf '%%PDF-1.5' > "$out/$name.pdf" ;;
+limits) printf '%%PDF-1.5' > "$out/$name.pdf"; { ulimit -v; ulimit -f; ulimit -c; } > "$out/limits.txt" ;;
+huge) truncate -s 67108865 "$out/$name.pdf" ;;
+stale) [ ! -f "$out/main.log" ] && [ -f "$out/main.aux" ] || printf unexpected > "$out/$name.log"; exit 1 ;;
+copies) printf '%%PDF-1.5' > "$out/$name.pdf"; cp refs.bib "$out/refs.bib"; printf changed > "$out/notes.bib" ;;
+outputs) printf '%%PDF-1.5' > "$out/$name.pdf"; echo transcript > "$out/$name.log"; echo sync > "$out/$name.synctex.gz"; echo aux > "$out/$name.aux" ;;
 bad) echo 'undefined control sequence' >&2; echo 'invalidcommand' > "$out/$name.log"; exit 1 ;;
 tamper) printf hijacked > main.tex && exit 1; printf '%%PDF-1.5' > "$out/$name.pdf" ;;
 long-name) printf '%%PDF-1.5' > "$out/$name.pdf"; echo transcript > "$out/$name.log"; echo sync > "$out/$name.synctex.gz" ;;
 missing) exit 0 ;;
 large) truncate -s 20971521 "$out/$name.pdf" ;;
 logs) head -c 100000 /dev/zero | tr '\000' x; head -c 100000 /dev/zero | tr '\000' y >&2; printf START > "$out/$name.log"; head -c 100000 /dev/zero | tr '\000' z >> "$out/$name.log"; printf END >> "$out/$name.log"; printf '%%PDF-1.5' > "$out/$name.pdf" ;;
-*) printf '%%PDF-1.5\n' > "$out/$name.pdf"; cat "$5" >> "$out/$name.pdf"; if [ -f sections/hello.tex ]; then cat sections/hello.tex assets/data.bin >> "$out/$name.pdf"; fi; echo transcript > "$out/$name.log" ;;
+*) printf '%%PDF-1.5\n' > "$out/$name.pdf"; cat "$5" >> "$out/$name.pdf"; if [ -f sections/hello.tex ]; then cat sections/hello.tex assets/data.bin >> "$out/$name.pdf"; fi; echo transcript > "$out/$name.log"; echo aux > "$out/$name.aux" ;;
 esac
 `
 	if err := os.WriteFile(filepath.Join(bin, "tectonic"), []byte(script), 0700); err != nil {
@@ -193,7 +200,11 @@ esac
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TMPDIR", temp)
 	t.Setenv("SERVICE_SECRET", "must not reach TeX")
-	handler := newHandler(300*time.Second, slots)
+	packages, err := newPackageCache(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newHandler(300*time.Second, slots, packages)
 	t.Cleanup(func() {
 		_ = handler.Close()
 		assertEmpty(t, temp)
@@ -339,7 +350,7 @@ func TestCompileHTTP(t *testing.T) {
 		t.Fatalf("invalid log: %+v", parsed.result)
 	}
 	restored, err := unpackCache(bytes.NewReader(parsed.entries["cache.tar.zst"]))
-	if err != nil || string(restored["-main.log"]) != "transcript\n" {
+	if err != nil || !reflect.DeepEqual(restored, map[string][]byte{"-main.aux": []byte("aux\n")}) {
 		t.Fatalf("invalid cache archive: %v %v", restored, err)
 	}
 	assertOnlyBlobs(t, temp, "hello", "nested", "\x00\x01\x02\xff")
@@ -431,6 +442,133 @@ func TestBusyTimeoutAndRecovery(t *testing.T) {
 	assertOnlyBlobs(t, temp, "slow")
 	if response := source("hello").send(t, handler); response.Code != 200 {
 		t.Fatalf("busy slot not released: %d", response.Code)
+	}
+}
+
+func processGone(t *testing.T, marker string) {
+	t.Helper()
+	waitForFile(t, marker)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		raw, err := os.ReadFile(marker)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+		if err == nil {
+			// A process whose parent has gone may stay a zombie until it is reaped.
+			stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+			if err != nil || strings.Contains(string(stat), ") Z ") {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a child of the compiler survived it")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestChildrenNeverOutliveACompile(t *testing.T) {
+	handler, _, marker := testEngine(t, 1)
+	started := time.Now()
+	response := source("child").with(func(c *compileRequest) { c.timeoutMs = 200 }).send(t, handler)
+	if response.Code != 408 || time.Since(started) > 5*time.Second {
+		t.Fatalf("a child held up its compile: %d after %v", response.Code, time.Since(started))
+	}
+	processGone(t, marker)
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	if response := source("orphan").send(t, handler); response.Code != 200 {
+		t.Fatalf("orphan: %d", response.Code)
+	}
+	processGone(t, marker)
+}
+
+func TestCompilesOutlastTheServerWriteTimeout(t *testing.T) {
+	handler, _, _ := testEngine(t, 1)
+	server := httptest.NewUnstartedServer(handler)
+	server.Config.WriteTimeout = 50 * time.Millisecond
+	server.Start()
+	defer server.Close()
+	request := source("slow").with(func(c *compileRequest) { c.timeoutMs = 300 }).http(t, server.URL)
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 408 || readResponse(t, response.Body).result.Error != "Compilation timed out" {
+		t.Fatalf("slow compile: %d", response.StatusCode)
+	}
+}
+
+func TestProcessLimits(t *testing.T) {
+	handler, _, _ := testEngine(t, 1)
+	response := source("limits").send(t, handler)
+	if response.Code != 200 {
+		t.Fatalf("limits: %d", response.Code)
+	}
+	limits := strings.Fields(string(readResponse(t, response.Body).artifact(t, "limits.txt")))
+	// ulimit reports KiB, and file sizes in blocks of 512 bytes or 1 KiB.
+	if len(limits) != 3 || limits[0] != "1048576" || limits[1] != "131072" && limits[1] != "65536" || limits[2] != "0" {
+		t.Fatalf("processes are not limited: %v", limits)
+	}
+	if response := source("huge").send(t, handler); response.Code != 422 {
+		t.Fatalf("an oversized file was written: %d", response.Code)
+	}
+}
+
+func TestCancellationsAreForgottenOldestFirst(t *testing.T) {
+	c := &cancellations{ids: map[string]bool{}}
+	for index := range maxCancellations + 1 {
+		c.add(strconv.Itoa(index))
+	}
+	if c.take("0") || !c.take("1") || c.take("1") || !c.take(strconv.Itoa(maxCancellations)) {
+		t.Fatal("cancellations were not forgotten oldest first")
+	}
+	c.add("1")
+	c.add("1")
+	if len(c.ids) != maxCancellations-1 || len(c.order) != len(c.ids) {
+		t.Fatalf("cancellations leaked: %d ids, %d in order", len(c.ids), len(c.order))
+	}
+}
+
+func TestCacheHoldsNoLogsOrOutputs(t *testing.T) {
+	handler, _, _ := testEngine(t, 1)
+	// Archives saved by earlier versions of the engine hold them too.
+	archive, err := packCache(map[string][]byte{"main.aux": []byte("aux"), "main.log": []byte("stale"), "main.synctex.gz": []byte("stale")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := source("stale").with(func(c *compileRequest) { c.cache = archive }).send(t, handler)
+	if timing := responseTiming(t, response); timing.ArchiveStatus != "restored" {
+		t.Fatalf("archive: %+v", timing)
+	}
+	if files := readResponse(t, response.Body).result.Files; response.Code != 422 || len(files) != 0 {
+		t.Fatalf("a failure returned an earlier log: %d %v", response.Code, files)
+	}
+	response = source("outputs").send(t, handler)
+	parsed := readResponse(t, response.Body)
+	if !slices.Equal(parsed.result.Files, []string{"main.aux", "main.log", "main.synctex.gz"}) {
+		t.Fatalf("artifacts: %v", parsed.result.Files)
+	}
+	restored, err := unpackCache(bytes.NewReader(parsed.entries["cache.tar.zst"]))
+	if err != nil || !reflect.DeepEqual(restored, map[string][]byte{"main.aux": []byte("aux\n")}) {
+		t.Fatalf("cache: %v %v", restored, err)
+	}
+	stale := source("stale").with(func(c *compileRequest) { c.manifest.Incremental = true })
+	if files := readResponse(t, stale.send(t, handler).Body).result.Files; len(files) != 0 {
+		t.Fatalf("an incremental failure returned an earlier log: %v", files)
+	}
+}
+
+func TestCopiedSourcesAreNotArtifacts(t *testing.T) {
+	handler, _, _ := testEngine(t, 1)
+	response := sources(map[string]string{"main.tex": "copies", "refs.bib": "same", "notes.bib": "source"}).send(t, handler)
+	parsed := readResponse(t, response.Body)
+	if !slices.Equal(parsed.result.Files, []string{"notes.bib"}) || string(parsed.artifact(t, "notes.bib")) != "changed" {
+		t.Fatalf("artifacts: %v", parsed.result.Files)
 	}
 }
 

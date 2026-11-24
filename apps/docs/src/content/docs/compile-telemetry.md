@@ -22,8 +22,9 @@ The compiler Worker knows no jobs or projects. It emits two events of its own wi
 `telemetryVersion: 2`. `compile_placement` records each compile's container, its
 `outcome`, and `waitMs`. `affinity` and `spare` found a warm container, with and
 without the caller's sources; `cold` waited for one. `compile_pool` reports pool
-size, leases, queue depth, spare capacity, and the current window's hits and misses
-every minute while containers exist.
+size (including containers that are `draining` their last compiles), leases, queue
+depth, spare capacity, and the current window's hits and misses every minute while
+containers exist.
 
 ## Timing fields
 

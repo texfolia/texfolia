@@ -28,12 +28,12 @@ export type ClaimReply = typeof ClaimReply.Type;
 export interface PoolRpc {
   claim(request: unknown): Promise<ClaimReply>;
   release(id: string, reusable: boolean): Promise<void>;
-  locate(id: string): Promise<Lease | null>;
+  cancel(id: string): Promise<Lease | null>;
 }
 
 const decodeRequest = Schema.decodeUnknownEffect(ClaimRequest);
 const decodeReply = Schema.decodeUnknownEffect(ClaimReply);
-const decodeLocated = Schema.decodeUnknownEffect(Schema.NullOr(Lease));
+const decodeCancelled = Schema.decodeUnknownEffect(Schema.NullOr(Lease));
 
 /** The serving side of `claim`. */
 export const serveClaim = (pool: PoolClient, input: unknown) =>
@@ -80,11 +80,11 @@ export function poolClient(rpc: PoolRpc): PoolClient {
           Effect.logError("Compile lease release failed", { id, cause }),
         ),
       ),
-    locate: (id) =>
-      Effect.tryPromise(() => rpc.locate(id)).pipe(
-        Effect.flatMap(decodeLocated),
+    cancel: (id) =>
+      Effect.tryPromise(() => rpc.cancel(id)).pipe(
+        Effect.flatMap(decodeCancelled),
         Effect.catch((cause) =>
-          Effect.logError("Compile lookup failed", { id, cause }).pipe(
+          Effect.logError("Compile cancellation failed", { id, cause }).pipe(
             Effect.as(null),
           ),
         ),

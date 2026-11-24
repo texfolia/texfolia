@@ -4,7 +4,8 @@ import { dirname } from "node:path";
 
 import { Effect, Layer, ManagedRuntime, Schedule } from "effect";
 
-import { Background, handle } from "./compile";
+import { Background } from "./background";
+import { serve } from "./compile";
 import { PoolConfig } from "./config";
 import type { Containers } from "./containers";
 import { PoolManagerService, PoolStore } from "./pool";
@@ -76,7 +77,9 @@ export function createLocalCompiler(options: {
   const runtime = ManagedRuntime.make(services);
   return {
     fetch: (request: Request) =>
-      runtime.runPromise(handle(request), { signal: request.signal }),
+      serve(request, (program, options) =>
+        runtime.runPromiseExit(program, options),
+      ),
     snapshot: () =>
       runtime.runPromise(PoolManagerService.use((pool) => pool.snapshot)),
     maintain: () =>

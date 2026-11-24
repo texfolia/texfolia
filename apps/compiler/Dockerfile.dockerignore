@@ -4,3 +4,5 @@
 !apps/compiler/engine/go.sum
 !apps/compiler/tectonic/*.rs
 !apps/compiler/tectonic/*.patch
+!apps/compiler/biber/*.patch
+!apps/compiler/warmup/*

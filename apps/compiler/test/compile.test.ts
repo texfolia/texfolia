@@ -248,10 +248,9 @@ test("a caller that disconnects mid-compile stops the engine and returns the con
   const controller = new AbortController();
   const id = crypto.randomUUID();
   const pending = compiler.post({ id }, { signal: controller.signal });
-  void pending.catch(() => {});
   await started.promise;
   controller.abort();
-  await expect(pending).rejects.toThrow();
+  expect((await pending).status).toBe(499);
   await compiler.released();
   expect(compiler.requests.at(-1)).toMatchObject({
     method: "DELETE",
@@ -385,4 +384,20 @@ test("only the compile, cancel and health routes exist", async () => {
     "/compile",
   ])
     expect(await status("GET", path)).toBe(404);
+});
+
+test("a caller that disconnects while waiting leaves the queue quietly", async () => {
+  const gate = Promise.withResolvers<Response>();
+  const compiler = harness(() => gate.promise, { POOL_MAX_INSTANCES: "1" });
+  const running = compiler.post();
+  while (compiler.requests.length === 0) await Bun.sleep(1);
+  const controller = new AbortController();
+  const waiting = compiler.post({}, { signal: controller.signal });
+  while ((await compiler.snapshot()).queued === 0) await Bun.sleep(1);
+  controller.abort();
+  expect((await waiting).status).toBe(499);
+  expect((await compiler.snapshot()).queued).toBe(0);
+  gate.resolve(success());
+  await (await running).text();
+  await compiler.released();
 });

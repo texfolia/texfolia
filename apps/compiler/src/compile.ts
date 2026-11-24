@@ -5,8 +5,9 @@ import {
   compileOptionHeaders,
   type CompilePlacement,
 } from "@texfolia/contracts/compiler";
-import { Cause, Clock, Context, Effect, Exit, Schema, Scope } from "effect";
+import { Cause, Clock, Effect, Exit, Schema, Scope } from "effect";
 
+import { Background } from "./background";
 import { Containers } from "./containers";
 import {
   type CompileError,
@@ -17,15 +18,10 @@ import {
 import { type Lease, Pool } from "./pool";
 
 const maxRequestBytes = 64 * 1024 * 1024;
-// Beyond the compile itself: receiving sources and restoring the cache.
-const engineMarginMs = 60_000;
+// Beyond the compile itself: the engine's limits for receiving sources and for
+// rendering a preview.
+const engineMarginMs = 90_000;
 const responseTimeoutMs = 120_000;
-
-/** Runs work that outlives the response, such as returning a container. */
-export class Background extends Context.Service<
-  Background,
-  { run(effect: Effect.Effect<void>): void }
->()("compiler/Background") {}
 
 const decodeOptions = Schema.decodeUnknownEffect(CompileOptions);
 
@@ -238,10 +234,9 @@ export const compile = Effect.fnUntraced(function* (
 /** Stops a compile that is waiting or running. Cancelling twice is harmless. */
 export const cancel = Effect.fnUntraced(function* (id: string) {
   const pool = yield* Pool;
-  const lease = yield* pool.locate(id);
+  const lease = yield* pool.cancel(id);
   // The running compile's own finalizer returns the container.
   if (lease) yield* cancelRun(lease.container, id);
-  else yield* pool.release(id, { reusable: true });
   return new Response(null, {
     status: 204,
     headers: { "Cache-Control": "no-store" },
@@ -279,3 +274,21 @@ export const handle = Effect.fnUntraced(function* (request: Request) {
     { status: 404 },
   );
 });
+
+/**
+ * Answers a request as a Promise. A caller that has gone is an ordinary outcome,
+ * and the 499 sent to nobody is only for logs.
+ */
+export async function serve(
+  request: Request,
+  run: (
+    program: ReturnType<typeof handle>,
+    options: { signal: AbortSignal },
+  ) => Promise<Exit.Exit<Response>>,
+): Promise<Response> {
+  const exit = await run(handle(request), { signal: request.signal });
+  if (Exit.isSuccess(exit)) return exit.value;
+  if (request.signal.aborted && Cause.hasInterruptsOnly(exit.cause))
+    return new Response(null, { status: 499 });
+  throw Cause.squash(exit.cause);
+}
