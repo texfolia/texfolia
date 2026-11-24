@@ -8,7 +8,13 @@ import {
 } from "@texfolia/ui/context-menu";
 import { Input } from "@texfolia/ui/input";
 import { Textarea } from "@texfolia/ui/textarea";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { z } from "zod";
 
 import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
@@ -22,22 +28,40 @@ import { gitAction } from "#/features/git/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 
+import {
+  decideGitStatusRefresh,
+  type GitSyncedSnapshot,
+} from "../-hooks/git-status-sync";
+
 const hostedNotice =
   "Texfolia no longer hosts Git repositories. This project still has history stored here. Link an empty repository to push it, or remove it.";
 
-export function GitPanel() {
+type GitError = { source: "status" | "action"; message: string };
+
+export function GitPanel({ visible }: { visible: boolean }) {
   const {
     projectId,
     canWrite,
     collaboration,
+    drafts,
     reveal,
     reportGitBranch,
     reportGitFailure,
   } = useWorkspace();
   const files = useProjectFiles();
+  const sourcesVersion = useSyncExternalStore(
+    files.subscribe,
+    () => files.getStatus().sourcesVersion,
+    () => files.getStatus().sourcesVersion,
+  );
+  const gitVersion = useSyncExternalStore(
+    files.subscribe,
+    () => files.getStatus().gitVersion,
+    () => files.getStatus().gitVersion,
+  );
   const [result, setResult] = useState<GitResult | null>(null);
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<GitError | null>(null);
   const [notice, setNotice] = useState("");
   const [message, setMessage] = useState("");
   const messageKey = `texfolia.git-message.${projectId}`;
@@ -50,38 +74,98 @@ export function GitPanel() {
   }
   const [branch, setBranch] = useState("");
   const [unlinking, setUnlinking] = useState(false);
-  const visible = true;
+  const [pageVisible, setPageVisible] = useState(
+    () =>
+      typeof document === "undefined" || document.visibilityState !== "hidden",
+  );
+  useEffect(() => {
+    const update = () => setPageVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
+  const panelVisible = visible && pageVisible;
+  const request = useRef(0);
+  const synced = useRef<GitSyncedSnapshot | null>(null);
+  const wasVisible = useRef(false);
+  const diffOpen = Boolean(result?.diff);
+
   useEffect(() => {
     if (result) reportGitBranch(result.status.branch);
   }, [result, reportGitBranch]);
-  useEffect(() => {
-    if (busy || !visible || !result?.status.branch || result.diff) return;
-    let active = true;
-    const timer = setInterval(() => {
-      void gitAction({ data: { projectId, action: { kind: "status" } } })
-        .then((next) => {
-          if (active) setResult(next);
-        })
-        .catch(() => {});
-    }, 5000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [projectId, busy, visible, result?.status.branch, result?.diff]);
-  const load = useCallback(
-    async () =>
-      setResult(
-        await gitAction({ data: { projectId, action: { kind: "status" } } }),
-      ),
-    [projectId],
+
+  const refreshStatus = useCallback(
+    async (kind: "status" | "diff" = "status") => {
+      const sequence = ++request.current;
+      const latest = files.getStatus();
+      synced.current = {
+        projectId,
+        sourcesVersion: latest.sourcesVersion,
+        gitVersion: latest.gitVersion,
+        hasRepo: synced.current?.hasRepo ?? null,
+        failed: false,
+      };
+      try {
+        const next = await gitAction({
+          data: { projectId, action: { kind } },
+        });
+        if (sequence !== request.current) return;
+        synced.current = {
+          ...synced.current,
+          hasRepo: Boolean(next.status.branch),
+          failed: false,
+        };
+        setResult(next);
+        setError((current) => (current?.source === "status" ? null : current));
+      } catch (failure: unknown) {
+        if (sequence !== request.current) return;
+        synced.current = {
+          ...synced.current,
+          failed: true,
+        };
+        reportGitFailure(failure);
+        setError({
+          source: "status",
+          message:
+            failure instanceof Error ? failure.message : "Could not load git.",
+        });
+      }
+    },
+    [files, projectId, reportGitFailure],
   );
+
   useEffect(() => {
-    void load().catch((error: unknown) => {
-      reportGitFailure(error);
-      setError(error instanceof Error ? error.message : "Could not load git.");
+    const reopened = panelVisible && !wasVisible.current;
+    wasVisible.current = panelVisible;
+    const hasUnsavedDrafts = [...drafts.values()].some(
+      (draft) => draft.value !== draft.savedValue,
+    );
+    const decision = decideGitStatusRefresh({
+      visible: panelVisible,
+      busy: Boolean(busy),
+      projectId,
+      sourcesVersion,
+      gitVersion,
+      hasUnsavedDrafts,
+      reopened,
+      synced: synced.current,
     });
-  }, [load, reportGitFailure]);
+    if (decision.kind === "hydrate") {
+      synced.current = decision.synced;
+      return;
+    }
+    if (decision.kind === "refresh")
+      void refreshStatus(diffOpen ? "diff" : "status");
+  }, [
+    panelVisible,
+    busy,
+    projectId,
+    sourcesVersion,
+    gitVersion,
+    drafts,
+    diffOpen,
+    refreshStatus,
+  ]);
+
   async function save() {
     await files.refresh();
     for (const file of collaboration.values()) {
@@ -95,12 +179,23 @@ export function GitPanel() {
   }
   async function act(action: Exclude<GitAction, { kind: "import" | "link" }>) {
     setBusy(action.kind);
-    setError("");
+    setError(null);
     setNotice("");
+    const sequence = ++request.current;
     try {
       if (canWrite) await save();
-      setResult(await gitAction({ data: { projectId, action } }));
+      const next = await gitAction({ data: { projectId, action } });
+      if (sequence !== request.current) return;
+      setResult(next);
       await files.refresh();
+      const latest = files.getStatus();
+      synced.current = {
+        projectId,
+        sourcesVersion: latest.sourcesVersion,
+        gitVersion: latest.gitVersion,
+        hasRepo: Boolean(next.status.branch),
+        failed: false,
+      };
       if (action.kind === "commit") {
         setMessage("");
         sessionStorage.removeItem(messageKey);
@@ -109,19 +204,23 @@ export function GitPanel() {
       if (action.kind === "unlink") setUnlinking(false);
       if (action.kind === "push") setNotice("Branch pushed.");
       if (action.kind === "pull") setNotice("Branch pulled.");
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Git action failed. Try again.",
-      );
+    } catch (failure) {
+      if (sequence !== request.current) return;
+      if (action.kind === "status") reportGitFailure(failure);
+      setError({
+        source: action.kind === "status" ? "status" : "action",
+        message:
+          failure instanceof Error
+            ? failure.message
+            : "Git action failed. Try again.",
+      });
     } finally {
       setBusy("");
     }
   }
   async function generate() {
     setBusy("generate");
-    setError("");
+    setError(null);
     setNotice("");
     try {
       await save();
@@ -139,12 +238,14 @@ export function GitPanel() {
       }
       changeMessage(z.object({ message: z.string() }).parse(body).message);
       setNotice("Review the suggested message before committing.");
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Could not generate a message.",
-      );
+    } catch (failure) {
+      setError({
+        source: "action",
+        message:
+          failure instanceof Error
+            ? failure.message
+            : "Could not generate a message.",
+      });
     } finally {
       setBusy("");
     }
@@ -160,7 +261,7 @@ export function GitPanel() {
             role="alert"
             className="text-destructive break-words whitespace-pre-wrap"
           >
-            {error}
+            {error.message}
           </p>
         )}
         {notice && <p role="status">{notice}</p>}
@@ -170,14 +271,8 @@ export function GitPanel() {
             size="sm"
             variant="ghost"
             onClick={() => {
-              setError("");
-              void load().catch((error: unknown) =>
-                setError(
-                  error instanceof Error
-                    ? error.message
-                    : "Could not load git.",
-                ),
-              );
+              setError(null);
+              void refreshStatus();
             }}
           >
             Try again
@@ -198,16 +293,27 @@ export function GitPanel() {
                 disabled={!!busy}
                 onConnect={async (url) => {
                   setBusy("link");
+                  setError(null);
+                  const sequence = ++request.current;
                   try {
                     await save();
-                    setResult(
-                      await gitAction({
-                        data: {
-                          projectId,
-                          action: { kind: "link", remote: url },
-                        },
-                      }),
-                    );
+                    const next = await gitAction({
+                      data: {
+                        projectId,
+                        action: { kind: "link", remote: url },
+                      },
+                    });
+                    if (sequence !== request.current) return;
+                    setResult(next);
+                    await files.refresh();
+                    const latest = files.getStatus();
+                    synced.current = {
+                      projectId,
+                      sourcesVersion: latest.sourcesVersion,
+                      gitVersion: latest.gitVersion,
+                      hasRepo: Boolean(next.status.branch),
+                      failed: false,
+                    };
                   } finally {
                     setBusy("");
                   }
@@ -261,16 +367,18 @@ export function GitPanel() {
                 disabled={!!busy}
                 onClick={async () => {
                   setBusy("authorize");
-                  setError("");
+                  setError(null);
                   try {
                     if (status.remote)
                       await connectGitAccount(status.remote.provider);
-                  } catch (error) {
-                    setError(
-                      error instanceof Error
-                        ? error.message
-                        : "Could not connect account.",
-                    );
+                  } catch (failure) {
+                    setError({
+                      source: "action",
+                      message:
+                        failure instanceof Error
+                          ? failure.message
+                          : "Could not connect account.",
+                    });
                   } finally {
                     setBusy("");
                   }

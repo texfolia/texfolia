@@ -5,6 +5,7 @@ export {
   gitAccount,
   gitAccounts,
   gitBranch,
+  gitVersion,
   runGit,
   type GitAccessToken,
 } from "./actions";

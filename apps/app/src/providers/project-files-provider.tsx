@@ -3,6 +3,7 @@ import type { z } from "zod";
 
 import {
   projectMetadataSchema,
+  projectSourcesFingerprint,
   type ProjectMetadata,
   createNodeSchema,
   newProjectNodePath,
@@ -40,11 +41,18 @@ export function createProjectFilesStore({
     error: string;
     deleted: ReadonlySet<string>;
     commentsVersion: string | undefined;
+    gitVersion: string | undefined;
+    sourcesVersion: string;
   } = {
     canWrite: undefined,
     error: "",
     deleted: new Set(),
     commentsVersion: undefined,
+    gitVersion: undefined,
+    sourcesVersion: projectSourcesFingerprint({
+      nodes: initial,
+      sourceVersions,
+    }),
   };
   const listeners = new Set<() => void>();
   const refreshListeners = new Set<() => void>();
@@ -53,7 +61,9 @@ export function createProjectFilesStore({
       next.canWrite === status.canWrite &&
       next.error === status.error &&
       next.deleted === status.deleted &&
-      next.commentsVersion === status.commentsVersion
+      next.commentsVersion === status.commentsVersion &&
+      next.gitVersion === status.gitVersion &&
+      next.sourcesVersion === status.sourcesVersion
     )
       return;
     status = next;
@@ -92,12 +102,37 @@ export function createProjectFilesStore({
               ? ""
               : new TextDecoder().decode(decodeSource(input.content)),
           );
+        const nextNodes = [
+          ...nodes.toArray.filter((node) => node.id !== created.id),
+          {
+            id: created.id,
+            projectId: created.projectId,
+            parentId: created.parentId,
+            name: created.name,
+            kind: created.kind,
+          },
+        ];
+        setStatus({
+          ...status,
+          sourcesVersion: projectSourcesFingerprint({
+            nodes: nextNodes,
+            sourceVersions,
+          }),
+        });
         return created;
       }),
     remove: (row) =>
       write(async () => {
         await deleteProjectNode({ data: { projectId, nodeId: row.id } });
+        delete sourceVersions[row.id];
         markDeleted([row.id]);
+        setStatus({
+          ...status,
+          sourcesVersion: projectSourcesFingerprint({
+            nodes: nodes.toArray.filter((node) => node.id !== row.id),
+            sourceVersions,
+          }),
+        });
       }),
   });
 
@@ -118,6 +153,14 @@ export function createProjectFilesStore({
         objectKey: version.objectKey,
         updatedAt: version.updatedAt,
       };
+      if (previous?.objectKey !== version.objectKey)
+        setStatus({
+          ...status,
+          sourcesVersion: projectSourcesFingerprint({
+            nodes: nodes.toArray,
+            sourceVersions,
+          }),
+        });
       return true;
     },
     createdTextSources,
@@ -174,6 +217,11 @@ export function createProjectFilesStore({
             canWrite: metadata.canWrite,
             error: "",
             commentsVersion: metadata.commentsVersion,
+            gitVersion: metadata.gitVersion,
+            sourcesVersion: projectSourcesFingerprint({
+              nodes: metadata.nodes,
+              sourceVersions,
+            }),
           });
           for (const listener of refreshListeners) listener();
           return metadata;
@@ -235,14 +283,19 @@ export function ProjectFilesProvider({
         if (!controller.signal.aborted) timer = setTimeout(refresh, 2000);
       }
     };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     void refresh();
     window.addEventListener("online", refresh);
     window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       controller.abort();
       clearTimeout(timer);
       window.removeEventListener("online", refresh);
       window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [store]);
   return <ProjectFilesContext value={store}>{children}</ProjectFilesContext>;

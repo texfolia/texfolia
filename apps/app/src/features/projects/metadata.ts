@@ -25,31 +25,42 @@ export const projectMetadataSchema = z.object({
   // Changes whenever the project's review comments change. Absent for
   // share-link guests.
   commentsVersion: z.string().optional(),
+  // Changes whenever the project's linked Git repository changes. Absent for
+  // share-link guests.
+  gitVersion: z.string().optional(),
 });
 export type ProjectMetadata = z.infer<typeof projectMetadataSchema>;
 
-export function projectMetadataVersion({
+export function projectSourcesFingerprint({
   nodes,
   sourceVersions,
   textSource = "saved",
-}: Pick<ProjectMetadata, "nodes" | "sourceVersions"> & {
+}: {
+  nodes: readonly ProjectMetadata["nodes"][number][];
+  sourceVersions: Readonly<Record<string, { objectKey: string | null }>>;
   textSource?: "saved" | "live";
 }) {
+  return JSON.stringify(
+    [...nodes]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(({ id, parentId, name, kind }) => [
+        id,
+        parentId,
+        name,
+        kind,
+        kind === "folder" || (kind === "text" && textSource === "live")
+          ? null
+          : (sourceVersions[id]?.objectKey ?? null),
+      ]),
+  );
+}
+
+export function projectMetadataVersion(
+  options: Pick<ProjectMetadata, "nodes" | "sourceVersions"> & {
+    textSource?: "saved" | "live";
+  },
+) {
   return sha256Hex(
-    new TextEncoder().encode(
-      JSON.stringify(
-        [...nodes]
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .map(({ id, parentId, name, kind }) => [
-            id,
-            parentId,
-            name,
-            kind,
-            kind === "text" && textSource === "live"
-              ? null
-              : (sourceVersions[id]?.objectKey ?? null),
-          ]),
-      ),
-    ),
+    new TextEncoder().encode(projectSourcesFingerprint(options)),
   );
 }
