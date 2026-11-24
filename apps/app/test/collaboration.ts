@@ -34,6 +34,7 @@ import { createProject } from "../src/lib/projects/project.server";
 import type { BrowserApi } from "./collaboration/browser";
 import { checkDeletion } from "./collaboration/deletion";
 import { checkRevocation } from "./collaboration/revocation";
+import { checkScratchpad } from "./collaboration/scratchpad";
 import { checkShareLinks } from "./collaboration/share-links";
 
 declare global {
@@ -521,6 +522,7 @@ try {
     "SELECT count(*) AS count FROM updates",
   );
   assert((count[0]?.count ?? 1000) < 64);
+  assert(saved.objectKey);
   assert.equal(await (await bucket.get(saved.objectKey))?.text(), saved.value);
   const row = await db.query.projectNode.findFirst({ where: { id: nodeId } });
   assert.equal(row?.objectKey, saved.objectKey);
@@ -621,6 +623,7 @@ try {
   const storedLarge = await largeSaved;
   assert(storedLarge.type === "saved");
   assert.equal(storedLarge.value, "large " + largeText);
+  assert(storedLarge.objectKey);
   assert.equal(
     await (await bucket.get(storedLarge.objectKey))?.text(),
     storedLarge.value,
@@ -810,8 +813,17 @@ try {
     cookies,
   });
   await checkShareLinks({ mf, db, origin, ownerId, editorId, cookies });
+  await checkScratchpad({
+    mf,
+    db,
+    origin,
+    ownerId,
+    editorId,
+    viewerId,
+    cookies,
+  });
   console.log(
-    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, live WebSocket/SSE/PDF revocation, and share-link guests",
+    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, live WebSocket/SSE/PDF revocation, share-link guests, and the scratchpad",
   );
 } finally {
   await Promise.all(contexts.map((context) => context.close()));

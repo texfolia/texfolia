@@ -5,10 +5,15 @@ import { z } from "zod";
 import { requestPrincipal } from "#/lib/auth/request-principal.server";
 import {
   collaborationProtocol,
+  documentIdSchema,
   peopleSearchParam,
   protocolSearchParam,
+  scratchpadId,
 } from "#/lib/collaboration";
-import { collaborationAccess } from "#/lib/collaboration/server";
+import {
+  collaborationAccess,
+  scratchpadAccess,
+} from "#/lib/collaboration/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
 
 export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
@@ -30,7 +35,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
         const parsed = z
           .object({
             projectId: z.uuid(),
-            nodeId: z.uuid(),
+            nodeId: documentIdSchema,
             clientId: z.coerce.number().int().nonnegative().max(0xffffffff),
           })
           .safeParse({
@@ -40,13 +45,21 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
         if (!parsed.success)
           return new Response("File not found", { status: 404 });
         try {
-          await collaborationAccess(
-            context.db,
-            params.projectId,
-            params.nodeId,
-            principal.userId,
-            { lock: lockProject },
-          );
+          if (parsed.data.nodeId === scratchpadId)
+            await scratchpadAccess(
+              context.db,
+              params.projectId,
+              principal.userId,
+              { lock: lockProject },
+            );
+          else
+            await collaborationAccess(
+              context.db,
+              params.projectId,
+              params.nodeId,
+              principal.userId,
+              { lock: lockProject },
+            );
         } catch (error) {
           if (
             error instanceof Error &&

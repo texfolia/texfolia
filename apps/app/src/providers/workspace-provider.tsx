@@ -14,7 +14,12 @@ export type FileState = { value: string; savedValue: string };
 export type Workspace = {
   /** Live documents: files that are open, or whose edits are unsaved. */
   collaboration: ReadonlyMap<string, CollaborativeFile>;
-  /** Connects a text file's document until the returned function is called. */
+  /** The scratchpad's live document, while its tab or preview is open. */
+  scratchpad: CollaborativeFile | undefined;
+  /**
+   * Connects a text file's document, or the scratchpad's, until the returned
+   * function is called.
+   */
   holdDocument: (id: string) => () => void;
   /** Edits a text file's collaborative document, connecting it if needed. */
   editDocument: (

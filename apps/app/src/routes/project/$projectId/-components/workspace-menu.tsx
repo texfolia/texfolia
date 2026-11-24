@@ -24,6 +24,7 @@ export function WorkspaceMenu({
   compiling,
   compileAvailable,
   editorAvailable,
+  scratchpadDisabled,
   compileOnSave,
   onSave,
   onSaveOnly,
@@ -37,6 +38,7 @@ export function WorkspaceMenu({
   onEditor,
   onSearch,
   onAddReference,
+  onScratchpad,
   chrome,
   onChrome,
   onPanel,
@@ -47,6 +49,7 @@ export function WorkspaceMenu({
   compiling: boolean;
   compileAvailable: boolean;
   editorAvailable: boolean;
+  scratchpadDisabled: boolean;
   compileOnSave: boolean;
   onSave: () => void;
   onSaveOnly: () => void;
@@ -60,6 +63,7 @@ export function WorkspaceMenu({
   onEditor: (command: EditorCommand) => void;
   onSearch: () => void;
   onAddReference: () => void;
+  onScratchpad: () => void;
   chrome: WorkspaceChrome;
   onChrome: (patch: Partial<WorkspaceChrome>) => void;
   onPanel: (view: PanelView) => void;
@@ -176,6 +180,10 @@ export function WorkspaceMenu({
               >
                 Right sidebar
               </MenubarCheckboxItem>
+              <MenubarSeparator />
+              <MenubarItem disabled={scratchpadDisabled} onClick={onScratchpad}>
+                Scratchpad
+              </MenubarItem>
               <MenubarSeparator />
               <MenubarCheckboxItem
                 checked={chrome.panelOpen}

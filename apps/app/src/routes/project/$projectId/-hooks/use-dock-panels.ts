@@ -2,16 +2,22 @@ import type { EditorView } from "@uiw/react-codemirror";
 import type { DockviewApi } from "dockview-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { scratchpadId } from "#/lib/collaboration";
 import type { EditorCommand } from "#/lib/editor/editor-command";
 import { projectPaths } from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
-import { restoreWorkspaceDock } from "#/lib/workspace/workspace-layout";
+import {
+  isEditorComponent,
+  restoreWorkspaceDock,
+} from "#/lib/workspace/workspace-layout";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState, Workspace } from "#/providers/workspace-provider";
 
 import type { MarkdownPreviewParams } from "../-components/markdown-preview";
 
 export type FilePanelParams = { node: ProjectNode; preview: boolean };
+
+export const scratchpadTitle = "Scratchpad";
 
 const markdownId = (id: string) => `markdown:${id}`;
 
@@ -42,6 +48,8 @@ export function useDockPanels({
   const commands = useRef(new Map<string, (command: EditorCommand) => void>());
   const positions = useRef(new Map<string, { line: number; column: number }>());
   const previousPaths = useRef(paths);
+  // Kept apart from the drafts, which search, analysis and saving cover.
+  const scratchpadSource = useRef("");
   const [activeId, setActiveId] = useState<string>();
   const [cursor, setCursor] = useState<{
     id: string;
@@ -123,6 +131,17 @@ export function useDockPanels({
     [],
   );
 
+  /** A document's current text, for its Markdown preview. */
+  function sourceOf(id: string) {
+    return id === scratchpadId
+      ? scratchpadSource.current
+      : (drafts.get(id)?.value ?? "");
+  }
+  function showScratchpad(source: string) {
+    scratchpadSource.current = source;
+    showMarkdownSource(scratchpadId, source);
+  }
+
   function keepOpen(id: string) {
     if (previewId.current !== id) return;
     previewId.current = null;
@@ -131,8 +150,14 @@ export function useDockPanels({
 
   function openMarkdownPreview(id: string) {
     const dock = api.current;
-    const node = nodesById.get(id);
-    if (!dock || !node || !/\.(?:md|markdown)$/i.test(node.name)) return;
+    const name =
+      id === scratchpadId ? scratchpadTitle : nodesById.get(id)?.name;
+    if (
+      !dock ||
+      !name ||
+      (id !== scratchpadId && !/\.(?:md|markdown)$/i.test(name))
+    )
+      return;
     keepOpen(id);
     const existing = dock.getPanel(markdownId(id));
     if (existing) {
@@ -140,13 +165,13 @@ export function useDockPanels({
       return;
     }
     const reference = dock.panels.find(
-      (panel) => panel.api.component !== "editor",
+      (panel) => !isEditorComponent(panel.api.component),
     );
     dock.addPanel<MarkdownPreviewParams>({
       id: markdownId(id),
       component: "markdown",
-      title: `Preview: ${node.name}`,
-      params: { source: drafts.get(id)?.value ?? "" },
+      title: `Preview: ${name}`,
+      params: { source: sourceOf(id) },
       position: reference
         ? { referencePanel: reference.id, direction: "within" }
         : { referencePanel: id, direction: "right" },
@@ -178,9 +203,10 @@ export function useDockPanels({
       ? dock.getPanel(previewId.current)
       : undefined;
     const reference =
-      preview ?? dock.panels.find((panel) => panel.api.component === "editor");
+      preview ??
+      dock.panels.find((panel) => isEditorComponent(panel.api.component));
     const previewPanel = dock.panels.find(
-      (panel) => panel.api.component !== "editor",
+      (panel) => !isEditorComponent(panel.api.component),
     );
     dock.addPanel<FilePanelParams>({
       id: node.id,
@@ -200,6 +226,32 @@ export function useDockPanels({
     }
   }
 
+  function openScratchpad() {
+    const dock = api.current;
+    if (!dock) return;
+    const existing = dock.getPanel(scratchpadId);
+    if (existing) {
+      existing.api.setActive();
+      return;
+    }
+    const reference = dock.panels.find((panel) =>
+      isEditorComponent(panel.api.component),
+    );
+    const previewPanel = dock.panels[0];
+    dock.addPanel({
+      id: scratchpadId,
+      component: "scratchpad",
+      tabComponent: "file",
+      title: scratchpadTitle,
+      params: {},
+      position: reference
+        ? { referencePanel: reference.id, direction: "within" }
+        : previewPanel
+          ? { referencePanel: previewPanel.id, direction: "left" }
+          : undefined,
+    });
+  }
+
   function openGenerated(path: string, permanent = false) {
     const dock = api.current;
     if (!dock) return;
@@ -217,7 +269,7 @@ export function useDockPanels({
       preview ??
       dock.panels.find(
         (panel) =>
-          panel.api.component === "editor" ||
+          isEditorComponent(panel.api.component) ||
           panel.api.component === "generated",
       );
     dock.addPanel({
@@ -269,11 +321,14 @@ export function useDockPanels({
 
   function cycleTab(direction: number) {
     const panels =
-      api.current?.panels.filter((panel) => panel.api.component === "editor") ??
-      [];
+      api.current?.panels.filter((panel) =>
+        isEditorComponent(panel.api.component),
+      ) ?? [];
     const activePanel = api.current?.activePanel;
     const currentId =
-      activePanel?.api.component === "editor" ? activePanel.id : activeId;
+      activePanel && isEditorComponent(activePanel.api.component)
+        ? activePanel.id
+        : activeId;
     const index = panels.findIndex((panel) => panel.id === currentId);
     panels[
       (index + direction + panels.length) % panels.length
@@ -294,7 +349,7 @@ export function useDockPanels({
       dock.onDidActivePanelChange(({ panel }) => {
         if (
           panel &&
-          (panel.api.component === "editor" ||
+          (isEditorComponent(panel.api.component) ||
             panel.api.component === "generated")
         )
           setActiveId(panel.id);
@@ -321,7 +376,7 @@ export function useDockPanels({
     for (const panel of dock.panels) {
       if (panel.api.component === "markdown")
         panel.api.updateParameters({
-          source: drafts.get(panel.id.slice("markdown:".length))?.value ?? "",
+          source: sourceOf(panel.id.slice("markdown:".length)),
         });
       if (panel.params?.preview === true) {
         if (previewId.current)
@@ -351,9 +406,11 @@ export function useDockPanels({
     reportCursor,
     refreshTitle,
     showMarkdownSource,
+    showScratchpad,
     keepOpen,
     openFile,
     openGenerated,
+    openScratchpad,
     openMarkdownPreview,
     reveal,
     revealRange,

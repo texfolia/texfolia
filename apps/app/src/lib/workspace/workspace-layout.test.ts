@@ -94,3 +94,40 @@ test("restored editor tabs use the default renderer, even if saved with another"
   expect(ok).toBe(true);
   expect(restored?.panels.n1).not.toHaveProperty("renderer");
 });
+
+test("the scratchpad and its preview restore without a project file", () => {
+  let restored: { panels: Record<string, { params?: unknown }> } | undefined;
+  const dock = {
+    fromJSON: (value: typeof restored) => {
+      restored = value;
+    },
+    getPanel: () => undefined,
+    clear: () => {},
+  } as unknown as DockviewApi;
+  const restore = (scratchpadPanel: string) =>
+    restoreWorkspaceDock(
+      dock,
+      {
+        grid: { root: {}, height: 1, width: 1, orientation: "HORIZONTAL" },
+        panels: {
+          scratchpad: {
+            id: scratchpadPanel,
+            contentComponent: "scratchpad",
+            params: { injected: true },
+          },
+          "markdown:scratchpad": {
+            id: "markdown:scratchpad",
+            contentComponent: "markdown",
+            params: { source: "stale notes" },
+          },
+        },
+      },
+      [],
+    );
+  expect(restore("scratchpad")).toBe(true);
+  expect(restored?.panels.scratchpad?.params).toEqual({});
+  expect(restored?.panels["markdown:scratchpad"]?.params).toEqual({
+    source: "",
+  });
+  expect(restore("other")).toBe(false);
+});

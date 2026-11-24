@@ -18,6 +18,7 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 | Revoke access      | **Remove** revokes a collaborator's access. The project disappears from their project list, and their open workspace loses access.                                                                                                          |
 | File management    | Editors can create files and folders, upload source files, and rename, move, or delete items. Deletion requires confirmation. Viewers have no source management controls.                                                                   |
 | Review comments    | Everyone with access, including viewers, can comment on a passage, reply, and resolve or reopen threads. See [Review comments](#review-comments).                                                                                           |
+| Scratchpad         | Each project has one shared Markdown scratchpad. Owners and editors edit it, viewers read it, and share links cannot see it. See [Scratchpad](#scratchpad).                                                                                 |
 | Access display     | The project list shows the actual collaborator count, **Personal** when there are none, or **Organization** for inherited membership. The workspace lists actual people and roles.                                                          |
 
 Organization projects inherit access from membership. Every organization member is an editor on every organization project, whatever their role (`owner`, `admin`, or `member`). Members can save sources, compile, write to collaboration, and use write assistant tools. Organization projects have no viewer role and no per-project roles. Owners and admins additionally can trash, restore, permanently delete, and transfer organization projects, and link or unlink a git remote. The workspace explains this and shows no personal-project sharing form. Organization creation, invitations, and membership administration have no management UI in v1. The invitation acceptance route remains available for existing invitations.
@@ -31,7 +32,7 @@ closes for everyone: it leaves project lists, its share links stop working, and
 open collaboration sockets and build streams close.
 
 - The personal owner, or an organization owner or admin, sees the project in the trash, restores it, or deletes it permanently. Collaborators, other members, and share-link visitors cannot.
-- Restoring brings back its files, collaborators, share links, comments, chats, tags, and Git link. Builds are not kept, so compile again. If the owner has reused the name, the restored project gets a numeric suffix.
+- Restoring brings back its files, collaborators, share links, comments, chats, tags, Git link, and scratchpad. Builds are not kept, so compile again. If the owner has reused the name, the restored project gets a numeric suffix.
 - **Delete permanently** removes the project row and everything stored with it, then its sources, collaboration documents, and Git clone. It cannot be undone, and it never touches the Git remote, published templates, or duplicates.
 - Projects are permanently deleted after 30 days in the trash, by the hourly scheduled run.
 
@@ -47,8 +48,8 @@ be opened after restoring.
 **Duplicate** copies the saved files, folders, formatting, and spelling settings
 into a new personal project named “… copy”. This also applies to organization
 projects: the copy belongs to the person who made it. Collaborators, share
-links, comments, chats, tags, the Git remote, and builds are not copied. The
-copy is independent of the original.
+links, comments, chats, tags, the Git remote, builds, and the scratchpad are not
+copied. The copy is independent of the original.
 
 ## Ownership transfer
 
@@ -82,6 +83,22 @@ Decisions on the open questions in NAT-443:
 
 Server-side, a link acts as the principal `share:<linkId>` wherever a user ID is checked. `lockProject` resolves it against `project_share_link`, rejects writes, and rejects PDF-only links unless the caller asks for build content. API requests carry the token in the `share` query parameter, which takes precedence over the session.
 
+## Scratchpad
+
+Each project has one scratchpad: shared Markdown notes, such as todos and
+decisions, that stay out of the paper. Open it from the status bar or the View
+menu.
+
+- Owners, editors, and organization members edit it together with live cursors. Viewers read it. Share-link guests cannot see, connect to, or read it.
+- It is not a project file. It has no place in the file tree, project search, compiles, Git, ZIP export, templates, or duplicates.
+- It has no review comments. The AI assistant can read it and cannot write it; see [the assistant guide](/ai-assistant/).
+- Edits save as they are made. Offline edits stay in the browser and merge on reconnecting, like edits to files.
+
+Server-side, it is the document `scratchpad` in the project's collaboration
+room, and the room's own storage is its only copy. It stays with a project in
+the trash and is removed with the project row. `scratchpadAccess` checks access
+and refuses share links of either scope.
+
 ## Review comments
 
 Anyone with access to a project can comment on a passage, including viewers.
@@ -113,6 +130,6 @@ are already linked from the shared footer and sign-in page.
 
 ## Verification
 
-`apps/app/test/compile-route.ts` covers share-link build access, PDF-only limits, rejected writes, and revocation. `apps/app/test/collaboration.ts` covers guest sockets: read-only sync, live edits, no presence, PDF-only rejection, and live revocation of sockets and build streams.
+`apps/app/test/compile-route.ts` covers share-link build access, PDF-only limits, rejected writes, and revocation. `apps/app/test/collaboration.ts` covers guest sockets: read-only sync, live edits, no presence, PDF-only rejection, and live revocation of sockets and build streams. It also covers scratchpad roles, share-link rejection, persistence, trash, and deletion.
 
 `apps/app/test/ui-overhaul.ts` exercises authenticated project creation, listing, opening, deletion, sharing errors, grants, role changes in both directions, live revocation, file management, and ZIP export. Keyboard checks cover navigation, file action dialogs, focus restoration, access removal, saving, and export. Public pages and the workspace are captured at desktop and mobile sizes. CI runs this suite against an isolated Postgres test database and local Worker services after the web build. `bun run --cwd apps/app test:ui` builds the app and runs the same checks locally when `INTEGRATION_DATABASE_URL` points to an isolated database with the current schema and `test` in its name.

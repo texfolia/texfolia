@@ -26,6 +26,8 @@ export function assistantWorkspace(env: Env): AssistantWorkspace {
       deleteProjectNode({ ...options, collaboration: env.COLLABORATION }),
     saveSource: (options) =>
       env.COLLABORATION.getByName(options.data.projectId).saveSource(options),
+    readScratchpad: (options) =>
+      env.COLLABORATION.getByName(options.projectId).readScratchpad(options),
     gitAction: (options) =>
       env.COLLABORATION.getByName(options.projectId).gitAction(options),
     compile: { POST: handleCompilePost, GET: handleCompileGet },

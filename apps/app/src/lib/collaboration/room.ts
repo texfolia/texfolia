@@ -15,15 +15,19 @@ import { decodeSource, type saveSourceSchema } from "#/lib/storage";
 import {
   awarenessFrame,
   decodeClientMessage,
+  documentIdSchema,
   encodeServerMessage,
   outdatedClientMessage,
   readAwareness,
+  scratchpadId,
   type ServerMessage,
 } from "./protocol";
 import {
   collaborationAccess,
   persistMergedSource,
+  scratchpadAccess,
   sourceNode,
+  type CollaborationLock,
   type SourceNode,
 } from "./sources";
 import {
@@ -38,7 +42,7 @@ import { checkUpdate, measureUsage, type Usage } from "./usage";
 
 const attachmentSchema = z.object({
   projectId: z.uuid(),
-  nodeId: z.uuid(),
+  nodeId: documentIdSchema,
   userId: z.string(),
   name: z.string().max(200),
   clientId: z.number().int().nonnegative(),
@@ -109,7 +113,7 @@ export abstract class CollaborationRoom<
   // Locks the project and checks access. Runs inside a Postgres transaction.
   protected abstract lockProject(
     request: ProjectAccessRequest,
-  ): Promise<{ canWrite: boolean }>;
+  ): ReturnType<CollaborationLock>;
   // Anonymous principals, such as share-link viewers, have no presence.
   protected abstract isAnonymous(userId: string): boolean;
   // Runs after the room persists sources, for example to invalidate builds.
@@ -229,9 +233,11 @@ export abstract class CollaborationRoom<
     const nodes = new Map<string, SourceNode>();
     for (const { id, objectKey, updatedAt } of live)
       if (id && updatedAt) nodes.set(id, { objectKey, updatedAt });
+    const projectDeleted = live.length === 0;
     for (const nodeId of nodeIds)
-      if (!nodes.has(nodeId)) this.removeDocument(nodeId);
-    return { projectDeleted: live.length === 0, nodes };
+      if (nodeId === scratchpadId ? projectDeleted : !nodes.has(nodeId))
+        this.removeDocument(nodeId);
+    return { projectDeleted, nodes };
   }
 
   // Bring loaded documents up to date with sources written outside collaboration.
@@ -271,12 +277,57 @@ export abstract class CollaborationRoom<
     });
   }
 
+  // Applies a document's stored snapshot and updates.
+  private restore(row: DocumentRow, doc: Y.Doc) {
+    Y.applyUpdate(
+      doc,
+      readSnapshot(this.ctx.storage.sql, row.node_id, row.snapshot),
+    );
+    for (const update of readUpdates(this.ctx.storage.sql, row.node_id))
+      Y.applyUpdate(doc, update);
+  }
+
+  private insertDocument(
+    info: Pick<Attachment, "nodeId" | "projectId">,
+    doc: Y.Doc,
+    objectKey: string | null,
+  ) {
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        "INSERT INTO documents (node_id, project_id, snapshot, object_key) VALUES (?, ?, ?, ?)",
+        info.nodeId,
+        info.projectId,
+        new Uint8Array(),
+        objectKey,
+      );
+      writeSnapshot(
+        this.ctx.storage.sql,
+        info.nodeId,
+        Y.encodeStateAsUpdate(doc),
+      );
+    });
+  }
+
+  // The scratchpad lives only in this room's storage: it has no node, no source
+  // object, and nothing to flush or reconcile.
+  private scratchpad(projectId: string) {
+    const cached = this.documents.get(scratchpadId);
+    if (cached) return cached;
+    const doc = new Y.Doc();
+    const row = this.row(scratchpadId);
+    if (row) this.restore(row, doc);
+    else this.insertDocument({ nodeId: scratchpadId, projectId }, doc, null);
+    this.documents.set(scratchpadId, doc);
+    return doc;
+  }
+
   // Loading reconciles with Postgres; a cached document reconciles only when the
   // caller already holds a fresh node, so edits do not query the database.
   private async document(
     info: Pick<Attachment, "nodeId" | "projectId">,
     options: { node?: SourceNode; recover?: boolean } = {},
   ) {
+    if (info.nodeId === scratchpadId) return this.scratchpad(info.projectId);
     const { recover = true } = options;
     const cached = this.documents.get(info.nodeId);
     if (cached) {
@@ -285,14 +336,8 @@ export abstract class CollaborationRoom<
     }
     const doc = new Y.Doc();
     const row = this.row(info.nodeId);
-    if (row) {
-      Y.applyUpdate(
-        doc,
-        readSnapshot(this.ctx.storage.sql, info.nodeId, row.snapshot),
-      );
-      for (const update of readUpdates(this.ctx.storage.sql, info.nodeId))
-        Y.applyUpdate(doc, update);
-    } else {
+    if (row) this.restore(row, doc);
+    else {
       const node =
         options.node ??
         (await this.withDb((db) =>
@@ -304,20 +349,7 @@ export abstract class CollaborationRoom<
       if (node.objectKey && !object)
         throw new Error("Saved source is missing from storage");
       doc.getText("source").insert(0, object ? await object.text() : "");
-      this.ctx.storage.transactionSync(() => {
-        this.ctx.storage.sql.exec(
-          "INSERT INTO documents (node_id, project_id, snapshot, object_key) VALUES (?, ?, ?, ?)",
-          info.nodeId,
-          info.projectId,
-          new Uint8Array(),
-          node.objectKey,
-        );
-        writeSnapshot(
-          this.ctx.storage.sql,
-          info.nodeId,
-          Y.encodeStateAsUpdate(doc),
-        );
-      });
+      this.insertDocument(info, doc, node.objectKey);
     }
     this.documents.set(info.nodeId, doc);
     if (row && recover) {
@@ -504,11 +536,28 @@ export abstract class CollaborationRoom<
         JSON.parse(request.headers.get("X-Collaboration-Session") ?? "null"),
       );
       const generation = this.accessGeneration;
-      const { node, canWrite } = await this.withDb((db) =>
-        collaborationAccess(db, info.projectId, info.nodeId, info.userId, {
-          register: true,
-          lock: (request) => this.lockProject(request),
-        }),
+      const access = {
+        register: true,
+        lock: (request: ProjectAccessRequest) => this.lockProject(request),
+      };
+      const { node, canWrite } = await this.withDb(async (db) =>
+        info.nodeId === scratchpadId
+          ? {
+              node: undefined,
+              ...(await scratchpadAccess(
+                db,
+                info.projectId,
+                info.userId,
+                access,
+              )),
+            }
+          : collaborationAccess(
+              db,
+              info.projectId,
+              info.nodeId,
+              info.userId,
+              access,
+            ),
       );
       this.remember(info.userId, generation, canWrite);
       if (info.binary) await this.document(info, { node });
@@ -532,6 +581,8 @@ export abstract class CollaborationRoom<
 
   private async apply(info: Attachment, bytes: Uint8Array) {
     const doc = await this.document(info);
+    // Sources are dirty until flushed; the scratchpad's storage is this room.
+    const flushes = info.nodeId !== scratchpadId;
     const usage = checkUpdate(
       doc,
       this.sizes.get(doc) ?? measureUsage(doc),
@@ -542,10 +593,11 @@ export abstract class CollaborationRoom<
     try {
       this.ctx.storage.transactionSync(() => {
         appendUpdate(this.ctx.storage.sql, info.nodeId, bytes);
-        this.ctx.storage.sql.exec(
-          "UPDATE documents SET dirty = 1 WHERE node_id = ?",
-          info.nodeId,
-        );
+        if (flushes)
+          this.ctx.storage.sql.exec(
+            "UPDATE documents SET dirty = 1 WHERE node_id = ?",
+            info.nodeId,
+          );
         const stored = this.ctx.storage.sql
           .exec<{ count: number; bytes: number }>(
             "SELECT count(*) AS count, coalesce(sum(bytes), 0) AS bytes FROM updates WHERE node_id = ?",
@@ -565,10 +617,12 @@ export abstract class CollaborationRoom<
       doc.destroy();
       throw error;
     }
-    const flushAt = Date.now() + 2000;
-    const alarm = await this.ctx.storage.getAlarm();
-    if (alarm === null || alarm > flushAt)
-      await this.ctx.storage.setAlarm(flushAt);
+    if (flushes) {
+      const flushAt = Date.now() + 2000;
+      const alarm = await this.ctx.storage.getAlarm();
+      if (alarm === null || alarm > flushAt)
+        await this.ctx.storage.setAlarm(flushAt);
+    }
     await this.broadcast(info.nodeId, { type: "update", update: bytes });
   }
 
@@ -624,7 +678,11 @@ export abstract class CollaborationRoom<
               throw new Error("Viewers cannot edit documents");
             if (data.type === "update") await this.apply(info, data.update);
             if (data.type === "save") {
-              const version = await this.flush(info.nodeId);
+              // Accepted scratchpad edits are already stored.
+              const version =
+                info.nodeId === scratchpadId
+                  ? { objectKey: null, updatedAt: Date.now() }
+                  : await this.flush(info.nodeId);
               if (!version) throw new Error("File not found");
               await this.send(ws, {
                 type: "saved",
@@ -817,6 +875,21 @@ export abstract class CollaborationRoom<
       const version = await this.flush(data.nodeId);
       if (!version) throw new Error("File not found");
       return version;
+    });
+  }
+
+  // The scratchpad's text, for people with their own access to the project.
+  async readScratchpad(options: { projectId: string; userId: string }) {
+    return this.serial(async () => {
+      await this.withDb((db) =>
+        scratchpadAccess(db, options.projectId, options.userId, {
+          lock: (request) => this.lockProject(request),
+        }),
+      );
+      // Reading a scratchpad nobody has opened must not create it.
+      return this.row(scratchpadId)
+        ? this.scratchpad(options.projectId).getText("source").toString()
+        : "";
     });
   }
 

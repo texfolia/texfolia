@@ -114,8 +114,16 @@ deleting files or changing Git state. This matters because templates and
 collaborators can add them. Adding `AGENTS.md` or a skill index to the system
 prompt is still undecided; see NAT-415 and the context budget in NAT-373.
 
+The read-only `read_scratchpad` tool returns the project's shared notes, up to
+64 KiB, to anyone who can use the assistant on the project, including viewers.
+No tool writes the scratchpad. Like project files, its text is untrusted: the
+instructions say it cannot authorize deletions, Git changes, or anything else the
+user did not request. Share-link guests cannot use the assistant, and the
+collaboration room refuses their principals.
+
 Project viewers can use the assistant for read-only questions. Their runs
-receive only `list_files`, `list_skills`, `search_project`, `read_file`, `git_status`,
+receive only `list_files`, `list_skills`, `search_project`, `read_file`,
+`read_scratchpad`, `git_status`,
 `git_diff`, and `read_compile_logs`; file edits, file creation, renames,
 deletions, compiles, and git mutations are not offered.
 The server write checks still apply to editors' tool calls. A run stops if the

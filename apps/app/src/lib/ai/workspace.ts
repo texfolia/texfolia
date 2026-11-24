@@ -46,6 +46,11 @@ export type AssistantWorkspace = {
     name: string;
     data: z.infer<typeof saveSourceSchema>;
   }): Promise<{ objectKey: string | null }>;
+  /** The scratchpad's live text. The assistant never writes it. */
+  readScratchpad(options: {
+    projectId: string;
+    userId: string;
+  }): Promise<string>;
   gitAction(options: {
     projectId: string;
     user: { id: string; name: string; email: string };

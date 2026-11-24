@@ -5,12 +5,12 @@ persists, and flushes collaborative text, the binary WebSocket protocol, and
 the browser side (the project's live documents, the Yjs document for an open
 file, its IndexedDB cache, and the localStorage draft cache).
 
-| Entry point                   | Contents                                                                                                                                                                                                                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#/lib/collaboration`         | The wire protocol: `encodeClientMessage`, `decodeClientMessage`, `encodeServerMessage`, `decodeServerMessage`, `awarenessFrame`, `readAwareness`, `collaborationProtocol`, `protocolSearchParam`, `peopleSearchParam`, `outdatedClientMessage`, `maxCollaborationBytes`. Safe to import anywhere        |
-| `#/lib/collaboration/browser` | `CollaborativeDocuments`, which connects documents on demand; `CollaborativeFile`; the IndexedDB cache helpers `clearCollaborationCaches`, `collaborationCachePrefix`, `documentCachingStopped`, `stopDocumentCaching`; the draft cache `reconcileSourceDrafts`, `serializeSourceDrafts`, `SourceDraft` |
-| `#/lib/collaboration/server`  | `collaborationAccess` (the `/api/collaboration` access check), `invalidateCollaborationAccess`, `invalidateOrganizationCollaborationAccess`, `cleanupDeletedCollaboration`, `collectCollaborationSources`. Does not load the Workers runtime, so Bun tests can import it                                |
-| `#/lib/collaboration/room`    | `CollaborationRoom` (the abstract Durable Object base class) and `CollaborationEnv`. Imports `cloudflare:workers`, so only Worker code loads it                                                                                                                                                         |
+| Entry point                   | Contents                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `#/lib/collaboration`         | The wire protocol: `encodeClientMessage`, `decodeClientMessage`, `encodeServerMessage`, `decodeServerMessage`, `awarenessFrame`, `readAwareness`, `collaborationProtocol`, `protocolSearchParam`, `peopleSearchParam`, `outdatedClientMessage`, `maxCollaborationBytes`, `scratchpadId`, `documentIdSchema`. Safe to import anywhere |
+| `#/lib/collaboration/browser` | `CollaborativeDocuments`, which connects documents on demand; `CollaborativeFile`; the IndexedDB cache helpers `clearCollaborationCaches`, `collaborationCachePrefix`, `documentCachingStopped`, `stopDocumentCaching`; the draft cache `reconcileSourceDrafts`, `serializeSourceDrafts`, `SourceDraft`                              |
+| `#/lib/collaboration/server`  | `collaborationAccess` and `scratchpadAccess` (the `/api/collaboration` access checks), `invalidateCollaborationAccess`, `invalidateOrganizationCollaborationAccess`, `cleanupDeletedCollaboration`, `collectCollaborationSources`. Does not load the Workers runtime, so Bun tests can import it                                     |
+| `#/lib/collaboration/room`    | `CollaborationRoom` (the abstract Durable Object base class) and `CollaborationEnv`. Imports `cloudflare:workers`, so only Worker code loads it                                                                                                                                                                                      |
 
 The rest of the app imports the core only through these entry points. The
 modules that bind it to the app, named below, are imported by path.
@@ -33,6 +33,14 @@ supplies what collaboration does not own:
 - `isAnonymous` marks share-link principals, which have no presence.
 - `sourcesChanged` runs after the room persists sources (the app invalidates
   the compiler's build).
+
+The scratchpad is the one document that is not a file. It uses the reserved ID
+`scratchpad` instead of a node ID and `scratchpadAccess` instead of
+`collaborationAccess`, and the room's storage is its only copy: it has no node or
+source object, is never dirty, and is not flushed or reconciled. Deleting the
+project removes it. `readScratchpad` is the RPC behind the assistant's tool. In
+the browser it has its own `CollaborativeDocuments`, so saving, compiling, Git,
+and export never include it.
 
 Operations that rewrite saved sources outside collaboration, such as Git, go
 through the protected `withSavedSources`: it flushes dirty documents first and

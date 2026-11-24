@@ -21,9 +21,11 @@ import {
 import { and, eq, inArray } from "drizzle-orm";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium } from "playwright";
+import * as Y from "yjs";
 import { z } from "zod";
 
 import { threadHistorySchema, threadSchema } from "#/lib/ai";
+import { encodeClientMessage, scratchpadId } from "#/lib/collaboration";
 import { hashSource } from "#/lib/compile";
 import { GitRepository } from "#/lib/git/server";
 
@@ -50,7 +52,8 @@ const source =
   "\\documentclass{article}\n\\begin{document}\nOriginal text.\n\\end{document}\n";
 const sourceHash = await hashSource(new TextEncoder().encode(source));
 let objectKey = "";
-let mode: "tools" | "files" | "error" | "simple" | "slow" = "tools";
+let mode: "tools" | "files" | "scratchpad" | "error" | "simple" | "slow" =
+  "tools";
 let call = 0;
 let logCalls = 0;
 const streamingTimers = new Set<ReturnType<typeof setInterval>>();
@@ -272,12 +275,15 @@ const mf = new Miniflare({
             },
             { name: "delete_file", args: { path: "sections" } },
           ];
+          const scratchpadCalls = [{ name: "read_scratchpad", args: {} }];
           const tool =
             mode === "tools"
               ? toolCalls[call++]
               : mode === "files"
                 ? fileToolCalls[call++]
-                : undefined;
+                : mode === "scratchpad"
+                  ? scratchpadCalls[call++]
+                  : undefined;
           const chunk = (delta: unknown, finish: string | null = null) => ({
             id: "completion-fixture",
             object: "chat.completion.chunk",
@@ -491,6 +497,7 @@ const readTools = [
   "list_skills",
   "read_compile_logs",
   "read_file",
+  "read_scratchpad",
   "search_project",
 ];
 const writeTools = [
@@ -720,6 +727,45 @@ try {
   assert(viewerSaved);
   assert((await viewerSaved.text()).includes("Revised text."));
   assert.equal(compileJobs.size, 1, "viewer runs never compile");
+  const scratchpadNotes = "Scratchpad decision: submit on Friday.";
+  const scratchpadDoc = new Y.Doc();
+  scratchpadDoc.getText("source").insert(0, scratchpadNotes);
+  const scratchpadSocket = (
+    await mf.dispatchFetch(
+      `${origin}/api/collaboration/${paidProject}/${scratchpadId}?protocol=2&clientId=1`,
+      {
+        headers: {
+          Cookie: cookies.get(userId) ?? "",
+          Origin: origin,
+          Upgrade: "websocket",
+        },
+      },
+    )
+  ).webSocket;
+  assert(scratchpadSocket);
+  scratchpadSocket.accept();
+  scratchpadSocket.send(
+    encodeClientMessage({
+      type: "update",
+      update: Y.encodeStateAsUpdate(scratchpadDoc),
+    }),
+  );
+  scratchpadDoc.destroy();
+  mode = "scratchpad";
+  call = 0;
+  const scratchpadCalls = inference.length;
+  const scratchpadRun = await send(path, viewerId, "POST", {
+    ...chatBody(),
+    threadId: viewerThread.thread.id,
+  });
+  assert.equal(scratchpadRun.status, 200, await scratchpadRun.clone().text());
+  assert(!(await scratchpadRun.text()).includes("RUN_ERROR"));
+  scratchpadSocket.close();
+  assert.equal(inference.length, scratchpadCalls + 2);
+  assert(
+    JSON.stringify(inference.at(-1)?.body).includes(scratchpadNotes),
+    "viewers' assistants read the scratchpad",
+  );
   const fileThread = threadHistorySchema.parse(
     await (
       await send(`${path}?threads=1`, userId, "POST", { kind: "create" })
@@ -1189,7 +1235,7 @@ try {
   assert.deepEqual(pageErrors, []);
   await context.close();
   console.info(
-    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, search, multi-edit, file create/rename/delete, read-only viewer tools, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
+    `AI assistant and metered git commit messages passed: authenticated Worker SSE, server file tools, search, multi-edit, file create/rename/delete, read-only viewer tools, scratchpad reads, collaborative edits, compile tool, metering every call, provider errors, default model, duplicate run rejection, Free denial, and desktop/mobile UI. Screenshots: ${screenshots}`,
   );
 } finally {
   for (const timer of streamingTimers) clearInterval(timer);
