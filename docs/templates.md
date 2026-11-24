@@ -38,13 +38,16 @@ Preview state is independently `queued`, `ready`, or `failed`. Review and copyin
 can proceed without an image. An approved template with a failed preview remains
 usable. A reviewer checks the source archive when an image is unavailable.
 
-Each preview attempt has its own compiler job ID. The gallery and detail page
-advance queued previews automatically. The minute cron is a fallback for pages
-nobody has open. Processing claims a one-minute database lease before compiler
-I/O. Updates compare the job ID and lease so stale attempts cannot replace newer
-work. Failed attempts can be retried by the owner or a reviewer after one minute,
-without changing the snapshot, URL, moderation, or publishing allowance. Attempts
-expire after one hour. Fixing the source still requires a new snapshot.
+Each preview attempt has its own compiler job ID. The detail page subscribes to
+`/api/templates/{id}/preview?events=1`, which starts the compile if needed,
+follows the compiler's project SSE stream, promotes the PNG (or records a
+failure), and pushes readiness to the client without polling. The minute cron
+is a fallback for pages nobody has open. Processing claims a one-minute database
+lease before compiler I/O. Updates compare the job ID and lease so stale
+attempts cannot replace newer work. Failed attempts can be retried by the owner
+or a reviewer after one minute, without changing the snapshot, URL, moderation,
+or publishing allowance. Attempts expire after one hour. Fixing the source still
+requires a new snapshot.
 
 Preview compiles use the Pro timeout and a separate compiler usage identity per
 snapshot, `template-preview:{templateId}`.

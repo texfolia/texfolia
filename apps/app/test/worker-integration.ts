@@ -51,7 +51,7 @@ export async function runWorkerIntegration({
       name: `${name}-test`,
       modules: true,
       script,
-      compatibilityDate: "2025-09-02",
+      compatibilityDate: "2026-10-30",
       compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
       durableObjects: {
         COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },

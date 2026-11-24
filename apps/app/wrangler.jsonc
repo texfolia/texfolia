@@ -1,7 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "texfolia-app-local",
-  "compatibility_date": "2025-09-02",
+  // Aligned with apps/compiler/wrangler.jsonc. Workers enables nodejs_compat
+  // by default from 2026-08-04 onwards; kept explicit here while compiler
+  // relies on the runtime default.
+  "compatibility_date": "2026-10-31",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/worker.ts",
   "r2_buckets": [

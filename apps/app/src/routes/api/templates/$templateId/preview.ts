@@ -2,7 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
-import { findTemplate } from "#/features/templates/server";
+import {
+  findTemplate,
+  streamTemplatePreview,
+} from "#/features/templates/server";
 
 export const Route = createFileRoute("/api/templates/$templateId/preview")({
   server: {
@@ -19,7 +22,16 @@ export const Route = createFileRoute("/api/templates/$templateId/preview")({
           userId: session?.user.id,
           reviewers: env.TEMPLATE_REVIEWER_IDS,
         });
-        if (!found?.previewKey)
+        if (!found) return new Response("Not found", { status: 404 });
+        if (new URL(request.url).searchParams.get("events") === "1")
+          return streamTemplatePreview({
+            db: context.db,
+            connectionString: env.HYPERDRIVE.connectionString,
+            bucket: env.SOURCES,
+            found,
+            signal: request.signal,
+          });
+        if (!found.previewKey)
           return new Response("Not found", { status: 404 });
         const object = await env.SOURCES.get(found.previewKey);
         if (!object) return new Response("Not found", { status: 404 });

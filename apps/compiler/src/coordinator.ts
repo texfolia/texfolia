@@ -101,6 +101,7 @@ export class ProjectCoordinatorCore {
     done: Promise<boolean>;
   } | null = null;
   private listeners = new Set<(snapshot: CoordinatorSnapshot) => void>();
+  private eventClosers = new Set<() => void>();
   private previews = new Map<
     string,
     (body: ReadableStream<Uint8Array>) => void
@@ -1029,16 +1030,26 @@ export class ProjectCoordinatorCore {
           const presence = this.options.engine.prewarm
             ? setInterval(report, 60_000)
             : undefined;
+          let closed = false;
           dispose = () => {
+            if (closed) return;
+            closed = true;
             clearInterval(ping);
             clearInterval(presence);
             this.listeners.delete(send);
+            this.eventClosers.delete(close);
             signal.removeEventListener("abort", close);
           };
           const close = () => {
+            if (closed) return;
             dispose();
-            controller.close();
+            try {
+              controller.close();
+            } catch {
+              // Consumer already cancelled the stream.
+            }
           };
+          this.eventClosers.add(close);
           this.listeners.add(send);
           send(this.snapshot());
           signal.addEventListener("abort", close, { once: true });
@@ -1058,6 +1069,7 @@ export class ProjectCoordinatorCore {
   }
 
   async close() {
+    for (const close of this.eventClosers) close();
     this.active?.controller.abort();
     await this.active?.done;
     this.discardPreview();
