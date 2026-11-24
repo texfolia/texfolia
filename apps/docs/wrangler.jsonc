@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "texfolia-docs-local",
+  "compatibility_date": "2025-09-02",
+  "assets": {
+    "directory": "./dist",
+  },
+  "env": {
+    "production": {
+      "name": "texfolia-docs",
+    },
+  },
+}

@@ -1,4 +1,6 @@
-# CI selection and caches
+---
+title: CI selection and caches
+---
 
 The CI workflow runs on pull requests and on every push to `main`. It keeps two
 jobs, `Checks` and `App database with plain Postgres`. Each job runs

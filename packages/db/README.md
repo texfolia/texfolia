@@ -31,14 +31,14 @@ for Neon.
 `bun run db:seed` runs this package's template CLI. It seeds the original templates
 in the local database configured in `packages/db/.env` or the shell and the
 web app's local R2 bucket. Run it after `db:push`; it does not apply the schema.
-See [Template lifecycle](../../docs/templates.md#seed-original-templates) for
+See [Template lifecycle](../../apps/docs/src/content/docs/templates.md#seed-original-templates) for
 seed behavior and remote seeding.
 
 Local development and CI use `db:push`. No generated migrations or
 snapshots are tracked yet. Generate and review the baseline only after the v1
 schema settles, immediately before the first production deploy. Production
 must use committed migrations. Follow the
-[Neon and Hyperdrive deployment guide](../../docs/database-deployment.md).
+[Neon and Hyperdrive deployment guide](../../apps/docs/src/content/docs/database-deployment.md).
 
 ## Change the schema
 
@@ -47,7 +47,7 @@ Generated Better Auth tables and relations are defined in `src/auth-schema.ts`.
 Both are exported through `@texfolia/db/schema`.
 NAT-287 adds independent preview state and account-free curated templates.
 Apply these schema changes with `bun run db:push`. See
-[Template lifecycle](../../docs/templates.md#schema-setup) for setup instructions
+[Template lifecycle](../../apps/docs/src/content/docs/templates.md#schema-setup) for setup instructions
 and the Drizzle seed command.
 
 The schema includes a collaboration room registry.
@@ -103,7 +103,7 @@ This check runs the app's database operations against Postgres. It verifies proj
 The Drizzle schema includes per-user settings, run records, and the durable
 request ledger. Billing records retain their original payer after account or
 project deletion. See
-[Configure the managed assistant](../../docs/ai-assistant.md) for reconciliation
+[Configure the managed assistant](../../apps/docs/src/content/docs/ai-assistant.md) for reconciliation
 and verification.
 
 ## Collaboration persistence

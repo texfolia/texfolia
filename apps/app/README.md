@@ -1,7 +1,7 @@
 # Product app
 
 TanStack Start runs the React workspace and authenticated API on Cloudflare Workers.
-Follow the [root setup guide](../../docs/local-development.md) to start the full local stack.
+Follow the [root setup guide](../docs/src/content/docs/local-development.md) to start the full local stack.
 From the repository root, `bun run --cwd apps/app build` builds the product app alone.
 
 ## Authentication
@@ -10,12 +10,12 @@ OAuth configuration in `.env.example` covers GitHub, Google, GitLab, and Microso
 Set credentials for the providers you use. The email sign-in flow uses the local
 Cloudflare email binding during development.
 
-See [Public auth abuse protection](../../docs/auth-abuse-protection.md) for the
+See [Public auth abuse protection](../docs/src/content/docs/auth-abuse-protection.md) for the
 enabled routes, CAPTCHA policy, rate limits, and verification commands.
 
 ## Projects
 
-See [Projects dashboard](../../docs/projects.md) for creation flows, private tags,
+See [Projects dashboard](../docs/src/content/docs/projects.md) for creation flows, private tags,
 client-side table behavior, and verification.
 
 Project CRUD, file-tree nodes, paths, metadata, search, and owner/organization
@@ -37,7 +37,7 @@ The catalog, snapshot, preview, review, and cleanup code lives in
 the project lock and R2 binding; the routes and create-from-template UI live under
 `src/routes`.
 
-See [Template lifecycle](../../docs/templates.md) for the design, original Drizzle
+See [Template lifecycle](../docs/src/content/docs/templates.md) for the design, original Drizzle
 seeds, schema setup, retention, and verification commands.
 
 ## Project source storage
@@ -51,11 +51,11 @@ checks, build invalidation, and collaboration cleanup live in `#/features/projec
 acknowledged source snapshot as a cached build while **Compile after saving** is
 on (the default). **Save without compiling** (Cmd/Ctrl+K S) only persists,
 **Save & compile** (Cmd/Ctrl+Shift+B) always compiles, and **Clean build**
-discards the cache. See [keyboard shortcuts](../../docs/settings.md#keyboard-shortcuts).
+discards the cache. See [keyboard shortcuts](../docs/src/content/docs/settings.md#keyboard-shortcuts).
 Uploads use the same storage and quota checks. Text uploads (including `.bib`)
 remain editable; binary sources can be downloaded, exported, and compiled.
 
-Source names and full paths follow the [project path policy](../../docs/source-paths.md).
+Source names and full paths follow the [project path policy](../docs/src/content/docs/source-paths.md).
 Creation and uploads check the assembled path before storage. Existing invalid
 paths appear in the Files sidebar under **Repair source paths**. Renaming keeps
 file contents and collaboration documents.
@@ -149,7 +149,7 @@ inputs, another user, or an older job without a digest returns a generic 409.
 Each retry rechecks session and project write access.
 
 Apply the schema with `bun run db:push` locally. For production, follow the
-[baseline migration setup](../../docs/database-deployment.md#prepare-the-baseline-at-launch).
+[baseline migration setup](../docs/src/content/docs/database-deployment.md#prepare-the-baseline-at-launch).
 Run the route's Postgres regression check with:
 
 ```sh
@@ -261,7 +261,7 @@ Apply the schema change before deploying the Worker. Local `bun run db:push`
 updates the constraint that allows text nodes to reference R2 objects.
 For a new database at launch, use the reviewed baseline. For an existing database,
 prepare and review an upgrade against its actual schema. Follow the
-[Neon and Hyperdrive deployment guide](../../docs/database-deployment.md).
+[Neon and Hyperdrive deployment guide](../docs/src/content/docs/database-deployment.md).
 
 Run from the repository root against an isolated, schema-initialized database:
 
@@ -332,7 +332,7 @@ Editor-owned linting uses the package's public `EditorView` API. Keeping syntax 
 or keyboard focus. In the editor, Settings opens as a dock panel. Theme selection
 edits a draft; Apply saves it, Save saves and closes, and Cancel discards it.
 Appearance is saved per account in this browser. Follow system uses GitHub Light
-and GitHub Dark. See [Themes](../../docs/themes.md) for storage and migration.
+and GitHub Dark. See [Themes](../docs/src/content/docs/themes.md) for storage and migration.
 
 Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the integration. Completion tests exercise the installed language extension together with project suggestions.
 
@@ -390,7 +390,7 @@ The production asset check verifies generated CSS and copied worker assets.
 ## Deploy to Cloudflare Workers
 
 Deployment remains deferred until the first production launch. Follow
-[Set up Neon and Hyperdrive](../../docs/database-deployment.md) to provision
+[Set up Neon and Hyperdrive](../docs/src/content/docs/database-deployment.md) to provision
 resources, review and apply migrations, configure secrets, and build for the
 intended environment. Use the repository's installed Wrangler version.
 
@@ -434,5 +434,5 @@ The assistant lives in [`#/features/ai`](src/features/ai/README.md). In it,
 assistant to project access, node operations, collaboration, Git, and the compile
 route. The `/api/ai/$projectId` route is under `src/routes`.
 
-See [Configure the managed assistant](../../docs/ai-assistant.md) for Gateway
+See [Configure the managed assistant](../docs/src/content/docs/ai-assistant.md) for Gateway
 credentials, the Stripe usage meter, spend controls, reconciliation, and tests.

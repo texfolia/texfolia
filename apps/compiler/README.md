@@ -6,7 +6,7 @@ The compiler currently runs only patched Tectonic. TeX Live and latexmk are not
 installed, and the app has no engine picker. Telemetry reports `tectonic` or
 `unknown`; older records that say `texlive` parse as `unknown`.
 
-See the [multiple compile engine plan](../../docs/compile-engines.md) for NAT-316's
+See the [multiple compile engine plan](../docs/src/content/docs/compile-engines.md) for NAT-316's
 proposed backend contracts, image options, and unresolved product decisions.
 
 ## Template previews
@@ -28,7 +28,7 @@ The web service copies the PNG into permanent template storage. It then calls
 A project whose latest submission requested a preview is temporary.
 Maintenance removes its state and objects one day after last activity, so a
 failed cleanup still expires. Other projects keep the 30-day retention. Pruning
-after each build skips preview images. See [Template lifecycle](../../docs/templates.md)
+after each build skips preview images. See [Template lifecycle](../docs/src/content/docs/templates.md)
 for publication, retry, permanent image storage, and deletion behavior.
 
 The compile image installs `poppler-utils`. After an opted-in compile, the engine
@@ -71,7 +71,7 @@ leased container. See [Container pool](docs/container-pool.md).
 ## Run locally
 
 From the repository root, configure the environment files described in the
-[root setup guide](../../docs/local-development.md), start Docker, and run:
+[root setup guide](../docs/src/content/docs/local-development.md), start Docker, and run:
 
 ```sh
 bun run dev:compiler

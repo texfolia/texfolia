@@ -1,10 +1,12 @@
-# Editor workspace
+---
+title: Editor workspace
+---
 
 The workspace has File, Edit and View menus above the dock, an Agents sidebar on
 the left, one switchable sidebar on the right, and a status bar below. Use the
 bottom-right icons or View menu to switch Files, Outline, Search, Git, Comments
 or Collaboration.
-Git actions stay in the Git view. Settings opens as a dialog with User and Project tabs. Changes use Apply, Save, and Cancel. Closing a dirty draft prompts before discarding. See [Settings](settings.md).
+Git actions stay in the Git view. Settings opens as a dialog with User and Project tabs. Changes use Apply, Save, and Cancel. Closing a dirty draft prompts before discarding. See [Settings](/settings/).
 
 The status bar shows compile state, Problems, compile logs, live collaborators,
 the git branch when a repository exists, and the active editor’s line and column.
@@ -124,7 +126,7 @@ permissions. Find in the Edit menu still searches only the active file.
 
 Comments lists review comment threads anchored to source ranges. Add one from the
 editor toolbar or context menu; commented ranges are highlighted and marked in the
-gutter. See [Review comments](project-controls.md#review-comments).
+gutter. See [Review comments](/project-controls/#review-comments).
 
 Chat history is a separate sidebar to the left of Agents, hidden by default.
 The bottom-left history button opens it without embedding a thread list above
@@ -137,8 +139,8 @@ Drag the dividers or use their arrow keys to resize. On narrow screens only one
 sidebar opens at a time, and PDFs follow the same tab placement as other files.
 Invalid layout data falls back to the default arrangement. Browser storage
 failure does not prevent editing. Chat history is stored on the server; see
-[the assistant guide](ai-assistant.md). Git is optional; see
-[Git integration](git-integration.md).
+[the assistant guide](/ai-assistant/). Git is optional; see
+[Git integration](/git-integration/).
 
 The app uses shadcn’s `base-nova` component style. Panel headers use small ghost
 buttons. Editor and PDF secondary tools live in an overflow menu to keep the

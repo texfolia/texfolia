@@ -2,7 +2,7 @@
 
 The managed LaTeX assistant: chat runs on Cloudflare AI Gateway through TanStack
 AI, the tools the model can call on a project, saved threads, agent skills, and
-the assistant panel. See [Configure the managed assistant](../../../../../docs/ai-assistant.md).
+the assistant panel. See [Configure the managed assistant](../../../../docs/src/content/docs/ai-assistant.md).
 
 | Entry point             | Contents                                                                                                                                                                                                                                                                                                                                                                                            |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
