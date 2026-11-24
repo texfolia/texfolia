@@ -31,7 +31,10 @@ export type PoolSettings = {
   claimTimeoutMs: number;
   /** How long an incremental compile waits for its own container. */
   affinityWaitMs: number;
-  /** Added to a compile's timeout before its lease is presumed abandoned. */
+  /**
+   * Added to a compile's timeout before its lease is presumed abandoned. Longer
+   * than everything else a compile may spend holding one.
+   */
   leaseMarginMs: number;
   /** The period over which misses and queue pressure are measured. */
   windowMs: number;
@@ -47,7 +50,7 @@ export function poolSettings(variables: unknown): PoolSettings {
     maxQueued: decoded.POOL_MAX_QUEUED,
     claimTimeoutMs: 60_000,
     affinityWaitMs: 2_000,
-    leaseMarginMs: 180_000,
+    leaseMarginMs: 240_000,
     windowMs: 60_000,
   };
 }

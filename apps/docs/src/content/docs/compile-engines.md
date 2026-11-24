@@ -61,8 +61,8 @@ Its cache placement and environment are Tectonic-specific.
 [main.go](../../../../compiler/engine/main.go) checks Tectonic at startup, and
 [handler.go](../../../../compiler/engine/handler.go) labels attempt timing as
 `tectonic`. The [Dockerfile](../../../../compiler/Dockerfile)
-builds patched Tectonic, warms its formats, and installs Poppler. It installs
-neither TeX Live nor latexmk.
+builds patched Tectonic and biber, warms formats and common packages, and installs
+Poppler. It installs neither TeX Live nor latexmk.
 
 Cache reuse spans several owners:
 

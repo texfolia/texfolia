@@ -3,6 +3,7 @@ import {
   Context,
   Deferred,
   Effect,
+  Fiber,
   Layer,
   Schedule,
   Schema,
@@ -16,6 +17,7 @@ import {
   recordDemand,
   retainedSize,
 } from "./autoscaler";
+import { Background } from "./background";
 import { PoolConfig } from "./config";
 import { Containers } from "./containers";
 import {
@@ -59,7 +61,8 @@ const PoolState = Schema.Struct({
   containers: Schema.Array(
     Schema.Struct({
       name: Schema.String,
-      status: Schema.Literals(["starting", "ready", "stopping"]),
+      // A draining container is stopped once the compiles it still runs end.
+      status: Schema.Literals(["starting", "ready", "draining", "stopping"]),
       slots: Schema.Array(SlotState),
     }),
   ),
@@ -81,6 +84,8 @@ type State = Mutable<typeof PoolState.Type>;
 type ContainerState = State["containers"][number];
 type Slot = ContainerState["slots"][number];
 export type PoolSnapshot = typeof PoolState.Type & { queued: number };
+
+const maxEnded = 1024;
 
 const decodeState = Schema.decodeUnknownSync(Schema.fromJsonString(PoolState));
 const encodeState = Schema.encodeSync(Schema.fromJsonString(PoolState));
@@ -113,11 +118,14 @@ export type PoolClient = {
   claim(request: ClaimRequest): Effect.Effect<Lease, ClaimError>;
   /**
    * Ends a lease or a wait. A reusable container is offered again immediately;
-   * any other container is replaced.
+   * any other container is replaced once nothing else runs in it.
    */
   release(id: string, options: { reusable: boolean }): Effect.Effect<void>;
-  /** The lease a compile holds, if it is running. */
-  locate(id: string): Effect.Effect<Lease | null>;
+  /**
+   * Ends a wait, or a claim that has yet to arrive. A compile that already holds
+   * a lease keeps it, and the caller must stop that run.
+   */
+  cancel(id: string): Effect.Effect<Lease | null>;
 };
 
 export class Pool extends Context.Service<Pool, PoolClient>()(
@@ -141,6 +149,7 @@ export class PoolManagerService extends Context.Service<
       const settings = yield* PoolConfig;
       const containers = yield* Containers;
       const store = yield* PoolStore;
+      const keepAlive = yield* Background;
       const scope = yield* Scope.Scope;
       const now = yield* Clock.currentTimeMillis;
       const saved = store.load();
@@ -155,8 +164,15 @@ export class PoolManagerService extends Context.Service<
           };
       const waiters: Waiter[] = [];
       let sequence = 0;
-      // IDs released before their claim arrived, such as an early cancellation.
+      // IDs ended before their claim arrived, such as by an early cancellation.
       const ended = new Set<string>();
+      const endEarly = (id: string) => {
+        ended.delete(id);
+        ended.add(id);
+        // The oldest has had the longest to meet its claim.
+        const [oldest] = ended;
+        if (ended.size > maxEnded && oldest !== undefined) ended.delete(oldest);
+      };
 
       // Every transition below is synchronous, so transitions never interleave.
       const persist = () => store.save(encodeState(state));
@@ -165,7 +181,11 @@ export class PoolManagerService extends Context.Service<
           container.slots.map((slot, index) => ({ container, slot, index })),
         );
       const demand = () => ({
-        activeLeases: slots().filter(({ slot }) => slot.lease).length,
+        // A draining container will serve nothing after its own leases.
+        activeLeases: slots().filter(
+          ({ container, slot }) =>
+            slot.lease && container.status !== "draining",
+        ).length,
         // A compile waiting for its own container cannot use a new one.
         queuedRequests: waiters.filter(
           ({ request }) => request.container === undefined,
@@ -288,9 +308,9 @@ export class PoolManagerService extends Context.Service<
           );
         });
 
+      // Takes a container out of use without ending the compiles it still runs.
       const retire = (container: ContainerState) => {
-        container.status = "stopping";
-        for (const slot of container.slots) slot.lease = null;
+        container.status = leased(container) ? "draining" : "stopping";
       };
 
       const startContainer = (name: string): Effect.Effect<void> =>
@@ -342,7 +362,11 @@ export class PoolManagerService extends Context.Service<
         );
 
       const background = (effect: Effect.Effect<void>) =>
-        Effect.forkIn(effect, scope).pipe(Effect.asVoid);
+        Effect.forkIn(effect, scope).pipe(
+          Effect.map((fiber) =>
+            keepAlive.run(Effect.asVoid(Fiber.await(fiber))),
+          ),
+        );
 
       const resize: Effect.Effect<void> = Effect.gen(function* () {
         const at = yield* Clock.currentTimeMillis;
@@ -363,7 +387,9 @@ export class PoolManagerService extends Context.Service<
           settings,
         );
         const running = () =>
-          state.containers.filter(({ status }) => status !== "stopping");
+          state.containers.filter(
+            ({ status }) => status === "starting" || status === "ready",
+          );
         const work: Effect.Effect<void>[] = [];
         while (
           running().length < desired &&
@@ -416,7 +442,9 @@ export class PoolManagerService extends Context.Service<
               ? Effect.void
               : Effect.suspend(() => {
                   dropWaiter(waiter);
-                  return release(waiter.request.id, { reusable: true });
+                  return findLease(waiter.request.id)
+                    ? release(waiter.request.id, { reusable: true })
+                    : Effect.void;
                 }),
           ),
         );
@@ -481,29 +509,27 @@ export class PoolManagerService extends Context.Service<
         );
       });
 
+      const endWait = (id: string) => {
+        const waiter = waiters.find((entry) => entry.request.id === id);
+        if (!waiter) return endEarly(id);
+        dropWaiter(waiter);
+        Deferred.doneUnsafe(
+          waiter.granted,
+          Effect.fail(new CompileCancelled()),
+        );
+      };
+
       const release = Effect.fnUntraced(function* (
         id: string,
         { reusable }: { reusable: boolean },
       ) {
         const at = yield* Clock.currentTimeMillis;
-        const waiter = waiters.find((entry) => entry.request.id === id);
-        if (waiter) {
-          dropWaiter(waiter);
-          Deferred.doneUnsafe(
-            waiter.granted,
-            Effect.fail(new CompileCancelled()),
-          );
-        }
         const found = findLease(id);
-        if (!found) {
-          if (ended.size >= 1024) ended.clear();
-          ended.add(id);
-          return;
-        }
+        if (!found) return endWait(id);
         recordNow(at);
         found.slot.lease = null;
         found.slot.lastUsed = at;
-        if (reusable) {
+        if (reusable && found.container.status === "ready") {
           dispatch(at);
           persist();
           return;
@@ -513,6 +539,24 @@ export class PoolManagerService extends Context.Service<
         yield* background(stopContainer(found.container.name));
         if (waiters.length) yield* resize;
       });
+
+      // One synchronous step, so a claim is cancelled or granted but never both.
+      const cancel = (id: string) =>
+        Effect.sync((): Lease | null => {
+          const found = findLease(id);
+          if (!found) {
+            endWait(id);
+            return null;
+          }
+          return {
+            id,
+            container: found.container.name,
+            slot: found.index,
+            generation: found.slot.generation,
+            outcome: "affinity",
+            waitMs: 0,
+          };
+        });
 
       const probe = (container: ContainerState) =>
         containers.probe(container.name).pipe(
@@ -534,18 +578,16 @@ export class PoolManagerService extends Context.Service<
 
       const maintain = Effect.gen(function* () {
         const at = yield* Clock.currentTimeMillis;
-        const abandoned = state.containers.filter(
-          (container) =>
-            container.status === "ready" &&
-            container.slots.some(
-              (slot) => slot.lease && slot.lease.expiresAt <= at,
-            ),
-        );
-        for (const container of abandoned) {
+        for (const container of state.containers) {
+          const abandoned = container.slots.filter(
+            (slot) => slot.lease && slot.lease.expiresAt <= at,
+          );
+          if (abandoned.length === 0) continue;
+          for (const slot of abandoned) slot.lease = null;
+          retire(container);
           yield* Effect.logWarning("Compile lease expired", {
             name: container.name,
           });
-          retire(container);
         }
         yield* resize;
         yield* Effect.forEach(
@@ -573,20 +615,7 @@ export class PoolManagerService extends Context.Service<
       return PoolManagerService.of({
         claim,
         release,
-        locate: (id) =>
-          Effect.sync(() => {
-            const found = findLease(id);
-            return found
-              ? {
-                  id,
-                  container: found.container.name,
-                  slot: found.index,
-                  generation: found.slot.generation,
-                  outcome: "affinity" as const,
-                  waitMs: 0,
-                }
-              : null;
-          }),
+        cancel,
         maintain,
         snapshot: Effect.sync(() => ({
           ...structuredClone(state),
@@ -606,7 +635,7 @@ export class PoolManagerService extends Context.Service<
       Pool.of({
         claim: manager.claim,
         release: manager.release,
-        locate: manager.locate,
+        cancel: manager.cancel,
       }),
     ),
   );

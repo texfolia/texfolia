@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,25 +36,37 @@ func (handler *engineHandler) Close() error {
 
 // cancellations remembers a cancel that overtakes its compile request.
 type cancellations struct {
-	mu  sync.Mutex
-	ids map[string]bool
+	mu    sync.Mutex
+	ids   map[string]bool
+	order []string
 }
+
+const maxCancellations = 1024
 
 func (c *cancellations) add(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.ids) >= 1024 {
-		clear(c.ids)
+	if c.ids[id] {
+		return
+	}
+	// The oldest has had the longest to meet its compile request.
+	if len(c.order) >= maxCancellations {
+		delete(c.ids, c.order[0])
+		c.order = c.order[1:]
 	}
 	c.ids[id] = true
+	c.order = append(c.order, id)
 }
 
 func (c *cancellations) take(id string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cancelled := c.ids[id]
+	if !c.ids[id] {
+		return false
+	}
 	delete(c.ids, id)
-	return cancelled
+	c.order = slices.DeleteFunc(c.order, func(other string) bool { return other == id })
+	return true
 }
 
 type compileHeaders struct {
@@ -102,7 +115,7 @@ func imageSize() *int64 {
 	return &size
 }
 
-func newHandler(maximum time.Duration, slotCount int) *engineHandler {
+func newHandler(maximum time.Duration, slotCount int, packages *packageCache) *engineHandler {
 	slots := make([]*slot, slotCount)
 	for index := range slots {
 		slots[index] = &slot{blobs: map[string]blob{}}
@@ -120,10 +133,18 @@ func newHandler(maximum time.Duration, slotCount int) *engineHandler {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
+		packages.trim()
+		free, err := packages.free()
+		status := "ready"
+		if err != nil || free < minFreeBytes {
+			status = "disk"
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
 		_ = json.NewEncoder(w).Encode(struct {
-			Status string `json:"status"`
-			BootID string `json:"bootId"`
-		}{"ready", bootID})
+			Status    string `json:"status"`
+			BootID    string `json:"bootId"`
+			FreeBytes int64  `json:"freeBytes"`
+		}{status, bootID, free})
 	})
 	mux.HandleFunc("DELETE /compilations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
@@ -142,6 +163,10 @@ func newHandler(maximum time.Duration, slotCount int) *engineHandler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /compile", func(w http.ResponseWriter, r *http.Request) {
+		// Each phase has its own limit. The response's starts when it does.
+		control := http.NewResponseController(w)
+		_ = control.SetReadDeadline(time.Now().Add(receiveTimeout))
+		_ = control.SetWriteDeadline(time.Time{})
 		headers, err := parseCompileHeaders(r.Header, slotCount, maximum)
 		if err != nil {
 			writeFailure(w, err)
@@ -171,7 +196,10 @@ func newHandler(maximum time.Duration, slotCount int) *engineHandler {
 			slog.New(slog.NewJSONHandler(os.Stdout, nil)).Info("compile_engine",
 				"event", "compile_engine", "telemetryVersion", 2, "compileId", headers.id, "timing", timing)
 		}()
+		release := packages.use()
 		result, preview, err := s.run(ctx, w, r, headers, &timing)
+		release()
+		_ = control.SetWriteDeadline(time.Now().Add(responseTimeout))
 		setTiming(w, &timing)
 		if err != nil {
 			if ctx.Err() != nil {

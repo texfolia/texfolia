@@ -137,13 +137,13 @@ func (s *slot) writeResult(w http.ResponseWriter, result *result, preview []byte
 	archive.copy("output.pdf", stat.Size(), result.pdf)
 	archive.flush()
 	name := filepath.Base(result.pdf.Name())
-	files, err := resultCache(result)
+	files, err := resultArtifacts(result)
 	if err != nil {
 		// The response has started; a truncated archive marks it as failed.
 		log.Printf("Reading compilation output failed: %v", err)
 		panic(http.ErrAbortHandler)
 	}
-	s.cache, s.cacheReady = files, true
+	s.cache, s.cacheReady = resultCache(files), true
 	paths := make([]string, 0, len(files))
 	for path := range files {
 		paths = append(paths, path)
@@ -158,7 +158,7 @@ func (s *slot) writeResult(w http.ResponseWriter, result *result, preview []byte
 		archive.write("artifacts/"+strconv.Itoa(index), files[path])
 	}
 	archive.flush()
-	if cache, err := packCache(files); err == nil {
+	if cache, err := packCache(s.cache); err == nil {
 		archive.write("cache.tar.zst", cache)
 	} else {
 		log.Printf("Packing the build cache failed: %v", fmt.Errorf("cache: %w", err))

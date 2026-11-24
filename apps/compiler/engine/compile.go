@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -62,6 +63,15 @@ func transcript(path string) (string, error) {
 	}
 	tail, err := io.ReadAll(io.LimitReader(file, maxLogBytes/2))
 	return string(head) + "\n…\n" + string(tail), err
+}
+
+func sameContent(source, output string) bool {
+	expected, err := os.ReadFile(source)
+	if err != nil {
+		return false
+	}
+	actual, err := os.ReadFile(output)
+	return err == nil && bytes.Equal(expected, actual)
 }
 
 func compile(ctx context.Context, p project, timeout time.Duration, timing *engineTiming, tempDir string) (_ *result, err error) {
@@ -144,7 +154,7 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 	if err = os.Mkdir(temporary, 0700); err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, "tectonic", "--untrusted", "--keep-logs", "--outdir", output, "./"+p.mainFile, "--keep-intermediates", "--synctex")
+	cmd := limitedCommand(ctx, "tectonic", "--untrusted", "--keep-logs", "--outdir", output, "./"+p.mainFile, "--keep-intermediates", "--synctex")
 	cmd.Dir = source
 	cmd.Env = []string{"TECTONIC_UNTRUSTED_MODE=1", "TMPDIR=" + temporary}
 	for _, key := range []string{"PATH", "HOME", "XDG_CACHE_HOME"} {
@@ -154,10 +164,9 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 	}
 	stdout, stderr := &limitedLog{}, &limitedLog{}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	cmd.WaitDelay = time.Second
 	timing.InputPrepMs = elapsedMs(prepStart)
 	compileStart := time.Now()
-	runErr := cmd.Run()
+	runErr := runLimited(cmd)
 	timing.CompileMs = elapsedMs(compileStart)
 	outputStart := time.Now()
 	defer func() { timing.OutputMs = elapsedMs(outputStart) }()
@@ -226,13 +235,19 @@ func compile(ctx context.Context, p project, timeout time.Duration, timing *engi
 		if !info.Mode().IsRegular() {
 			return errors.New("TeX produced a non-regular output file")
 		}
-		artifactBytes += info.Size()
-		if artifactBytes > maxArtifactBytes {
-			return &httpError{status: 413, message: "Build output exceeds 32 MiB"}
-		}
 		name, err := filepath.Rel(output, path)
 		if err != nil || !validPath(filepath.ToSlash(name)) {
 			return errors.New("TeX produced an invalid output path")
+		}
+		// Tectonic also writes out the sources it passed to biber. In a cache, such
+		// a copy would outlive the source.
+		blob := p.files[filepath.ToSlash(filepath.Join(filepath.Dir(p.mainFile), name))]
+		if blob != "" && sameContent(blob, path) {
+			return nil
+		}
+		artifactBytes += info.Size()
+		if artifactBytes > maxArtifactBytes {
+			return &httpError{status: 413, message: "Build output exceeds 32 MiB"}
 		}
 		artifacts = append(artifacts, filepath.ToSlash(name))
 		return nil

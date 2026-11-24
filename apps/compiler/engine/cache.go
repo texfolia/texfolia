@@ -47,6 +47,10 @@ func unpackCache(input io.Reader) (map[string][]byte, error) {
 		if header.Typeflag != tar.TypeReg || !validPath(header.Name) || header.Size < 0 || size > maxArtifactBytes || len(files) >= maxCacheFiles {
 			return nil, errors.New("invalid cache archive entry")
 		}
+		// Archives saved before these were left out still carry them.
+		if !cacheable(header.Name) {
+			continue
+		}
 		if _, exists := files[header.Name]; exists {
 			return nil, errors.New("duplicate cache archive entry")
 		}
@@ -104,7 +108,30 @@ func packCache(files map[string][]byte) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func resultCache(result *result) (map[string][]byte, error) {
+// TeX reads auxiliary files back. It only ever writes these, and a build that
+// fails early must not find a previous build's log.
+func cacheable(path string) bool {
+	for _, suffix := range []string{".log", ".synctex.gz", ".synctex", ".pdf"} {
+		if strings.HasSuffix(path, suffix) {
+			return false
+		}
+	}
+	return true
+}
+
+// resultCache is what the next compile starts from.
+func resultCache(artifacts map[string][]byte) map[string][]byte {
+	files := make(map[string][]byte, len(artifacts))
+	for path, content := range artifacts {
+		if cacheable(path) {
+			files[path] = content
+		}
+	}
+	return files
+}
+
+// resultArtifacts is everything TeX wrote, except for the PDF.
+func resultArtifacts(result *result) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	for _, path := range result.artifacts {
 		if path == filepath.Base(result.pdf.Name()) {

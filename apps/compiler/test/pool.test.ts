@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Fiber, Layer, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 
+import { Background } from "../src/background";
 import { PoolConfig, poolSettings, type PoolSettings } from "../src/config";
 import { Containers } from "../src/containers";
 import { ContainerError } from "../src/errors";
@@ -34,6 +35,7 @@ function harness(overrides: Partial<PoolSettings> = {}) {
     probeDelayMs: 0,
   };
   let saved: string | null = null;
+  const kept: Effect.Effect<void>[] = [];
   const containers = Containers.of({
     start: (name) =>
       Effect.gen(function* () {
@@ -60,6 +62,11 @@ function harness(overrides: Partial<PoolSettings> = {}) {
       Layer.mergeAll(
         Layer.succeed(PoolConfig, { ...poolSettings({}), ...overrides }),
         Layer.succeed(Containers, containers),
+        Layer.succeed(Background, {
+          run: (effect) => {
+            kept.push(effect);
+          },
+        }),
         Layer.succeed(PoolStore, {
           load: () => saved,
           save: (value) => {
@@ -69,7 +76,7 @@ function harness(overrides: Partial<PoolSettings> = {}) {
       ),
     ),
   );
-  return { platform, layer, saved: () => saved };
+  return { platform, layer, kept, saved: () => saved };
 }
 
 const run = <A, E>(
@@ -437,7 +444,7 @@ describe("claims", () => {
         yield* settle;
         expect((yield* pool.snapshot).queued).toBe(2);
         yield* Fiber.interrupt(interrupted);
-        yield* pool.release(input.id, { reusable: true });
+        expect(yield* pool.cancel(input.id)).toBeNull();
         expect((yield* Fiber.join(cancelled))._tag).toBe("CompileCancelled");
         expect((yield* pool.snapshot).queued).toBe(0);
         yield* pool.release(held.id, { reusable: true });
@@ -455,7 +462,7 @@ describe("claims", () => {
       Effect.gen(function* () {
         const pool = yield* PoolManagerService;
         const input = request("a");
-        yield* pool.release(input.id, { reusable: true });
+        expect(yield* pool.cancel(input.id)).toBeNull();
         expect((yield* Effect.flip(pool.claim(input)))._tag).toBe(
           "CompileCancelled",
         );
@@ -478,8 +485,78 @@ describe("claims", () => {
         expect((yield* Effect.flip(pool.claim(input)))._tag).toBe(
           "PoolUnavailable",
         );
-        expect(yield* pool.locate(input.id)).toMatchObject({ generation: 1 });
-        expect(yield* pool.locate("unknown")).toBeNull();
+      }),
+    );
+  });
+
+  test("a cancel leaves a lease to its compile and names the container to stop", async () => {
+    const test = harness();
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const held = yield* claimCold(request("a"));
+        expect(yield* pool.cancel(held.id)).toMatchObject({
+          container: held.container,
+          slot: held.slot,
+          generation: 1,
+        });
+        const [container] = (yield* pool.snapshot).containers;
+        expect(container?.slots[0]?.lease?.id).toBe(held.id);
+      }),
+    );
+  });
+
+  test("a cancel that meets a grant either prevents it or reports it", async () => {
+    const test = harness({ maxInstances: 1 });
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const held = yield* claimCold(request("a"));
+        const input = request("b");
+        const waiting = yield* Effect.forkChild(pool.claim(input));
+        yield* settle;
+        // Granted, but its claim has not yet been told.
+        yield* pool.release(held.id, { reusable: true });
+        expect(yield* pool.cancel(input.id)).toMatchObject({
+          container: held.container,
+        });
+        expect(yield* Fiber.join(waiting)).toMatchObject({ generation: 2 });
+      }),
+    );
+  });
+
+  test("early cancels are forgotten oldest first", async () => {
+    const test = harness();
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const inputs = Array.from({ length: 1025 }, () => request("a"));
+        for (const { id } of inputs) yield* pool.cancel(id);
+        for (const input of [inputs[1]!, inputs[1024]!])
+          expect((yield* Effect.flip(pool.claim(input)))._tag).toBe(
+            "CompileCancelled",
+          );
+        expect(yield* claimCold(inputs[0]!)).toMatchObject({ generation: 1 });
+      }),
+    );
+  });
+
+  test("a wait that ends on its own does not cancel its compile ID", async () => {
+    const test = harness();
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const held = yield* claimCold(request("a"));
+        const input = request("a", { container: held.container });
+        const waiting = yield* Effect.forkChild(Effect.flip(pool.claim(input)));
+        yield* TestClock.adjust("2 seconds");
+        expect((yield* Fiber.join(waiting))._tag).toBe("ResyncRequired");
+        yield* pool.release(held.id, { reusable: true });
+        expect(yield* pool.claim(input)).toMatchObject({ generation: 2 });
       }),
     );
   });
@@ -576,7 +653,7 @@ describe("failures", () => {
       Effect.gen(function* () {
         const pool = yield* PoolManagerService;
         const lease = yield* claimCold(request("a", { timeoutMs: 15_000 }));
-        yield* TestClock.adjust(194_000);
+        yield* TestClock.adjust(254_000);
         yield* pool.maintain;
         expect(test.platform.stopped).toEqual([]);
         yield* TestClock.adjust(1_000);
@@ -634,6 +711,113 @@ describe("failures", () => {
       }),
     );
   });
+});
+
+describe("several compiles in one container", () => {
+  const pair = Effect.gen(function* () {
+    const a = yield* claimCold(request("a"));
+    const pool = yield* PoolManagerService;
+    const b = yield* pool.claim(request("b", { timeoutMs: 300_000 }));
+    expect(b.container).toBe(a.container);
+    return { a, b };
+  });
+
+  test("a container is replaced only after its other compiles end", async () => {
+    const test = harness({ concurrency: 2, maxInstances: 2 });
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const { a, b } = yield* pair;
+        yield* pool.release(a.id, { reusable: false });
+        yield* pool.maintain;
+        expect(test.platform.stopped).toEqual([]);
+        expect((yield* pool.snapshot).containers[0]).toMatchObject({
+          status: "draining",
+          slots: [{ lease: null }, { lease: { id: b.id } }],
+        });
+        // Its free slot is never offered, even to its last caller.
+        expect(
+          (yield* Effect.flip(
+            pool.claim(request("a", { container: a.container })),
+          ))._tag,
+        ).toBe("ResyncRequired");
+        const next = yield* claimCold(request("a"));
+        expect(next.container).not.toBe(a.container);
+        yield* pool.release(b.id, { reusable: true });
+        yield* settle;
+        expect(test.platform.stopped).toEqual([a.container]);
+      }),
+    );
+    expect(test.platform.started).toHaveLength(2);
+  });
+
+  test("an abandoned lease does not end the compile beside it", async () => {
+    const test = harness({ concurrency: 2 });
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const { a, b } = yield* pair;
+        yield* TestClock.adjust("5 minutes");
+        yield* pool.maintain;
+        expect(test.platform.stopped).toEqual([]);
+        expect(yield* pool.cancel(a.id)).toBeNull();
+        expect(yield* pool.cancel(b.id)).toMatchObject({ id: b.id });
+        // Nor does it keep the container forever.
+        yield* TestClock.adjust("5 minutes");
+        yield* pool.maintain;
+        expect(test.platform.stopped).toEqual([a.container]);
+      }),
+    );
+  });
+
+  test("a new pool instance finishes draining", async () => {
+    const test = harness({ concurrency: 2 });
+    const { a, b } = await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        const leases = yield* pair;
+        yield* pool.release(leases.a.id, { reusable: false });
+        return leases;
+      }),
+    );
+    await run(
+      test,
+      Effect.gen(function* () {
+        const pool = yield* PoolManagerService;
+        yield* settle;
+        expect(test.platform.stopped).toEqual([]);
+        yield* pool.release(b.id, { reusable: true });
+        yield* settle;
+        expect(test.platform.stopped).toEqual([a.container]);
+      }),
+    );
+  });
+});
+
+test("starting and stopping a container keeps the pool's process running", async () => {
+  const test = harness();
+  await run(
+    test,
+    Effect.gen(function* () {
+      const pool = yield* PoolManagerService;
+      const claim = yield* Effect.forkChild(pool.claim(request("a")));
+      yield* settle;
+      expect(test.kept).toHaveLength(1);
+      const starting = yield* Effect.forkChild(test.kept[0]!);
+      yield* settle;
+      expect(starting.pollUnsafe()).toBeUndefined();
+      yield* TestClock.adjust("1 second");
+      yield* Fiber.join(starting);
+      const lease = yield* Fiber.join(claim);
+      yield* pool.release(lease.id, { reusable: false });
+      expect(test.kept).toHaveLength(2);
+      yield* test.kept[1]!;
+      expect(test.platform.stopped).toEqual([lease.container]);
+    }),
+  );
 });
 
 test("a new pool instance keeps leases and finishes interrupted starts and stops", async () => {
