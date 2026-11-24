@@ -36,6 +36,8 @@ export class CollaborativeDocuments {
     private options: Pick<FileOptions, "projectId" | "userId"> & {
       /** How long a released document stays connected, so reopening is cheap. */
       closeDelayMs?: number;
+      /** False when no document was ever cached without an unsynced marker. */
+      recoverUnmarked?: boolean;
       onChange: (id: string, value: string, local: boolean | undefined) => void;
       onSaved: (id: string, saved: Saved, file: CollaborativeFile) => void;
       /** Called before a document closes, while its text can still be read. */
@@ -210,6 +212,7 @@ export class CollaborativeDocuments {
         this.recovering.add(id);
         this.open(id);
       }
+    if (this.options.recoverUnmarked === false) return;
     try {
       const unmarked = await unmarkedDocuments(this.options);
       if (this.destroyed) return;

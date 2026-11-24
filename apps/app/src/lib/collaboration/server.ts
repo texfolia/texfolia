@@ -3,6 +3,7 @@
 // cleanup of deleted sources. The Durable Object itself is in `./room`.
 export {
   collaborationAccess,
+  scratchpadAccess,
   type CollaborationLock,
   type SourceNode,
 } from "./sources";

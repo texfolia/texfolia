@@ -188,6 +188,21 @@ export default {
         await db.$client.end();
       }
     }
+    if (url.pathname.startsWith("/scratchpad/")) {
+      // The RPC behind the assistant's read_scratchpad tool.
+      const projectId = url.pathname.split("/")[2] ?? "";
+      const body: Record<string, string> = await request.json();
+      try {
+        return new Response(
+          await env.COLLABORATION.getByName(projectId).readScratchpad({
+            projectId,
+            userId: body.userId ?? "",
+          }),
+        );
+      } catch {
+        return new Response("Not found", { status: 404 });
+      }
+    }
     if (url.pathname.startsWith("/usage/"))
       return Response.json(
         await (

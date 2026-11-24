@@ -8,6 +8,7 @@ import {
   IconListTree,
   IconLoader2,
   IconMessage,
+  IconNotes,
   IconPlayerPlay,
   IconSearch,
   IconTimeline,
@@ -50,6 +51,8 @@ export function WorkspaceStatusBar({
   words,
   onRevealWords,
   git,
+  scratchpadDisabled,
+  onScratchpad,
   location,
   cursor,
 }: {
@@ -64,6 +67,8 @@ export function WorkspaceStatusBar({
   words: WordCount | undefined;
   onRevealWords: (path: string, line: number) => void;
   git: GitBranchState;
+  scratchpadDisabled: boolean;
+  onScratchpad: () => void;
   /** The active tab's path. */
   location: string;
   cursor: { line: number; column: number } | undefined;
@@ -143,6 +148,17 @@ export function WorkspaceStatusBar({
           onChrome({ rightOpen: true, rightView: "collaboration" })
         }
       />
+      <Button
+        variant="ghost"
+        size="xs"
+        aria-label="Open scratchpad"
+        title="Scratchpad: shared project notes"
+        disabled={scratchpadDisabled}
+        onClick={onScratchpad}
+      >
+        <IconNotes />
+        <span className="max-sm:hidden">Scratchpad</span>
+      </Button>
       {(git.kind === "unavailable" || git.name) && (
         <Button
           variant="ghost"

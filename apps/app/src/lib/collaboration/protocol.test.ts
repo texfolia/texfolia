@@ -98,6 +98,13 @@ describe("collaboration protocol", () => {
         objectKey: "key",
         updatedAt: 1,
       },
+      {
+        type: "saved",
+        id: crypto.randomUUID(),
+        value: "notes",
+        objectKey: null,
+        updatedAt: 1,
+      },
       { type: "error", message: "nope" },
       { type: "people", people: [{ name: "Ada", color: "#123456" }] },
     ] satisfies ServerMessage[])

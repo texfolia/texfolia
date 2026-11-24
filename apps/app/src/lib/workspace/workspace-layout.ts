@@ -1,6 +1,8 @@
 import type { DockviewApi, SerializedDockview } from "dockview-react";
 import { z } from "zod";
 
+import { scratchpadId } from "#/lib/collaboration";
+
 export const sidebarViewSchema = z.enum([
   "files",
   "outline",
@@ -72,6 +74,11 @@ export function writeWorkspaceLayout(
   }
 }
 
+/** Whether a dock component edits text, rather than previewing something. */
+export function isEditorComponent(component: string) {
+  return component === "editor" || component === "scratchpad";
+}
+
 export function restoreWorkspaceDock(
   dock: DockviewApi,
   raw: unknown,
@@ -93,6 +100,7 @@ export function restoreWorkspaceDock(
             "editor",
             "generated",
             "markdown",
+            "scratchpad",
             "problems",
           ]),
           params: z.record(z.string(), z.unknown()).optional(),
@@ -127,16 +135,21 @@ export function restoreWorkspaceDock(
     }
     if (panel.contentComponent === "markdown") {
       if (
-        !panel.id.startsWith("markdown:") ||
-        !nodes.some(
-          (node) =>
-            node.id === panel.id.slice(9) &&
-            node.kind === "text" &&
-            /\.(md|markdown)$/i.test(node.name),
-        )
+        panel.id !== `markdown:${scratchpadId}` &&
+        (!panel.id.startsWith("markdown:") ||
+          !nodes.some(
+            (node) =>
+              node.id === panel.id.slice(9) &&
+              node.kind === "text" &&
+              /\.(md|markdown)$/i.test(node.name),
+          ))
       )
         return false;
       panel.params = { source: "" };
+    }
+    if (panel.contentComponent === "scratchpad") {
+      if (panel.id !== scratchpadId) return false;
+      panel.params = {};
     }
     if (
       panel.contentComponent === "problems" &&

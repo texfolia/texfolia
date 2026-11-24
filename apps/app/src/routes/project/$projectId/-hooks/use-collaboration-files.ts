@@ -25,6 +25,7 @@ export function useCollaborationFiles({
   ready,
   nodes,
   deleted,
+  recoverUnmarked,
   onSaved,
   onChange,
   onClose,
@@ -33,8 +34,9 @@ export function useCollaborationFiles({
   userId: string;
   canWrite: boolean;
   ready: boolean;
-  nodes: ProjectNode[];
+  nodes: readonly Pick<ProjectNode, "id" | "kind">[];
   deleted: ReadonlySet<string>;
+  recoverUnmarked?: Options["recoverUnmarked"];
   onSaved: Options["onSaved"];
   /** Called for every document change; `local` is true for this tab's edits. */
   onChange: Options["onChange"];
@@ -54,6 +56,7 @@ export function useCollaborationFiles({
       new CollaborativeDocuments({
         projectId,
         userId,
+        recoverUnmarked,
         onSaved: (...args) => saved(...args),
         onChange: (...args) => changed(...args),
         onClose: (...args) => closed(...args),

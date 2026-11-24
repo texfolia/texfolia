@@ -45,7 +45,16 @@ type EditorProps = {
   readOnly?: boolean;
   defaultValue?: string;
   savedValue?: string;
+  /** Saves itself, so closing the page needs no warning here. */
+  autosaved?: boolean;
   filename?: string;
+  /** Replaces the file name and wording of a document that is not a file. */
+  labels?: {
+    title: string;
+    region: string;
+    source: string;
+    placeholder: string;
+  };
   onChange?: (value: string) => void;
   onCreateEditor?: (view: EditorView) => void;
   onOpenPreview?: () => void;
@@ -87,7 +96,9 @@ export function Editor({
   readOnly = false,
   defaultValue = "",
   savedValue,
+  autosaved = false,
   filename = "main.tex",
+  labels,
   onChange,
   onCreateEditor,
   onOpenPreview,
@@ -185,13 +196,13 @@ export function Editor({
   useEffect(() => jumpArrived(), [jump]);
 
   useEffect(() => {
-    if (!modified) return;
+    if (!modified || autosaved) return;
     const warn = (event: BeforeUnloadEvent) => {
       if (!documentCachingStopped()) event.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [modified]);
+  }, [modified, autosaved]);
 
   const { commenting, commentExtension, addComment } = useEditorComments({
     editor,
@@ -283,11 +294,11 @@ export function Editor({
         render={<div />}
         role="region"
         ref={container}
-        aria-label="Source editor"
+        aria-label={labels?.region ?? "Source editor"}
         className="bg-background flex h-full min-h-0 min-w-0 flex-col"
       >
         <EditorToolbar
-          title={name}
+          title={labels?.title ?? name}
           isMarkdown={isMarkdown}
           isLatex={isLatex}
           canFormat={canFormat}
@@ -444,9 +455,14 @@ export function Editor({
           height="100%"
           theme={theme.extension}
           placeholder={
-            isMarkdown ? "Write your Markdown here…" : "Write your LaTeX here…"
+            labels?.placeholder ??
+            (isMarkdown
+              ? "Write your Markdown here…"
+              : "Write your LaTeX here…")
           }
-          aria-label={isMarkdown ? "Markdown source" : "LaTeX source"}
+          aria-label={
+            labels?.source ?? (isMarkdown ? "Markdown source" : "LaTeX source")
+          }
           className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
         />
       </ContextMenuTrigger>

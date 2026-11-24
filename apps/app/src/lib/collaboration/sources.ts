@@ -16,9 +16,11 @@ import {
 
 // Locks the project row and checks access, throwing to deny. The app owns which
 // grants apply, such as collaborators and share links.
-export type CollaborationLock = (
-  request: ProjectAccessRequest,
-) => Promise<{ canWrite: boolean }>;
+export type CollaborationLock = (request: ProjectAccessRequest) => Promise<{
+  canWrite: boolean;
+  /** Set only for share-link principals. */
+  shareScope: "project" | "pdf" | null;
+}>;
 
 export async function collaborationAccess(
   db: Db,
@@ -49,6 +51,31 @@ export async function collaborationAccess(
         .values({ projectId })
         .onConflictDoNothing();
     return { node, canWrite: access.canWrite };
+  });
+}
+
+// The scratchpad is internal to people with their own access to the project, so
+// share links of either scope cannot open it.
+export async function scratchpadAccess(
+  db: Db,
+  projectId: string,
+  userId: string,
+  options: { lock: CollaborationLock; register?: boolean },
+) {
+  return db.transaction(async (tx) => {
+    const { canWrite, shareScope } = await options.lock({
+      tx,
+      projectId,
+      userId,
+      access: "read",
+    });
+    if (shareScope !== null) throw new Error("File not found");
+    if (options.register)
+      await tx
+        .insert(projectCollaboration)
+        .values({ projectId })
+        .onConflictDoNothing();
+    return { canWrite };
   });
 }
 

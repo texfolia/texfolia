@@ -15,6 +15,7 @@ const workspace: AssistantWorkspace = {
   renameNode: unused,
   deleteNode: unused,
   saveSource: unused,
+  readScratchpad: unused,
   gitAction: unused,
   compile: { POST: unused, GET: unused },
 };
@@ -40,6 +41,7 @@ const readOnly = [
   "list_skills",
   "read_compile_logs",
   "read_file",
+  "read_scratchpad",
   "search_project",
 ];
 

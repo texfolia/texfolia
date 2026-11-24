@@ -128,6 +128,11 @@ Comments lists review comment threads anchored to source ranges. Add one from th
 editor toolbar or context menu; commented ranges are highlighted and marked in the
 gutter. See [Review comments](/project-controls/#review-comments).
 
+**Scratchpad** in the status bar or View menu opens the project's shared Markdown
+notes as a tab. It edits like a Markdown file, with live cursors and the same
+preview (Mod+Shift+V), and saves itself. See
+[Scratchpad](/project-controls/#scratchpad).
+
 Chat history is a separate sidebar to the left of Agents, hidden by default.
 The bottom-left history button opens it without embedding a thread list above
 the conversation. History and Agents can be resized independently.

@@ -1205,6 +1205,84 @@ try {
     0,
   );
   await reader.keyboard.press("Escape");
+
+  // The scratchpad is its own tab, outside the project's files. The owner
+  // edits it while the reader, now a viewer, follows along.
+  const scratchpadText = (page: Page) =>
+    page
+      .getByRole("region", { name: "Scratchpad editor", exact: true })
+      .locator(".cm-content");
+  const scratchpadTab = (page: Page, name: string) =>
+    page.getByRole("tab", { name, exact: true });
+  assert(!sockets.has("scratchpad"), "An unopened scratchpad never connects");
+  for (const page of [owner, reader])
+    await page
+      .getByRole("button", { name: "Open scratchpad", exact: true })
+      .click();
+  await scratchpadTab(owner, "Scratchpad").waitFor();
+  await scratchpadText(owner).click();
+  await owner.keyboard.insertText("# Shared plan\n\n<b id=raw>raw</b>\n");
+  await scratchpadText(reader)
+    .getByText("# Shared plan", { exact: true })
+    .waitFor();
+  assert.equal(
+    await scratchpadText(reader).getAttribute("contenteditable"),
+    "false",
+    "Viewers cannot edit the scratchpad",
+  );
+  await reader.locator(".cm-ySelectionCaret").first().waitFor();
+  assert.equal(
+    await owner
+      .getByRole("region", { name: "Scratchpad editor", exact: true })
+      .getByRole("button", { name: "Add comment", exact: true })
+      .count(),
+    0,
+    "Review comments stay on project files",
+  );
+  await owner.keyboard.press("ControlOrMeta+Shift+V");
+  const scratchpadPreview = owner.getByRole("region", {
+    name: "Markdown preview",
+    exact: true,
+  });
+  await scratchpadPreview
+    .getByRole("heading", { name: "Shared plan", exact: true })
+    .waitFor();
+  assert.equal(await scratchpadPreview.locator("#raw").count(), 0);
+  await capture(owner, "scratchpad-desktop");
+  await scratchpadText(owner).click();
+  await owner.keyboard.press("ControlOrMeta+End");
+  await owner.keyboard.insertText("\n## Decisions\n");
+  await scratchpadPreview
+    .getByRole("heading", { name: "Decisions", exact: true })
+    .waitFor();
+  assert.equal(
+    await db.query.projectNode.findFirst({
+      where: {
+        projectId: project.id,
+        name: { in: ["Scratchpad", "scratchpad", "scratchpad.md"] },
+      },
+    }),
+    undefined,
+    "The scratchpad is not a project file",
+  );
+  for (const name of ["Preview: Scratchpad", "Scratchpad"])
+    await scratchpadTab(owner, name)
+      .getByRole("button", { name: "Close tab" })
+      .click();
+  await eventually(
+    () => sockets.get("scratchpad") === 0,
+    "Closing the scratchpad closes its collaboration socket",
+  );
+  await workspaceMenu(owner, "View", "Scratchpad");
+  await scratchpadText(owner).getByText("## Decisions").waitFor();
+  await owner.reload();
+  await scratchpadText(owner).getByText("## Decisions").waitFor();
+  for (const page of [owner, reader])
+    await scratchpadTab(page, "Scratchpad")
+      .getByRole("button", { name: "Close tab" })
+      .click();
+  console.info("Scratchpad editing, preview, viewer access, and reload passed");
+  await sidebarView(owner, "collaboration");
   await owner
     .getByRole("button", { name: "Remove Emmy Reader", exact: true })
     .focus();

@@ -2,6 +2,13 @@ import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import { z } from "zod";
 
+/**
+ * The document ID of a project's scratchpad: shared Markdown notes that are not
+ * a file. Every other document is a text file, identified by its node.
+ */
+export const scratchpadId = "scratchpad";
+export const documentIdSchema = z.union([z.uuid(), z.literal(scratchpadId)]);
+
 export const maxCollaborationBytes = 20 * 1024 * 1024;
 const maxAwarenessBytes = 6144;
 const maxControlLength = 1024;
@@ -37,7 +44,8 @@ const serverControlSchema = z.discriminatedUnion("type", [
     type: z.literal("saved"),
     id: z.uuid(),
     value: z.string(),
-    objectKey: z.string(),
+    // Null for the scratchpad, which is saved in the room.
+    objectKey: z.string().nullable(),
     updatedAt: z.number(),
   }),
   z.object({

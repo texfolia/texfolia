@@ -6,6 +6,7 @@ import { SidebarProvider } from "@texfolia/ui/sidebar";
 import { cn } from "cn";
 import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
 import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -18,6 +19,7 @@ import { SettingsDialog } from "#/components/settings-dialog";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useSyncTex } from "#/hooks/use-synctex";
+import { scratchpadId } from "#/lib/collaboration";
 import { entryAppendix } from "#/lib/editor/latex/bibtex";
 import { latexCompletion } from "#/lib/editor/latex/completion";
 import { projectOutline } from "#/lib/editor/latex/outline";
@@ -37,8 +39,9 @@ import {
 
 import { useCollaborationFiles } from "../-hooks/use-collaboration-files";
 import { useCompilation } from "../-hooks/use-compilation";
-import { useDockPanels } from "../-hooks/use-dock-panels";
+import { scratchpadTitle, useDockPanels } from "../-hooks/use-dock-panels";
 import { useSavedSources } from "../-hooks/use-saved-sources";
+import { useScratchpad } from "../-hooks/use-scratchpad";
 import { sourceDraftsKey, useSourceSave } from "../-hooks/use-source-save";
 import { useWorkspaceChrome } from "../-hooks/use-workspace-chrome";
 import { useWorkspaceProblems } from "../-hooks/use-workspace-problems";
@@ -166,8 +169,20 @@ export function ProjectWorkspace({
     refreshSaved: savedSources.refresh,
     refreshTitle: panels.refreshTitle,
   });
+  const scratchpad = useScratchpad({
+    projectId,
+    userId,
+    canWrite,
+    ready,
+    onChange: panels.showScratchpad,
+  });
   // Drafts are recovered into live documents.
   const { hold } = collaboration;
+  const { hold: holdScratchpad } = scratchpad;
+  const holdDocument = useCallback(
+    (id: string) => (id === scratchpadId ? holdScratchpad(id) : hold(id)),
+    [hold, holdScratchpad],
+  );
   const { recovery } = sources;
   useEffect(() => {
     const releases = Object.keys(recovery).map(hold);
@@ -371,7 +386,8 @@ export function ProjectWorkspace({
     <WorkspaceProvider
       value={{
         collaboration: collaboration.snapshot,
-        holdDocument: hold,
+        scratchpad: scratchpad.file,
+        holdDocument,
         editDocument: (id, run) => {
           if (!writable)
             return Promise.reject(
@@ -437,9 +453,12 @@ export function ProjectWorkspace({
           saving={sources.saving}
           compiling={compilation.compiling}
           compileAvailable={!!main}
-          editorAvailable={nodes.some(
-            (node) => node.id === activeId && node.kind === "text",
-          )}
+          editorAvailable={
+            activeId === scratchpadId ||
+            nodes.some((node) => node.id === activeId && node.kind === "text")
+          }
+          scratchpadDisabled={!ready}
+          onScratchpad={panels.openScratchpad}
           compileOnSave={compileSettings.onSave}
           onSave={save}
           onSaveOnly={saveOnly}
@@ -590,12 +609,16 @@ export function ProjectWorkspace({
           words={main ? result.words : undefined}
           onRevealWords={(path, line) => panels.reveal(path, line)}
           git={git.state}
+          scratchpadDisabled={!ready}
+          onScratchpad={panels.openScratchpad}
           location={
-            activeId?.startsWith("out:")
-              ? `out/${activeId.slice(4)}`
-              : activeId
-                ? (paths.get(activeId) ?? "")
-                : "LaTeX workspace"
+            activeId === scratchpadId
+              ? scratchpadTitle
+              : activeId?.startsWith("out:")
+                ? `out/${activeId.slice(4)}`
+                : activeId
+                  ? (paths.get(activeId) ?? "")
+                  : "LaTeX workspace"
           }
           cursor={panels.cursor}
         />
