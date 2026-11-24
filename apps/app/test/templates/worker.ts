@@ -14,15 +14,9 @@ import { seedTemplates } from "@texfolia/db/seed-templates";
 import { templateStarters } from "@texfolia/db/template-starters";
 import { eq, inArray, isNull } from "drizzle-orm";
 
-import { encodeSource } from "#/features/storage";
-import {
-  type SourceBucket,
-  sweepProjectSources,
-} from "#/features/storage/server";
-import {
-  publishTemplateSchema,
-  templateSnapshotSchema,
-} from "#/features/templates";
+import { encodeSource } from "#/lib/storage";
+import { type SourceBucket, sweepProjectSources } from "#/lib/storage/server";
+import { publishTemplateSchema, templateSnapshotSchema } from "#/lib/templates";
 import {
   collectTemplateObjects,
   findTemplate,
@@ -36,27 +30,27 @@ import {
   reviewTemplate,
   templateArchive,
   templateReviewQueue,
-} from "#/features/templates/server";
+} from "#/lib/templates/server";
 
-import { createProjectNode } from "../../src/features/projects/project-node.server";
+import { createProjectNode } from "../../src/lib/projects/project-node.server";
 import {
   collectProjectSources,
   saveProjectSource,
-} from "../../src/features/projects/project-source.server";
+} from "../../src/lib/projects/project-source.server";
 import {
   createProject,
   deleteTrashedProject,
   getProject,
   getProjects,
   trashProject,
-} from "../../src/features/projects/project.server";
-import { lockProject } from "../../src/features/sharing/project-access.server";
+} from "../../src/lib/projects/project.server";
+import { lockProject } from "../../src/lib/sharing/project-access.server";
 
 const publishTemplate = (
   options: Omit<Parameters<typeof publishTemplateSnapshot>[0], "lock">,
 ) => publishTemplateSnapshot({ ...options, lock: lockProject });
 
-export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
 
 export default {
   async fetch(_request: Request, env: Env) {

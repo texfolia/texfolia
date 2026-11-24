@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 
-import type { ShortcutAction } from "#/features/shortcuts/shortcuts";
+import type { ShortcutAction } from "#/lib/shortcuts/shortcuts";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 
 type WorkspaceShortcut = Extract<

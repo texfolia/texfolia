@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-import { editorTheme } from "#/features/editor/themes/theme-editor";
+import { editorTheme } from "#/lib/editor/themes/theme-editor";
 import {
   type Appearance,
   appearanceStorageKey,
@@ -19,8 +19,8 @@ import {
   migrateAppearance,
   resolveTheme,
   selectedTheme,
-} from "#/features/editor/themes/themes";
-import { appearanceSnapshot } from "#/features/theme/theme-bootstrap";
+} from "#/lib/editor/themes/themes";
+import { appearanceSnapshot } from "#/lib/theme/theme-bootstrap";
 
 function readAppearance(userId: string): {
   appearance: Appearance;

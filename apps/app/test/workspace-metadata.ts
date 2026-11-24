@@ -22,13 +22,10 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 import { z } from "zod";
 
-import { compileDeltaSchema, hashSource } from "#/features/compile";
-import {
-  projectMetadataSchema,
-  projectMetadataVersion,
-} from "#/features/projects";
+import { compileDeltaSchema, hashSource } from "#/lib/compile";
+import { projectMetadataSchema, projectMetadataVersion } from "#/lib/projects";
 
-import { createProject } from "../src/features/projects/project.server";
+import { createProject } from "../src/lib/projects/project.server";
 
 declare global {
   interface Window {

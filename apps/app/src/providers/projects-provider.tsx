@@ -5,13 +5,13 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { projectNameSchema } from "#/features/projects";
+import { projectNameSchema } from "#/lib/projects";
 import {
   createProject,
   getProjects,
   trashProject,
   type Project,
-} from "#/features/projects/project.functions";
+} from "#/lib/projects/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
 
 type ProjectsPage = { projects: Project[]; nextCursor: string | null };

@@ -13,7 +13,7 @@ import {
 } from "@texfolia/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
 
-import type { Project } from "#/features/projects/project.functions";
+import type { Project } from "#/lib/projects/project.functions";
 
 import { ProjectActions } from "./project-actions";
 import type { Features } from "./project-table-features";

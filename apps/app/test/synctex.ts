@@ -6,13 +6,10 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "#/features/collaboration";
-import { hashSource } from "#/features/compile";
+import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
+import { hashSource } from "#/lib/compile";
 
-import type { ProjectDetails } from "../src/features/projects/project.functions";
+import type { ProjectDetails } from "../src/lib/projects/project.functions";
 
 const fixture = new URL("./fixtures/synctex/", import.meta.url);
 const pdf = await Bun.file(new URL("main.pdf", fixture)).arrayBuffer();
@@ -317,11 +314,11 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
-      "#/features/projects/project.functions": rpc,
-      "#/features/projects/project-node.functions": rpc,
-      "#/features/projects/project-source.functions": rpc,
-      "#/features/git/git.functions": rpc,
-      "#/features/sharing/project-sharing.functions": rpc,
+      "#/lib/projects/project.functions": rpc,
+      "#/lib/projects/project-node.functions": rpc,
+      "#/lib/projects/project-source.functions": rpc,
+      "#/lib/git/git.functions": rpc,
+      "#/lib/sharing/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },

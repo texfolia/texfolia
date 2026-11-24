@@ -40,9 +40,9 @@ import {
 } from "@texfolia/ui/sidebar";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 
-import { renamedProjectNodes } from "#/features/projects";
-import type { ProjectNode } from "#/features/projects/project.functions";
-import { droppedEntries } from "#/features/storage/browser";
+import { renamedProjectNodes } from "#/lib/projects";
+import type { ProjectNode } from "#/lib/projects/project.functions";
+import { droppedEntries } from "#/lib/storage/browser";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 import { ProjectNodeActions } from "./project-node-actions";

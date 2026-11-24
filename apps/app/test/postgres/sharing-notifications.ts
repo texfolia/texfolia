@@ -4,16 +4,16 @@ import type { Db } from "@texfolia/db";
 import { user } from "@texfolia/db/schema";
 import { inArray } from "drizzle-orm";
 
-import type { EmailMessage } from "../../src/features/email";
-import { createProject } from "../../src/features/projects/project.server";
+import type { EmailMessage } from "../../src/lib/email";
+import { createProject } from "../../src/lib/projects/project.server";
 import {
   createShareLink,
   listShareLinks,
-} from "../../src/features/sharing/project-share-links.server";
+} from "../../src/lib/sharing/project-share-links.server";
 import {
   grantProjectAccess,
   revokeProjectAccess,
-} from "../../src/features/sharing/project-sharing.server";
+} from "../../src/lib/sharing/project-sharing.server";
 
 const baseURL = "https://app.texfolia.com";
 

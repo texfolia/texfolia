@@ -1,18 +1,18 @@
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { type RefObject, useEffect, useMemo, useRef } from "react";
 
-import type { CollaborativeFile } from "#/features/collaboration/browser";
+import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import {
   type CommentAnchor,
   createCommentAnchor,
   resolveCommentAnchor,
-} from "#/features/comments/anchor";
+} from "#/lib/comments/anchor";
 import {
   commentRanges,
   type CommentRange,
   setCommentRanges,
-} from "#/features/comments/editor";
-import { commentQuote } from "#/features/comments/project-comments.schema";
+} from "#/lib/comments/editor";
+import { commentQuote } from "#/lib/comments/project-comments.schema";
 
 export type EditorComments = {
   threads: (CommentAnchor & { id: string })[];

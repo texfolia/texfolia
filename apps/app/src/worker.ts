@@ -1,21 +1,21 @@
 import handler from "@tanstack/react-start/server-entry";
 import { createDb } from "@texfolia/db";
 
-import { gatewayRequestCost } from "#/features/ai/gateway";
-import { reconcileAiUsage } from "#/features/billing/server";
-import { collectGitObjects } from "#/features/git/server";
-import { sweepProjectSources } from "#/features/storage/server";
+import { gatewayRequestCost } from "#/lib/ai/gateway";
+import { reconcileAiUsage } from "#/lib/billing/server";
+import { collectGitObjects } from "#/lib/git/server";
+import { sweepProjectSources } from "#/lib/storage/server";
 import {
   collectTemplateObjects,
   refreshTemplatePreviews,
-} from "#/features/templates/server";
+} from "#/lib/templates/server";
 
-import { aiConfig } from "./features/ai/ai-config.server";
-import { collectProjectSources } from "./features/projects/project-source.server";
-import { deleteExpiredProjects } from "./features/projects/project.server";
+import { aiConfig } from "./lib/ai/ai-config.server";
+import { collectProjectSources } from "./lib/projects/project-source.server";
+import { deleteExpiredProjects } from "./lib/projects/project.server";
 import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 
-export { ProjectCollaboration } from "./features/collaboration/project-collaboration.server";
+export { ProjectCollaboration } from "./lib/collaboration/project-collaboration.server";
 
 export default {
   async fetch(request) {

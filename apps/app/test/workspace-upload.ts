@@ -6,23 +6,16 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import * as Y from "yjs";
 
-import {
-  decodeClientMessage,
-  encodeServerMessage,
-} from "#/features/collaboration";
-import { compileDeltaSchema, hashSource } from "#/features/compile";
+import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
+import { compileDeltaSchema, hashSource } from "#/lib/compile";
 import {
   createNodeSchema,
   renameNodeSchema,
   renamedProjectNodes,
-} from "#/features/projects";
-import {
-  decodeSource,
-  encodeSource,
-  type SourceFiles,
-} from "#/features/storage";
+} from "#/lib/projects";
+import { decodeSource, encodeSource, type SourceFiles } from "#/lib/storage";
 
-import type { ProjectDetails } from "../src/features/projects/project.functions";
+import type { ProjectDetails } from "../src/lib/projects/project.functions";
 import type { UploadTest } from "./workspace-upload/browser";
 
 declare global {
@@ -320,11 +313,11 @@ const vite = await createServer({
   ],
   resolve: {
     alias: {
-      "#/features/projects/project.functions": rpc,
-      "#/features/projects/project-node.functions": rpc,
-      "#/features/projects/project-source.functions": rpc,
-      "#/features/git/git.functions": rpc,
-      "#/features/sharing/project-sharing.functions": rpc,
+      "#/lib/projects/project.functions": rpc,
+      "#/lib/projects/project-node.functions": rpc,
+      "#/lib/projects/project-source.functions": rpc,
+      "#/lib/git/git.functions": rpc,
+      "#/lib/sharing/project-sharing.functions": rpc,
       "#": `${webRoot}src`,
     },
   },

@@ -3,8 +3,8 @@ import { Field, FieldLabel } from "@texfolia/ui/field";
 import { Input } from "@texfolia/ui/input";
 import { useId } from "react";
 
-import type { FormatSettings } from "#/features/editor/latex/format";
-import { formatSettingsSchema as settingsSchema } from "#/features/settings/settings.schema";
+import type { FormatSettings } from "#/lib/editor/latex/format";
+import { formatSettingsSchema as settingsSchema } from "#/lib/settings/settings.schema";
 
 export function LatexFormatSettingsFields({
   settings,

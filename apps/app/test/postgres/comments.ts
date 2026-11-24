@@ -5,7 +5,7 @@ import { projectCollaborator, projectNode, user } from "@texfolia/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import * as Y from "yjs";
 
-import { createCommentAnchor } from "../../src/features/comments/anchor";
+import { createCommentAnchor } from "../../src/lib/comments/anchor";
 import {
   createCommentThread,
   deleteComment,
@@ -14,10 +14,10 @@ import {
   replyToCommentThread,
   resolveCommentThread,
   updateComment,
-} from "../../src/features/comments/project-comments.server";
-import { getProjectMetadata } from "../../src/features/projects/project-metadata.server";
-import { createProject } from "../../src/features/projects/project.server";
-import { sharePrincipal } from "../../src/features/sharing/project-access.server";
+} from "../../src/lib/comments/project-comments.server";
+import { getProjectMetadata } from "../../src/lib/projects/project-metadata.server";
+import { createProject } from "../../src/lib/projects/project.server";
+import { sharePrincipal } from "../../src/lib/sharing/project-access.server";
 
 // Review comments: viewers can comment, strangers and share links cannot,
 // authors own their comments, and every change moves the metadata version.

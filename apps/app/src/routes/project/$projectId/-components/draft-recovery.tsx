@@ -3,8 +3,8 @@ import { Button } from "@texfolia/ui/button";
 import {
   serializeSourceDrafts,
   type SourceDraft,
-} from "#/features/collaboration/browser";
-import { downloadFile } from "#/features/storage/browser";
+} from "#/lib/collaboration/browser";
+import { downloadFile } from "#/lib/storage/browser";
 
 /** Offers browser drafts that could not be migrated to the server. */
 export function DraftRecovery({

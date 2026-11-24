@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Browser } from "playwright";
 
-import type { FormatResponse } from "#/features/editor/latex/format";
+import type { FormatResponse } from "#/lib/editor/latex/format";
 
 import { pdfFixture } from "./pdf-fixture";
 

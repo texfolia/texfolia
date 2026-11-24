@@ -28,14 +28,14 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
-import { reportCompilePreview } from "#/features/compile";
+import { reportCompilePreview } from "#/lib/compile";
 import {
   pdfToSource,
   rotatePdfPoint,
   type SyncTexIndex,
   type SyncTexLocation,
-} from "#/features/editor/latex/synctex";
-import { downloadFile } from "#/features/storage/browser";
+} from "#/lib/editor/latex/synctex";
+import { downloadFile } from "#/lib/storage/browser";
 import { useTheme } from "#/providers/theme-provider";
 
 import "react-pdf/dist/Page/TextLayer.css";

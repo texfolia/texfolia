@@ -2,7 +2,7 @@ import { createMiddleware, createStart } from "@tanstack/react-start";
 import { createDb } from "@texfolia/db";
 import { env } from "cloudflare:workers";
 
-import { createAuth } from "./features/auth/auth";
+import { createAuth } from "./lib/auth/auth";
 import { lazy } from "./lib/lazy";
 
 const requestContext = createMiddleware().server(async ({ next }) => {

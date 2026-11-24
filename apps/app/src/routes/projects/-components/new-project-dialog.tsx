@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import {
   getTemplateAccount,
   listTemplates,
-} from "#/features/templates/template.functions";
+} from "#/lib/templates/template.functions";
 
 import { FilesProjectForm } from "./files-project-form";
 import { GitImport } from "./git-import";

@@ -8,7 +8,7 @@ import {
 } from "@texfolia/ui/dropdown-menu";
 
 import { NavigationShortcuts } from "#/components/navigation-shortcuts";
-import { authClient } from "#/features/auth/auth-client";
+import { authClient } from "#/lib/auth/auth-client";
 import { webPath } from "#/lib/origins";
 
 export function Header() {

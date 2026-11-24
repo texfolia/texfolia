@@ -7,18 +7,18 @@ import {
   type ProjectMetadata,
   createNodeSchema,
   newProjectNodePath,
-} from "#/features/projects";
+} from "#/lib/projects";
 import {
   createProjectNode,
   renameProjectNode,
-} from "#/features/projects/project-node.functions";
-import { deleteProjectNode } from "#/features/projects/project-source.functions";
+} from "#/lib/projects/project-node.functions";
+import { deleteProjectNode } from "#/lib/projects/project-source.functions";
 import type {
   ProjectDetails,
   ProjectNode,
-} from "#/features/projects/project.functions";
-import { decodeSource } from "#/features/storage";
+} from "#/lib/projects/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
+import { decodeSource } from "#/lib/storage";
 
 type NewNode = z.input<typeof createNodeSchema>;
 

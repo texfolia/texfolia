@@ -1,13 +1,13 @@
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
-import { browserSpellChecker } from "#/features/editor/spelling/checker";
+import { browserSpellChecker } from "#/lib/editor/spelling/checker";
 import {
   personalDictionaryChanged,
   spellcheck,
-} from "#/features/editor/spelling/editor";
-import type { SpellingLanguage } from "#/features/editor/spelling/languages";
-import { personalDictionaryHas } from "#/features/settings/settings.schema";
+} from "#/lib/editor/spelling/editor";
+import type { SpellingLanguage } from "#/lib/editor/spelling/languages";
+import { personalDictionaryHas } from "#/lib/settings/settings.schema";
 
 /**
  * Configures LaTeX prose spellchecking and refreshes diagnostics whenever the

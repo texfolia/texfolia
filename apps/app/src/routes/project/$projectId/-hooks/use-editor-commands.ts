@@ -3,9 +3,9 @@ import { openSearchPanel } from "@codemirror/search";
 import type { EditorView, ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 
-import type { CollaborativeFile } from "#/features/collaboration/browser";
-import type { EditorCommand } from "#/features/editor/editor-command";
-import { keymapHistory } from "#/features/editor/keymaps/extension";
+import type { CollaborativeFile } from "#/lib/collaboration/browser";
+import type { EditorCommand } from "#/lib/editor/editor-command";
+import { keymapHistory } from "#/lib/editor/keymaps/extension";
 
 const readonlyBlockedCommands = new Set<EditorCommand>([
   "undo",

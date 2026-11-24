@@ -1,8 +1,8 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import type { CollaborativeFile } from "#/features/collaboration/browser";
-import type { ProjectDetails } from "#/features/projects/project.functions";
+import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
+import type { ProjectDetails } from "#/lib/projects/project.functions";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState } from "#/providers/workspace-provider";
 

@@ -3,7 +3,7 @@ import { Input } from "@texfolia/ui/input";
 import { Label } from "@texfolia/ui/label";
 import { useEffect, useState } from "react";
 
-import { authClient } from "#/features/auth/auth-client";
+import { authClient } from "#/lib/auth/auth-client";
 import {
   gitProvider,
   gitProviderIds,
@@ -11,8 +11,8 @@ import {
   gitRemoteMessage,
   gitRemoteSchema,
   type GitProvider,
-} from "#/features/git";
-import { getGitAccounts } from "#/features/git/git.functions";
+} from "#/lib/git";
+import { getGitAccounts } from "#/lib/git/git.functions";
 
 export async function connectGitAccount(provider: GitProvider) {
   const result = await authClient.linkSocial({

@@ -3,7 +3,7 @@
   "ignorePatterns": [
     ".agents/skills/*",
     "apps/*/src/routeTree.gen.ts",
-    "apps/app/src/features/editor/themes/theme-catalog.gen.ts",
+    "apps/app/src/lib/editor/themes/theme-catalog.gen.ts",
     "apps/app/worker-configuration.d.ts"
   ],
   "plugins": ["typescript", "unicorn", "oxc"],

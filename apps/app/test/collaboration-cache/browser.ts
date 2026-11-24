@@ -1,13 +1,13 @@
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
 
-import { clearCollaborationCaches } from "#/features/collaboration/browser";
+import { clearCollaborationCaches } from "#/lib/collaboration/browser";
 import {
   CollaborativeDocuments,
   CollaborativeFile,
-} from "#/features/collaboration/browser";
+} from "#/lib/collaboration/browser";
 
-import { signOut } from "../../src/features/auth/sign-out";
+import { signOut } from "../../src/lib/auth/sign-out";
 
 let file: CollaborativeFile | undefined;
 let documents: CollaborativeDocuments | undefined;

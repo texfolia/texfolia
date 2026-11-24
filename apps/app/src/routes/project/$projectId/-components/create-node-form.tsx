@@ -16,8 +16,8 @@ import {
   nodeNameSchema,
   newProjectNodePath,
   projectNodePaths,
-} from "#/features/projects";
-import type { ProjectNode } from "#/features/projects/project.functions";
+} from "#/lib/projects";
+import type { ProjectNode } from "#/lib/projects/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 export type CreateNodeHandle = {

@@ -11,38 +11,35 @@ import {
 } from "@texfolia/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { projectMetadataVersion } from "#/features/projects";
+import { projectMetadataVersion } from "#/lib/projects";
 import {
   encodeSource,
   maxSourceFileBytes,
   maxSourceProjectBytes,
   sourceContentSchema,
-} from "#/features/storage";
-import {
-  type SourceBucket,
-  sweepProjectSources,
-} from "#/features/storage/server";
+} from "#/lib/storage";
+import { type SourceBucket, sweepProjectSources } from "#/lib/storage/server";
 
-import { compileResync } from "../../src/features/compile/compile-source.server";
-import { getProjectMetadata } from "../../src/features/projects/project-metadata.server";
+import { compileResync } from "../../src/lib/compile/compile-source.server";
+import { getProjectMetadata } from "../../src/lib/projects/project-metadata.server";
 import {
   createProjectNode,
   renameProjectNode,
-} from "../../src/features/projects/project-node.server";
+} from "../../src/lib/projects/project-node.server";
 import {
   collectProjectSources,
   deleteProjectNode,
   readProjectSource,
   saveProjectSource,
-} from "../../src/features/projects/project-source.server";
+} from "../../src/lib/projects/project-source.server";
 import {
   createProject,
   deleteTrashedProject,
   getProject,
   trashProject,
-} from "../../src/features/projects/project.server";
+} from "../../src/lib/projects/project.server";
 
-export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
 
 async function deleteForever(db: Db, userId: string, projectId: string) {
   await trashProject({ db, userId, projectId });

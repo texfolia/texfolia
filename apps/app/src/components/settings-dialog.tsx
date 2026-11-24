@@ -39,18 +39,18 @@ import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
 import {
   editorKeymapLabels,
   editorKeymaps,
-} from "#/features/editor/keymaps/keymaps";
+} from "#/lib/editor/keymaps/keymaps";
 import {
   spellingDictionaries,
   spellingLanguages,
   spellingLanguageSchema,
-} from "#/features/editor/spelling/languages";
+} from "#/lib/editor/spelling/languages";
 import {
   addPersonalWord,
   autoCompileDelays,
   maxPersonalWords,
   personalWord,
-} from "#/features/settings/settings.schema";
+} from "#/lib/settings/settings.schema";
 import {
   defaultShortcuts,
   eventChord,
@@ -60,7 +60,7 @@ import {
   shortcutIds,
   type ShortcutAction,
   yieldsToKeymap,
-} from "#/features/shortcuts/shortcuts";
+} from "#/lib/shortcuts/shortcuts";
 import {
   type SettingsSection,
   useSettings,

@@ -14,8 +14,8 @@ import {
   getProjectAccess,
   grantProjectAccess,
   revokeProjectAccess,
-} from "#/features/sharing/project-sharing.functions";
-import { grantProjectAccessSchema } from "#/features/sharing/project-sharing.schema";
+} from "#/lib/sharing/project-sharing.functions";
+import { grantProjectAccessSchema } from "#/lib/sharing/project-sharing.schema";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 import { ProjectShareLinks } from "./project-share-links";

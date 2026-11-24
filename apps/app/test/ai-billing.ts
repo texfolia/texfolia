@@ -17,8 +17,8 @@ import {
   gatewayRequestCost,
   type AiConfig,
   type AiFetch,
-} from "#/features/ai/gateway";
-import { BillingError, markedUpNanos, nanoDollars } from "#/features/billing";
+} from "#/lib/ai/gateway";
+import { BillingError, markedUpNanos, nanoDollars } from "#/lib/billing";
 import {
   aiEntitlement,
   aiSpend,
@@ -26,7 +26,7 @@ import {
   reconcileAiUsage,
   reserveAiRequest,
   type MeterReporter,
-} from "#/features/billing/server";
+} from "#/lib/billing/server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

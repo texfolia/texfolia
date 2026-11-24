@@ -7,13 +7,13 @@ import { betterAuth } from "better-auth";
 import { eq, inArray } from "drizzle-orm";
 import Stripe from "stripe";
 
-import { createOrganizationPlugin } from "#/features/auth/auth";
+import { createOrganizationPlugin } from "#/lib/auth/auth";
 import {
   aiEntitlement,
   compilePlan,
   createBillingPlugin,
   enforceBillingScope,
-} from "#/features/billing/server";
+} from "#/lib/billing/server";
 
 const key = process.env.STRIPE_SECRET_KEY;
 assert(

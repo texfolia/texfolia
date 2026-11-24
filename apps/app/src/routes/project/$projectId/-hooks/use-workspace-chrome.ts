@@ -1,14 +1,14 @@
 import type { DockviewApi } from "dockview-react";
 import { type RefObject, useEffect, useEffectEvent, useState } from "react";
 
-import { documentCachingStopped } from "#/features/collaboration/browser";
+import { documentCachingStopped } from "#/lib/collaboration/browser";
 import {
   defaultWorkspaceChrome,
   readWorkspaceLayout,
   writeWorkspaceLayout,
   type PanelView,
   type WorkspaceChrome,
-} from "#/features/workspace/workspace-layout";
+} from "#/lib/workspace/workspace-layout";
 
 const narrowQuery = "(max-width: 767px)";
 

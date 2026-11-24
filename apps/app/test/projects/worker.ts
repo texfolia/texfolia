@@ -13,24 +13,21 @@ import {
 } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
 
-import type { CollaborationCleanup } from "#/features/collaboration/server";
+import type { CollaborationCleanup } from "#/lib/collaboration/server";
 import {
   projectPaths,
   projectTagsSchema,
   trashRetentionDays,
-} from "#/features/projects";
-import { encodeSource, maxSourceFileBytes } from "#/features/storage";
-import {
-  sweepProjectSources,
-  type SourceBucket,
-} from "#/features/storage/server";
+} from "#/lib/projects";
+import { encodeSource, maxSourceFileBytes } from "#/lib/storage";
+import { sweepProjectSources, type SourceBucket } from "#/lib/storage/server";
 
-import { importProjectFiles } from "../../src/features/projects/project-import.server";
+import { importProjectFiles } from "../../src/lib/projects/project-import.server";
 import {
   collectProjectSources,
   saveProjectSource,
   readProjectSource,
-} from "../../src/features/projects/project-source.server";
+} from "../../src/lib/projects/project-source.server";
 import {
   createProject,
   deleteExpiredProjects,
@@ -43,15 +40,15 @@ import {
   restoreProject,
   setProjectTags,
   trashProject,
-} from "../../src/features/projects/project.server";
-import { sharePrincipal } from "../../src/features/sharing/project-access.server";
+} from "../../src/lib/projects/project.server";
+import { sharePrincipal } from "../../src/lib/sharing/project-access.server";
 import {
   createShareLink,
   getSharedProject,
-} from "../../src/features/sharing/project-share-links.server";
-import { transferProject } from "../../src/features/sharing/project-transfer.server";
+} from "../../src/lib/sharing/project-share-links.server";
+import { transferProject } from "../../src/lib/sharing/project-transfer.server";
 
-export { ProjectCollaboration } from "../../src/features/collaboration/project-collaboration.server";
+export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
 
 async function checkLifecycle({
   db,

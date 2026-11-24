@@ -22,8 +22,8 @@ import {
 } from "react";
 import * as Y from "yjs";
 
-import { type LatexProblem } from "#/features/editor/latex/analysis";
-import { downloadFile } from "#/features/storage/browser";
+import { type LatexProblem } from "#/lib/editor/latex/analysis";
+import { downloadFile } from "#/lib/storage/browser";
 import { useWorkspace, type Workspace } from "#/providers/workspace-provider";
 
 import type { FilePanelParams } from "../-hooks/use-dock-panels";

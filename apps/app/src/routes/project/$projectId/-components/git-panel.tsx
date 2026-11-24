@@ -23,8 +23,8 @@ import {
   gitProviders,
   type GitAction,
   type GitResult,
-} from "#/features/git";
-import { gitAction } from "#/features/git/git.functions";
+} from "#/lib/git";
+import { gitAction } from "#/lib/git/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useWorkspace } from "#/providers/workspace-provider";
 

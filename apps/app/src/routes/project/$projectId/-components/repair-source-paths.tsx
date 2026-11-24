@@ -15,8 +15,8 @@ import {
   invalidProjectPaths,
   projectNodePaths,
   renamedProjectNodes,
-} from "#/features/projects";
-import type { ProjectNode } from "#/features/projects/project.functions";
+} from "#/lib/projects";
+import type { ProjectNode } from "#/lib/projects/project.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
 export type RepairSourcePathsHandle = { open: () => void };

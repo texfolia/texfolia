@@ -1,4 +1,4 @@
-// Writes src/features/editor/themes/theme-catalog.gen.ts from @uiw/codemirror-themes-all.
+// Writes src/lib/editor/themes/theme-catalog.gen.ts from @uiw/codemirror-themes-all.
 // The app reads theme names, modes and colors from the generated file and
 // loads each CodeMirror extension from its own package only when needed.
 // Run after upgrading the UIW theme packages: bun run themes:catalog
@@ -10,7 +10,7 @@ import { EditorState, EditorView, type Extension } from "@uiw/react-codemirror";
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 export const catalogPath = join(
   packageRoot,
-  "src/features/editor/themes/theme-catalog.gen.ts",
+  "src/lib/editor/themes/theme-catalog.gen.ts",
 );
 
 export async function buildThemeCatalog() {

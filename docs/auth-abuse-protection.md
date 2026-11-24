@@ -1,6 +1,6 @@
 # Public auth abuse protection
 
-Auth is configured in `apps/app/src/features/auth/auth.ts`; only the product app
+Auth is configured in `apps/app/src/lib/auth/auth.ts`; only the product app
 uses it. The login page supports
 email OTP and GitHub, Google, GitLab, and Microsoft OAuth. Password sign-in and
 OTP password reset remain available for existing credentials. Password signup
@@ -76,7 +76,7 @@ These are response-body guarantees; local tests do not establish constant timing
 From the repository root:
 
 ```sh
-bun test apps/app/src/features/auth/auth-abuse.test.ts
+bun test apps/app/src/lib/auth/auth-abuse.test.ts
 ```
 
 The suite uses the production auth options, Better Auth's HTTP handler, a memory
@@ -90,5 +90,5 @@ Existing OTP and organization tests cover code consumption, password reset,
 expiry, invitation permissions, and billing authorization:
 
 ```sh
-bun test apps/app/src/features/auth/auth-otp.test.ts apps/app/src/features/auth/auth.test.ts
+bun test apps/app/src/lib/auth/auth-otp.test.ts apps/app/src/lib/auth/auth.test.ts
 ```

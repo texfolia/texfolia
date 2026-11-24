@@ -6,7 +6,7 @@ import { useRef } from "react";
 import {
   panelHeightBounds,
   type PanelView,
-} from "#/features/workspace/workspace-layout";
+} from "#/lib/workspace/workspace-layout";
 
 import { WorkspaceLogs } from "./workspace-logs";
 import { WorkspaceProblems } from "./workspace-problems";

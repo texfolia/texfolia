@@ -60,9 +60,7 @@ test("shared contract fixtures run every check", () => {
 });
 
 test("web unit-only changes skip integration and production assets", () => {
-  const plan = selectChecks([
-    "apps/app/src/features/shortcuts/shortcuts.test.ts",
-  ]);
+  const plan = selectChecks(["apps/app/src/lib/shortcuts/shortcuts.test.ts"]);
   assert.equal(plan["web-checks"], true);
   assert.equal(plan.compiler, false);
   assert.equal(plan.postgres, false);
@@ -132,7 +130,7 @@ test("shared, lockfile, CI, environment, schema, and unknown root changes select
     "apps/app/src/vite-env.d.ts",
     "apps/compiler/src/environment.ts",
     "apps/app/src/env/config.ts",
-    "apps/app/src/features/projects/project.schema.ts",
+    "apps/app/src/lib/projects/project.schema.ts",
     "apps/compiler/wrangler.jsonc",
     "apps/app/worker-configuration.d.ts",
     "new-build-config.json",
@@ -248,7 +246,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       "apps/compiler/src/local.ts",
       "packages/contracts/fixtures/path-policy.json",
       "apps/compiler/engine/compile.go",
-      "apps/app/src/features/shortcuts/shortcuts.test.ts",
+      "apps/app/src/lib/shortcuts/shortcuts.test.ts",
       "packages/db/src/index.ts",
     ])
       write(path, "base input");
@@ -269,7 +267,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
         ["compiler#test", "compiler#lint"],
       ],
       [
-        "apps/app/src/features/shortcuts/shortcuts.test.ts",
+        "apps/app/src/lib/shortcuts/shortcuts.test.ts",
         ["@texfolia/contracts", "@texfolia/db", "app"],
         ["app#test"],
       ],

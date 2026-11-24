@@ -10,23 +10,23 @@ import {
   useState,
 } from "react";
 
-import { type FormatSettings } from "#/features/editor/latex/format";
-import type { SpellingLanguage } from "#/features/editor/spelling/languages";
+import { type FormatSettings } from "#/lib/editor/latex/format";
+import type { SpellingLanguage } from "#/lib/editor/spelling/languages";
 import {
   updateProjectFormatting,
   updateProjectSpelling,
-} from "#/features/projects/project.functions";
+} from "#/lib/projects/project.functions";
 import {
   rebaseUserDraft,
   rebaseFormattingDraft,
-} from "#/features/settings/settings-draft";
-import { createBrowserSettingsStore } from "#/features/settings/settings.functions";
+} from "#/lib/settings/settings-draft";
+import { createBrowserSettingsStore } from "#/lib/settings/settings.functions";
 import {
   defaultSettings,
   settingsSchema,
   type Settings,
-} from "#/features/settings/settings.schema";
-import { shortcutConflicts } from "#/features/shortcuts/shortcuts";
+} from "#/lib/settings/settings.schema";
+import { shortcutConflicts } from "#/lib/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,

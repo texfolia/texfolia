@@ -71,7 +71,7 @@ on Apply or Save. The editor's **Add to dictionary** saves immediately. See
 
 ## Keyboard shortcuts
 
-`apps/app/src/features/shortcuts/shortcuts.ts` owns the action catalog, default bindings,
+`apps/app/src/lib/shortcuts/shortcuts.ts` owns the action catalog, default bindings,
 validation, and conflict checks. Defaults copy VS Code unless that would take
 over an important browser or editor function. The recorder accepts one chord or
 up to four chords separated by spaces. Enter finishes recording. Escape cancels
@@ -118,7 +118,7 @@ as separate chunks the first time someone chooses them. Open editors switch
 when the preference is saved. If a chunk fails to load, the editor shows an
 error and keeps the default keys.
 
-`apps/app/src/features/editor/keymaps/keymaps.ts` lists the Ctrl and Alt chords each
+`apps/app/src/lib/editor/keymaps/keymaps.ts` lists the Ctrl and Alt chords each
 keymap binds. Inside an editor running Vim or Emacs, an app shortcut whose
 first chord is on that list gives the key to the editor. For example, Ctrl+B is
 Vim's page up rather than Bold, and Emacs's Ctrl+K kills the line instead of

@@ -11,11 +11,8 @@ import {
 import { toast } from "@texfolia/ui/toast";
 import { useState } from "react";
 
-import { trashRetentionDays } from "#/features/projects";
-import {
-  restoreProject,
-  type Project,
-} from "#/features/projects/project.functions";
+import { trashRetentionDays } from "#/lib/projects";
+import { restoreProject, type Project } from "#/lib/projects/project.functions";
 import { useProjects } from "#/providers/projects-provider";
 
 export function DeleteProjectButton({

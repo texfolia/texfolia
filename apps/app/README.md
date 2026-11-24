@@ -19,7 +19,7 @@ See [Projects dashboard](../../docs/projects.md) for creation flows, private tag
 client-side table behavior, and verification.
 
 Project CRUD, file-tree nodes, paths, metadata, search, and owner/organization
-access live in [`#/features/projects`](src/features/projects/README.md). The
+access live in [`#/lib/projects`](src/lib/projects/README.md). The
 feature's bound modules add collaborator and share-link grants, build
 invalidation, collaboration cleanup, and review-comment versions.
 
@@ -33,7 +33,7 @@ reviewed. Preview generation and retries run independently of moderation,
 including in local development without cron.
 
 The catalog, snapshot, preview, review, and cleanup code lives in
-[`#/features/templates`](src/features/templates/README.md). Its server functions pass in
+[`#/lib/templates`](src/lib/templates/README.md). Its server functions pass in
 the project lock and R2 binding; the routes and create-from-template UI live under
 `src/routes`.
 
@@ -45,8 +45,8 @@ seeds, schema setup, retention, and verification commands.
 Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed
 by `project_node.object_key` and `size_bytes`. Keys are
 `projects/{projectId}/sources/{sha256}`. Object keys, uploads, limits, and the garbage
-queue live in [`#/features/storage`](src/features/storage/README.md); access
-checks, build invalidation, and collaboration cleanup live in `#/features/projects`. Collaborative text edits persist automatically.
+queue live in [`#/lib/storage`](src/lib/storage/README.md); access
+checks, build invalidation, and collaboration cleanup live in `#/lib/projects`. Collaborative text edits persist automatically.
 **Save** (Cmd/Ctrl+S) waits for merged text to reach R2, then submits the
 acknowledged source snapshot as a cached build while **Compile after saving** is
 on (the default). **Save without compiling** (Cmd/Ctrl+K S) only persists,
@@ -115,8 +115,8 @@ opened appear after the room saves them, usually within about four seconds.
 Binary files retain their existing source-storage path.
 
 The room, protocol, browser cache, and drafts live in
-[`#/features/collaboration`](src/features/collaboration/README.md).
-`src/features/collaboration/project-collaboration.server.ts` subclasses its `CollaborationRoom`
+[`#/lib/collaboration`](src/lib/collaboration/README.md).
+`src/lib/collaboration/project-collaboration.server.ts` subclasses its `CollaborationRoom`
 with the app's project lock, share links, build invalidation, and Git. The
 `/api/collaboration` route and the `y-codemirror.next` editor binding stay here.
 
@@ -135,8 +135,8 @@ The authenticated compile route compares that digest with current database state
 if they differ, it rebuilds the submission from saved R2 sources. This prevents a
 stale session from omitting new files or restoring deleted files in the build.
 
-The compile client lives in [`#/features/compile`](src/features/compile/README.md).
-`src/features/compile/compile-route.server.ts` and `src/features/compile/compile-source.server.ts` only
+The compile client lives in [`#/lib/compile`](src/lib/compile/README.md).
+`src/lib/compile/compile-route.server.ts` and `src/lib/compile/compile-source.server.ts` only
 bind it to auth, billing, the project aggregate, and Workers bindings.
 
 Compile POSTs reserve `X-Compilation-Id` atomically in Postgres. The stored SHA-256
@@ -320,7 +320,7 @@ CodeMirror update; it does not measure deployed latency.
 
 ## Editor libraries
 
-The editor uses [codemirror-lang-latex](https://github.com/TeXlyre/codemirror-lang-latex) for parsing, highlighting, folding, indentation, environment closing, completion, tooltips, and syntax diagnostics. `#/features/editor/latex/language` ([source](src/features/editor/latex/language.ts)) combines its completion source with project labels, citations, file paths, and package commands. A single linter merges syntax diagnostics with project and compiler diagnostics so neither replaces the other.
+The editor uses [codemirror-lang-latex](https://github.com/TeXlyre/codemirror-lang-latex) for parsing, highlighting, folding, indentation, environment closing, completion, tooltips, and syntax diagnostics. `#/lib/editor/latex/language` ([source](src/lib/editor/latex/language.ts)) combines its completion source with project labels, citations, file paths, and package commands. A single linter merges syntax diagnostics with project and compiler diagnostics so neither replaces the other.
 
 Syntax linting runs in open editors and reports to the workspace Problems panel. The analysis worker checks references, citations, and missing files across the project. File-local checks for references, bibliography declarations, and package imports are disabled in project editors because those declarations can live in another file. Document-environment checks are disabled to support included fragments.
 
@@ -340,8 +340,8 @@ Run `bun run test`, `bun run typecheck`, and `bun run format:check` to check the
 
 Organization setup follows the [Better Auth organization plugin](https://better-auth.com/docs/plugins/organization)
 and [Stripe organization billing](https://better-auth.com/docs/plugins/stripe#using-with-organizations) documentation.
-The organization configuration lives in [`src/features/auth/auth.ts`](src/features/auth/auth.ts). Plans, checkout, the portal,
-webhooks, entitlements, and AI metering are exposed by [`#/features/billing`](src/features/billing/README.md);
+The organization configuration lives in [`src/lib/auth/auth.ts`](src/lib/auth/auth.ts). Plans, checkout, the portal,
+webhooks, entitlements, and AI metering are exposed by [`#/lib/billing`](src/lib/billing/README.md);
 the `/settings/billing` route, its server function, and the billing UI stay in the app.
 Auth tables and relations, including organizations, are generated into
 `packages/db/src/auth-schema.ts` from the auth configuration.
@@ -429,7 +429,7 @@ during a build. CI runs this check after applying the database schema.
 
 ## Managed AI assistant
 
-The assistant lives in [`#/features/ai`](src/features/ai/README.md). In it,
+The assistant lives in [`#/lib/ai`](src/lib/ai/README.md). In it,
 `ai-config.server.ts` reads the secrets and `assistant.server.ts` binds the
 assistant to project access, node operations, collaboration, Git, and the compile
 route. The `/api/ai/$projectId` route is under `src/routes`.

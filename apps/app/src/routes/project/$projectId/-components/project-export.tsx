@@ -10,11 +10,11 @@ import {
 } from "@texfolia/ui/dialog";
 import { useState, useImperativeHandle, type Ref } from "react";
 
-import { buildFileUrl } from "#/features/compile/build";
-import { decodeSource, type SourceFiles } from "#/features/storage";
-import { downloadFile } from "#/features/storage/browser";
-import { createZip } from "#/features/storage/zip";
+import { buildFileUrl } from "#/lib/compile/build";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
+import { decodeSource, type SourceFiles } from "#/lib/storage";
+import { downloadFile } from "#/lib/storage/browser";
+import { createZip } from "#/lib/storage/zip";
 import { useWorkspace } from "#/providers/workspace-provider";
 
 export type ProjectExportHandle = { open: () => void };

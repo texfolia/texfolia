@@ -9,9 +9,9 @@ import {
 import { useState } from "react";
 
 import { connectGitAccount } from "#/components/git-remote-form";
-import { authClient } from "#/features/auth/auth-client";
-import { hasRepositoryAccess, isGitProvider } from "#/features/git";
-import { getConnections } from "#/features/settings/account-settings.functions";
+import { authClient } from "#/lib/auth/auth-client";
+import { hasRepositoryAccess, isGitProvider } from "#/lib/git";
+import { getConnections } from "#/lib/settings/account-settings.functions";
 export const Route = createFileRoute("/settings/connections")({
   loader: () => getConnections(),
   component: ConnectionsPage,

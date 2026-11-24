@@ -13,17 +13,17 @@ import {
 } from "@texfolia/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
-import { updateProjectFormattingSchema } from "#/features/projects";
+import { updateProjectFormattingSchema } from "#/lib/projects";
 
 import {
   createProject,
   getProject,
   updateProjectFormatting,
-} from "../src/features/projects/project.server";
+} from "../src/lib/projects/project.server";
 import {
   getAccountUsage,
   saveAccountAiSettings,
-} from "../src/features/settings/account-settings.server";
+} from "../src/lib/settings/account-settings.server";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(

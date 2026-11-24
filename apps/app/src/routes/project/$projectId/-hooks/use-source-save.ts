@@ -1,22 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
-import { documentCachingStopped } from "#/features/collaboration/browser";
-import type { CollaborativeFile } from "#/features/collaboration/browser";
+import { documentCachingStopped } from "#/lib/collaboration/browser";
+import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import {
   reconcileSourceDrafts,
   serializeSourceDrafts,
   type SourceDraft,
-} from "#/features/collaboration/browser";
-import type { CompileSources } from "#/features/compile";
+} from "#/lib/collaboration/browser";
+import type { CompileSources } from "#/lib/compile";
+import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import {
   projectMetadataVersion,
   assertProjectSourcePaths,
   projectPaths,
-} from "#/features/projects";
-import { saveProjectSource } from "#/features/projects/project-source.functions";
-import type { ProjectDetails } from "#/features/projects/project.functions";
-import { encodeSource, type SourceFiles } from "#/features/storage";
-import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
+} from "#/lib/projects";
+import { saveProjectSource } from "#/lib/projects/project-source.functions";
+import type { ProjectDetails } from "#/lib/projects/project.functions";
+import { encodeSource, type SourceFiles } from "#/lib/storage";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState } from "#/providers/workspace-provider";
 

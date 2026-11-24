@@ -24,7 +24,7 @@ import {
   setEntryKey,
   uniqueEntryKey,
   validEntryKey,
-} from "#/features/editor/latex/bibtex";
+} from "#/lib/editor/latex/bibtex";
 
 export type AddReferenceRequest = {
   /** An undefined \cite key the new entry should define. */

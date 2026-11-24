@@ -9,8 +9,8 @@ import {
 import {
   CollaborativeDocuments,
   type CollaborativeFile,
-} from "#/features/collaboration/browser";
-import type { ProjectNode } from "#/features/projects/project.functions";
+} from "#/lib/collaboration/browser";
+import type { ProjectNode } from "#/lib/projects/project.functions";
 
 type Options = ConstructorParameters<typeof CollaborativeDocuments>[0];
 

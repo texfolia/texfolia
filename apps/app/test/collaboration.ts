@@ -27,10 +27,10 @@ import {
   encodeClientMessage,
   outdatedClientMessage,
   type ServerMessage,
-} from "#/features/collaboration";
-import { hashSource } from "#/features/compile";
+} from "#/lib/collaboration";
+import { hashSource } from "#/lib/compile";
 
-import { createProject } from "../src/features/projects/project.server";
+import { createProject } from "../src/lib/projects/project.server";
 import type { BrowserApi } from "./collaboration/browser";
 import { checkDeletion } from "./collaboration/deletion";
 import { checkRevocation } from "./collaboration/revocation";

@@ -21,8 +21,8 @@ import { useEffect, useRef, useState } from "react";
 import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
 import { z } from "zod";
 
-import { authClient } from "#/features/auth/auth-client";
-import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/features/auth/captcha";
+import { authClient } from "#/lib/auth/auth-client";
+import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
 import { webPath } from "#/lib/origins";
 
 export const loginSearchSchema = z.object({
