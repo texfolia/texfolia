@@ -6,6 +6,8 @@
   "preview_urls": false,
   "routes": [],
   "compatibility_date": "2026-10-31",
+  // Stops a compile when its caller disconnects without cancelling it.
+  "compatibility_flags": ["enable_request_signal"],
   "containers": [
     {
       "class_name": "TectonicContainer",
@@ -18,9 +20,7 @@
   "durable_objects": {
     "bindings": [
       { "name": "COMPILER", "class_name": "TectonicContainer" },
-      { "name": "PROJECTS", "class_name": "ProjectCoordinator" },
       { "name": "POOL", "class_name": "PoolManager" },
-      { "name": "COMPILE_USAGE", "class_name": "UserCompileUsage" },
     ],
   },
   "migrations": [
@@ -28,66 +28,21 @@
     { "tag": "v2", "new_sqlite_classes": ["ProjectCoordinator"] },
     { "tag": "v3", "new_sqlite_classes": ["PoolManager"] },
     { "tag": "v4", "new_sqlite_classes": ["UserCompileUsage"] },
-  ],
-  "r2_buckets": [
+    // Build history and fair use moved to apps/app.
     {
-      "binding": "PDFS",
-      "bucket_name": "texfolia-compilations-local",
-      "remote": false,
+      "tag": "v5",
+      "deleted_classes": ["ProjectCoordinator", "UserCompileUsage"],
     },
   ],
-  "queues": {
-    "producers": [
-      {
-        "binding": "COMPILE_PRO",
-        "queue": "compile-pro-local",
-        "remote": false,
-      },
-      {
-        "binding": "COMPILE_FREE",
-        "queue": "compile-free-local",
-        "remote": false,
-      },
-      { "binding": "BACKGROUND", "queue": "background-local", "remote": false },
-    ],
-    "consumers": [
-      {
-        "queue": "compile-pro-local",
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-        "max_concurrency": 4,
-        "max_retries": 1,
-        "dead_letter_queue": "compile-dlq-local",
-      },
-      {
-        "queue": "compile-free-local",
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-        "max_concurrency": 1,
-        "max_retries": 1,
-        "dead_letter_queue": "compile-dlq-local",
-      },
-      {
-        "queue": "compile-dlq-local",
-        "max_batch_size": 10,
-        "max_batch_timeout": 5,
-        "max_concurrency": 2,
-      },
-      {
-        "queue": "background-local",
-        "max_batch_size": 20,
-        "max_batch_timeout": 5,
-        "max_concurrency": 1,
-      },
-    ],
+  "vars": {
+    // Autoscaling. POOL_MAX_INSTANCES must not exceed max_instances above.
+    // Raise POOL_CONCURRENCY only with a larger instance_type.
+    "POOL_MIN_WARM": "0",
+    "POOL_MAX_INSTANCES": "20",
+    "POOL_CONCURRENCY": "1",
+    "POOL_IDLE_MS": "600000",
+    "POOL_MAX_QUEUED": "100",
   },
-  "ratelimits": [
-    {
-      "name": "COMPILE_LIMIT",
-      "namespace_id": "244",
-      "simple": { "limit": 2, "period": 10 },
-    },
-  ],
   // Explicitly empty so deploys remove the retired legacy recovery cron.
   "triggers": { "crons": [] },
   "observability": {
@@ -111,58 +66,16 @@
       "durable_objects": {
         "bindings": [
           { "name": "COMPILER", "class_name": "TectonicContainer" },
-          { "name": "PROJECTS", "class_name": "ProjectCoordinator" },
           { "name": "POOL", "class_name": "PoolManager" },
-          { "name": "COMPILE_USAGE", "class_name": "UserCompileUsage" },
         ],
       },
-      "r2_buckets": [
-        { "binding": "PDFS", "bucket_name": "texfolia-compilations" },
-      ],
-      "queues": {
-        "producers": [
-          { "binding": "COMPILE_PRO", "queue": "compile-pro" },
-          { "binding": "COMPILE_FREE", "queue": "compile-free" },
-          { "binding": "BACKGROUND", "queue": "background" },
-        ],
-        "consumers": [
-          {
-            "queue": "compile-pro",
-            "max_batch_size": 1,
-            "max_batch_timeout": 0,
-            "max_concurrency": 4,
-            "max_retries": 1,
-            "dead_letter_queue": "compile-dlq",
-          },
-          {
-            "queue": "compile-free",
-            "max_batch_size": 1,
-            "max_batch_timeout": 0,
-            "max_concurrency": 1,
-            "max_retries": 1,
-            "dead_letter_queue": "compile-dlq",
-          },
-          {
-            "queue": "compile-dlq",
-            "max_batch_size": 10,
-            "max_batch_timeout": 5,
-            "max_concurrency": 2,
-          },
-          {
-            "queue": "background",
-            "max_batch_size": 20,
-            "max_batch_timeout": 5,
-            "max_concurrency": 1,
-          },
-        ],
+      "vars": {
+        "POOL_MIN_WARM": "0",
+        "POOL_MAX_INSTANCES": "20",
+        "POOL_CONCURRENCY": "1",
+        "POOL_IDLE_MS": "600000",
+        "POOL_MAX_QUEUED": "100",
       },
-      "ratelimits": [
-        {
-          "name": "COMPILE_LIMIT",
-          "namespace_id": "243",
-          "simple": { "limit": 2, "period": 10 },
-        },
-      ],
     },
   },
 }

@@ -13,8 +13,10 @@ import {
   user,
 } from "@texfolia/db/schema";
 import { inArray } from "drizzle-orm";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
+
+import { withBuildsFixture } from "./builds/miniflare";
 
 const connection = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -43,37 +45,37 @@ reservation.stop(true);
 assert(port);
 const origin = `http://127.0.0.1:${port}`;
 const mf = new Miniflare({
-  ...convertV4MiniflareOptions({
-    name: "pricing-ui-test",
-    modules: filenames
-      .filter((path) => path.endsWith(".js"))
-      .sort((a, b) =>
-        a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
-      )
-      .map((path) => ({ type: "ESModule", path: join(root, path) })),
-    modulesRoot: root,
-    compatibilityDate: "2026-10-30",
-    compatibilityFlags: ["nodejs_compat"],
-    assets: {
-      directory: new URL("../dist/client/", import.meta.url).pathname,
-      routerConfig: { has_user_worker: true },
+  ...withBuildsFixture(
+    {
+      name: "pricing-ui-test",
+      modules: filenames
+        .filter((path) => path.endsWith(".js"))
+        .sort((a, b) =>
+          a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
+        )
+        .map((path) => ({ type: "ESModule", path: join(root, path) })),
+      modulesRoot: root,
+      compatibilityDate: "2026-10-30",
+      compatibilityFlags: ["nodejs_compat"],
+      assets: {
+        directory: new URL("../dist/client/", import.meta.url).pathname,
+        routerConfig: { has_user_worker: true },
+      },
+      durableObjects: {
+        COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+      },
+      r2Buckets: ["SOURCES"],
+      hyperdrives: { HYPERDRIVE: connection },
+      bindings: {
+        BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: origin,
+        STRIPE_SECRET_KEY: "sk_test_pricing_ui",
+        STRIPE_PRO_PRICE_ID: "price_pro",
+        STRIPE_TEAM_PRICE_ID: "price_team",
+      },
     },
-    durableObjects: {
-      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
-    },
-    r2Buckets: ["SOURCES"],
-    hyperdrives: { HYPERDRIVE: connection },
-    bindings: {
-      BETTER_AUTH_SECRET: secret,
-      BETTER_AUTH_URL: origin,
-      STRIPE_SECRET_KEY: "sk_test_pricing_ui",
-      STRIPE_PRO_PRICE_ID: "price_pro",
-      STRIPE_TEAM_PRICE_ID: "price_team",
-    },
-    serviceBindings: {
-      COMPILER: async () => new Response(null, { status: 404 }),
-    },
-  }),
+    async () => new Response(null, { status: 404 }),
+  ),
   port,
   resourcePersistencePath: directory,
 });

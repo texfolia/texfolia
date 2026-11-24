@@ -61,15 +61,18 @@ bun run dev
 
 Turbo starts Postgres, waits for its health check, and starts the product app at
 [localhost:3000](http://localhost:3000). It also builds the LaTeX engine image
-and runs the Hono compiler locally with Bun's file watcher. The compiler starts
-a dedicated Docker engine container when a project first compiles. The first
+and runs the compiler locally with Bun's file watcher. The compiler starts a Docker
+engine container for the first compile and reuses it, up to 20 at once, until the
+pool has been idle for ten minutes. The first
 image build downloads and caches the base LaTeX packages. Additional packages
 may need a network connection when first used.
 
-Press Ctrl+C to stop the development processes. Postgres and project engine
-containers keep running. Run `docker compose stop` to stop Postgres. Database
-data persists in the Compose volume, and compiler data persists in
-`apps/compiler/.cache/compiler.sqlite`.
+Press Ctrl+C to stop the development processes. Postgres and engine containers
+keep running. Run `docker compose stop` to stop Postgres. Database
+data persists in the Compose volume. Build history and artifacts persist with the
+product app's other local Worker storage, and the engine pool persists in
+`apps/compiler/.cache/pool.sqlite`. Remove leftover engine containers with
+`docker ps -aq --filter label=texfolia.compiler | xargs docker rm -f`.
 
 Development and build commands delegate to Turbo. To run one app independently:
 
@@ -83,8 +86,8 @@ Run these in separate terminals when you need them. `dev:app` starts Postgres
 and the product app. `dev:web` starts the TanStack Start marketing site at
 [localhost:4321](http://localhost:4321). `dev:compiler` builds the engine image
 and starts only the compiler API at `http://localhost:8080`.
-Template previews run as project builds on the same compiler. See the
-[compiler guide](../../../../compiler/README.md#template-previews).
+Template previews run as project builds on the same compiler. See
+[Template lifecycle](/templates/).
 
 Cloudflare simulates the email binding locally and logs the file containing
 each sign-in code or invitation. You can also inspect sent messages in
@@ -95,8 +98,7 @@ and webhook signature verification.
 The web app reads `env.HYPERDRIVE.connectionString` in both environments. Local
 development uses `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` from
 `apps/app/.env`. Compiler requests use loopback HTTP locally and a service
-binding on Cloudflare. The local compiler stores jobs and PDFs in its SQLite
-database.
+binding on Cloudflare. The compiler stores no jobs or PDFs.
 
 See the [database guide](../../../../../packages/db/README.md) for standalone schema operations
 and integration checks. For deployed environments, follow

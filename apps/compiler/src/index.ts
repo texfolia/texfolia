@@ -1,27 +1,27 @@
 import { assertLocalEnvironment } from "../../../scripts/local-environment.mts";
-import { createLocalRuntime } from "./local";
-import { createLocalContainerPool } from "./local-containers";
-import { maxSourceSyncBytes } from "./source-sync";
+import { poolSettings } from "./config";
+import { createLocalCompiler, sqliteStore } from "./local";
+import { dockerLayer } from "./local-containers";
 
 assertLocalEnvironment(process.env);
 
-const path = process.env.COMPILER_DB_PATH ?? ".cache/compiler.sqlite";
-const pool = createLocalContainerPool({
-  path: `${path}.pool.sqlite`,
-  socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
-  image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
-  network: process.env.COMPILER_DOCKER_NETWORK,
-});
-const runtime = createLocalRuntime({
-  path,
-  projectEngine: pool.projectEngine,
+const compiler = createLocalCompiler({
+  variables: process.env,
+  store: sqliteStore(process.env.COMPILER_POOL_PATH ?? ".cache/pool.sqlite"),
+  containers: dockerLayer({
+    socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
+    image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
+    network: process.env.COMPILER_DOCKER_NETWORK,
+    concurrency: poolSettings(process.env).concurrency,
+  }),
 });
 
 const server = Bun.serve({
   hostname: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 8080),
-  maxRequestBodySize: maxSourceSyncBytes,
-  idleTimeout: 120,
-  fetch: runtime.fetch,
+  maxRequestBodySize: 64 * 1024 * 1024,
+  // A compile may run for minutes before its first byte.
+  idleTimeout: 0,
+  fetch: compiler.fetch,
 });
 console.log(`Compiler listening on ${server.url}`);

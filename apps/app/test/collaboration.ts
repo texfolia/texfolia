@@ -94,7 +94,7 @@ const runtimeOptions = {
     compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
     durableObjects: {
       COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
-      COMPILER_STREAMS: { className: "CompilerFixture", useSQLite: true },
+      BUILDS: { className: "BuildsFixture", useSQLite: true },
     },
     r2Buckets: ["SOURCES"],
     hyperdrives: { HYPERDRIVE: connectionString },
@@ -113,10 +113,6 @@ const runtimeOptions = {
       MICROSOFT_CLIENT_SECRET: "fixture",
     },
     serviceBindings: {
-      COMPILER: {
-        name: "collaboration-test",
-        entrypoint: "CompilerServiceFixture",
-      },
       CLIENT: () =>
         new Response(client, {
           headers: { "Content-Type": "text/javascript" },

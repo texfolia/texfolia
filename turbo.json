@@ -178,7 +178,11 @@
     },
     "app#typecheck": {
       "dependsOn": ["^typecheck"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/compiler/src/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/compiler/src/**",
+        "$TURBO_ROOT$/apps/compiler/scripts/engine-client.ts"
+      ],
       "outputs": []
     },
     "compiler#test": {

@@ -1,15 +1,8 @@
 import assert from "node:assert/strict";
 
-import { encodeBase64 } from "../src/artifacts";
-import { createEngineClient } from "../src/engine";
-import type { Project } from "../src/project";
-import type { Engine } from "../src/types";
+import { compileSuccessfully, packCache, type Files } from "./engine-client";
 
-const engine = createEngineClient(
-  (request) => fetch(request),
-  process.env.ENGINE_URL ?? "http://127.0.0.1:8081",
-);
-type Cache = NonNullable<Parameters<Engine>[1]["cache"]>;
+type Cache = Map<string, Uint8Array>;
 const bibliography = String.raw`@book{knuth, author={Donald Knuth}, title={Original Title}, year={1984}, publisher={Publisher}}
 @book{lamport, author={Leslie Lamport}, title={Second Reference}, year={1994}, publisher={Publisher}}`;
 const document = (
@@ -31,17 +24,13 @@ for (const documentClass of ["article", "report", "book", "amsart", "beamer"]) {
     documentClass === "beamer"
       ? String.raw`\begin{frame}Ready\end{frame}`
       : "Ready";
-  const output = await engine(
-    {
-      mainFile: "main.tex",
-      files: {
-        "main.tex": String.raw`\documentclass{${documentClass}}\begin{document}${body}\end{document}`,
-      },
+  const output = await compileSuccessfully({
+    files: {
+      "main.tex": String.raw`\documentclass{${documentClass}}\begin{document}${body}\end{document}`,
     },
-    { jobId: crypto.randomUUID(), attempt: 1, plan: "free" },
-  );
+  });
   assert.ok(output.pdf.length > 1000, `${documentClass}: missing PDF`);
-  assert.doesNotMatch(output.log, /generating format/i, documentClass);
+  assert.doesNotMatch(output.result.log, /generating format/i, documentClass);
   console.info(`${documentClass}: compiled using baked format`);
 }
 
@@ -54,23 +43,24 @@ async function compile({
   mainFile = "main.tex",
 }: {
   label: string;
-  files: Project["files"];
+  files: Files;
   cache?: Cache;
   bibtex: boolean;
   text: string;
   mainFile?: string;
 }) {
-  const output = await engine(
-    { mainFile, files },
-    { jobId: crypto.randomUUID(), attempt: 1, plan: "free", cache },
-  );
-  assert.equal(/Running BibTeX/.test(output.log), bibtex, label);
+  const output = await compileSuccessfully({
+    mainFile,
+    files,
+    cache: cache ? await packCache(cache) : null,
+  });
+  assert.equal(/Running BibTeX/.test(output.result.log), bibtex, label);
   assert.doesNotMatch(
-    output.log,
+    output.result.log,
     /generating format|stopping at 6 passes/i,
     label,
   );
-  if (!bibtex) assert.doesNotMatch(output.log, /bibtex was run/, label);
+  if (!bibtex) assert.doesNotMatch(output.result.log, /bibtex was run/, label);
   const pdfText = Bun.spawn(["pdftotext", "-", "-"], {
     stdin: new Blob([output.pdf]),
     stdout: "pipe",
@@ -87,12 +77,8 @@ async function compile({
     extracted.includes("See Section 2."),
     `${label}: unresolved reference`,
   );
-  const next: Cache = {};
-  for (const [path, blob] of Object.entries(output.files ?? {}))
-    next[path] = {
-      base64: encodeBase64(new Uint8Array(await blob.arrayBuffer())),
-    };
-  assert.ok(next["main.bbl"], `${label}: missing restored bibliography`);
+  const next: Cache = output.files;
+  assert.ok(next.has("main.bbl"), `${label}: missing restored bibliography`);
   console.info(`${label}: verified PDF, BibTeX ${bibtex ? "ran" : "skipped"}`);
   return next;
 }
@@ -196,17 +182,15 @@ await compile({
 await compile({
   label: "changed bbl",
   files,
-  cache: {
+  cache: new Map([
     ...clean,
-    "main.bbl": {
-      base64: encodeBase64(new TextEncoder().encode("Modified bibliography")),
-    },
-  },
+    ["main.bbl", new TextEncoder().encode("Modified bibliography")],
+  ]),
   bibtex: true,
   text: "Original Title",
 });
-const missingBbl = { ...clean };
-delete missingBbl["main.bbl"];
+const missingBbl = new Map(clean);
+missingBbl.delete("main.bbl");
 await compile({
   label: "missing bbl",
   files,
@@ -214,8 +198,8 @@ await compile({
   bibtex: true,
   text: "Original Title",
 });
-const missingMetadata = { ...clean };
-delete missingMetadata[".texfolia-bibtex-v1"];
+const missingMetadata = new Map(clean);
+missingMetadata.delete(".texfolia-bibtex-v1");
 await compile({
   label: "legacy cache",
   files,

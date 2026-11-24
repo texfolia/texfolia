@@ -1,10 +1,10 @@
+import { fetchBuilds } from "#/lib/builds/client";
 import {
   cleanupDeletedCollaboration,
   invalidateCollaborationAccess,
   type CollaborationAccess,
   type CollaborationCleanup,
 } from "#/lib/collaboration/server";
-import { fetchCompiler } from "#/lib/compile/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
 
 import * as projects from "./server";
@@ -70,7 +70,7 @@ export async function trashProject({
   await projects.trashProject({ ...args, lock: lockProject });
   await invalidateCollaborationAccess(collaboration, projectId);
   try {
-    const response = await fetchCompiler(`/projects/${projectId}/build`, {
+    const response = await fetchBuilds(`/projects/${projectId}/build`, {
       method: "DELETE",
     });
     if (!response.ok)

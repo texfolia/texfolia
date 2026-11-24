@@ -99,7 +99,13 @@ export function containerStart(
 ): ContainerStart {
   if (!compiler) return { kind: "unknown", label: "Container" };
   if (compiler.prewarmed)
-    return { kind: "warm", label: "Warm container (prepared while editing)" };
+    return {
+      kind: "warm",
+      label:
+        compiler.archiveStatus === "restored"
+          ? "Warm container, cache restored"
+          : "Warm container, no cache",
+    };
   switch (compiler.archiveStatus) {
     case "warm":
       return {

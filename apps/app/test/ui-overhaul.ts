@@ -17,7 +17,7 @@ import {
   user,
 } from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 
 import {
@@ -30,6 +30,7 @@ import {
   grantProjectAccess,
   revokeProjectAccess,
 } from "../src/lib/sharing/project-sharing.server";
+import { withBuildsFixture } from "./builds/miniflare";
 import { pdfFixture } from "./pdf-fixture";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
@@ -60,83 +61,82 @@ const port = portReservation.port;
 portReservation.stop(true);
 assert(port);
 const mf = new Miniflare({
-  ...convertV4MiniflareOptions({
-    name: "ui-overhaul-test",
-    modules: filenames
-      .filter((path) => path.endsWith(".js"))
-      .sort((a, b) =>
-        a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
-      )
-      .map((path) => ({ type: "ESModule", path: join(root, path) })),
-    modulesRoot: root,
-    compatibilityDate: "2026-10-30",
-    compatibilityFlags: ["nodejs_compat"],
-    assets: {
-      directory: new URL("../dist/client/", import.meta.url).pathname,
-      routerConfig: { has_user_worker: true },
-    },
-    durableObjects: {
-      COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
-    },
-    r2Buckets: ["SOURCES"],
-    hyperdrives: { HYPERDRIVE: connectionString },
-    bindings: {
-      BETTER_AUTH_SECRET: secret,
-      BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
-      STRIPE_SECRET_KEY: "sk_test_ui",
-      TEMPLATE_REVIEWER_IDS: ownerId,
-      ...Object.fromEntries(
-        ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((provider) => [
-          [`${provider}_CLIENT_ID`, "fixture"],
-          [`${provider}_CLIENT_SECRET`, "fixture"],
-        ]),
-      ),
-    },
-    serviceBindings: {
-      COMPILER: async (request) => {
-        const path = new URL(request.url).pathname;
-        if (path.endsWith("/build/files"))
-          return new Response(
-            new URL(request.url).searchParams.get("path")?.endsWith(".pdf")
-              ? pdfFixture()
-              : "Generated output fixture\n",
-            {
-              headers: { "Content-Type": "text/plain" },
-            },
-          );
-        if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
-        if (path.endsWith("/changed"))
-          return new Response(null, { status: 204 });
-        const snapshot = {
-          revision: 0,
-          current: null,
-          latestBuild: null,
-          stale: false,
-          artifacts: showArtifacts
-            ? {
-                id: "fixture-build",
-                revision: 0,
-                digest: "fixture",
-                builtAt: new Date().toISOString(),
-                builtBy: "UI fixture",
-                engine: "tectonic",
-                pdf: null,
-                files: [
-                  { path: "output.pdf", key: "pdf-v1", sizeBytes: 500 },
-                  { path: "main.log", key: "log-v1", sizeBytes: 25 },
-                  { path: "nested/main.aux", key: "aux-v1", sizeBytes: 25 },
-                ],
-              }
-            : null,
-        };
-        if (path.endsWith("/events"))
-          return new Response(`data: ${JSON.stringify(snapshot)}\n\n`, {
-            headers: { "Content-Type": "text/event-stream" },
-          });
-        return Response.json(snapshot);
+  ...withBuildsFixture(
+    {
+      name: "ui-overhaul-test",
+      modules: filenames
+        .filter((path) => path.endsWith(".js"))
+        .sort((a, b) =>
+          a === "index.js" ? -1 : b === "index.js" ? 1 : a.localeCompare(b),
+        )
+        .map((path) => ({ type: "ESModule", path: join(root, path) })),
+      modulesRoot: root,
+      compatibilityDate: "2026-10-30",
+      compatibilityFlags: ["nodejs_compat"],
+      assets: {
+        directory: new URL("../dist/client/", import.meta.url).pathname,
+        routerConfig: { has_user_worker: true },
+      },
+      durableObjects: {
+        COLLABORATION: { className: "ProjectCollaboration", useSQLite: true },
+      },
+      r2Buckets: ["SOURCES"],
+      hyperdrives: { HYPERDRIVE: connectionString },
+      bindings: {
+        BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
+        STRIPE_SECRET_KEY: "sk_test_ui",
+        TEMPLATE_REVIEWER_IDS: ownerId,
+        ...Object.fromEntries(
+          ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((provider) => [
+            [`${provider}_CLIENT_ID`, "fixture"],
+            [`${provider}_CLIENT_SECRET`, "fixture"],
+          ]),
+        ),
       },
     },
-  }),
+    async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path.endsWith("/build/files"))
+        return new Response(
+          new URL(request.url).searchParams.get("path")?.endsWith(".pdf")
+            ? pdfFixture()
+            : "Generated output fixture\n",
+          {
+            headers: { "Content-Type": "text/plain" },
+          },
+        );
+      if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
+      if (path.endsWith("/changed")) return new Response(null, { status: 204 });
+      const snapshot = {
+        revision: 0,
+        current: null,
+        latestBuild: null,
+        stale: false,
+        artifacts: showArtifacts
+          ? {
+              id: "fixture-build",
+              revision: 0,
+              digest: "fixture",
+              builtAt: new Date().toISOString(),
+              builtBy: "UI fixture",
+              engine: "tectonic",
+              pdf: null,
+              files: [
+                { path: "output.pdf", key: "pdf-v1", sizeBytes: 500 },
+                { path: "main.log", key: "log-v1", sizeBytes: 25 },
+                { path: "nested/main.aux", key: "aux-v1", sizeBytes: 25 },
+              ],
+            }
+          : null,
+      };
+      if (path.endsWith("/events"))
+        return new Response(`data: ${JSON.stringify(snapshot)}\n\n`, {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      return Response.json(snapshot);
+    },
+  ),
   port,
   resourcePersistencePath: directory,
 });

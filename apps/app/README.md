@@ -157,8 +157,8 @@ INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test b
 ```
 
 The check runs the production POST and GET handlers with signed sessions,
-Postgres, local R2, and the compiler coordinator. Only the TeX engine and a lost
-compiler response are fixtures. It covers concurrent and completed retries,
+Postgres, local R2, and the build coordinator. Only the compiler and a lost
+coordinator response are fixtures. It covers concurrent and completed retries,
 request conflicts, source resync, authorization, and status reconciliation.
 
 `y-codemirror.next` binds the editor, remote selections, and user cursors to Yjs.
@@ -181,8 +181,8 @@ Compaction does not reset the document or discard offline merge history.
 An alarm writes merged text to R2 after two seconds, through the same project
 lock, quotas, and content-addressed keys as other sources. Failed writes remain
 dirty in SQLite and retry. Save waits for this write, and compile uses the
-acknowledged merged text. The existing ProjectCoordinator stays in the compiler
-Worker and receives source-change notifications through its existing endpoint.
+acknowledged merged text. The project's build coordinator receives source-change
+notifications.
 
 Moving a project to the trash closes its sockets and keeps its documents, so a
 restored project has the CRDT identities that comments and offline edits use.
@@ -272,8 +272,7 @@ INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test b
 This uses the configured R2 binding with isolated temporary local storage and
 real Postgres. It tests text/binary round trips, byte counts, authorization,
 stale versions, rollback, deduplication, garbage collection, recursive deletion,
-and concurrent aggregate quotas. The existing compiler invalidation calls are
-best-effort and log failures when the compiler Worker is unavailable in this
+and concurrent aggregate quotas. Build invalidation calls are best-effort and reach a fixture in this
 standalone check. CI runs this check after applying the database schema.
 
 To check uploads in the rendered workspace, start a local Tectonic engine and run:
@@ -304,7 +303,7 @@ client and CodeMirror binding. It covers concurrent and offline edits, reconnect
 and reload recovery, read-only viewers, permission changes, named cursors,
 formatting, local undo, hibernation, snapshot compaction, and persisted sources.
 The test entry point invokes the production collaboration and compile GET routes
-with signed Better Auth sessions stored in Postgres. A compiler fixture supplies
+with signed Better Auth sessions stored in Postgres. A builds fixture supplies
 controlled SSE and progressive PDF chunks. Revocation cases cover personal
 collaborators and organization members, including idle sockets after hibernation,
 role changes, denied reconnects, viewer access, and persistence of accepted edits.
@@ -400,7 +399,7 @@ deploy scripts pass `--env production`, and the web build selects
 Production compiler
 requests use the `COMPILER` service binding in `wrangler.jsonc` and need no
 internal token. `COMPILER_URL` is only a development setting and defaults to
-`http://localhost:8080`. See the [compiler deployment guide](../compiler/README.md).
+`http://localhost:8080`.
 After changing bindings, run `bun run cf:typegen` to refresh their TypeScript types.
 
 Bindings are configured in `wrangler.jsonc`. See
@@ -424,7 +423,7 @@ Auth cookies, production loaders, and authenticated RPC and API routes. The chec
 covers creation, folders, binary uploads and version changes, delayed snapshots,
 changes during compilation, stale compile submissions, ZIP contents, editor
 selection, offline recovery after reload, and personal and organization access
-revocation. A compiler fixture holds jobs open so metadata changes can occur
+revocation. A builds fixture holds jobs open so metadata changes can occur
 during a build. CI runs this check after applying the database schema.
 
 ## Managed AI assistant

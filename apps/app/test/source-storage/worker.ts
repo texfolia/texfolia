@@ -176,7 +176,6 @@ export default {
       await assert.rejects(
         compileResync({
           db,
-          bucket,
           userId: ownerId,
           projectId: pathProject.id,
           mainFile: "main.tex",
@@ -192,7 +191,6 @@ export default {
       await assert.rejects(
         compileResync({
           db,
-          bucket,
           userId: ownerId,
           projectId: pathProject.id,
           mainFile: "main.tex",
@@ -254,16 +252,15 @@ export default {
       );
       const recoveredSources = await compileResync({
         db,
-        bucket,
         userId: ownerId,
         projectId: pathProject.id,
         mainFile: "main.tex",
         sourceRevision: 0,
       });
-      assert.equal(
-        recoveredSources.files["chapters/intro.tex"]?.content,
-        "preserved source",
-      );
+      assert.deepEqual(recoveredSources.files["chapters/intro.tex"], {
+        hash: boundary.sourceVersion.objectKey?.split("/").at(-1),
+        size: "preserved source".length,
+      });
       await renameProjectNode({
         db,
         userId: ownerId,
@@ -456,7 +453,6 @@ export default {
       );
       const resync = await compileResync({
         db,
-        bucket,
         projectId,
         userId: editorId,
         mainFile: "main.tex",
@@ -473,13 +469,10 @@ export default {
         resync.files["image.png"]?.hash,
         binary.sourceVersion.objectKey?.split("/").at(-1),
       );
-      assert.deepEqual(resync.files["image.png"]?.content, {
-        base64: encodeSource(binaryBytes),
-      });
+      assert.equal(resync.files["image.png"]?.size, binaryBytes.length);
       await assert.rejects(
         compileResync({
           db,
-          bucket,
           projectId,
           userId: viewerId,
           mainFile: "main.tex",

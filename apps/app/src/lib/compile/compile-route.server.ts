@@ -17,7 +17,6 @@ export const compileHandlers = createCompileHandlers<{
   principal: ({ request, projectId, context }) =>
     requestPrincipal({ request, projectId, ...context }),
   project: compileProject,
-  bucket: () => env.SOURCES,
   compilePlan,
   streamLive: (options) =>
     streamProjectResponse({

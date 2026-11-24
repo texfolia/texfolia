@@ -74,10 +74,12 @@ Edit `apps/app/wrangler.jsonc` before building the production deployment artifac
 3. Configure production routes, auth origins, Turnstile keys, OAuth callbacks,
    Stripe settings, email delivery, and Worker secrets in the production account.
    Never copy production secrets into local environment files.
-4. Provision the existing production source bucket `texfolia-sources`. Provision
-   the compiler's existing bucket, queues, and container infrastructure using the
-   [compiler deployment guide](../../../../compiler/README.md#deploy-to-cloudflare).
-   The production web service binds `COMPILER` to `texfolia-compiler`.
+4. Provision the production source bucket `texfolia-sources`, the build artifact
+   bucket `texfolia-compilations`, and the `compile-pro`, `compile-free`,
+   `compile-dlq`, and `background` queues. The product app consumes the queues.
+   The compiler needs a Workers Paid account with Containers enabled and has no
+   storage of its own. The production web service binds `COMPILER` to
+   `texfolia-compiler`.
 5. Run `bun run cf:typegen` after changing bindings.
 
 The top-level web configuration is for local emulation. Its local Worker,

@@ -1,3 +1,4 @@
+import { buildsFetcher } from "#/lib/builds/client";
 import type { GitAction } from "#/lib/git";
 import { runGit } from "#/lib/git/git.server";
 import { invalidateSourceBuild } from "#/lib/projects/project-source.server";
@@ -11,7 +12,7 @@ import { CollaborationRoom } from "./room";
 
 // The Durable Object bound as `COLLABORATION`. The room comes from
 // #/lib/collaboration; this class supplies the app's project access, share
-// links, compiler invalidation, and Git.
+// links, build invalidation, and Git.
 export class ProjectCollaboration extends CollaborationRoom<Env> {
   protected override lockProject(request: ProjectAccessRequest) {
     return lockProject(request);
@@ -22,7 +23,7 @@ export class ProjectCollaboration extends CollaborationRoom<Env> {
   }
 
   protected override sourcesChanged(projectId: string) {
-    return invalidateSourceBuild(projectId, this.env.COMPILER);
+    return invalidateSourceBuild(projectId, buildsFetcher(this.env.BUILDS));
   }
 
   async gitAction(options: {

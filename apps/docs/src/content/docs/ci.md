@@ -21,7 +21,8 @@ restore.
 Turbo typecheck, unit test, package lint, and package format tasks use
 `--filter=...[<PR base SHA>]`, which includes changed packages and their dependents.
 Compiler runtime and fixture changes also select web tasks because web tests import
-those files outside the package dependency graph. Repository link checks, root
+those files outside the package dependency graph. Build history, admission, and
+queue code is web code. Repository link checks, root
 Oxlint, and root Oxfmt always run, including on documentation changes.
 
 Changes to shared packages, the lockfile, root configuration, CI configuration,

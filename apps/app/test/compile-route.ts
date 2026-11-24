@@ -5,7 +5,6 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { unknownEngineTiming } from "@texfolia/contracts";
 import { buildSnapshotSchema } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import {
@@ -21,6 +20,7 @@ import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { z } from "zod";
 
+import { sourceDeltaSchema } from "#/lib/builds/source-sync";
 import {
   compileHistoryLimit,
   compileHistorySchema,
@@ -31,9 +31,6 @@ import {
 } from "#/lib/compile";
 import { projectMetadataVersion } from "#/lib/projects";
 
-import { createLocalRuntime } from "../../compiler/src/local";
-import { sourceDeltaSchema } from "../../compiler/src/source-sync";
-import type { Engine } from "../../compiler/src/types";
 import { readProjectMetadata } from "../src/lib/projects/project-metadata.server";
 import { createProject } from "../src/lib/projects/project.server";
 import {
@@ -46,6 +43,8 @@ import {
   listShareLinks,
   revokeShareLink,
 } from "../src/lib/sharing/project-share-links.server";
+import { createCompilerFixture } from "./builds/compiler-fixture";
+import { buildsBindings } from "./builds/miniflare";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
 assert(
@@ -62,38 +61,31 @@ const accepted = z.object({
   revision: z.number().optional(),
   sourceRevision: z.number().optional(),
 });
-const submissions: Array<{ id: string; body: unknown; status: number }> = [];
+const submissionSchema = z.object({
+  id: z.string(),
+  body: z.unknown(),
+  status: z.number(),
+});
+const submissions: z.infer<typeof submissionSchema>[] = [];
 const expectedSources = new Map<
   string,
   Record<string, string | { base64: string }>
 >();
 let engineCalls = 0;
-const engine: Engine = async (project, context) => {
+const compiler = createCompilerFixture(({ options, sources }) => {
   engineCalls++;
-  const expected = expectedSources.get(context.projectId ?? "");
+  const expected = expectedSources.get(options.affinity);
   if (expected) {
-    assert("kind" in project);
-    assert.equal(project.kind, "synced");
-    assert(context.readSource);
-    assert.deepEqual(
-      Object.keys(project.files).sort(),
-      Object.keys(expected).sort(),
-    );
-    for (const [path, file] of Object.entries(project.files))
-      assert.deepEqual(await context.readSource(file), expected[path]);
+    assert.deepEqual(Object.keys(sources).sort(), Object.keys(expected).sort());
+    for (const [path, bytes] of Object.entries(sources))
+      assert.deepEqual(Buffer.from(bytes), sourceBytes(expected[path] ?? ""));
   }
-  const pdf = new TextEncoder().encode("%PDF-compile-route-test");
-  return {
-    pdf,
-    log: "compiled",
-    timing: unknownEngineTiming,
-    files: { "main.pdf": new Blob([pdf]) },
-  };
-};
-const compiler = createLocalRuntime({
-  path: join(directory, "compiler.sqlite"),
-  projectEngine: () => engine,
+  return { pdf: "%PDF-compile-route-test", log: "compiled" };
 });
+const sourceBytes = (content: string | { base64: string }) =>
+  typeof content === "string"
+    ? Buffer.from(content)
+    : Buffer.from(content.base64, "base64");
 let loseResponse = false;
 let beforeSubmit = async () => {};
 const worker = await build({
@@ -120,8 +112,8 @@ const worker = await build({
 });
 const script = worker.outputFiles[0]?.text;
 assert(script);
-// The route, signed-session auth, Postgres, R2, and compiler coordinator run for
-// real. Only the TeX engine and a lost service response are fixtures.
+// The route, signed-session auth, Postgres, R2, queues, and build coordinator
+// run for real. Only the compiler and a lost coordinator response are fixtures.
 const mf = new Miniflare({
   ...convertV4MiniflareOptions({
     modules: true,
@@ -129,7 +121,7 @@ const mf = new Miniflare({
     compatibilityDate: "2026-10-30",
     compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
     hyperdrives: { HYPERDRIVE: connectionString },
-    r2Buckets: ["SOURCES"],
+    ...buildsBindings,
     bindings: {
       BETTER_AUTH_SECRET: secret,
       BETTER_AUTH_URL: "http://localhost",
@@ -144,32 +136,24 @@ const mf = new Miniflare({
       MICROSOFT_CLIENT_SECRET: "fixture",
     },
     serviceBindings: {
-      COMPILER: async (request) => {
-        const submitting = request.method === "POST";
-        if (submitting) await beforeSubmit();
-        const body = submitting ? await request.text() : undefined;
-        const response = await compiler.fetch(
-          new Request(request.url, {
-            method: request.method,
-            headers: [...request.headers.entries()],
-            body,
-          }),
-        );
-        if (submitting) {
-          submissions.push({
-            id: request.headers.get("X-Compilation-Id") ?? "",
-            body: JSON.parse(body ?? "null"),
-            status: response.status,
-          });
-          if (loseResponse && response.status === 202) {
-            loseResponse = false;
-            throw new Error("Lost compiler acceptance response");
-          }
+      COMPILER: async (request) =>
+        compiler.fetch(request.url, {
+          method: request.method,
+          headers: [...request.headers.entries()],
+          body:
+            request.method === "POST" ? await request.arrayBuffer() : undefined,
+        }),
+      // Observes submissions inside the coordinator's Durable Object.
+      SUBMISSIONS: async (request) => {
+        if (new URL(request.url).pathname === "/before") {
+          await beforeSubmit();
+          return new Response(null, { status: 204 });
         }
-        return new Response(await response.arrayBuffer(), {
-          status: response.status,
-          headers: response.headers,
-        });
+        const submission = submissionSchema.parse(await request.json());
+        submissions.push(submission);
+        const lost = loseResponse && submission.status === 202;
+        if (lost) loseResponse = false;
+        return new Response(null, { status: lost ? 500 : 204 });
       },
     },
   }),
@@ -609,8 +593,13 @@ try {
         Object.keys(sources).sort(),
         label,
       );
-      for (const [path, content] of Object.entries(sources))
-        assert.deepEqual(snapshot.files[path]?.content, content, label);
+      for (const [path, content] of Object.entries(sources)) {
+        const bytes = new Uint8Array(sourceBytes(content));
+        const file = snapshot.files[path];
+        assert.equal(file?.hash, await hashSource(bytes), label);
+        assert.equal(file?.content, undefined, "Saved sources are not copied");
+        assert.equal(file?.size, bytes.length, label);
+      }
     }
     await completed(assistant.projectId, assistant.userId, job.id);
   }
@@ -623,11 +612,13 @@ try {
   // Clearing the mirror sets sources to null, just like the 30-day source wipe.
   assert.equal(
     (
-      await compiler.fetch(
-        new Request(`http://local/projects/${assistant.projectId}/build`, {
-          method: "DELETE",
-        }),
+      await (
+        await mf.getDurableObjectNamespace("BUILDS")
       )
+        .getByName(assistant.projectId)
+        .fetch(`http://builds/projects/${assistant.projectId}/build`, {
+          method: "DELETE",
+        })
     ).status,
     204,
   );
@@ -878,6 +869,5 @@ try {
   for (const id of cookies.keys()) await db.delete(user).where(eq(user.id, id));
   await db.$client.end();
   await mf.dispose();
-  compiler.close();
   await rm(directory, { recursive: true, force: true });
 }
