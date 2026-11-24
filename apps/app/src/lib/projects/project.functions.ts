@@ -47,7 +47,7 @@ export const trashProject = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       projectId: data.projectId,
-      collaboration: env.COLLABORATION,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
     });
   });
 

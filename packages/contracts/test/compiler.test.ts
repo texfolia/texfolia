@@ -2,12 +2,13 @@ import { expect, test } from "bun:test";
 
 import { Schema } from "effect";
 
-import { readArchive, writeArchive } from "../src/archive";
+import { collectArchive, readArchive, writeArchive } from "../src/archive";
 import {
   CompileOptions,
   compileOptionHeaders,
   encodeCompileHeaders,
   encodeCompileRequest,
+  collectCompileArtifacts,
   readCompileArtifacts,
   readCompilePlacement,
   readCompileRejection,
@@ -57,7 +58,7 @@ test("archives round trip through every chunk size and report their exact length
   const data = await collect(archive.body);
   expect(data.length).toBe(archive.size);
   for (const size of [1, 13, 512, 4096, data.length]) {
-    const read = await readArchive(chunked(data, size), { maxBytes: 1e6 });
+    const read = await collectArchive(chunked(data, size), { maxBytes: 1e6 });
     expect(
       [...read].map(([name, content]) => [
         name,
@@ -89,22 +90,22 @@ test("truncated, corrupt, oversized and duplicate archives are rejected", async 
     data.length - 600,
   ])
     await expect(
-      readArchive(chunked(data.slice(0, length), 300), { maxBytes: 1e6 }),
+      collectArchive(chunked(data.slice(0, length), 300), { maxBytes: 1e6 }),
     ).rejects.toThrow("Truncated archive");
   const corrupt = data.slice();
   corrupt[3]!++;
   await expect(
-    readArchive(chunked(corrupt, 512), { maxBytes: 1e6 }),
+    collectArchive(chunked(corrupt, 512), { maxBytes: 1e6 }),
   ).rejects.toThrow("Invalid archive entry");
   await expect(
-    readArchive(chunked(data, 512), { maxBytes: 1000 }),
+    collectArchive(chunked(data, 512), { maxBytes: 1000 }),
   ).rejects.toThrow("exceeds its limit");
   const duplicate = await artifacts([
     ["a", "1"],
     ["a", "2"],
   ]);
   await expect(
-    readArchive(chunked(duplicate, 512), { maxBytes: 1e6 }),
+    collectArchive(chunked(duplicate, 512), { maxBytes: 1e6 }),
   ).rejects.toThrow("Invalid archive entry");
 });
 
@@ -194,7 +195,7 @@ test("requests put the manifest first and load blobs lazily in order", async () 
     },
   });
   expect(loaded).toEqual([]);
-  const entries = await readArchive(request.body, { maxBytes: 1e6 });
+  const entries = await collectArchive(request.body, { maxBytes: 1e6 });
   expect([...entries.keys()]).toEqual([
     "manifest.json",
     `blobs/${hash}`,
@@ -210,14 +211,40 @@ test("requests put the manifest first and load blobs lazily in order", async () 
   });
 });
 
-test("the PDF is delivered before the rest of the response exists", async () => {
+test("each part reaches its sink as it arrives, and only the result is held", async () => {
   const pdf = crypto.getRandomValues(new Uint8Array(5000));
   const data = await artifacts([
     ["output.pdf", pdf],
-    ["result.json", JSON.stringify({ log: "ok", pdf: "main.pdf", files: [] })],
+    [
+      "result.json",
+      JSON.stringify({ log: "ok", pdf: "main.pdf", files: ["main.log", "a"] }),
+    ],
+    ["preview.png", "png"],
+    ["artifacts/0", "transcript"],
+    ["artifacts/1", ""],
+    ["cache.tar.zst", "cache"],
   ]);
   const tail = Promise.withResolvers<void>();
-  const preview = Promise.withResolvers<Uint8Array>();
+  const received = Promise.withResolvers<void>();
+  const events: string[] = [];
+  let chunks = 0;
+  const sink = (name: string, size: number) => {
+    const parts: Uint8Array[] = [];
+    return {
+      write: (part: Uint8Array) => {
+        chunks++;
+        parts.push(part.slice());
+      },
+      close: async () => {
+        const content = await new Blob(
+          parts as Uint8Array<ArrayBuffer>[],
+        ).text();
+        expect(new Blob(parts as Uint8Array<ArrayBuffer>[]).size).toBe(size);
+        events.push(name === "pdf" ? "pdf" : `${name}:${content}`);
+        if (name === "pdf") received.resolve();
+      },
+    };
+  };
   const reading = readCompileArtifacts(
     new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -228,37 +255,81 @@ test("the PDF is delivered before the rest of the response exists", async () => 
         controller.close();
       },
     }),
-    (body) => void collect(body).then(preview.resolve, preview.reject),
+    {
+      pdf: (size) => sink("pdf", size),
+      preview: (size) => sink("preview", size),
+      file: (path, size) => sink(path, size),
+      cache: (size) => sink("cache", size),
+    },
   );
-  expect(await preview.promise).toEqual(pdf);
+  // The PDF finished while the rest of the response does not exist yet.
+  await received.promise;
+  expect(chunks).toBe(2);
   tail.resolve();
-  expect((await reading).pdf).toEqual(pdf);
+  expect(await reading).toMatchObject({ log: "ok", pdf: "main.pdf" });
+  expect(events).toEqual([
+    "pdf",
+    "preview:png",
+    "main.log:transcript",
+    "a:",
+    "cache:cache",
+  ]);
 });
 
-test("a consumer that cancels its PDF does not disturb the artifacts", async () => {
-  const result = await readCompileArtifacts(
-    chunked(await artifacts(), 64),
-    (body) => void body.cancel(),
+test("a slow sink holds the archive back", async () => {
+  let pulled = 0;
+  const data = await artifacts([["output.pdf", "x".repeat(50_000)]]);
+  const release = Promise.withResolvers<void>();
+  const slow = readArchive(
+    new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          controller.enqueue(data.slice(pulled, pulled + 1000));
+          pulled += 1000;
+          if (pulled >= data.length) controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    ),
+    { maxBytes: 1e6, open: () => ({ write: () => release.promise }) },
   );
-  expect(result).toMatchObject({
-    result: { log: "ok", pdf: "main.pdf" },
-    preview: null,
-  });
-  expect(new TextDecoder().decode(result.files.get("main.log"))).toBe(
-    "transcript",
-  );
-  expect(new TextDecoder().decode(result.cache!)).toBe("cache");
+  await Bun.sleep(5);
+  expect(pulled).toBe(1000);
+  release.resolve();
+  await slow;
+  expect(pulled).toBeGreaterThan(50_000);
 });
 
-test("a response cut short errors the streamed PDF and the result", async () => {
+test("a response cut short aborts the sink it was filling", async () => {
   const data = await artifacts([["output.pdf", "x".repeat(2000)]]);
-  let streamed: Promise<unknown> | undefined;
+  let cause: unknown;
+  let closed = false;
   await expect(
-    readCompileArtifacts(chunked(data.slice(0, 1200), 600), (body) => {
-      streamed = collect(body).catch((error: unknown) => error);
+    readCompileArtifacts(chunked(data.slice(0, 1200), 600), {
+      pdf: () => ({
+        write: () => {},
+        close: () => {
+          closed = true;
+        },
+        abort: (error) => {
+          cause = error;
+        },
+      }),
     }),
   ).rejects.toThrow("Truncated archive");
-  expect(await streamed).toBeInstanceOf(Error);
+  expect(cause).toBeInstanceOf(Error);
+  expect(closed).toBe(false);
+});
+
+test("a result that could exhaust memory is refused", async () => {
+  await expect(
+    collectCompileArtifacts(
+      chunked(
+        await artifacts([["result.json", "x".repeat(4 * 1024 * 1024 + 1)]]),
+        65536,
+      ),
+    ),
+  ).rejects.toThrow("exceeds its limit");
 });
 
 test.each([
@@ -295,13 +366,13 @@ test.each([
   "responses with %s are rejected",
   async (_name, entries, message) => {
     await expect(
-      readCompileArtifacts(chunked(await artifacts(entries), 512)),
+      collectCompileArtifacts(chunked(await artifacts(entries), 512)),
     ).rejects.toThrow(message);
   },
 );
 
 test("failures, rejections and placement decode, and unknown shapes do not", async () => {
-  const failed = await readCompileArtifacts(
+  const failed = await collectCompileArtifacts(
     chunked(
       await artifacts([
         [

@@ -50,26 +50,40 @@ export async function copySource({
   return objectKey;
 }
 
-export async function putSource({
-  tx,
-  bucket,
-  projectId,
-  content,
-  previousSize,
-  kind,
-}: {
+type SourceTarget = {
   tx: SourceTransaction;
   bucket: SourceBucket;
   projectId: string;
-  content: string;
   previousSize: bigint;
-  kind: "text" | "binary";
-}) {
+};
+
+// Stores base64 content from a request.
+export async function putSource({
+  content,
+  kind,
+  ...target
+}: SourceTarget & { content: string; kind: "text" | "binary" }) {
   const bytes = decodeSource(content);
-  if (bytes.byteLength > maxSourceFileBytes)
-    throw new Error("File exceeds 10 MiB");
+  checkSourceSize(bytes);
   if (kind === "text")
     new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
+  return putSourceBytes({ ...target, bytes });
+}
+
+function checkSourceSize(bytes: Uint8Array) {
+  if (bytes.byteLength > maxSourceFileBytes)
+    throw new Error("File exceeds 10 MiB");
+}
+
+// Stores bytes the caller already has. Bytes of a text file must be UTF-8.
+export async function putSourceBytes({
+  tx,
+  bucket,
+  projectId,
+  bytes,
+  previousSize,
+}: SourceTarget & { bytes: Uint8Array<ArrayBuffer> }) {
+  checkSourceSize(bytes);
   const [usage] = await tx
     .select({ bytes: sql<string>`coalesce(sum(${projectNode.sizeBytes}), 0)` })
     .from(projectNode)

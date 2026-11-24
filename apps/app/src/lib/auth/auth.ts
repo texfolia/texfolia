@@ -10,10 +10,6 @@ import { z } from "zod";
 
 import { createBillingPlugin, enforceBillingScope } from "#/lib/billing/stripe";
 import {
-  invalidateOrganizationCollaborationAccess,
-  type CollaborationAccess,
-} from "#/lib/collaboration/server";
-import {
   codeEmail,
   deleteAccountEmail,
   invitationEmail,
@@ -21,6 +17,10 @@ import {
   type DeliverEmail,
   type EmailMessage,
 } from "#/lib/email";
+import {
+  invalidateOrganizationAccess,
+  type LiveProjects,
+} from "#/lib/projects/live";
 
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./captcha";
 
@@ -79,7 +79,7 @@ const removedMemberResponseSchema = z.union([
 
 // Reads its secrets from process.env. BETTER_AUTH_URL is the app origin
 // (https://app.texfolia.com in production), where OAuth callbacks land.
-export function createAuth(db: Db, collaboration?: CollaborationAccess) {
+export function createAuth(db: Db, live?: LiveProjects) {
   const baseURL = process.env.BETTER_AUTH_URL!;
   const allowedHostnames = z
     .array(z.hostname())
@@ -134,9 +134,9 @@ export function createAuth(db: Db, collaboration?: CollaborationAccess) {
           ctx.context.returned,
         );
         if (removed.success)
-          await invalidateOrganizationCollaborationAccess({
+          await invalidateOrganizationAccess({
             db,
-            collaboration,
+            live,
             ...removed.data,
           });
       }),

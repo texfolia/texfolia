@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import {
   encodeCompileHeaders,
   encodeCompileRequest,
-  readCompileArtifacts,
+  collectCompileArtifacts,
   readCompilePlacement,
   type CompileOptions,
   writeArchive,
@@ -145,7 +145,7 @@ test("sources pass through unchanged and artifacts stream back with their placem
   const placement = readCompilePlacement(response.headers);
   expect(placement).toMatchObject({ outcome: "cold" });
   expect(response.headers.get("X-Compile-Timing")).toBe("{}");
-  expect((await readCompileArtifacts(response.body!)).result.log).toBe("ok");
+  expect((await collectCompileArtifacts(response.body!)).result.log).toBe("ok");
   await compiler.released();
   const next = await compiler.post({ container: placement!.container });
   expect(readCompilePlacement(next.headers)).toMatchObject({

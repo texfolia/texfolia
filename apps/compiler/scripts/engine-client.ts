@@ -1,7 +1,7 @@
 import { engineTimingSchema } from "@texfolia/contracts";
 import {
   encodeCompileRequest,
-  readCompileArtifacts,
+  collectCompileArtifacts,
   writeArchive,
   type CompileManifest,
 } from "@texfolia/contracts/compiler";
@@ -79,7 +79,7 @@ export async function compileOnEngine(
     throw new Error(
       `Engine returned ${response.status}: ${await response.text()}`,
     );
-  const artifacts = await readCompileArtifacts(response.body!);
+  const artifacts = await collectCompileArtifacts(response.body!);
   return {
     ...artifacts,
     status: response.status,

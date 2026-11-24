@@ -4,7 +4,7 @@ import { template } from "@texfolia/db/schema";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import { fetchBuilds } from "#/lib/builds/client";
+import { connectBuilds, fetchBuilds } from "#/lib/builds/client";
 import { assertProjectSourcePaths, projectPaths } from "#/lib/projects";
 import { InvalidSourcePathError } from "#/lib/storage";
 import type { SourceBucket } from "#/lib/storage/server";
@@ -152,7 +152,7 @@ export async function refreshTemplatePreviews({
         );
       if (result.status !== "succeeded") {
         // The 60s lease already serialized this attempt; release immediately so
-        // an SSE completion event can promote the preview without waiting.
+        // a completion event can promote the preview without waiting.
         backoffMs = 0;
         continue;
       }
@@ -292,8 +292,10 @@ function shouldCheckPreview(snapshot: BuildSnapshot, jobId: string) {
     : snapshot.current !== null && snapshot.current.id !== jobId;
 }
 
-// Subscribes to the project's build stream for a queued template preview
-// and pushes a single terminal event (`ready` or `failed`) once settled.
+const heartbeatMs = 15_000;
+
+// Follows a queued template preview's builds and pushes a single terminal event
+// (`ready` or `failed`) once settled.
 export function createTemplatePreviewStream({
   templateId,
   initialJobId,
@@ -308,18 +310,25 @@ export function createTemplatePreviewStream({
   signal: AbortSignal;
 }) {
   const encoder = new TextEncoder();
-  const upstream = new AbortController();
-  let closed = false;
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let stop = () => {};
 
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      const close = () => {
+      let closed = false;
+      let socket: WebSocket | null = null;
+      const heartbeat = setInterval(() => {
+        send(": heartbeat\n\n");
+      }, heartbeatMs);
+      stop = () => {
         if (closed) return;
         closed = true;
+        clearInterval(heartbeat);
         signal.removeEventListener("abort", close);
-        upstream.abort();
-        void reader?.cancel().catch(() => {});
+        socket?.close();
+      };
+      const close = () => {
+        if (closed) return;
+        stop();
         try {
           controller.close();
         } catch {
@@ -327,107 +336,72 @@ export function createTemplatePreviewStream({
         }
       };
       const send = (chunk: string) => {
-        if (closed) return;
-        controller.enqueue(encoder.encode(chunk));
+        if (!closed) controller.enqueue(encoder.encode(chunk));
+      };
+      const retry = (reason = "") => {
+        send(`retry: 3000\n${reason}\n`);
+        close();
       };
       signal.addEventListener("abort", close, { once: true });
       if (signal.aborted) {
         close();
         return;
       }
+      let jobId = initialJobId;
+      const settle = async () => {
+        const next = await advance();
+        if (closed) return;
+        if (!next) {
+          close();
+          return;
+        }
+        if (next.previewStatus === "ready" || next.previewStatus === "failed") {
+          send(sseEvent(next.previewStatus));
+          close();
+          return;
+        }
+        jobId = next.previewJobId;
+      };
+      // Snapshots are handled in order, one at a time.
+      let queue = Promise.resolve();
+      const enqueue = (work: () => Promise<void> | void) => {
+        queue = queue.then(async () => {
+          if (!closed) await work();
+        });
+        queue.catch(() => retry());
+      };
       void (async () => {
-        let jobId = initialJobId;
-        const trySettle = async () => {
-          const next = await advance();
-          if (closed) return true;
-          if (!next) {
-            close();
-            return true;
-          }
-          if (
-            next.previewStatus === "ready" ||
-            next.previewStatus === "failed"
-          ) {
-            send(sseEvent(next.previewStatus));
-            close();
-            return true;
-          }
-          jobId = next.previewJobId;
-          return false;
-        };
-        try {
-          const response = await fetchBuilds(
-            `/projects/${encodeURIComponent(templateId)}/events`,
-            { signal: upstream.signal },
-            builds,
-          );
-          if (!response.ok || !response.body) {
-            if (!closed) send("retry: 3000\n: unavailable\n\n");
-            close();
+        const response = await connectBuilds(templateId, null, builds);
+        if (!response.webSocket) {
+          await response.body?.cancel();
+          retry(": unavailable\n");
+          return;
+        }
+        socket = response.webSocket;
+        socket.addEventListener("message", ({ data }) => {
+          let snapshot: BuildSnapshot;
+          try {
+            snapshot = buildSnapshotSchema.parse(JSON.parse(String(data)));
+          } catch {
+            // Ignore malformed build event payloads.
             return;
           }
-          reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let dataLines: string[] = [];
-          while (!closed) {
-            const { value, done } = await reader.read();
-            if (closed) return;
-            buffer += done
-              ? decoder.decode()
-              : decoder.decode(value, { stream: true });
-            const lines = buffer.split(/\r?\n/);
-            buffer = done ? "" : (lines.pop() ?? "");
-            for (const line of lines) {
-              if (line === "") {
-                if (dataLines.length) {
-                  const raw = dataLines.join("\n");
-                  dataLines = [];
-                  try {
-                    const parsed = buildSnapshotSchema.safeParse(
-                      JSON.parse(raw),
-                    );
-                    if (
-                      parsed.success &&
-                      shouldCheckPreview(parsed.data, jobId) &&
-                      (await trySettle())
-                    )
-                      return;
-                  } catch {
-                    // Ignore malformed build event payloads.
-                  }
-                }
-                continue;
-              }
-              if (line.startsWith(":")) {
-                send(": heartbeat\n\n");
-              } else if (line.startsWith("data:")) {
-                const payload = line.slice(5);
-                dataLines.push(
-                  payload.startsWith(" ") ? payload.slice(1) : payload,
-                );
-              }
-            }
-            if (done) {
-              if (!(await trySettle())) {
-                send("retry: 3000\n\n");
-                close();
-              }
-              return;
-            }
-          }
-        } catch {
-          if (!closed) {
-            send("retry: 3000\n\n");
-            close();
-          }
-        }
-      })();
+          enqueue(async () => {
+            if (shouldCheckPreview(snapshot, jobId)) await settle();
+          });
+        });
+        socket.addEventListener("close", () =>
+          enqueue(async () => {
+            await settle();
+            retry();
+          }),
+        );
+        socket.accept();
+        if (closed) socket.close();
+      })().catch(() => retry());
     },
     cancel() {
-      closed = true;
-      upstream.abort();
-      return reader?.cancel().catch(() => {});
+      stop();
     },
   });
 

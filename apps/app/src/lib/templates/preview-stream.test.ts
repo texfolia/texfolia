@@ -56,98 +56,85 @@ function compilerSnapshot(
   };
 }
 
-test("pushes ready once the compiler event stream reports job completion", async () => {
+// The builds side of one socket, as a Worker sees it.
+function fakeBuilds() {
+  const listeners = new Map<string, (event: { data?: string }) => void>();
+  const state = { path: "", upgrade: "", accepted: false, closed: false };
+  const socket = {
+    accept: () => {
+      state.accepted = true;
+    },
+    addEventListener: (
+      type: string,
+      listener: (event: { data?: string }) => void,
+    ) => void listeners.set(type, listener),
+    close: () => {
+      state.closed = true;
+    },
+  };
+  return {
+    state,
+    push: (snapshot: unknown) =>
+      listeners.get("message")?.({ data: JSON.stringify(snapshot) }),
+    drop: () => listeners.get("close")?.({}),
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+      state.path = new URL(String(input)).pathname;
+      state.upgrade = new Headers(init?.headers).get("Upgrade") ?? "";
+      return { webSocket: socket, body: null } as unknown as Response;
+    },
+  };
+}
+
+test("pushes ready once the build socket reports job completion", async () => {
   const jobId = crypto.randomUUID();
   const templateId = crypto.randomUUID();
-  const encoder = new TextEncoder();
-  let push!: (chunk: string) => void;
-  let closedUpstream = false;
-
-  const compiler = {
-    fetch: async (input: RequestInfo | URL) => {
-      const url = new URL(typeof input === "string" ? input : input.toString());
-      expect(url.pathname).toBe(`/projects/${templateId}/events`);
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          push = (chunk) => controller.enqueue(encoder.encode(chunk));
-        },
-        cancel() {
-          closedUpstream = true;
-        },
-      });
-      return new Response(stream, {
-        headers: { "Content-Type": "text/event-stream" },
-      });
-    },
-  } satisfies Pick<Fetcher, "fetch">;
-
+  const builds = fakeBuilds();
   let advances = 0;
   const response = createTemplatePreviewStream({
     templateId,
     initialJobId: jobId,
-    builds: compiler,
+    builds,
     signal: new AbortController().signal,
     advance: async () => {
       advances++;
       return { previewStatus: "ready", previewJobId: jobId };
     },
   });
-
   expect(response.headers.get("Content-Type")).toBe("text/event-stream");
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
 
-  // Wait a microtask for the stream to attach to the fake compiler.
+  // Wait for the stream to attach to the fake builds.
   await Bun.sleep(10);
-  push(
-    `data: ${JSON.stringify(compilerSnapshot(1, { id: jobId, status: "queued" }))}\n\n`,
-  );
-  push(": heartbeat\n\n");
-  const heartbeat = await reader.read();
-  expect(decoder.decode(heartbeat.value)).toBe(": heartbeat\n\n");
-  expect(advances).toBe(0);
-
-  push(
-    `data: ${JSON.stringify(compilerSnapshot(2, { id: jobId, status: "running" }))}\n\n`,
-  );
+  expect(builds.state).toMatchObject({
+    path: `/projects/${templateId}/events`,
+    upgrade: "websocket",
+    accepted: true,
+  });
+  builds.push(compilerSnapshot(1, { id: jobId, status: "queued" }));
+  builds.push("not a snapshot");
+  builds.push(compilerSnapshot(2, { id: jobId, status: "running" }));
   await Bun.sleep(10);
   expect(advances).toBe(0);
 
-  push(
-    `data: ${JSON.stringify(compilerSnapshot(3, { id: jobId, status: "succeeded" }))}\n\n`,
-  );
+  builds.push(compilerSnapshot(3, { id: jobId, status: "succeeded" }));
   const settled = await reader.read();
   expect(decoder.decode(settled.value)).toBe(
     'data: {"previewStatus":"ready"}\n\n',
   );
   expect((await reader.read()).done).toBe(true);
   expect(advances).toBe(1);
-  expect(closedUpstream).toBe(true);
+  expect(builds.state.closed).toBe(true);
 });
 
 test("settles when another viewer clears the temporary compiler project", async () => {
   const jobId = crypto.randomUUID();
-  const templateId = crypto.randomUUID();
-  const encoder = new TextEncoder();
-  let push!: (chunk: string) => void;
-
-  const compiler = {
-    fetch: async () =>
-      new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            push = (chunk) => controller.enqueue(encoder.encode(chunk));
-          },
-        }),
-        { headers: { "Content-Type": "text/event-stream" } },
-      ),
-  } satisfies Pick<Fetcher, "fetch">;
-
+  const builds = fakeBuilds();
   let checks = 0;
   const response = createTemplatePreviewStream({
-    templateId,
+    templateId: crypto.randomUUID(),
     initialJobId: jobId,
-    builds: compiler,
+    builds,
     signal: new AbortController().signal,
     advance: async () => {
       checks++;
@@ -157,71 +144,73 @@ test("settles when another viewer clears the temporary compiler project", async 
         : { previewStatus: "failed", previewJobId: jobId };
     },
   });
-
   const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
   await Bun.sleep(10);
 
-  push(
-    `data: ${JSON.stringify(compilerSnapshot(2, { id: jobId, status: "failed" }))}\n\n`,
-  );
+  builds.push(compilerSnapshot(2, { id: jobId, status: "failed" }));
   await Bun.sleep(10);
   expect(checks).toBe(1);
 
-  push(`data: ${JSON.stringify(compilerSnapshot(3, null))}\n\n`);
+  builds.push(compilerSnapshot(3, null));
   const settled = await reader.read();
-  expect(decoder.decode(settled.value)).toBe(
+  expect(new TextDecoder().decode(settled.value)).toBe(
     'data: {"previewStatus":"failed"}\n\n',
   );
   expect((await reader.read()).done).toBe(true);
   expect(checks).toBe(2);
 });
 
-test("aborts the upstream compiler stream when the client disconnects", async () => {
+test("a dropped build socket checks once and then asks the page to retry", async () => {
   const jobId = crypto.randomUUID();
-  const templateId = crypto.randomUUID();
-  let upstreamAborted = false;
-
-  const compiler = {
-    fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
-      init?.signal?.addEventListener("abort", () => {
-        upstreamAborted = true;
-      });
-      return new Response(new ReadableStream<Uint8Array>({}), {
-        headers: { "Content-Type": "text/event-stream" },
-      });
-    },
-  } satisfies Pick<Fetcher, "fetch">;
-
-  const controller = new AbortController();
+  const builds = fakeBuilds();
+  let checks = 0;
   const response = createTemplatePreviewStream({
-    templateId,
+    templateId: crypto.randomUUID(),
     initialJobId: jobId,
-    builds: compiler,
-    signal: controller.signal,
-    advance: async () => ({ previewStatus: "queued", previewJobId: jobId }),
+    builds,
+    signal: new AbortController().signal,
+    advance: async () => {
+      checks++;
+      return { previewStatus: "queued", previewJobId: jobId };
+    },
   });
-
   await Bun.sleep(10);
-  controller.abort();
-  const reader = response.body!.getReader();
-  expect((await reader.read()).done).toBe(true);
-  expect(upstreamAborted).toBe(true);
+  builds.drop();
+  expect(await response.text()).toBe("retry: 3000\n\n");
+  expect(checks).toBe(1);
 });
 
-test("sends retry backoff and closes cleanly when the compiler event stream is unavailable", async () => {
-  const compiler = {
-    fetch: async () => new Response("Unavailable", { status: 503 }),
-  } satisfies Pick<Fetcher, "fetch">;
+test("closes the build socket when the client disconnects", async () => {
+  const jobId = crypto.randomUUID();
+  for (const how of ["abort", "cancel"] as const) {
+    const builds = fakeBuilds();
+    const controller = new AbortController();
+    const response = createTemplatePreviewStream({
+      templateId: crypto.randomUUID(),
+      initialJobId: jobId,
+      builds,
+      signal: controller.signal,
+      advance: async () => ({ previewStatus: "queued", previewJobId: jobId }),
+    });
+    await Bun.sleep(10);
+    const reader = response.body!.getReader();
+    if (how === "abort") controller.abort();
+    else await reader.cancel();
+    expect((await reader.read()).done).toBe(true);
+    expect(builds.state.closed).toBe(true);
+  }
+});
 
+test("sends retry backoff and closes cleanly when the build socket is unavailable", async () => {
   const response = createTemplatePreviewStream({
     templateId: crypto.randomUUID(),
     initialJobId: crypto.randomUUID(),
-    builds: compiler,
+    builds: {
+      fetch: async () => new Response("Unavailable", { status: 503 }),
+    },
     signal: new AbortController().signal,
     advance: async () => null,
   });
-
   expect(response.status).toBe(200);
   expect(response.headers.get("Content-Type")).toBe("text/event-stream");
   expect(await response.text()).toBe("retry: 3000\n: unavailable\n\n");

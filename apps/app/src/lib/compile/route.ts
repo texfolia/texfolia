@@ -22,7 +22,11 @@ import {
 import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
-import { fetchBuilds } from "#/lib/builds/client";
+import {
+  connectBuilds,
+  fetchBuilds,
+  liveUserHeader,
+} from "#/lib/builds/client";
 
 import {
   compileHistoryLimit,
@@ -52,14 +56,6 @@ export type CompileRouteOptions<Context extends { db: Db }> = {
   project: CompileProject;
   // The billing plan the build is admitted and limited by.
   compilePlan(db: Db, userId: string): Promise<string>;
-  // Wraps a long-lived build response so it closes when the caller loses
-  // access to the project.
-  streamLive(options: {
-    response: Response;
-    projectId: string;
-    userId: string;
-    signal: AbortSignal;
-  }): Response;
 };
 
 export type CompileHandlerArgs<Context extends { db: Db }> = {
@@ -625,13 +621,6 @@ export function createCompileHandlers<Context extends { db: Db }>(
       );
       if (denied instanceof Response) return denied;
       const url = new URL(request.url);
-      const liveResponse = (response: Response) =>
-        options.streamLive({
-          response,
-          projectId: params.projectId,
-          userId: denied.userId,
-          signal: request.signal,
-        });
       // PDF-only links see the build stream and the latest PDF, but not job
       // logs or other generated files, which can quote the sources.
       const pdfOnly = denied.shareScope === "pdf";
@@ -685,12 +674,13 @@ export function createCompileHandlers<Context extends { db: Db }>(
             return await fetchBuilds(
               `/projects/${params.projectId}/build/files?path=${encodeURIComponent(file)}&version=${encodeURIComponent(url.searchParams.get("version") ?? "")}`,
             );
-          const events = url.searchParams.get("events") === "1";
-          const response = await fetchBuilds(
-            `/projects/${params.projectId}${events ? "/events" : ""}`,
-            events ? { signal: request.signal } : undefined,
-          );
-          return events ? liveResponse(response) : response;
+          if (url.searchParams.get("events") !== "1")
+            return await fetchBuilds(`/projects/${params.projectId}`);
+          if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
+            return new Response("WebSocket required", { status: 426 });
+          if (url.origin !== request.headers.get("Origin"))
+            return new Response("Invalid origin", { status: 403 });
+          return await connectBuilds(params.projectId, denied.userId);
         } catch {
           return json({ error: "Project coordinator unavailable" }, 502);
         }
@@ -717,6 +707,8 @@ export function createCompileHandlers<Context extends { db: Db }>(
           const response = await fetchBuilds(
             `/projects/${params.projectId}/jobs/${id}/pdf`,
             {
+              // The stream ends when this user loses access to the project.
+              headers: { [liveUserHeader]: denied.userId },
               signal: AbortSignal.any([
                 request.signal,
                 AbortSignal.timeout(10 * 60_000),
@@ -726,15 +718,13 @@ export function createCompileHandlers<Context extends { db: Db }>(
           if (!response.ok) return response;
           if (response.headers.get("Content-Type") !== "application/pdf")
             throw new Error("Invalid compiler PDF stream");
-          return liveResponse(
-            new Response(response.body, {
-              headers: {
-                ...noStore,
-                "Content-Type": "application/pdf",
-                "X-Accel-Buffering": "no",
-              },
-            }),
-          );
+          return new Response(response.body, {
+            headers: {
+              ...noStore,
+              "Content-Type": "application/pdf",
+              "X-Accel-Buffering": "no",
+            },
+          });
         }
         if (url.searchParams.get("artifact") === "pdf") {
           if (job.status !== "succeeded")

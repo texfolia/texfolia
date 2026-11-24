@@ -31,7 +31,7 @@ export const grantProjectAccess = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
-      collaboration: env.COLLABORATION,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
       email: createEmailDelivery(env.BACKGROUND, process.env.BETTER_AUTH_URL),
     });
   });
@@ -44,7 +44,7 @@ export const revokeProjectAccess = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
-      collaboration: env.COLLABORATION,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
     });
   });
 export const transferProject = createServerFn({ method: "POST" })
@@ -56,6 +56,6 @@ export const transferProject = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
-      collaboration: env.COLLABORATION,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
     });
   });

@@ -1,8 +1,11 @@
 import { jobIdSchema } from "@texfolia/contracts";
+import { createDb } from "@texfolia/db";
 import { DurableObject } from "cloudflare:workers";
 
 import { sendEmail } from "#/lib/email";
+import { lockProject } from "#/lib/sharing/project-access.server";
 
+import { liveUserHeader } from "./client";
 import { createCompilerEngine, fetchCompiler } from "./compiler";
 import { cacheKey, ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
@@ -12,6 +15,7 @@ import {
   withCompileUsage,
   type Plan,
 } from "./limits";
+import { LiveProject } from "./live-object.server";
 import { compileQueue, processQueueMessage } from "./queues";
 import { artifactStore, draftSources, savedSources } from "./storage";
 
@@ -55,7 +59,7 @@ export class CompileUsage extends DurableObject<Env> {
 }
 
 /** One project's builds: admission, debounce, history, artifacts, and push. */
-export class ProjectBuilds extends DurableObject<Env> {
+export class ProjectBuilds extends LiveProject {
   private core: ProjectCoordinatorCore | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -106,7 +110,8 @@ export class ProjectBuilds extends DurableObject<Env> {
           sql.exec("INSERT OR IGNORE INTO identity VALUES (?)", projectId);
         });
       },
-      schedule: (at) => this.ctx.storage.setAlarm(at),
+      publish: () => this.publish(projectId),
+      schedule: (at) => this.plan("work", at),
       overflow: async (message, plan) => {
         await (
           compileQueue(plan) === "compile-pro"
@@ -127,22 +132,48 @@ export class ProjectBuilds extends DurableObject<Env> {
     return this.core;
   }
 
-  override fetch(request: Request) {
-    const id = jobIdSchema.safeParse(
-      new URL(request.url).pathname.split("/")[2],
-    );
+  override async fetch(request: Request) {
+    const path = new URL(request.url).pathname;
+    const id = jobIdSchema.safeParse(path.split("/")[2]);
     if (!id.success)
       return Response.json({ error: "Invalid project ID" }, { status: 400 });
-    return createCoordinatorApp(this.coordinator(id.data), (submission) =>
-      checkCompileAdmission(
-        submission,
-        this.env.COMPILE_LIMIT,
-        usageFor(this.env),
-      ),
+    if (path === `/projects/${id.data}/events`)
+      return this.openSocket(request, id.data);
+    const response = await createCoordinatorApp(
+      this.coordinator(id.data),
+      (submission) =>
+        checkCompileAdmission(
+          submission,
+          this.env.COMPILE_LIMIT,
+          usageFor(this.env),
+        ),
     ).fetch(request);
+    const viewer = request.headers.get(liveUserHeader);
+    return viewer === null ? response : this.guard(response, id.data, viewer);
   }
 
-  override async alarm() {
+  protected override liveFrame(projectId: string) {
+    return JSON.stringify(this.coordinator(projectId).snapshot());
+  }
+
+  protected override async checkLiveAccess(projectId: string, userId: string) {
+    const db = createDb(this.env.HYPERDRIVE.connectionString);
+    try {
+      await db.transaction((tx) =>
+        lockProject({
+          tx,
+          projectId,
+          userId,
+          access: "read",
+          content: "build",
+        }),
+      );
+    } finally {
+      await db.$client.end();
+    }
+  }
+
+  protected override async work() {
     await this.project().wake();
   }
 

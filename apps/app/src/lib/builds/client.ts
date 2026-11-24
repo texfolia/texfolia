@@ -13,6 +13,34 @@ export function buildsFetcher(
   };
 }
 
+/** Who a live response is for. It ends when they lose access to the project. */
+export const liveUserHeader = "X-Live-User";
+
+/**
+ * Opens a project's build snapshots as a WebSocket upgrade. `userId` is null for
+ * the app's own reads. There is no timeout: a signal would also end the socket.
+ */
+export async function connectBuilds(
+  projectId: string,
+  userId: string | null,
+  builds?: Pick<Fetcher, "fetch">,
+) {
+  const fetcher =
+    builds ?? buildsFetcher((await import("cloudflare:workers")).env.BUILDS);
+  return fetcher.fetch(
+    new URL(
+      `/projects/${encodeURIComponent(projectId)}/events`,
+      "http://builds",
+    ),
+    {
+      headers: {
+        Upgrade: "websocket",
+        ...(userId === null ? {} : { [liveUserHeader]: userId }),
+      },
+    },
+  );
+}
+
 /** Requests a project's builds. Paths start with `/projects/<projectId>`. */
 export async function fetchBuilds(
   path: string,

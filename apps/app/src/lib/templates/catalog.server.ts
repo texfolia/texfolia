@@ -4,7 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 
 import { projectPaths } from "#/lib/projects";
 import type { SourceBucket } from "#/lib/storage/server";
-import { createZip } from "#/lib/storage/zip";
+import { zipStream, type ZipEntry } from "#/lib/storage/zip";
 
 import { templateSnapshotSchema } from "./schema";
 
@@ -132,7 +132,8 @@ export async function templateDestinations({
     .where(eq(member.userId, userId));
 }
 
-export async function templateArchive({
+// Streams a template's sources, reading one at a time from storage.
+export function templateArchive({
   bucket,
   found,
 }: {
@@ -141,13 +142,18 @@ export async function templateArchive({
 }) {
   const snapshot = templateSnapshotSchema.parse(found.snapshot);
   const paths = projectPaths(snapshot);
-  const files: { path: string; blob: Blob }[] = [];
-  for (const node of snapshot) {
-    const path = paths.get(node.id);
+  const entries: ZipEntry[] = [];
+  for (const { id, objectKey } of snapshot) {
+    const path = paths.get(id);
     if (!path) continue;
-    const object = node.objectKey ? await bucket.get(node.objectKey) : null;
-    if (!object) throw new Error("Snapshot source is missing from storage");
-    files.push({ path, blob: new Blob([await object.arrayBuffer()]) });
+    entries.push({
+      path,
+      async open() {
+        const object = objectKey ? await bucket.get(objectKey) : null;
+        if (!object) throw new Error("Snapshot source is missing from storage");
+        return new Uint8Array(await object.arrayBuffer());
+      },
+    });
   }
-  return createZip(files);
+  return zipStream(entries);
 }

@@ -105,51 +105,65 @@ const octal = (bytes: Uint8Array, offset: number, length: number) => {
 };
 
 /**
- * Reads entries in order and passes each one to `visit`. A visitor may take an
- * entry's chunks as they arrive; every entry is also returned whole. Throws on
- * a truncated archive, so a response cut short never looks complete.
+ * Takes one entry's bytes as they arrive. A chunk is only valid until `write`
+ * settles, and the archive waits for it, so a sink applies backpressure. `abort`
+ * reports an archive that ended before the entry did.
+ */
+export type ArchiveSink = {
+  write: (bytes: Uint8Array) => void | Promise<void>;
+  close?: () => void | Promise<void>;
+  abort?: (cause: unknown) => void;
+};
+
+/**
+ * Streams entries in order into the sink `open` returns for each one. Nothing is
+ * kept. Throws on a truncated archive, so a response cut short never looks
+ * complete.
  */
 export async function readArchive(
   body: ReadableStream<Uint8Array>,
   options: {
     maxBytes: number;
-    visit?: (entry: { name: string; size: number }) =>
-      | {
-          chunk: (bytes: Uint8Array) => void;
-          end: () => void;
-          error: (cause: unknown) => void;
-        }
-      | undefined;
+    open: (entry: {
+      name: string;
+      size: number;
+    }) => ArchiveSink | Promise<ArchiveSink>;
   },
 ) {
   const reader = body.getReader();
   let pending: Uint8Array = new Uint8Array();
   let total = 0;
-  const next = async () => {
-    const { done, value } = await reader.read();
-    if (done) throw new Error("Truncated archive");
-    total += value.byteLength;
-    if (total > options.maxBytes) throw new Error("Archive exceeds its limit");
-    pending = value;
-  };
-  const take = async (size: number, onChunk?: (bytes: Uint8Array) => void) => {
-    const result = new Uint8Array(size);
-    let filled = 0;
-    while (filled < size) {
-      if (!pending.byteLength) await next();
-      const part = pending.subarray(0, size - filled);
-      result.set(part, filled);
-      filled += part.byteLength;
+  const take = async (
+    size: number,
+    write: (bytes: Uint8Array) => void | Promise<void>,
+  ) => {
+    let left = size;
+    while (left) {
+      if (!pending.byteLength) {
+        const { done, value } = await reader.read();
+        if (done) throw new Error("Truncated archive");
+        total += value.byteLength;
+        if (total > options.maxBytes)
+          throw new Error("Archive exceeds its limit");
+        pending = value;
+        continue;
+      }
+      const part = pending.subarray(0, left);
       pending = pending.subarray(part.byteLength);
-      if (part.byteLength) onChunk?.(part);
+      left -= part.byteLength;
+      await write(part);
     }
-    return result;
   };
-  const entries = new Map<string, Bytes>();
+  const names = new Set<string>();
   try {
     while (true) {
-      const block = await take(blockBytes);
-      if (block.every((byte) => byte === 0)) return entries;
+      const block = new Uint8Array(blockBytes);
+      let filled = 0;
+      await take(blockBytes, (bytes) => {
+        block.set(bytes, filled);
+        filled += bytes.byteLength;
+      });
+      if (block.every((byte) => byte === 0)) return;
       const end = block.indexOf(0);
       const name = decoder.decode(
         block.subarray(0, Math.min(end < 0 ? 100 : end, 100)),
@@ -164,21 +178,52 @@ export async function readArchive(
         block[156] !== 0x30 ||
         !Number.isSafeInteger(size) ||
         octal(block, 148, 8) !== checksum ||
-        entries.has(name)
+        names.has(name)
       )
         throw new Error("Invalid archive entry");
       if (size > options.maxBytes) throw new Error("Archive exceeds its limit");
-      const visitor = options.visit?.({ name, size });
+      names.add(name);
+      const sink = await options.open({ name, size });
       try {
-        entries.set(name, await take(size, visitor?.chunk));
-        visitor?.end();
+        await take(size, sink.write);
+        await sink.close?.();
       } catch (error) {
-        visitor?.error(error);
+        sink.abort?.(error);
         throw error;
       }
-      await take(padding(size));
+      await take(padding(size), () => {});
     }
   } finally {
     await reader.cancel().catch(() => {});
   }
+}
+
+/** A sink that hands over an entry whole. Only for entries known to be small. */
+export function collectEntry(
+  size: number,
+  done: (bytes: Bytes) => void,
+): ArchiveSink {
+  const result = new Uint8Array(size);
+  let filled = 0;
+  return {
+    write: (bytes) => {
+      result.set(bytes, filled);
+      filled += bytes.byteLength;
+    },
+    close: () => done(result),
+  };
+}
+
+/** Holds a whole archive in memory. For tests and scripts. */
+export async function collectArchive(
+  body: ReadableStream<Uint8Array>,
+  options: { maxBytes: number },
+) {
+  const entries = new Map<string, Bytes>();
+  await readArchive(body, {
+    ...options,
+    open: ({ name, size }) =>
+      collectEntry(size, (bytes) => void entries.set(name, bytes)),
+  });
+  return entries;
 }

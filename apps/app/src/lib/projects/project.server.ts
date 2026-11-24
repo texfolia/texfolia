@@ -1,12 +1,11 @@
 import { fetchBuilds } from "#/lib/builds/client";
 import {
   cleanupDeletedCollaboration,
-  invalidateCollaborationAccess,
-  type CollaborationAccess,
   type CollaborationCleanup,
 } from "#/lib/collaboration/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
 
+import { invalidateProjectAccess, type LiveProjects } from "./live";
 import * as projects from "./server";
 
 // Binds `#/lib/projects` operations to the app's composed access check and
@@ -61,14 +60,14 @@ export function duplicateProject(
 }
 
 export async function trashProject({
-  collaboration,
+  live,
   ...args
 }: Locked<Parameters<typeof projects.trashProject>[0]> & {
-  collaboration?: CollaborationAccess;
+  live?: LiveProjects;
 }) {
   const { projectId } = args;
   await projects.trashProject({ ...args, lock: lockProject });
-  await invalidateCollaborationAccess(collaboration, projectId);
+  await invalidateProjectAccess(live, projectId);
   try {
     const response = await fetchBuilds(`/projects/${projectId}/build`, {
       method: "DELETE",

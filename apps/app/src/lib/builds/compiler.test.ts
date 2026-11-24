@@ -6,6 +6,7 @@ import {
   type FixtureOutput,
   type FixtureRequest,
 } from "../../../test/builds/compiler-fixture";
+import { collectSinks } from "../../../test/builds/engine";
 import { memoryStore, type StoredObject } from "../../../test/builds/stores";
 import { createCompilerEngine } from "./compiler";
 import { EngineError, HttpError, MissingSourceError } from "./project";
@@ -62,7 +63,8 @@ function harness(
   ) => {
     const { project: change, ...context } = options;
     const { synced, contents } = await project(files, change);
-    return engine(synced, {
+    const collected = collectSinks();
+    const output = await engine(synced, {
       jobId: crypto.randomUUID(),
       plan: "free",
       attempt: 1,
@@ -70,8 +72,10 @@ function harness(
         reads.push(file.hash);
         return contents.get(file.hash)!;
       },
+      artifacts: collected.sinks,
       ...context,
     });
+    return { ...output, ...collected };
   };
   return { compiler, objects, pauses, reads, engine, run };
 }
@@ -99,7 +103,7 @@ test("the first build sends everything; later builds send only what the containe
     "a.tex": "a",
     "renamed.png": "binary",
   });
-  expect(new TextDecoder().decode(second.pdf)).toBe("%PDF-two");
+  expect(second.text("pdf")).toBe("%PDF-two");
   expect(compiler.requests[1]).toMatchObject({
     options: { container: "compiler-1" },
     manifest: { incremental: true },
@@ -179,6 +183,7 @@ test("clean builds and unavailable or oversized archives compile without a cache
     plan: "pro",
     attempt: 1,
     readSource: async (file) => contents.get(file.hash)!,
+    artifacts: collectSinks().sinks,
   });
   expect(output.timing.archiveStatus).toBe("unavailable");
 });
@@ -204,7 +209,7 @@ test("plans choose the timeout, queue priority, and Free yield; fair use can sho
   ]);
 });
 
-test("artifacts, the cache archive, and a synthesized log come back by path", async () => {
+test("artifacts and the cache archive are streamed by path", async () => {
   const { run } = harness(() => ({
     pdf: "%PDF",
     log: "summary",
@@ -212,15 +217,17 @@ test("artifacts, the cache archive, and a synthesized log come back by path", as
     cache: "archive",
   }));
   const output = await run({ "main.tex": "x" });
-  expect(Object.keys(output.files ?? {}).sort()).toEqual([
-    "main.aux",
-    "main.log",
-    "main.pdf",
-    "nested/data.bin",
+  expect([...output.entries.keys()]).toEqual([
+    "pdf",
+    "file:main.aux",
+    "file:nested/data.bin",
+    "cache",
   ]);
-  expect(output.files?.["nested/data.bin"]).toEqual(new Uint8Array([0, 255]));
-  expect(new TextDecoder().decode(output.files?.["main.log"])).toBe("summary");
-  expect(new TextDecoder().decode(output.cacheArchive)).toBe("archive");
+  expect(output.entries.get("file:nested/data.bin")).toEqual(
+    new Uint8Array([0, 255]),
+  );
+  expect(output.text("cache")).toBe("archive");
+  expect(output.sizeBytes).toBe(4);
 });
 
 test("previews are opt-in, and a missing or oversized image is an infrastructure failure", async () => {
@@ -235,10 +242,12 @@ test("previews are opt-in, and a missing or oversized image is an infrastructure
     pdf: "%PDF",
     preview: images.shift(),
   }));
-  expect((await run({ "main.tex": "x" })).preview).toBeUndefined();
+  expect((await run({ "main.tex": "x" })).text("preview")).toBeUndefined();
   expect(compiler.requests[0]?.manifest.preview).toBeUndefined();
   const preview = { project: { preview: true } };
-  expect((await run({ "main.tex": "x" }, preview)).preview).toEqual(png);
+  expect(
+    (await run({ "main.tex": "x" }, preview)).entries.get("preview"),
+  ).toEqual(png);
   expect(compiler.requests[1]?.manifest.preview).toBe(true);
   for (let index = 0; index < 2; index++)
     await expect(run({ "main.tex": "x" }, preview)).rejects.toThrow(
@@ -254,14 +263,17 @@ test("compile failures are terminal and carry the full log; everything else is r
       log: "summary",
       files: { "main.log": "full transcript" },
     }));
-    const error = await run({ "main.tex": "x" }).catch((cause) => cause);
+    const { sinks, text } = collectSinks();
+    const error = await run({ "main.tex": "x" }, { artifacts: sinks }).catch(
+      (cause) => cause,
+    );
+    expect(text("file:main.log")).toBe("full transcript");
     expect(error).toBeInstanceOf(HttpError);
     expect(error).toMatchObject({
       status,
       message: "Failed",
       log: "summary",
       timing: { compileMs: 1 },
-      logFile: { path: "main.log", content: bytes("full transcript") },
     });
   }
   const invalid = harness(() =>
@@ -387,13 +399,63 @@ test("a source that left storage fails the build instead of retrying it", async 
   ).rejects.toBeInstanceOf(MissingSourceError);
 });
 
-test("the PDF reaches its consumer with a first-byte time before the build finishes", async () => {
-  const { run } = harness(() => ({ pdf: "%PDF-early", log: "ok" }));
-  let streamed: Promise<string> | undefined;
-  const output = await run(
-    { "main.tex": "x" },
-    { onPdf: (body) => (streamed = new Response(body).text()) },
+test("a PDF stored under another name fails the build", async () => {
+  const { run } = harness(() =>
+    fixtureResponse({ mainFile: "other.tex" }, { pdf: "%PDF", log: "ok" }),
   );
-  expect(await streamed).toBe("%PDF-early");
+  await expect(run({ "main.tex": "x" })).rejects.toThrow("unexpected PDF");
+});
+
+test("small sources are read ahead a few at a time and large ones only when sent", async () => {
+  const large = "x".repeat(600 * 1024);
+  const files: Record<string, string> = {
+    "main.tex": "main",
+    "big.bin": large,
+  };
+  for (let index = 0; index < 20; index++) files[`${index}.tex`] = `${index}`;
+  const { synced, contents } = await project(files);
+  const bigHash = synced.files["big.bin"]!.hash;
+  const reads: string[] = [];
+  const started = Promise.withResolvers<void>();
+  const proceed = Promise.withResolvers<void>();
+  const fixture = createCompilerFixture(() => ({ pdf: "%PDF", log: "ok" }));
+  const engine = createCompilerEngine({
+    projectId,
+    store: memoryStore(),
+    cacheKey: key,
+    fetch: async (path, init) => {
+      started.resolve();
+      await proceed.promise;
+      return fixture.fetch(path, init);
+    },
+    pause: async () => {},
+  });
+  const run = engine(synced, {
+    jobId: "job",
+    plan: "pro",
+    attempt: 1,
+    artifacts: collectSinks().sinks,
+    readSource: async (file) => {
+      reads.push(file.hash);
+      return new Blob([contents.get(file.hash)!]).stream();
+    },
+  });
+  await started.promise;
+  await Bun.sleep(5);
+  expect(reads).toHaveLength(5);
+  expect(reads).not.toContain(bigHash);
+  proceed.resolve();
+  await run;
+  expect(reads).toHaveLength(22);
+  expect(fixture.requests[0]?.received).toHaveLength(22);
+  expect(
+    new TextDecoder().decode(fixture.requests[0]?.sources["big.bin"]),
+  ).toBe(large);
+});
+
+test("the PDF reaches its sink with a first-byte time before the build finishes", async () => {
+  const { run } = harness(() => ({ pdf: "%PDF-early", log: "ok" }));
+  const output = await run({ "main.tex": "x" });
+  expect(output.text("pdf")).toBe("%PDF-early");
   expect(output.timing.firstPdfByteMs).toBeNumber();
 });

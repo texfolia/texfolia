@@ -48,6 +48,13 @@ const backend = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   websocket: {
+    data: { events: false },
+    open(socket) {
+      if (socket.data.events)
+        socket.send(
+          '{"revision":0,"current":null,"latestBuild":null,"stale":false,"artifacts":null}',
+        );
+    },
     message(socket, raw) {
       if (raw === "ping") {
         socket.send("pong");
@@ -83,7 +90,7 @@ const backend = Bun.serve({
       return Response.json(data.formatting);
     }
     if (url.pathname.startsWith("/api/collaboration/")) {
-      if (server.upgrade(request)) return;
+      if (server.upgrade(request, { data: { events: false } })) return;
       return new Response(null, { status: 400 });
     }
     if (
@@ -92,10 +99,9 @@ const backend = Bun.serve({
     )
       return Response.json(project);
     if (url.searchParams.has("events"))
-      return new Response(
-        'data: {"revision":0,"current":null,"latestBuild":null,"stale":false,"artifacts":null}\n\n',
-        { headers: { "Content-Type": "text/event-stream" } },
-      );
+      return server.upgrade(request, { data: { events: true } })
+        ? undefined
+        : new Response(null, { status: 426 });
     if (url.searchParams.has("changed"))
       return new Response(null, { status: 204 });
     return new Response(null, { status: 404 });

@@ -45,7 +45,7 @@ export const revokeShareLink = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
-      collaboration: env.COLLABORATION,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
     });
   });
 

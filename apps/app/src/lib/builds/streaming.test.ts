@@ -71,11 +71,15 @@ for (const scenario of [
         const engine: Engine = (project, context) =>
           client(project, {
             ...context,
-            onPdf(body) {
-              context.onPdf?.(body);
-              void sourceText(project, context).then((text) => {
-                if (text === "streamed") pdfReady.resolve();
-              });
+            artifacts: {
+              ...context.artifacts,
+              async pdf(size) {
+                const sink = await context.artifacts.pdf(size);
+                void sourceText(project, context).then((text) => {
+                  if (text === "streamed") pdfReady.resolve();
+                });
+                return sink;
+              },
             },
           });
         return engine;

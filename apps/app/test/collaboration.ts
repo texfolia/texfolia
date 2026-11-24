@@ -819,7 +819,7 @@ try {
     cookies,
   });
   console.log(
-    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, live WebSocket/SSE/PDF revocation, share-link guests, and the scratchpad",
+    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, live edit, build event and PDF revocation, share-link guests, and the scratchpad",
   );
 } finally {
   await Promise.all(contexts.map((context) => context.close()));

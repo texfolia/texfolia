@@ -97,7 +97,7 @@ let sidecar: SidecarMode = "gzip";
 let savedId = buildId;
 let previewRequested = false;
 const requestedMaps = new Set<SidecarMode>();
-const subscribers = new Set<ReadableStreamDefaultController<Uint8Array>>();
+const subscribers = new Set<{ send(data: string): unknown }>();
 function snapshot() {
   return {
     revision,
@@ -140,10 +140,10 @@ function snapshot() {
   };
 }
 function event() {
-  return new TextEncoder().encode(`data: ${JSON.stringify(snapshot())}\n\n`);
+  return JSON.stringify(snapshot());
 }
 function publish() {
-  for (const subscriber of subscribers) subscriber.enqueue(event());
+  for (const subscriber of subscribers) subscriber.send(event());
 }
 function nextBuild(mode: SidecarMode) {
   buildId = crypto.randomUUID();
@@ -158,7 +158,15 @@ const backend = Bun.serve({
   port: 0,
   idleTimeout: 120,
   websocket: {
-    data: { nodeId: "" },
+    data: { nodeId: "", events: false },
+    open(socket) {
+      if (!socket.data.events) return;
+      subscribers.add(socket);
+      socket.send(event());
+    },
+    close(socket) {
+      subscribers.delete(socket);
+    },
     async message(socket, raw) {
       if (raw === "ping") {
         socket.send("pong");
@@ -207,7 +215,10 @@ const backend = Bun.serve({
     if (url.pathname.startsWith("/api/collaboration/")) {
       if (
         server.upgrade(request, {
-          data: { nodeId: url.pathname.split("/").at(-1) ?? "" },
+          data: {
+            nodeId: url.pathname.split("/").at(-1) ?? "",
+            events: false,
+          },
         })
       )
         return;
@@ -219,20 +230,9 @@ const backend = Bun.serve({
     )
       return Response.json(project);
     if (url.searchParams.has("events")) {
-      let subscriber: ReadableStreamDefaultController<Uint8Array>;
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            subscriber = controller;
-            subscribers.add(controller);
-            controller.enqueue(event());
-          },
-          cancel() {
-            subscribers.delete(subscriber);
-          },
-        }),
-        { headers: { "Content-Type": "text/event-stream" } },
-      );
+      return server.upgrade(request, { data: { nodeId: "", events: true } })
+        ? undefined
+        : new Response(null, { status: 426 });
     }
     if (url.pathname === "/fixture/preview.pdf") {
       previewRequested = true;

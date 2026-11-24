@@ -4,11 +4,11 @@ import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
-import {
-  invalidateCollaborationAccess,
-  type CollaborationAccess,
-} from "#/lib/collaboration/server";
 import { projectCollaboratorEmail, type EmailDelivery } from "#/lib/email";
+import {
+  invalidateProjectAccess,
+  type LiveProjects,
+} from "#/lib/projects/server";
 
 import { lockProject } from "./project-access.server";
 import type {
@@ -83,13 +83,13 @@ export async function grantProjectAccess({
   db,
   userId,
   data,
-  collaboration,
+  live,
   email,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof grantProjectAccessSchema>;
-  collaboration?: CollaborationAccess;
+  live?: LiveProjects;
   email?: EmailDelivery;
 }) {
   const added = await db.transaction(async (tx) => {
@@ -126,9 +126,7 @@ export async function grantProjectAccess({
         set: { role: data.role, updatedAt: new Date() },
       });
     // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateCollaborationAccess(collaboration, data.projectId, [
-      person.id,
-    ]);
+    await invalidateProjectAccess(live, data.projectId, [person.id]);
     if (existing) return;
     const [inviter] = await tx
       .select({ name: user.name })
@@ -165,12 +163,12 @@ export async function revokeProjectAccess({
   db,
   userId,
   data,
-  collaboration,
+  live,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof revokeProjectAccessSchema>;
-  collaboration?: CollaborationAccess;
+  live?: LiveProjects;
 }) {
   await db.transaction(async (tx) => {
     const found = await lockProject({ tx, projectId: data.projectId, userId });
@@ -185,8 +183,6 @@ export async function revokeProjectAccess({
         ),
       );
     // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateCollaborationAccess(collaboration, data.projectId, [
-      data.userId,
-    ]);
+    await invalidateProjectAccess(live, data.projectId, [data.userId]);
   });
 }

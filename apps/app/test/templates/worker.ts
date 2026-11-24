@@ -493,7 +493,8 @@ export default {
           ),
       );
       assert(
-        (await templateArchive({ bucket, found })).size > sourceText.length,
+        (await new Response(templateArchive({ bucket, found })).arrayBuffer())
+          .byteLength > sourceText.length,
       );
 
       const uploaded = Promise.withResolvers<void>();

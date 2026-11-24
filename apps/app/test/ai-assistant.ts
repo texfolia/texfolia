@@ -406,8 +406,7 @@ const mf = new Miniflare({
         });
       if (path.endsWith("/events"))
         return new Response(
-          `data: ${JSON.stringify({ revision: 0, current: null, latestBuild: null, stale: false, artifacts: null })}\n\n`,
-          { headers: { "Content-Type": "text/event-stream" } },
+          `${JSON.stringify({ revision: 0, current: null, latestBuild: null, stale: false, artifacts: null })}\n`,
         );
       if (path.endsWith("/pdf")) return new Response(null, { status: 404 });
       return Response.json({

@@ -11,9 +11,7 @@ import {
   readCompileRejection,
 } from "@texfolia/contracts/compiler";
 
-import { mapLimit } from "#/lib/map-limit";
-
-import { storageConcurrency } from "./artifacts";
+import { pdfPath, storageConcurrency } from "./artifacts";
 import { compilePolicy } from "./limits";
 import { EngineError, HttpError } from "./project";
 import type { SyncedProject } from "./source-sync";
@@ -51,6 +49,44 @@ const cancelTimeoutMs = 10_000;
 // Shorter than the compiler's idle drain, so a container that is probably gone
 // is not asked for.
 const retainedMs = 9 * 60_000;
+
+// A small source is read before the archive reaches it, a few at a time, so
+// many small files cost one wait rather than one each. Larger ones are streamed
+// when their turn comes. One connection is left for the cache archive.
+const aheadBytes = 512 * 1024;
+const aheadCount = storageConcurrency - 1;
+type ReadSource = Parameters<Engine>[1]["readSource"];
+
+function readSources(
+  files: readonly SyncedProject["files"][string][],
+  read: ReadSource,
+) {
+  const ahead = new Map<number, ReturnType<ReadSource>>();
+  let next = 0;
+  const fill = () => {
+    for (; next < files.length && ahead.size < aheadCount; next++) {
+      const file = files[next]!;
+      if (file.size > aheadBytes) continue;
+      const bytes = read(file).then(async (source) =>
+        source instanceof Uint8Array
+          ? source
+          : new Uint8Array(await new Response(source).arrayBuffer()),
+      );
+      bytes.catch(() => {});
+      ahead.set(next, bytes);
+    }
+  };
+  return {
+    fill,
+    open(index: number) {
+      const started = ahead.get(index);
+      ahead.delete(index);
+      next = Math.max(next, index + 1);
+      fill();
+      return started ?? read(files[index]!);
+    },
+  };
+}
 
 type Retained = { container: string; hashes: Set<string>; at: number };
 
@@ -104,8 +140,21 @@ export function createCompilerEngine(options: {
         .map((file) => [file.hash, file]),
     );
     const files = [...missing.values()];
-    // Read sources while the compiler finds a container.
-    const loaded = mapLimit(files, storageConcurrency, context.readSource);
+    const request = new AbortController();
+    // A source that cannot be read fails the build, whatever the compiler says.
+    const unreadable = Promise.withResolvers<never>();
+    unreadable.promise.catch(() => {});
+    const sources = readSources(files, async (file) => {
+      try {
+        return await context.readSource(file);
+      } catch (error) {
+        unreadable.reject(error);
+        request.abort();
+        throw error;
+      }
+    });
+    // Start while the compiler finds a container.
+    sources.fill();
     const cache = previous || context.clean ? null : await cacheArchive(timing);
     const body = encodeCompileRequest({
       manifest: {
@@ -123,13 +172,12 @@ export function createCompilerEngine(options: {
       blobs: files.map(({ hash, size }, index) => ({
         hash,
         size,
-        content: async () => (await loaded)[index]!,
+        content: () => sources.open(index),
       })),
       ...(cache
         ? { cache: { size: cache.size, content: async () => cache.body } }
         : {}),
     }).body;
-    const request = new AbortController();
     let cancellation: Promise<void> | undefined;
     const cancel = () => {
       // Stop the engine first, so a cancelled compile never holds a container
@@ -148,13 +196,6 @@ export function createCompilerEngine(options: {
     };
     context.signal?.addEventListener("abort", cancel, { once: true });
     if (context.signal?.aborted) cancel();
-    // A source that cannot be read fails the build, whatever the compiler says.
-    const unreadable = new Promise<never>((_, reject) =>
-      loaded.catch((error: unknown) => {
-        request.abort();
-        reject(error);
-      }),
-    );
     const finish = async () => {
       context.signal?.removeEventListener("abort", cancel);
       await cancellation;
@@ -178,7 +219,7 @@ export function createCompilerEngine(options: {
             AbortSignal.timeout(timeoutMs + requestMarginMs),
           ]),
         } as RequestInit),
-        unreadable,
+        unreadable.promise,
       ]);
       return { response, finish };
     } catch (error) {
@@ -254,20 +295,24 @@ export function createCompilerEngine(options: {
             rejection?.error ?? `Compiler returned ${response.status}`,
           );
         }
-        const output = await readCompileArtifacts(
-          response.body!,
-          response.status === 200 && context.onPdf
-            ? (pdf) => {
-                timing = {
-                  ...timing,
-                  firstPdfByteMs: performance.now() - started,
-                };
-                context.onPdf?.(pdf);
-              }
-            : undefined,
-        );
+        const { artifacts } = context;
+        let sizeBytes = 0;
+        let preview = false;
+        const result = await readCompileArtifacts(response.body!, {
+          ...artifacts,
+          pdf(size) {
+            sizeBytes = size;
+            timing = { ...timing, firstPdfByteMs: performance.now() - started };
+            return artifacts.pdf(size);
+          },
+          preview(size) {
+            if (size > maxPreviewBytes)
+              throw new Error("Compiler returned an invalid preview");
+            preview = true;
+            return artifacts.preview(size);
+          },
+        });
         context.signal?.throwIfAborted();
-        const { result } = output;
         // The container now holds exactly this build's sources and cache.
         if (placement && [200, 408, 422].includes(response.status))
           retained = {
@@ -277,33 +322,19 @@ export function createCompilerEngine(options: {
             ),
             at: Date.now(),
           };
-        if (!output.pdf || result.pdf === undefined) {
-          const [path, content] = [...output.files][0] ?? [];
+        if (result.pdf === undefined)
           throw new HttpError(
             response.status,
             result.error ?? "LaTeX compilation failed",
             result.log,
             timing,
-            path !== undefined && content ? { path, content } : undefined,
           );
-        }
-        if (
-          project.preview &&
-          (!output.preview || output.preview.byteLength > maxPreviewBytes)
-        )
+        // The PDF was already stored under this name.
+        if (result.pdf !== pdfPath(project.mainFile))
+          throw new Error("Compiler returned an unexpected PDF");
+        if (project.preview && !preview)
           throw new Error("Compiler returned an invalid preview");
-        const files: Record<string, Uint8Array> = { [result.pdf]: output.pdf };
-        for (const [path, content] of output.files) files[path] = content;
-        const logPath = result.pdf.replace(/\.pdf$/, ".log");
-        files[logPath] ??= new TextEncoder().encode(result.log);
-        return {
-          pdf: output.pdf,
-          log: result.log,
-          timing,
-          files,
-          ...(output.cache ? { cacheArchive: output.cache } : {}),
-          ...(output.preview ? { preview: output.preview } : {}),
-        };
+        return { sizeBytes, log: result.log, timing };
       } finally {
         await finish();
       }

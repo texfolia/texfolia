@@ -15,7 +15,9 @@ import type { SourceStore } from "./types";
 
 const sourceHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
 const sizeSchema = z.number().int().nonnegative();
-export const maxSourceSyncBytes = 64 * 1024 * 1024;
+// A submission carries changed text as JSON, which the compile route already
+// holds to 10 MiB, or only names saved sources.
+export const maxSourceSyncBytes = 12 * 1024 * 1024;
 const revisionSchema = z
   .number()
   .int()
@@ -107,10 +109,14 @@ export class SourceResyncError extends HttpError {
 
 // The compiler verifies each hash as it receives the source.
 export async function readSource(sources: SourceStore, file: SyncedFile) {
-  const bytes = file.key
-    ? await sources.saved.read(file.key)
-    : sources.drafts.read(file.hash);
-  if (!bytes || bytes.byteLength !== file.size) throw new MissingSourceError();
+  if (file.key) {
+    const object = await sources.saved.open(file.key);
+    if (object?.size === file.size) return object.body;
+    await object?.body.cancel();
+    throw new MissingSourceError();
+  }
+  const bytes = sources.drafts.read(file.hash);
+  if (bytes?.byteLength !== file.size) throw new MissingSourceError();
   return bytes;
 }
 

@@ -8,7 +8,12 @@ import { lazy } from "./lib/lazy";
 const requestContext = createMiddleware().server(async ({ next }) => {
   const db = createDb(env.HYPERDRIVE.connectionString);
   try {
-    const auth = lazy(() => createAuth(db, env.COLLABORATION));
+    const auth = lazy(() =>
+      createAuth(db, {
+        collaboration: env.COLLABORATION,
+        builds: env.BUILDS,
+      }),
+    );
     return await next({ context: { auth, db } });
   } finally {
     await db.$client.end();

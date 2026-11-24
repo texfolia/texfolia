@@ -1,8 +1,6 @@
 import { type EngineTiming, unknownEngineTiming } from "@texfolia/contracts";
 import { z } from "zod";
 
-import type { LogFile } from "./types";
-
 export const maxProjectBytes = 10 * 1024 * 1024;
 
 export class HttpError extends Error {
@@ -11,7 +9,6 @@ export class HttpError extends Error {
     message: string,
     public log = "",
     public timing: EngineTiming = unknownEngineTiming,
-    public logFile?: LogFile,
     public retryAfter?: number,
   ) {
     super(message);

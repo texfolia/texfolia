@@ -103,7 +103,7 @@ function useEditNotifications(projectId: string) {
 }
 
 /**
- * Compiles the project, follows the shared build over SSE, and schedules
+ * Compiles the project, follows the shared build over a socket, and schedules
  * auto-compiles after editing stops.
  */
 export function useCompilation({

@@ -12,6 +12,7 @@ import { HttpError } from "./project";
 import {
   maxSourceSyncBytes,
   sourceDeltaSchema,
+  sourceHash,
   SourceResyncError,
   sourceSnapshotSchema,
 } from "./source-sync";
@@ -32,9 +33,6 @@ export function createCoordinatorApp(
     await next();
   });
   app.get("/projects/:projectId", (c) => c.json(coordinator.snapshot()));
-  app.get("/projects/:projectId/events", (c) =>
-    coordinator.events(c.req.raw.signal),
-  );
   app.post("/projects/:projectId/changed", async (c) => {
     const body: unknown = await c.req.json();
     const version = editorVersionSchema.safeParse(body);
@@ -73,7 +71,7 @@ export function createCoordinatorApp(
     },
     bodyLimit({
       maxSize: maxSourceSyncBytes,
-      onError: (c) => c.json({ error: "Source sync exceeds 64 MiB" }, 413),
+      onError: (c) => c.json({ error: "Source sync exceeds 12 MiB" }, 413),
     }),
     async (c) => {
       if (!c.req.header("Content-Type")?.startsWith("application/json"))
@@ -82,9 +80,12 @@ export function createCoordinatorApp(
         c.req.header("X-Compilation-Id") ?? crypto.randomUUID(),
       );
       if (!id.success) return c.json({ error: "Invalid compilation ID" }, 400);
+      // Hash the bytes as sent rather than encoding the sources again.
+      const bytes = new Uint8Array(await c.req.arrayBuffer());
+      const digest = await sourceHash(bytes);
       let body: unknown;
       try {
-        body = await c.req.json();
+        body = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
         return c.json({ error: "Invalid JSON" }, 400);
       }
@@ -104,6 +105,7 @@ export function createCoordinatorApp(
         typeof body === "object" && body !== null && "baseRevision" in body
           ? sourceDeltaSchema.parse(body)
           : parseSnapshot(body),
+        digest,
         planSchema.catch("unknown").parse(c.req.header("X-Compile-Plan")),
         version?.data,
         {

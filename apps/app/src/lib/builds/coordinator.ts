@@ -11,8 +11,9 @@ import {
 } from "@texfolia/contracts";
 import { z } from "zod";
 
-import { storeArtifacts } from "./artifacts";
+import { createArtifactWriter, logPath, pdfPath } from "./artifacts";
 import { compilePolicy, compileUserSchema } from "./limits";
+import type { LivePdf } from "./live-pdf";
 import { EngineError, HttpError, MissingSourceError } from "./project";
 import {
   backgroundDelay,
@@ -31,7 +32,7 @@ import {
   type SyncedProject,
 } from "./source-sync";
 import { emitCompileEvent } from "./telemetry";
-import type { Engine, LogFile, ObjectStore, SourceStore } from "./types";
+import type { Engine, ObjectStore, SourceStore } from "./types";
 
 // The coordinator stores these fields on each job beyond the shared contract.
 const stored = {
@@ -99,27 +100,16 @@ export class ProjectCoordinatorCore {
     done: Promise<boolean>;
   } | null = null;
   private listeners = new Set<(snapshot: CoordinatorSnapshot) => void>();
-  private eventClosers = new Set<() => void>();
-  private previews = new Map<
-    string,
-    (body: ReadableStream<Uint8Array>) => void
-  >();
-  private pendingPreview: {
-    id: string;
-    body: ReadableStream<Uint8Array>;
-  } | null = null;
-
-  private discardPreview() {
-    if (this.pendingPreview)
-      void this.pendingPreview.body.cancel().catch(() => {});
-    this.pendingPreview = null;
-  }
+  private previews = new Map<string, (pdf: LivePdf) => void>();
+  private livePdf: { id: string; pdf: LivePdf } | null = null;
 
   constructor(
     private options: {
       projectId: string;
       saved: string | null;
       save: (value: string) => void;
+      // Hears about every state change.
+      publish?: (snapshot: CoordinatorSnapshot) => void;
       schedule: (at: number) => Promise<void>;
       overflow: (
         message: CompileMessage,
@@ -175,12 +165,14 @@ export class ProjectCoordinatorCore {
 
   private persist() {
     this.options.save(JSON.stringify(this.state));
+    this.options.publish?.(this.snapshot());
     for (const listener of this.listeners) listener(this.snapshot());
   }
 
   async submit(
     id: string,
     submission: SourceSnapshot | SourceDelta,
+    submissionDigest: string,
     plan: z.infer<typeof planSchema>,
     version?: z.infer<typeof editorVersionSchema>,
     buildOptions: { clean: boolean; builtBy: string; userId?: string } = {
@@ -190,9 +182,6 @@ export class ProjectCoordinatorCore {
   ) {
     this.submissions++;
     return this.exclusive(async () => {
-      const submissionDigest = await sourceHash(
-        new TextEncoder().encode(JSON.stringify(submission)),
-      );
       const existing = await this.get(id);
       if (existing) {
         if ((existing.submissionDigest ?? existing.digest) !== submissionDigest)
@@ -246,7 +235,7 @@ export class ProjectCoordinatorCore {
           }),
         );
       }
-      this.discardPreview();
+      this.livePdf = null;
       // Persist the new revision and its wake-up before returning acceptance.
       const current: Build = {
         id,
@@ -304,7 +293,7 @@ export class ProjectCoordinatorCore {
   async clear() {
     this.active?.controller.abort();
     await this.active?.done;
-    this.discardPreview();
+    this.livePdf = null;
     await this.exclusive(async () => {
       this.state.artifacts = null;
       this.state.latestBuild = null;
@@ -440,7 +429,7 @@ export class ProjectCoordinatorCore {
       if (!current || current.revision !== revision || !this.state.pending)
         return;
       this.active?.controller.abort();
-      this.discardPreview();
+      this.livePdf = null;
       const result: Build = {
         ...current,
         status: "failed",
@@ -514,11 +503,7 @@ export class ProjectCoordinatorCore {
           "Cache-Control": "no-store",
         },
       });
-    if (this.pendingPreview?.id === id) {
-      const { body } = this.pendingPreview;
-      this.pendingPreview = null;
-      return pdfResponse(body);
-    }
+    if (this.livePdf?.id === id) return pdfResponse(this.livePdf.pdf.read());
     const saved = async () => {
       const body = await this.artifact(id);
       return body
@@ -563,9 +548,9 @@ export class ProjectCoordinatorCore {
           void saved().then(resolve, reject);
         }
       };
-      this.previews.set(id, (body) => {
+      this.previews.set(id, (pdf) => {
         cleanup();
-        resolve(pdfResponse(body));
+        resolve(pdfResponse(pdf.read()));
       });
       this.listeners.add(check);
       signal.addEventListener("abort", abort, { once: true });
@@ -718,8 +703,25 @@ export class ProjectCoordinatorCore {
     let output: Awaited<ReturnType<Engine>> | undefined;
     let cacheUsed = false;
     let cleanRetried = false;
-    let logFile: LogFile | undefined;
     let compileMs = 0;
+    const createWriter = () =>
+      createArtifactWriter({
+        store: this.options.store,
+        projectId: this.options.projectId,
+        mainFile: project.mainFile,
+        keys: {
+          preview: this.pngKey(build.id),
+          cache: cacheKey(this.options.projectId),
+        },
+        signal,
+        onPdf: (pdf) => {
+          firstPdfAt ??= new Date().toISOString();
+          if (signal.aborted || this.state.current?.id !== build.id) return;
+          this.livePdf = { id: build.id, pdf };
+          this.previews.get(build.id)?.(pdf);
+        },
+      });
+    let writer = createWriter();
     try {
       const manifest = this.state.artifacts;
       cacheUsed =
@@ -736,26 +738,11 @@ export class ProjectCoordinatorCore {
         clean: !cacheUsed,
         readSource: (file: SyncedProject["files"][string]) =>
           readSource(this.options.sources, file),
-        onPdf: (body: ReadableStream<Uint8Array>) => {
-          firstPdfAt ??= new Date().toISOString();
-          const preview =
-            !signal.aborted && this.state.current?.id === build.id
-              ? this.previews.get(build.id)
-              : undefined;
-          if (preview) preview(body);
-          else if (!signal.aborted && this.state.current?.id === build.id) {
-            this.discardPreview();
-            const [pending, drain] = body.tee();
-            this.pendingPreview = { id: build.id, body: pending };
-            void drain
-              .pipeTo(new WritableStream({ write() {} }))
-              .catch(() => {});
-          } else void body.cancel().catch(() => {});
-        },
       };
       try {
         output = await this.options.engine(project, {
           ...context,
+          artifacts: writer,
         });
       } catch (error) {
         if (
@@ -772,9 +759,12 @@ export class ProjectCoordinatorCore {
           this.state.cacheValid = false;
           this.persist();
         });
+        await writer.settled();
+        writer = createWriter();
         output = await this.options.engine(project, {
           ...context,
           clean: true,
+          artifacts: writer,
         });
       }
       engineTiming = output.timing;
@@ -784,11 +774,11 @@ export class ProjectCoordinatorCore {
         ...build,
         status: "succeeded",
         log: output.log,
-        sizeBytes: output.pdf.byteLength,
+        sizeBytes: output.sizeBytes,
         artifactUrl: `/${this.pdfKey(build.id)}`,
       };
     } catch (error) {
-      if (error instanceof HttpError) logFile = error.logFile;
+      await writer.settled();
       // Deltas can no longer build on this manifest; the next one resyncs.
       if (error instanceof MissingSourceError)
         await this.exclusive(async () => {
@@ -818,7 +808,7 @@ export class ProjectCoordinatorCore {
           if (this.state.current?.id !== build.id || !this.state.pending)
             return;
           this.state.current = { ...this.state.current, status: "queued" };
-          this.discardPreview();
+          this.livePdf = null;
           this.persist();
           if (this.state.pending.delivery === "direct")
             await this.dispatchOverflow();
@@ -839,28 +829,17 @@ export class ProjectCoordinatorCore {
       let manifest: ArtifactManifest | null = this.state.artifacts;
       if (output && result.status === "succeeded") {
         try {
-          // The compiler client rejects preview builds without an image.
-          [manifest] = await Promise.all([
-            storeArtifacts({
-              store: this.options.store,
-              projectId: this.options.projectId,
-              mainFile: project.mainFile,
-              build: {
-                id: build.id,
-                revision: build.revision,
-                digest: build.digest,
-                builtBy: build.builtBy,
-              },
-              output,
-            }),
-            output.preview &&
-              this.options.store.write(this.pngKey(build.id), output.preview),
-            output.cacheArchive &&
-              this.options.store.write(
-                cacheKey(this.options.projectId),
-                output.cacheArchive,
-              ),
-          ]);
+          // Everything was streamed to storage while the engine answered.
+          manifest = {
+            id: build.id,
+            revision: build.revision,
+            digest: build.digest,
+            builtBy: build.builtBy,
+            files: await writer.finish(output.log),
+            builtAt: new Date().toISOString(),
+            engine: output.timing.engine,
+            pdf: pdfPath(project.mainFile),
+          };
         } catch (error) {
           console.error("Build artifact persistence failed", {
             jobId: build.id,
@@ -876,21 +855,14 @@ export class ProjectCoordinatorCore {
           };
         }
       } else if (result.status === "failed") {
-        const path = `${project.mainFile
-          .split("/")
-          .at(-1)!
-          .replace(/\.tex$/, "")}.log`;
-        const key = `projects/${this.options.projectId}/builds/${crypto.randomUUID()}/${path}`;
-        const data =
-          logFile?.path === path
-            ? logFile.content
-            : new TextEncoder().encode(result.log);
-        await this.options.store.create(key, data);
-        const file = {
-          path,
-          key,
-          sizeBytes: data.length,
-        };
+        const path = logPath(project.mainFile);
+        let file = await writer.saved(path);
+        if (!file) {
+          const key = `projects/${this.options.projectId}/builds/${crypto.randomUUID()}/${path}`;
+          const data = new TextEncoder().encode(result.log);
+          await this.options.store.create(key, data);
+          file = { path, key, sizeBytes: data.length };
+        }
         manifest = manifest
           ? {
               ...manifest,
@@ -964,8 +936,8 @@ export class ProjectCoordinatorCore {
       if (result.status === "succeeded") {
         this.state.latestBuild = result;
         this.state.cacheValid = true;
-        this.discardPreview();
       }
+      this.livePdf = null;
       this.state.artifacts = manifest;
       if (result.status === "succeeded")
         this.state.stale = this.state.revision !== build.revision;
@@ -973,67 +945,15 @@ export class ProjectCoordinatorCore {
       this.state.pending = null;
       this.persist();
     });
+    // The next build starts only when this one can no longer write.
+    await writer.settled();
     return true;
   }
 
-  events(signal: AbortSignal) {
-    const encoder = new TextEncoder();
-    let dispose = () => {};
-    const body = new ReadableStream<Uint8Array>(
-      {
-        start: (controller) => {
-          const enqueue = (text: string) => {
-            if ((controller.desiredSize ?? 0) <= 0) {
-              close();
-              return;
-            }
-            controller.enqueue(encoder.encode(text));
-          };
-          const send = (snapshot: CoordinatorSnapshot) =>
-            enqueue(`data: ${JSON.stringify(snapshot)}\n\n`);
-          const ping = setInterval(() => enqueue(": heartbeat\n\n"), 15_000);
-          let closed = false;
-          dispose = () => {
-            if (closed) return;
-            closed = true;
-            clearInterval(ping);
-            this.listeners.delete(send);
-            this.eventClosers.delete(close);
-            signal.removeEventListener("abort", close);
-          };
-          const close = () => {
-            if (closed) return;
-            dispose();
-            try {
-              controller.close();
-            } catch {
-              // Consumer already cancelled the stream.
-            }
-          };
-          this.eventClosers.add(close);
-          this.listeners.add(send);
-          send(this.snapshot());
-          signal.addEventListener("abort", close, { once: true });
-          if (signal.aborted) close();
-        },
-        cancel: () => dispose(),
-      },
-      { highWaterMark: 32 },
-    );
-    return new Response(body, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-store",
-        "X-Accel-Buffering": "no",
-      },
-    });
-  }
-
   async close() {
-    for (const close of this.eventClosers) close();
     this.active?.controller.abort();
     await this.active?.done;
-    this.discardPreview();
+    this.livePdf = null;
     await this.writer;
   }
 }

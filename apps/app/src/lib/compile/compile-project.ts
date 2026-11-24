@@ -83,7 +83,7 @@ function waitForCompletion(options: {
       reject(signal.reason);
     };
     // A terminal notification reconciles the web job record before PDF access.
-    // During an outage, make one recovery read and otherwise await SSE reconnect.
+    // During an outage, make one recovery read and otherwise await the reconnect.
     const check = async () => {
       if (checking || settled) return;
       checking = true;

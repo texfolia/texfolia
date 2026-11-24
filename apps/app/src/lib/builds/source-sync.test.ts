@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { unknownEngineTiming } from "@texfolia/contracts";
 import pathPolicy from "@texfolia/contracts/path-policy.json";
 
+import { type TestEngine } from "../../../test/builds/engine";
 import { createBuildsRuntime } from "../../../test/builds/runtime";
 import { coordinatorSnapshotSchema } from "./coordinator";
 import {
@@ -15,7 +16,6 @@ import {
   sourceSnapshotSchema,
   type SourceDelta,
 } from "./source-sync";
-import type { Engine } from "./types";
 
 const text = async (content: string) => ({
   hash: await sourceHash(new TextEncoder().encode(content)),
@@ -63,12 +63,12 @@ async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "source-sync-"));
   const options = {
     path: join(directory, "state.sqlite"),
-    projectEngine: (): Engine => async (project, context) => {
+    projectEngine: (): TestEngine => async (project, context) => {
       const sources: Record<string, string> = {};
       for (const [path, file] of Object.entries(project.files))
-        sources[path] = Buffer.from(await context.readSource(file)).toString(
-          "latin1",
-        );
+        sources[path] = Buffer.from(
+          await new Response(await context.readSource(file)).arrayBuffer(),
+        ).toString("latin1");
       built.push(sources);
       return {
         pdf: new TextEncoder().encode("%PDF-test"),
