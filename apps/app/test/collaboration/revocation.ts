@@ -222,9 +222,46 @@ export async function checkRevocation({
             return;
           }
         }
-        async function openStream(userId: string, query = "events=1") {
+        async function openEvents(userId: string) {
+          const response = await mf.dispatchFetch(eventsUrl, {
+            headers: { ...headers(userId), Upgrade: "websocket" },
+          });
+          assert.equal(response.status, 101);
+          const socket = response.webSocket;
+          assert(socket);
+          sockets.push(socket);
+          const frames: string[] = [];
+          let closeCode = 0;
+          socket.addEventListener("message", (event) => {
+            if (event.data !== "pong") frames.push(String(event.data));
+          });
+          socket.addEventListener("close", (event) => {
+            closeCode = event.code;
+          });
+          socket.accept();
+          // As the browser does when the socket opens.
+          socket.send("ping");
+          await eventually(() => frames.length > 0, "Initial frame timed out");
+          assert.match(frames[0] ?? "", /attached/);
+          return { frames, closeCode: () => closeCode };
+        }
+        async function emit(body: string) {
+          await fetch(`${origin}/fixture/emit/${projectId}`, {
+            method: "POST",
+            body,
+          });
+        }
+        async function builds() {
           const response = await fetch(
-            `${origin}/api/compile/${projectId}?${query}`,
+            `${origin}/fixture/subscribers/${projectId}`,
+          );
+          return z
+            .object({ recipients: z.number(), checks: z.number() })
+            .parse(await response.json());
+        }
+        async function openPdf(userId: string) {
+          const response = await fetch(
+            `${origin}/api/compile/${projectId}?job=${jobId}&preview=pdf`,
             { headers: headers(userId) },
           );
           assert.equal(response.status, 200);
@@ -255,11 +292,26 @@ export async function checkRevocation({
         );
         if (ownership === "personal" && trigger === "source")
           await checkEditsSkipDatabase(owner, recipient, viewer);
-        const revokedEvents = await openStream(editorId);
-        const allowedEvents = await openStream(viewerId);
-        const revokedPdf = await openStream(
-          editorId,
-          `job=${jobId}&preview=pdf`,
+        const revokedEvents = await openEvents(editorId);
+        const allowedEvents = await openEvents(viewerId);
+        const revokedPdf = await openPdf(editorId);
+        // Chunks and frames for viewers with unchanged access skip Postgres.
+        const { checks } = await builds();
+        for (let index = 0; index < 20; index++) {
+          await emit(`progress-${index}`);
+          await bounded(revokedPdf.read(), "PDF chunk missing");
+        }
+        await eventually(
+          () =>
+            [revokedEvents, allowedEvents].every(({ frames }) =>
+              frames.includes("progress-19"),
+            ),
+          "Viewers missed progress",
+        );
+        assert.equal(
+          (await builds()).checks,
+          checks,
+          "Chunks queried Postgres",
         );
 
         if (ownership === "personal") {
@@ -298,18 +350,14 @@ export async function checkRevocation({
             .where(eq(member.id, removedMembershipId));
         }
         // Role changes preserve live reads for both personal viewers and organization members.
-        const roleRead = revokedEvents.read();
-        await fetch(`${origin}/fixture/emit/${projectId}`, {
-          method: "POST",
-          body: "data: role-change\n\n",
-        });
-        assert.match(
-          new TextDecoder().decode(
-            (await bounded(roleRead, "Role change lost events")).value,
-          ),
-          /role-change/,
+        await emit("role-change");
+        await eventually(
+          () =>
+            [revokedEvents, allowedEvents].every(({ frames }) =>
+              frames.includes("role-change"),
+            ),
+          "Role change lost events",
         );
-        await bounded(allowedEvents.read(), "Authorized viewer lost events");
         assert.match(
           new TextDecoder().decode(
             (await bounded(revokedPdf.read(), "PDF role chunk missing")).value,
@@ -318,6 +366,7 @@ export async function checkRevocation({
         );
         assert.equal(recipient.closeCode(), 0);
         const receivedBefore = recipient.messages.length;
+        const framesBefore = revokedEvents.frames.length;
 
         // Idle revocation skips the notification to exercise the alarm backstop.
         if (ownership === "personal" && trigger !== "idle")
@@ -385,17 +434,20 @@ export async function checkRevocation({
           "Revoked socket received source or awareness data",
         );
         assert.equal(recipient.closeCode(), 1008);
-        const eventsEnd = revokedEvents.read();
         const pdfEnd = revokedPdf.read();
-        if (trigger !== "idle")
-          await fetch(`${origin}/fixture/emit/${projectId}`, {
-            method: "POST",
-            body: `data: ${secret}\n\n`,
-          });
+        // A missed notice is caught by the periodic check instead.
+        if (trigger === "idle")
+          await fetch(`${origin}/fixture/backstop/${projectId}`);
+        else await emit(secret);
+        await eventually(
+          () => revokedEvents.closeCode() !== 0,
+          "Revoked events stayed open",
+        );
+        assert.equal(revokedEvents.closeCode(), 1008);
         assert.equal(
-          (await bounded(eventsEnd, "Revoked SSE stayed open")).done,
-          true,
-          "SSE leaked a post-removal payload",
+          revokedEvents.frames.length,
+          framesBefore,
+          "Events leaked a post-removal payload",
         );
         assert.equal(
           (await bounded(pdfEnd, "Revoked PDF stayed open")).done,
@@ -403,17 +455,22 @@ export async function checkRevocation({
           "PDF leaked a post-removal payload",
         );
         if (trigger !== "idle")
-          assert.match(
-            new TextDecoder().decode(
-              (
-                await bounded(
-                  allowedEvents.read(),
-                  "Authorized viewer lost build updates",
-                )
-              ).value,
-            ),
-            new RegExp(secret),
+          await eventually(
+            () => allowedEvents.frames.includes(secret),
+            "Authorized viewer lost build updates",
           );
+        // Viewers stay connected while the object hibernates.
+        await mf.unsafeEvictDurableObject(
+          "collaboration-test",
+          "BuildsFixture",
+          { name: projectId, webSockets: "hibernate" },
+        );
+        await emit("woken");
+        await eventually(
+          () => allowedEvents.frames.includes("woken"),
+          "Hibernated viewer lost build updates",
+        );
+        assert.equal(allowedEvents.closeCode(), 0);
         await eventually(async () => {
           const row = await db.query.projectNode.findFirst({
             where: { id: nodeId },
@@ -439,7 +496,25 @@ export async function checkRevocation({
         assert.equal(
           (await fetch(eventsUrl, { headers: headers(editorId) })).status,
           404,
-          "Revoked SSE reconnected",
+          "Revoked events reconnected",
+        );
+        assert.equal(
+          (await fetch(eventsUrl, { headers: headers(viewerId) })).status,
+          426,
+          "Events answered without a socket",
+        );
+        assert.equal(
+          (
+            await mf.dispatchFetch(eventsUrl, {
+              headers: {
+                ...headers(viewerId),
+                Origin: "https://example.com",
+                Upgrade: "websocket",
+              },
+            })
+          ).status,
+          403,
+          "Another site opened build events",
         );
         assert.equal(
           (
@@ -471,6 +546,8 @@ export async function checkRevocation({
         await Promise.all(
           streams.map((reader) => reader.cancel().catch(() => {})),
         );
+        for (const socket of sockets)
+          if (socket?.readyState === 1) socket.close();
         await eventually(async () => {
           const response = await fetch(
             `${origin}/fixture/subscribers/${projectId}`,
@@ -483,8 +560,6 @@ export async function checkRevocation({
             state.recipients === 0
           );
         }, "Upstream compiler subscriptions were not cancelled");
-        for (const socket of sockets)
-          if (socket?.readyState === 1) socket.close();
         await db.delete(project).where(eq(project.id, projectId));
         if (ownership === "organization")
           await db

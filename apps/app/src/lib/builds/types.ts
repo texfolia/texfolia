@@ -1,4 +1,5 @@
 import { type EngineTiming, type planSchema } from "@texfolia/contracts";
+import type { CompileSinks } from "@texfolia/contracts/compiler";
 import type { z } from "zod";
 
 import type { SyncedProject } from "./source-sync";
@@ -6,12 +7,20 @@ import type { SyncedProject } from "./source-sync";
 // Build artifacts, results, previews and cache archives.
 export interface ObjectStore {
   read(key: string): Promise<ReadableStream<Uint8Array> | null>;
-  // The size is known before the body is read.
+  // The size is that of the whole object, and is known before the body is read.
   open(
     key: string,
+    offset?: number,
   ): Promise<{ size: number; body: ReadableStream<Uint8Array> } | null>;
   create(key: string, value: string | Uint8Array): Promise<boolean>;
   write(key: string, value: string | Uint8Array): Promise<void>;
+  // Writes exactly `size` bytes as they arrive. `saved` is false when `create`
+  // is set and the object already exists.
+  upload(
+    key: string,
+    size: number,
+    options: { create: boolean },
+  ): { body: WritableStream<Uint8Array>; saved: Promise<boolean> };
   remove(key: string): Promise<void>;
   keys(prefix: string, before?: number): AsyncIterable<string>;
 }
@@ -22,7 +31,9 @@ export interface ObjectStore {
 export interface SourceStore {
   saved: {
     size(key: string): Promise<number | null>;
-    read(key: string): Promise<Uint8Array<ArrayBuffer> | null>;
+    open(
+      key: string,
+    ): Promise<{ size: number; body: ReadableStream<Uint8Array> } | null>;
   };
   drafts: {
     size(hash: string): number | null;
@@ -31,8 +42,6 @@ export interface SourceStore {
     retain(hashes: ReadonlySet<string>): void;
   };
 }
-
-export type LogFile = { path: string; content: Uint8Array };
 
 export type Engine = (
   project: SyncedProject,
@@ -45,16 +54,14 @@ export type Engine = (
     projectId?: string;
     signal?: AbortSignal;
     clean?: boolean;
-    onPdf?: (body: ReadableStream<Uint8Array>) => void;
     readSource: (
       file: SyncedProject["files"][string],
-    ) => Promise<Uint8Array<ArrayBuffer>>;
+    ) => Promise<Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array>>;
+    // Where the engine streams the PDF, the other files, and the cache.
+    artifacts: Required<CompileSinks>;
   },
 ) => Promise<{
-  pdf: Uint8Array;
+  sizeBytes: number;
   log: string;
   timing: EngineTiming;
-  files?: Record<string, Uint8Array>;
-  cacheArchive?: Uint8Array;
-  preview?: Uint8Array;
 }>;

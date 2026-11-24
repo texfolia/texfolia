@@ -68,7 +68,7 @@ let failUpload = true;
 let failCompile = true;
 let pdf: Blob | null = null;
 let jobId = "";
-const subscribers = new Set<ReadableStreamDefaultController<Uint8Array>>();
+const subscribers = new Set<{ send(data: string): unknown }>();
 function snapshot() {
   const build = jobId ? { id: jobId, revision: 1, status: "succeeded" } : null;
   return {
@@ -91,7 +91,7 @@ function snapshot() {
   };
 }
 function event() {
-  return new TextEncoder().encode(`data: ${JSON.stringify(snapshot())}\n\n`);
+  return JSON.stringify(snapshot());
 }
 
 // The network boundary is a fixture; React, upload, collection, collaboration
@@ -101,7 +101,15 @@ const backend = Bun.serve({
   port: 0,
   idleTimeout: 120,
   websocket: {
-    data: { nodeId: "" },
+    data: { nodeId: "", events: false },
+    open(socket) {
+      if (!socket.data.events) return;
+      subscribers.add(socket);
+      socket.send(event());
+    },
+    close(socket) {
+      subscribers.delete(socket);
+    },
     async message(socket, raw) {
       if (raw === "ping") {
         socket.send("pong");
@@ -149,7 +157,10 @@ const backend = Bun.serve({
     if (url.pathname.startsWith("/api/collaboration/")) {
       if (
         server.upgrade(request, {
-          data: { nodeId: url.pathname.split("/").at(-1) ?? "" },
+          data: {
+            nodeId: url.pathname.split("/").at(-1) ?? "",
+            events: false,
+          },
         })
       )
         return;
@@ -204,20 +215,9 @@ const backend = Bun.serve({
         : new Response(null, { status: 404 });
     }
     if (url.searchParams.has("events")) {
-      let subscriber: ReadableStreamDefaultController<Uint8Array>;
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            subscriber = controller;
-            subscribers.add(controller);
-            controller.enqueue(event());
-          },
-          cancel() {
-            subscribers.delete(subscriber);
-          },
-        }),
-        { headers: { "Content-Type": "text/event-stream" } },
-      );
+      return server.upgrade(request, { data: { nodeId: "", events: true } })
+        ? undefined
+        : new Response(null, { status: 426 });
     }
     if (request.method === "PATCH") return new Response(null, { status: 204 });
     if (url.searchParams.has("changed"))
@@ -262,7 +262,7 @@ const backend = Bun.serve({
       );
       assert(output.pdf, output.result.error);
       pdf = new Blob([output.pdf]);
-      for (const subscriber of subscribers) subscriber.enqueue(event());
+      for (const subscriber of subscribers) subscriber.send(event());
       return Response.json({
         id: jobId,
         revision: 1,

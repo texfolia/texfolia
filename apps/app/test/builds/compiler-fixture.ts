@@ -5,7 +5,7 @@ import {
   CompileManifest,
   CompileOptions,
   compileOptionHeaders,
-  readArchive,
+  collectArchive,
   writeArchive,
 } from "@texfolia/contracts/compiler";
 import { Schema } from "effect";
@@ -132,7 +132,7 @@ export function createCompilerFixture(
       if (options.container !== undefined && options.container !== container)
         return resync();
       assert(request.body);
-      const entries = await readArchive(request.body, {
+      const entries = await collectArchive(request.body, {
         maxBytes: 64 * 1024 * 1024,
       });
       const manifest = decodeManifest(

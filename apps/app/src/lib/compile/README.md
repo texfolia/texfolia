@@ -24,7 +24,7 @@ arguments:
 - `CompileProject` locks a project and checks access, returns the metadata
   version the browser sends as `X-Source-Metadata`, and maps nodes to paths.
 - `createCompileHandlers` also takes `principal` (session or share link),
-  `compilePlan` (billing), and `streamLive` (closes live streams when access is revoked).
+  and `compilePlan` (billing).
 
 `ProjectBuildEvents` takes an optional URL decorator, which the share view uses
 to add its share token.

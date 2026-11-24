@@ -7,7 +7,7 @@ import { join } from "node:path";
 import {
   encodeCompileHeaders,
   encodeCompileRequest,
-  readCompileArtifacts,
+  collectCompileArtifacts,
   readCompilePlacement,
 } from "@texfolia/contracts/compiler";
 
@@ -89,7 +89,7 @@ async function compile(...parameters: Parameters<typeof send>) {
   assert.equal(response.status, 200, await response.clone().text());
   const placement = readCompilePlacement(response.headers);
   assert(placement && response.body);
-  const artifacts = await readCompileArtifacts(response.body);
+  const artifacts = await collectCompileArtifacts(response.body);
   assert(artifacts.pdf && artifacts.cache);
   assert.equal(new TextDecoder().decode(artifacts.pdf.slice(0, 5)), "%PDF-");
   assert(artifacts.files.has("main.synctex.gz"));

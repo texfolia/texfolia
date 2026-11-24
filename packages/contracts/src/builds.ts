@@ -81,7 +81,7 @@ const buildStateSchema = z.object({
   revision: z.number().int().nonnegative(),
   status: buildStatusSchema,
 });
-// The project build state the compiler publishes on GET and over SSE.
+// The project build state the compiler publishes on GET and over its event socket.
 export const buildSnapshotSchema = z.object({
   revision: z.number().int().nonnegative(),
   current: buildStateSchema.nullable().default(null),

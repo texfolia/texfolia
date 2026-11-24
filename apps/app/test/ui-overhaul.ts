@@ -131,9 +131,7 @@ const mf = new Miniflare({
           : null,
       };
       if (path.endsWith("/events"))
-        return new Response(`data: ${JSON.stringify(snapshot)}\n\n`, {
-          headers: { "Content-Type": "text/event-stream" },
-        });
+        return new Response(`${JSON.stringify(snapshot)}\n`);
       return Response.json(snapshot);
     },
   ),

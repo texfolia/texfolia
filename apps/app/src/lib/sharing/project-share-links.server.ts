@@ -8,14 +8,14 @@ import { and, asc, count, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
-  invalidateCollaborationAccess,
-  type CollaborationAccess,
-} from "#/lib/collaboration/server";
-import {
   projectShareLinkEmail,
   type EmailDelivery,
   type EmailNotificationStatus,
 } from "#/lib/email";
+import {
+  invalidateProjectAccess,
+  type LiveProjects,
+} from "#/lib/projects/server";
 import type { ProjectTransaction } from "#/lib/projects/server";
 import { encodeSource } from "#/lib/storage";
 
@@ -178,12 +178,12 @@ export async function revokeShareLink({
   db,
   userId,
   data,
-  collaboration,
+  live,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof revokeShareLinkSchema>;
-  collaboration?: CollaborationAccess;
+  live?: LiveProjects;
 }) {
   await db.transaction(async (tx) => {
     await lockManagedProject(tx, data.projectId, userId);
@@ -196,8 +196,7 @@ export async function revokeShareLink({
         ),
       );
     // Invalidate before commit so open sockets re-verify behind this lock.
-    // Live build streams re-check access on their own interval.
-    await invalidateCollaborationAccess(collaboration, data.projectId, [
+    await invalidateProjectAccess(live, data.projectId, [
       sharePrincipal(data.linkId),
     ]);
   });

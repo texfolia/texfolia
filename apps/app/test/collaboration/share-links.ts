@@ -26,20 +26,6 @@ async function eventually(
   }
 }
 
-async function bounded<T>(promise: Promise<T>, label: string) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(label)), 12_000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 const createdLink = z.object({ id: z.uuid(), token: z.string() });
 
 // Anonymous share-link viewers: read-only, no presence, and revocable live.
@@ -64,7 +50,6 @@ export async function checkShareLinks({
   const sockets: NonNullable<
     Awaited<ReturnType<Miniflare["dispatchFetch"]>>["webSocket"]
   >[] = [];
-  const streams: ReadableStreamDefaultReader<Uint8Array>[] = [];
   const socketUrl = `${origin}/api/collaboration/${projectId}/${nodeId}`;
   try {
     await db
@@ -221,22 +206,31 @@ export async function checkShareLinks({
     );
 
     // Both link kinds follow the live build stream.
-    for (const token of [link.token, pdfLink.token]) {
-      const response = await fetch(
-        `${origin}/api/compile/${projectId}?events=1&share=${token}`,
-      );
-      assert.equal(response.status, 200);
-      assert(response.body);
-      const reader = response.body.getReader();
-      streams.push(reader);
-      assert.match(
-        new TextDecoder().decode(
-          (await bounded(reader.read(), "Initial stream timed out")).value,
-        ),
-        /attached/,
-      );
-    }
-    const [guestEvents, pdfEvents] = streams;
+    const [guestEvents, pdfEvents] = await Promise.all(
+      [link.token, pdfLink.token].map(async (token) => {
+        const response = await mf.dispatchFetch(
+          `${origin}/api/compile/${projectId}?events=1&share=${token}`,
+          { headers: { Origin: origin, Upgrade: "websocket" } },
+        );
+        assert.equal(response.status, 101);
+        const socket = response.webSocket;
+        assert(socket);
+        sockets.push(socket);
+        const frames: string[] = [];
+        let closeCode = 0;
+        socket.addEventListener("message", (event) => {
+          if (event.data !== "pong") frames.push(String(event.data));
+        });
+        socket.addEventListener("close", (event) => {
+          closeCode = event.code;
+        });
+        socket.accept();
+        // As the browser does when the socket opens.
+        socket.send("ping");
+        await eventually(() => frames.length > 0, "Initial frame timed out");
+        return { frames, closeCode: () => closeCode };
+      }),
+    );
     assert(guestEvents && pdfEvents);
 
     // Revocation closes the guest's socket and stream; other links keep working.
@@ -258,22 +252,20 @@ export async function checkShareLinks({
     );
     assert.equal(guest.messages.length, before, "Revoked guest got data");
     assert.equal(guest.closeCode(), 1008);
-    const guestEnd = guestEvents.read();
     await fetch(`${origin}/fixture/emit/${projectId}`, {
       method: "POST",
-      body: `data: ${secret}\n\n`,
+      body: secret,
     });
-    assert.equal(
-      (await bounded(guestEnd, "Revoked guest stream stayed open")).done,
-      true,
-      "Revoked guest stream leaked a payload",
+    await eventually(
+      () => pdfEvents.frames.includes(secret),
+      "PDF link lost build updates",
     );
-    assert.match(
-      new TextDecoder().decode(
-        (await bounded(pdfEvents.read(), "PDF link lost build updates")).value,
-      ),
-      new RegExp(secret),
+    await eventually(
+      () => guestEvents.closeCode() !== 0,
+      "Revoked guest events stayed open",
     );
+    assert.equal(guestEvents.closeCode(), 1008);
+    assert.equal(guestEvents.frames.length, 1, "Revoked guest got events");
     assert.equal(
       (
         await mf.dispatchFetch(
@@ -288,7 +280,6 @@ export async function checkShareLinks({
     );
     for (const client of [owner, editor, guest]) client.doc.destroy();
   } finally {
-    await Promise.all(streams.map((reader) => reader.cancel().catch(() => {})));
     for (const socket of sockets) if (socket?.readyState === 1) socket.close();
     await db.delete(project).where(eq(project.id, projectId));
   }

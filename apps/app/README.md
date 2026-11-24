@@ -215,24 +215,25 @@ IndexedDB. Viewer clients do not load writable caches.
 
 ### Live access revocation
 
-Compile SSE subscriptions and progressive PDF streams check project access
-before each outgoing payload. The check holds shared locks on the project and the
-recipient's collaborator or membership row through delivery. A committed removal
-therefore prevents subsequent build payloads from being sent. Failure to verify
-access also closes the subscription.
-
-Collaboration rooms cache each connected user's access in memory, so edits and
-cursor updates do not query Postgres. Paths that change access notify the room
-through `invalidateAccess`. Sharing changes notify it inside the revoking
+Collaboration rooms and build coordinators cache each connected user's access in
+memory, so edits, cursor updates, build events, and progressive PDF chunks do not
+query Postgres. Paths that change access notify both through `invalidateAccess`.
+Sharing changes notify it inside the revoking
 transaction. The next delivery to that user then waits on the revocation's locks
 and sees the committed change. Organization member removal and leaving notify
-every registered room of the organization after Better Auth commits. Moving a
-project to the trash and transferring it notify its room too. Permanent project
+every registered room and every build coordinator of the organization after
+Better Auth commits. Moving a project to the trash and transferring it notify
+them too. Permanent project
 and file deletion close sockets through source cleanup. Eviction clears the cache.
 
-Idle subscriptions and collaboration rooms recheck access every five seconds.
-If a notification fails, this check is the backstop: a revoked user can receive
-updates for up to five seconds, plus database time and runtime scheduling.
+Build events are hibernatable WebSockets from the project's build coordinator. A
+PDF that loses its reader's access ends early. Failure to verify access also
+closes a socket or stream.
+
+A periodic check is the backstop when a notification fails or a path sends none,
+such as account deletion. Collaboration rooms recheck connected users every five
+seconds and build coordinators every 60. A revoked user can receive updates for
+up to that long, plus database time and runtime scheduling.
 Collaboration uses a durable alarm so checks continue after hibernation. The alarm
 also reconciles open documents with sources saved outside collaboration. Revoked
 WebSockets close with code `1008`. Compile streams close and cancel their upstream
@@ -304,7 +305,8 @@ and reload recovery, read-only viewers, permission changes, named cursors,
 formatting, local undo, hibernation, snapshot compaction, and persisted sources.
 The test entry point invokes the production collaboration and compile GET routes
 with signed Better Auth sessions stored in Postgres. A builds fixture supplies
-controlled SSE and progressive PDF chunks. Revocation cases cover personal
+controlled build events and progressive PDF chunks through the production live
+channel, and asserts that they run no Postgres queries. Revocation cases cover personal
 collaborators and organization members, including idle sockets after hibernation,
 role changes, denied reconnects, viewer access, and persistence of accepted edits.
 They also assert that edits and cursor updates run no Postgres queries.

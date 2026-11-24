@@ -68,7 +68,7 @@ Compiler timing adds compiler-clock instants: `startedAt` (attempt start),
 `firstPdfAt` (first streamed PDF), `engineFinishedAt` and `publishedAt`, plus
 `debounceMs` and `delivery` (`direct` or `overflow`). `requestSentMs` and
 `notifiedMs` are browser durations from the compile action to the submission
-request leaving the browser and to the terminal SSE event. `serverMs` is the web
+request leaving the browser and to the terminal build event. `serverMs` is the web
 route’s own POST duration, returned in the submission response. The browser
 maps its durations onto server time as
 `receivedAt + (t - requestSentMs - (submissionMs - requestSentMs - serverMs) / 2)`;

@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { unknownEngineTiming } from "@texfolia/contracts";
 
+import { fill, streamed, type TestEngine } from "../../../test/builds/engine";
 import { createBuildsRuntime } from "../../../test/builds/runtime";
 import {
   memorySources,
@@ -18,7 +19,7 @@ import {
   ProjectCoordinatorCore,
 } from "./coordinator";
 import { HttpError } from "./project";
-import type { Engine, ObjectStore } from "./types";
+import type { ObjectStore } from "./types";
 
 const timing = {
   ...unknownEngineTiming,
@@ -44,7 +45,7 @@ async function createBuildFixture() {
   const path = join(root, "store.sqlite");
   const projectId = crypto.randomUUID();
   const calls: { text: string; clean: boolean }[] = [];
-  const engine: Engine = async (project, context) => {
+  const engine: TestEngine = async (project, context) => {
     const text = await sourceText(project, context);
     calls.push({ text, clean: context.clean ?? false });
     if (text === "broken")
@@ -241,7 +242,7 @@ test("collaborator edits before and during a build mark it stale; older notifica
   const root = await mkdtemp(join(tmpdir(), "stale-build-"));
   const started = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const engine: Engine = async () => {
+  const engine: TestEngine = async () => {
     started.resolve();
     await release.promise;
     return output("good");
@@ -322,13 +323,16 @@ test("publication stays atomic through a storage failure; retention removes aban
   const memory = memoryStore(objects);
   const store: ObjectStore = {
     ...memory,
-    async create(key, value) {
-      if (key.includes("/builds/") && ++writes === 2 && fail) {
-        pause.resolve();
-        await release.promise;
-        throw new Error("Storage unavailable");
-      }
-      return memory.create(key, value);
+    upload(key, size, options) {
+      const upload = memory.upload(key, size, options);
+      if (!key.includes("/builds/") || ++writes !== 2 || !fail) return upload;
+      pause.resolve();
+      return {
+        body: upload.body,
+        saved: release.promise.then(() => {
+          throw new Error("Storage unavailable");
+        }),
+      };
     },
     // Sweep objects written in this same millisecond too.
     keys: (prefix) => memory.keys(prefix),
@@ -344,7 +348,7 @@ test("publication stays atomic through a storage failure; retention removes aban
     background: async () => {},
     store,
     sources: memorySources(new Map(), drafts),
-    engine: async () => output("atomic"),
+    engine: streamed(async () => output("atomic")),
   };
   const core = new ProjectCoordinatorCore(options);
   try {
@@ -352,6 +356,7 @@ test("publication stays atomic through a storage failure; retention removes aban
     await core.submit(
       id,
       { mainFile: "main.tex", files: { "main.tex": "atomic" } },
+      "digest",
       "free",
     );
     await Bun.sleep(310);
@@ -367,6 +372,7 @@ test("publication stays atomic through a storage failure; retention removes aban
     await core.submit(
       crypto.randomUUID(),
       { mainFile: "main.tex", files: { "main.tex": "atomic" } },
+      "digest",
       "free",
     );
     await Bun.sleep(310);
@@ -404,11 +410,9 @@ test("publication stays atomic through a storage failure; retention removes aban
 test("the first failed compile exposes its full log without inventing a PDF", async () => {
   const root = await mkdtemp(join(tmpdir(), "first-failure-"));
   const rawLog = "full TeX log\n".repeat(10_000);
-  const engine: Engine = async () => {
-    throw new HttpError(422, "Bad TeX", "bounded summary", timing, {
-      path: "main.log",
-      content: encode(rawLog),
-    });
+  const engine: TestEngine = async (_project, { artifacts }) => {
+    await fill(artifacts.file("main.log", rawLog.length), rawLog);
+    throw new HttpError(422, "Bad TeX", "bounded summary", timing);
   };
   const runtime = createBuildsRuntime({
     path: join(root, "state.sqlite"),

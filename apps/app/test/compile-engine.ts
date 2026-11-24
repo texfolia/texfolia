@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 
-import { compileJobSchema, type CompileJob } from "@texfolia/contracts";
+import {
+  buildSnapshotSchema,
+  compileJobSchema,
+  type CompileJob,
+} from "@texfolia/contracts";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 
@@ -52,7 +56,15 @@ const worker = await build({
   platform: "neutral",
   mainFields: ["module", "main"],
   conditions: ["workerd"],
-  external: [...builtinModules, "node:*", "cloudflare:workers"],
+  banner: {
+    js: 'import { createRequire } from "node:module"; const require = createRequire("file:///worker.js");',
+  },
+  external: [
+    ...builtinModules,
+    "node:*",
+    "cloudflare:workers",
+    "cloudflare:sockets",
+  ],
   define: { "import.meta.env.DEV": "false" },
 });
 const script = worker.outputFiles[0]?.text;
@@ -149,22 +161,18 @@ try {
   const imageHash = await hashSource(image);
   await bucket.put(`projects/${projectId}/sources/${imageHash}`, image);
 
-  // Completion is pushed: one SSE stream reports every transition.
+  // Completion is pushed: one socket reports every transition.
   const events: string[] = [];
-  const stream = await request("/events");
-  assert(stream.body);
-  const reader = stream.body.getReader();
-  void (async () => {
-    const decoder = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) return;
-      for (const [, status] of decoder
-        .decode(value)
-        .matchAll(/"current":\{[^}]*?"status":"(\w+)"/g))
-        events.push(status ?? "");
-    }
-  })().catch(() => {});
+  const socket = new WebSocket(
+    `${origin.replace("http", "ws")}/projects/${projectId}/events`,
+  );
+  socket.onmessage = ({ data }) => {
+    const { current } = buildSnapshotSchema.parse(JSON.parse(String(data)));
+    if (current) events.push(current.status);
+  };
+  await new Promise((resolve) => {
+    socket.onopen = resolve;
+  });
 
   const first = await submit({
     mainFile: "main.tex",
@@ -192,7 +200,7 @@ try {
   );
   assert((await request("/build/files?path=main.synctex.gz")).ok);
   for (const status of ["queued", "running", "succeeded"])
-    assert(events.includes(status), `SSE never reported ${status}`);
+    assert(events.includes(status), `The socket never reported ${status}`);
 
   // An edit sends one file to the same warm container.
   const second = await submit({
@@ -269,9 +277,9 @@ try {
   const recoveredJob = await settled(recovered);
   assert.equal(recoveredJob.status, "succeeded", JSON.stringify(recoveredJob));
   assert(compileRequests - before >= 2);
-  await reader.cancel();
+  socket.close();
   console.info(
-    `Compile engine passed with real Tectonic: streamed PDF, artifacts, SSE push, incremental edit (${bytesSent[0]} → ${bytesSent[1]} bytes), TeX failure, supersede and cancel, and container loss.`,
+    `Compile engine passed with real Tectonic: streamed PDF, artifacts, pushed completion, incremental edit (${bytesSent[0]} → ${bytesSent[1]} bytes), TeX failure, supersede and cancel, and container loss.`,
   );
 } finally {
   await mf.dispose();

@@ -66,9 +66,7 @@ let snapshot: BuildSnapshot = {
   artifacts: null,
 };
 function emit() {
-  const data = new TextEncoder().encode(
-    `data: ${JSON.stringify(snapshot)}\n\n`,
-  );
+  const data = new TextEncoder().encode(`${JSON.stringify(snapshot)}\n`);
   for (const subscriber of subscribers) subscriber.enqueue(data);
 }
 const mf = new Miniflare({
@@ -120,7 +118,6 @@ const mf = new Miniflare({
               subscribers.delete(subscription);
             },
           }),
-          { headers: { "Content-Type": "text/event-stream" } },
         );
       }
       if (url.pathname.endsWith("/changed")) {

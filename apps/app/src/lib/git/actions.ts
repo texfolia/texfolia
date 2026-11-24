@@ -13,9 +13,8 @@ import * as git from "isomorphic-git";
 import { isOrgAdmin } from "#/lib/auth/roles";
 import { projectPaths } from "#/lib/projects";
 import type { LockProject, ProjectTransaction } from "#/lib/projects/server";
-import { encodeSource } from "#/lib/storage";
 import {
-  putSource,
+  putSourceBytes,
   retireSources,
   type SourceBucket,
 } from "#/lib/storage/server";
@@ -236,13 +235,12 @@ async function replaceFiles(
     } catch {
       kind = "binary";
     }
-    const stored = await putSource({
+    const stored = await putSourceBytes({
       tx,
       bucket,
       projectId,
-      content: encodeSource(bytes),
+      bytes: new Uint8Array(bytes),
       previousSize: 0n,
-      kind,
     });
     const existing = byPath.get(path);
     if (existing && existing.objectKey !== stored.objectKey)

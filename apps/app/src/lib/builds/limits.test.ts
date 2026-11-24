@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 
 import { unknownEngineTiming } from "@texfolia/contracts";
 
+import { collectSinks } from "../../../test/builds/engine";
 import { emptyProject } from "../../../test/builds/stores";
 import {
   CompileUsageCore,
@@ -139,6 +140,7 @@ test("failed engine attempts count toward fair use", async () => {
         engine(emptyProject, {
           ...context,
           readSource: async () => new Uint8Array(),
+          artifacts: collectSinks().sinks,
         }),
       ).rejects.toThrow("Timed out");
     expect(f.core().check("pro").allowed).toBe(false);

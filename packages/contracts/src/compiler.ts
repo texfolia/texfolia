@@ -9,7 +9,13 @@
 // and its log. Any other failure is a JSON `CompileRejection`.
 import { Schema } from "effect";
 
-import { readArchive, writeArchive, type ArchiveEntry } from "./archive";
+import {
+  collectEntry,
+  readArchive,
+  writeArchive,
+  type ArchiveEntry,
+  type ArchiveSink,
+} from "./archive";
 import { maxPdfBytes } from "./builds";
 
 export const maxCompileTimeoutMs = 300_000;
@@ -19,6 +25,8 @@ export const maxPreviewBytes = 4 * 1024 * 1024;
 export const compileArchiveType = "application/x-tar";
 // The PDF, 32 MiB of artifacts, the cache archive, and archive overhead.
 const maxResponseBytes = 96 * 1024 * 1024;
+// The bounded log and up to 1,024 artifact paths.
+const maxResultBytes = 4 * 1024 * 1024;
 
 export const compileHeaders = {
   id: "X-Compile-Id",
@@ -169,71 +177,95 @@ export async function readCompileRejection(
   return rejection._tag === "Some" ? rejection.value : null;
 }
 
-export type CompileArtifacts = {
-  result: CompileResult;
-  pdf: Uint8Array<ArrayBuffer> | null;
-  files: Map<string, Uint8Array<ArrayBuffer>>;
-  preview: Uint8Array<ArrayBuffer> | null;
-  cache: Uint8Array<ArrayBuffer> | null;
+type OpenSink = (size: number) => ArchiveSink | Promise<ArchiveSink>;
+/** Where each part of a compile response goes. A missing sink discards it. */
+export type CompileSinks = {
+  pdf?: OpenSink;
+  preview?: OpenSink;
+  cache?: OpenSink;
+  file?: (path: string, size: number) => ArchiveSink | Promise<ArchiveSink>;
 };
 
+const discard: ArchiveSink = { write: () => {} };
+
 /**
- * Reads a whole compile response. `onPdf` receives the PDF as it arrives, long
- * before the remaining artifacts; a slow or cancelled consumer never delays
- * them.
+ * Streams a compile response into `sinks` in the order the compiler sends it:
+ * the PDF, then the artifacts, then the cache. Only `result.json` is held.
  */
 export async function readCompileArtifacts(
   body: ReadableStream<Uint8Array>,
-  onPdf?: (pdf: ReadableStream<Uint8Array>) => void,
-): Promise<CompileArtifacts> {
+  sinks: CompileSinks,
+): Promise<CompileResult> {
   let first = true;
-  const entries = await readArchive(body, {
+  let pdf = false;
+  let result: CompileResult | undefined;
+  const missing = new Set<string>();
+  await readArchive(body, {
     maxBytes: maxResponseBytes,
-    visit: ({ name, size }) => {
+    open: async ({ name, size }) => {
       const leading = first;
       first = false;
-      if (name !== "output.pdf") return undefined;
-      if (!leading) throw new Error("The compiler must send the PDF first");
-      if (!size) throw new Error("The compiler returned an empty PDF");
-      if (size > maxPdfBytes) throw new Error("The PDF exceeds 20 MiB");
-      if (!onPdf) return undefined;
-      let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-      onPdf(
-        new ReadableStream<Uint8Array>({
-          start: (value) => {
-            controller = value;
-          },
-          cancel: () => {
-            controller = undefined;
-          },
-        }),
-      );
-      return {
-        chunk: (bytes) => controller?.enqueue(bytes.slice()),
-        end: () => controller?.close(),
-        error: (cause) => controller?.error(cause),
-      };
+      switch (name) {
+        case "output.pdf":
+          if (!leading) throw new Error("The compiler must send the PDF first");
+          if (!size) throw new Error("The compiler returned an empty PDF");
+          if (size > maxPdfBytes) throw new Error("The PDF exceeds 20 MiB");
+          pdf = true;
+          return (await sinks.pdf?.(size)) ?? discard;
+        case "result.json":
+          if (size > maxResultBytes)
+            throw new Error("The compiler result exceeds its limit");
+          return collectEntry(size, (bytes) => {
+            result = decodeResult(new TextDecoder().decode(bytes));
+            for (const index of result.files.keys())
+              missing.add(`artifacts/${index}`);
+          });
+        case "preview.png":
+          return (await sinks.preview?.(size)) ?? discard;
+        case "cache.tar.zst":
+          return (await sinks.cache?.(size)) ?? discard;
+      }
+      if (!missing.delete(name)) return discard;
+      const path = result?.files[Number(name.slice("artifacts/".length))];
+      if (path === undefined) return discard;
+      return (await sinks.file?.(path, size)) ?? discard;
     },
   });
-  const encoded = entries.get("result.json");
-  if (!encoded) throw new Error("The compiler returned no result");
-  const result = decodeResult(new TextDecoder().decode(encoded));
-  const files = new Map<string, Uint8Array<ArrayBuffer>>();
-  for (const [index, path] of result.files.entries()) {
-    const content = entries.get(`artifacts/${index}`);
-    if (!content) throw new Error("The compiler omitted an artifact");
-    files.set(path, content);
-  }
-  const pdf = entries.get("output.pdf") ?? null;
-  if ((pdf === null) !== (result.pdf === undefined))
+  if (!result) throw new Error("The compiler returned no result");
+  if (missing.size) throw new Error("The compiler omitted an artifact");
+  if (pdf !== (result.pdf !== undefined))
     throw new Error("The compiler result does not match its PDF");
+  return result;
+}
+
+/** Holds a whole compile response in memory. For tests and scripts. */
+export async function collectCompileArtifacts(
+  body: ReadableStream<Uint8Array>,
+) {
+  type Bytes = Uint8Array<ArrayBuffer>;
+  let pdf: Bytes | null = null;
+  let preview: Bytes | null = null;
+  let cache: Bytes | null = null;
+  const files = new Map<string, Bytes>();
+  const result = await readCompileArtifacts(body, {
+    pdf: (size) => collectEntry(size, (bytes) => void (pdf = bytes)),
+    preview: (size) => collectEntry(size, (bytes) => void (preview = bytes)),
+    cache: (size) => collectEntry(size, (bytes) => void (cache = bytes)),
+    file: (path, size) =>
+      collectEntry(size, (bytes) => void files.set(path, bytes)),
+  });
   return {
     result,
-    pdf,
     files,
-    preview: entries.get("preview.png") ?? null,
-    cache: entries.get("cache.tar.zst") ?? null,
+    pdf: pdf as Bytes | null,
+    preview: preview as Bytes | null,
+    cache: cache as Bytes | null,
   };
 }
 
-export { readArchive, writeArchive } from "./archive";
+export {
+  collectArchive,
+  readArchive,
+  writeArchive,
+  type ArchiveSink,
+} from "./archive";

@@ -7,9 +7,8 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 
 import type { ProjectAccessRequest } from "#/lib/projects/server";
-import { encodeSource } from "#/lib/storage";
 import {
-  putSource,
+  putSourceBytes,
   retireSources,
   type SourceBucket,
 } from "#/lib/storage/server";
@@ -134,14 +133,12 @@ export async function persistMergedSource(options: {
       },
     });
     if (!node) return null;
-    const content = encodeSource(new TextEncoder().encode(value));
-    const stored = await putSource({
+    const stored = await putSourceBytes({
       tx,
       bucket,
       projectId,
-      content,
+      bytes: new TextEncoder().encode(value),
       previousSize: node.sizeBytes,
-      kind: "text",
     });
     // A retry after a successful SQL commit is safe; other external writes are conflicts.
     if (

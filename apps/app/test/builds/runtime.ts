@@ -13,13 +13,16 @@ import {
   type CompileUsage,
 } from "#/lib/builds/limits";
 import { compileQueue, processQueueMessage } from "#/lib/builds/queues";
-import type { Engine, ObjectStore, SourceStore } from "#/lib/builds/types";
+import type { ObjectStore, SourceStore } from "#/lib/builds/types";
+
+import { streamed, type TestEngine } from "./engine";
+import { bufferedUpload } from "./stores";
 
 // Runs the build coordinators in this process with durable SQLite state, so
 // tests can exercise restarts, queues, and alarms without Workers.
 export function createBuildsRuntime(options: {
   path: string;
-  projectEngine: (projectId: string, store: ObjectStore) => Engine;
+  projectEngine: (projectId: string, store: ObjectStore) => TestEngine;
 }) {
   mkdirSync(dirname(options.path), { recursive: true });
   const db = new Database(options.path, { strict: true });
@@ -46,12 +49,12 @@ export function createBuildsRuntime(options: {
   );
   const encode = (value: string | Uint8Array) =>
     typeof value === "string" ? new TextEncoder().encode(value) : value;
-  const open: ObjectStore["open"] = async (key) => {
+  const open: ObjectStore["open"] = async (key, offset = 0) => {
     const row = read.get(key);
     return row
       ? {
           size: row.body.length,
-          body: new Blob([new Uint8Array(row.body)]).stream(),
+          body: new Blob([new Uint8Array(row.body).slice(offset)]).stream(),
         }
       : null;
   };
@@ -64,6 +67,12 @@ export function createBuildsRuntime(options: {
     async write(key, value) {
       write.run(key, encode(value), Date.now());
     },
+    upload: (key, size, { create: exclusive }) =>
+      bufferedUpload(
+        size,
+        async (bytes) =>
+          (exclusive ? create : write).run(key, bytes, Date.now()).changes > 0,
+      ),
     async remove(key) {
       remove.run(key);
     },
@@ -80,9 +89,14 @@ export function createBuildsRuntime(options: {
   const sourcesFor = (projectId: string): SourceStore => ({
     saved: {
       size: async (key) => readSaved.get(key)?.body.length ?? null,
-      async read(key) {
+      async open(key) {
         const row = readSaved.get(key);
-        return row ? new Uint8Array(row.body) : null;
+        return row
+          ? {
+              size: row.body.length,
+              body: new Blob([new Uint8Array(row.body)]).stream(),
+            }
+          : null;
       },
     },
     drafts: {
@@ -228,7 +242,7 @@ export function createBuildsRuntime(options: {
       store,
       sources: sourcesFor(projectId),
       engine: withCompileUsage(
-        options.projectEngine(projectId, store),
+        streamed(options.projectEngine(projectId, store)),
         usageFor,
       ),
     });

@@ -10,12 +10,10 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
-  invalidateCollaborationAccess,
-  type CollaborationAccess,
-} from "#/lib/collaboration/server";
-import {
   availableProjectName,
+  invalidateProjectAccess,
   requireProjectManager,
+  type LiveProjects,
 } from "#/lib/projects/server";
 
 import { lockProject } from "./project-access.server";
@@ -30,12 +28,12 @@ export async function transferProject({
   db,
   userId,
   data,
-  collaboration,
+  live,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof transferProjectSchema>;
-  collaboration?: CollaborationAccess;
+  live?: LiveProjects;
 }) {
   return db.transaction(async (tx) => {
     // Lock users before the project, in a fixed order, as name allocation and
@@ -107,7 +105,7 @@ export async function transferProject({
       .set({ ownerId: data.userId, organizationId: null, name })
       .where(eq(project.id, data.projectId));
     // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateCollaborationAccess(collaboration, data.projectId);
+    await invalidateProjectAccess(live, data.projectId);
     return { name };
   });
 }

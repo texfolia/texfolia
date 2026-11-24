@@ -8,13 +8,17 @@ import { planSchema, unknownEngineTiming } from "@texfolia/contracts";
 import { unstable_readConfig } from "wrangler";
 import { z } from "zod";
 
+import { streamed, type TestEngine } from "../../../test/builds/engine";
 import { createBuildsRuntime } from "../../../test/builds/runtime";
 import {
   memorySources,
   memoryStore,
   type StoredObject,
 } from "../../../test/builds/stores";
-import { ProjectCoordinatorCore } from "./coordinator";
+import {
+  ProjectCoordinatorCore,
+  type CoordinatorSnapshot,
+} from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
 import { HttpError } from "./project";
 import {
@@ -26,7 +30,6 @@ import {
   type MaintenanceMessage,
 } from "./queues";
 import { sourceHash } from "./source-sync";
-import type { Engine } from "./types";
 
 const project = { mainFile: "main.tex", files: { "main.tex": "source" } };
 const output = {
@@ -51,7 +54,7 @@ async function waitUntil(check: () => boolean) {
   }
 }
 
-function harness(engine: Engine) {
+function harness(engine: TestEngine) {
   const objects = new Map<string, StoredObject>();
   const store = memoryStore(objects);
   const drafts = new Map<string, Uint8Array>();
@@ -69,14 +72,18 @@ function harness(engine: Engine) {
     onSend: undefined,
   };
   const alarms: number[] = [];
+  const published: CoordinatorSnapshot[] = [];
   const options = {
     projectId: crypto.randomUUID(),
     store,
     sources: memorySources(new Map(), drafts),
-    engine,
+    engine: streamed(engine),
     saved: null,
     save(value: string) {
       state.saved = value;
+    },
+    publish(snapshot: CoordinatorSnapshot) {
+      published.push(snapshot);
     },
     async schedule(at: number) {
       alarms.push(at);
@@ -104,6 +111,7 @@ function harness(engine: Engine) {
     background,
     state,
     alarms,
+    published,
     projectId: options.projectId,
     async restart(change?: (saved: z.infer<typeof persistedSchema>) => void) {
       await core.close();
@@ -382,15 +390,12 @@ test("overflow fails once, retries once, then DLQ persists and publishes a termi
     expect(fixture.core.snapshot().current?.status).toBe("queued");
     expect(await fixture.deliver("compile-pro", body, 3)).toBe(false);
     expect(runs).toBe(3);
-    const stream = fixture.core
-      .events(new AbortController().signal)
-      .body!.getReader();
-    await stream.read();
+    fixture.published.length = 0;
     expect(await fixture.deliver("compile-dlq", body)).toBe(true);
-    expect(new TextDecoder().decode((await stream.read()).value)).toContain(
-      deadLetterError,
-    );
-    await stream.cancel();
+    expect(fixture.published[0]?.current).toMatchObject({
+      status: "failed",
+      error: deadLetterError,
+    });
     expect(fixture.core.snapshot().current).toMatchObject({
       status: "failed",
       error: deadLetterError,

@@ -109,7 +109,7 @@ export function sharedPdfStep(
       (build.artifacts?.revision ?? -1) <= (completed.revision ?? Infinity)
     )
       return { kind: "keep" };
-    // A recovery read may deliver the PDF before the SSE snapshot catches up.
+    // A recovery read may deliver the PDF before the pushed snapshot catches up.
     if (
       (completed.revision !== undefined &&
         (build?.revision ?? -1) < completed.revision) ||

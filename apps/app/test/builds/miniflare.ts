@@ -7,8 +7,29 @@ type Service = NonNullable<WorkerOptions["serviceBindings"]>[string];
 const fixtureScript = `
 import { DurableObject } from "cloudflare:workers";
 export class ProjectBuilds extends DurableObject {
-  fetch(request) {
-    return this.env.HANDLER.fetch(request);
+  async fetch(request) {
+    if (!new URL(request.url).pathname.endsWith("/events"))
+      return this.env.HANDLER.fetch(request);
+    // The handler streams one snapshot per line; a viewer gets one per message.
+    const { body } = await this.env.HANDLER.fetch(request.url);
+    const [client, server] = Object.values(new WebSocketPair());
+    server.accept();
+    const reader = body.getReader();
+    server.addEventListener("message", () => server.send("pong"));
+    server.addEventListener("close", () => void reader.cancel());
+    void (async () => {
+      const decoder = new TextDecoder();
+      let text = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        text += decoder.decode(value, { stream: true });
+        const lines = text.split("\\n");
+        text = lines.pop();
+        for (const line of lines) server.send(line);
+      }
+    })().catch(() => server.close());
+    return new Response(null, { status: 101, webSocket: client });
   }
 }
 export default { fetch: () => new Response(null, { status: 404 }) };
@@ -17,6 +38,7 @@ export default { fetch: () => new Response(null, { status: 404 }) };
 /**
  * Options for a Worker whose `BUILDS` binding answers with `handler`, in place
  * of real build coordinators. Requests keep their `/projects/<id>/...` paths.
+ * `/events` answers with one JSON snapshot per line, and viewers get a socket.
  */
 export function withBuildsFixture(options: WorkerOptions, handler: Service) {
   const converted = convertV4MiniflareOptions({

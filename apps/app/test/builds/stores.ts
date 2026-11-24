@@ -6,29 +6,52 @@ export type StoredObject = { bytes: Uint8Array; uploaded: number };
 const encode = (value: string | Uint8Array) =>
   typeof value === "string" ? new TextEncoder().encode(value) : value;
 
+/** Like R2, saves a streamed body only once exactly `size` bytes arrived. */
+export function bufferedUpload(
+  size: number,
+  save: (bytes: Uint8Array) => Promise<boolean>,
+): ReturnType<ObjectStore["upload"]> {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  return {
+    body: writable,
+    saved: new Response(readable).arrayBuffer().then((buffer) => {
+      if (buffer.byteLength !== size)
+        throw new Error("Upload has the wrong size");
+      return save(new Uint8Array(buffer));
+    }),
+  };
+}
+
 export function memoryStore(
   objects = new Map<string, StoredObject>(),
 ): ObjectStore {
   const put = (key: string, value: string | Uint8Array) => {
     objects.set(key, { bytes: encode(value), uploaded: Date.now() });
   };
-  const open: ObjectStore["open"] = async (key) => {
+  const open: ObjectStore["open"] = async (key, offset = 0) => {
     const object = objects.get(key);
     return object
       ? {
           size: object.bytes.length,
-          body: new Blob([new Uint8Array(object.bytes)]).stream(),
+          body: new Blob([new Uint8Array(object.bytes).slice(offset)]).stream(),
         }
       : null;
+  };
+  const create: ObjectStore["create"] = async (key, value) => {
+    if (objects.has(key)) return false;
+    put(key, value);
+    return true;
   };
   return {
     open,
     read: async (key) => (await open(key))?.body ?? null,
-    async create(key, value) {
-      if (objects.has(key)) return false;
-      put(key, value);
-      return true;
-    },
+    create,
+    upload: (key, size, options) =>
+      bufferedUpload(size, async (bytes) => {
+        if (options.create) return create(key, bytes);
+        put(key, bytes);
+        return true;
+      }),
     async write(key, value) {
       put(key, value);
     },
@@ -51,7 +74,12 @@ export function memorySources(
   return {
     saved: {
       size: async (key) => saved.get(key)?.length ?? null,
-      read: async (key) => copy(saved.get(key)),
+      async open(key) {
+        const bytes = copy(saved.get(key));
+        return bytes
+          ? { size: bytes.length, body: new Blob([bytes]).stream() }
+          : null;
+      },
     },
     drafts: {
       size: (hash) => drafts.get(hash)?.length ?? null,
@@ -75,7 +103,7 @@ export async function sourceText(
 ) {
   const file = project.files[path];
   if (!file) throw new Error(`Missing source ${path}`);
-  return new TextDecoder().decode(await context.readSource(file));
+  return new Response(await context.readSource(file)).text();
 }
 
 /** A one-file project whose content is never read. */

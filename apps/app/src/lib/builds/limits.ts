@@ -136,7 +136,6 @@ function fairUseError(userId: string, plan: Plan, retryAfter: number) {
     "You've been compiling frequently. Please try again in a little while.",
     "",
     undefined,
-    undefined,
     retryAfter,
   );
 }

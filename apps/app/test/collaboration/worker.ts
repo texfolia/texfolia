@@ -1,9 +1,10 @@
 import { createDb } from "@texfolia/db";
 import { project } from "@texfolia/db/schema";
-import { DurableObject } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 
-import { invalidateOrganizationCollaborationAccess } from "#/lib/collaboration/server";
+import { liveUserHeader } from "#/lib/builds/client";
+import { LiveProject } from "#/lib/builds/live-object.server";
+import { invalidateOrganizationAccess } from "#/lib/projects/server";
 
 import { createAuth } from "../../src/lib/auth/auth";
 import { ProjectCollaboration as Room } from "../../src/lib/collaboration/project-collaboration.server";
@@ -16,6 +17,7 @@ import {
   restoreProject,
   trashProject,
 } from "../../src/lib/projects/project.server";
+import { lockProject } from "../../src/lib/sharing/project-access.server";
 import {
   createShareLink,
   revokeShareLink,
@@ -58,6 +60,7 @@ export class ProjectCollaboration extends Room {
 export default {
   async fetch(request: Request, env: Env & { CLIENT: Fetcher }) {
     const url = new URL(request.url);
+    const live = { collaboration: env.COLLABORATION, builds: env.BUILDS };
     if (url.pathname.startsWith("/cleanup/")) {
       const db = createDb(env.HYPERDRIVE.connectionString);
       const userId = request.headers.get("X-Owner") ?? "";
@@ -104,7 +107,7 @@ export default {
             db,
             userId,
             projectId,
-            collaboration: env.COLLABORATION,
+            live,
           });
         else if (action === "restore")
           await restoreProject({ db, userId, projectId });
@@ -145,14 +148,14 @@ export default {
               email: body.email ?? "",
               role: body.role === "editor" ? "editor" : "viewer",
             },
-            collaboration: env.COLLABORATION,
+            live,
           });
         else if (action === "revoke")
           await revokeProjectAccess({
             db,
             userId: ownerId,
             data: { projectId, userId: body.userId ?? "" },
-            collaboration: env.COLLABORATION,
+            live,
           });
         else if (action === "share-create")
           return Response.json(
@@ -170,12 +173,12 @@ export default {
             db,
             userId: ownerId,
             data: { projectId, linkId: body.linkId ?? "" },
-            collaboration: env.COLLABORATION,
+            live,
           });
         else if (action === "member-removed")
-          await invalidateOrganizationCollaborationAccess({
+          await invalidateOrganizationAccess({
             db,
-            collaboration: env.COLLABORATION,
+            live,
             organizationId: body.organizationId ?? "",
             userId: body.userId ?? "",
           });
@@ -223,7 +226,7 @@ export default {
       );
     const [, , channel, projectId = "", nodeId = ""] = url.pathname.split("/");
     const db = createDb(env.HYPERDRIVE.connectionString);
-    const context = { db, auth: createAuth(db, env.COLLABORATION) };
+    const context = { db, auth: createAuth(db, live) };
     try {
       const next = () => {
         throw new Error("Unexpected route chaining");
@@ -264,46 +267,81 @@ export default {
   },
 };
 
-// Stands in for a project's build coordinator.
-export class BuildsFixture extends DurableObject {
-  private recipients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+// Stands in for a project's build coordinator. Its live channel and access
+// checks are the real ones; only the data is made up.
+export class BuildsFixture extends LiveProject {
+  private frame = "attached";
+  private bodies = new Set<ReadableStreamDefaultController<Uint8Array>>();
+  private checks = 0;
+
+  protected override liveFrame() {
+    return this.frame;
+  }
+
+  protected override async checkLiveAccess(projectId: string, userId: string) {
+    this.checks++;
+    const db = createDb(this.env.HYPERDRIVE.connectionString);
+    try {
+      await db.transaction((tx) =>
+        lockProject({
+          tx,
+          projectId,
+          userId,
+          access: "read",
+          content: "build",
+        }),
+      );
+    } finally {
+      await db.$client.end();
+    }
+  }
+
   override async fetch(request: Request) {
     const url = new URL(request.url);
     const parts = url.pathname.split("/");
-    const recipients = this.recipients;
+    const { bodies } = this;
     if (parts[1] === "emit") {
-      const bytes = new TextEncoder().encode(await request.text());
-      for (const controller of recipients) controller.enqueue(bytes);
-      return Response.json({ recipients: recipients.size });
+      this.frame = await request.text();
+      this.publish(parts[2] ?? "");
+      const bytes = new TextEncoder().encode(this.frame);
+      for (const controller of bodies) controller.enqueue(bytes);
+      return Response.json({});
+    }
+    // Runs the periodic check now rather than after a minute.
+    if (parts[1] === "backstop") {
+      await this.plan("access", Date.now());
+      return Response.json({});
     }
     if (parts[1] === "subscribers")
-      return Response.json({ recipients: recipients.size });
-    if (url.pathname.endsWith("/events") || url.pathname.endsWith("/pdf")) {
+      return Response.json({
+        recipients:
+          bodies.size +
+          this.ctx
+            .getWebSockets()
+            .filter((ws) => ws.readyState === WebSocket.OPEN).length,
+        checks: this.checks,
+      });
+    if (url.pathname.endsWith("/events"))
+      return this.openSocket(request, parts[2] ?? "");
+    if (url.pathname.endsWith("/pdf")) {
       let subscription: ReadableStreamDefaultController<Uint8Array>;
-      return new Response(
+      const response = new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
             subscription = controller;
-            recipients.add(controller);
-            controller.enqueue(
-              new TextEncoder().encode(
-                url.pathname.endsWith("/events")
-                  ? "data: attached\n\n"
-                  : "%PDF-attached\n",
-              ),
-            );
+            bodies.add(controller);
+            controller.enqueue(new TextEncoder().encode("%PDF-attached\n"));
           },
           cancel() {
-            recipients.delete(subscription);
+            bodies.delete(subscription);
           },
         }),
-        {
-          headers: {
-            "Content-Type": url.pathname.endsWith("/events")
-              ? "text/event-stream"
-              : "application/pdf",
-          },
-        },
+        { headers: { "Content-Type": "application/pdf" } },
+      );
+      return this.guard(
+        response,
+        parts[2] ?? "",
+        request.headers.get(liveUserHeader) ?? "",
       );
     }
     return new Response(null, { status: 204 });

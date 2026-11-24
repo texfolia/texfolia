@@ -68,7 +68,7 @@ The owner of a personal project manages share links in the **Collaboration** pan
 - Links never write: they cannot edit, save, compile, or change metadata.
 - A project has at most 10 links. The full link is shown once, when it is created; only a SHA-256 hash of its token is stored. Copy it then, or create another.
 - Creating a bare link without a recipient sends no email. Optionally entering a recipient email when creating a link emails that person the read-only link directly; the owner and existing collaborators are rejected so people who already have access are not emailed.
-- **Revoke** deletes a link. Open collaboration sockets close immediately and live build streams stop within the access re-check interval. Links of a project in the trash do not work until it is restored.
+- **Revoke** deletes a link. Open collaboration sockets and live build streams close immediately. Links of a project in the trash do not work until it is restored.
 
 ### Sharing limits
 

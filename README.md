@@ -82,7 +82,7 @@ sequenceDiagram
     participant T as Compiler
     participant R as Artifact storage
 
-    B->>W: Open project event stream
+    B->>W: Open project event socket
     W->>P: Attach after verifying project access
     P-->>B: Current revision and latest build metadata
     B->>W: Save sources, then request compile
@@ -91,9 +91,9 @@ sequenceDiagram
     P->>T: Cancel superseded run and wait for exit
     P->>T: Compile newest revision
     T-->>P: Stream PDF, then logs and artifacts
+    P->>R: Stream each one to a new artifact generation
     P-->>W: Progressive PDF stream
     W-->>B: PDF bytes for the preview
-    P->>R: Persist artifact generation
     P-->>B: Push saved build metadata
     B->>W: Fetch job status or saved PDF
 ```

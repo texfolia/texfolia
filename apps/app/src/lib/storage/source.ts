@@ -21,14 +21,26 @@ export function sourceFileKind(file: {
     : "binary";
 }
 
+// Node's base64 is native on the server. Browsers have no Buffer.
+const native = typeof Buffer === "undefined" ? null : Buffer;
+
 export function encodeSource(bytes: Uint8Array) {
+  if (native)
+    return native
+      .from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      .toString("base64");
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += 8192)
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
   return btoa(binary);
 }
 
-export function decodeSource(base64: string) {
+export function decodeSource(base64: string): Uint8Array<ArrayBuffer> {
+  if (native) {
+    // Small buffers share a pool, so return a plain view of these bytes only.
+    const { buffer, byteOffset, byteLength } = native.from(base64, "base64");
+    return new Uint8Array(buffer, byteOffset, byteLength);
+  }
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
 }
 

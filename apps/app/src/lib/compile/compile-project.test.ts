@@ -6,46 +6,66 @@ import { requestCompilation } from "./compile-project";
 import { reportCompilePreview, trackCompilePreview } from "./compile-telemetry";
 import { ProjectBuildEvents } from "./project-build-events";
 
-const originalEventSource = Object.getOwnPropertyDescriptor(
-  globalThis,
-  "EventSource",
-);
 const originalFetch = globalThis.fetch;
 const streams: ProjectBuildEvents[] = [];
 
-class FakeEventSource {
-  static latest: FakeEventSource;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onopen: (() => void) | null = null;
+// Stands in for every socket a build stream opens, in turn.
+class FakeSocket {
+  static latest: FakeSocket;
+  readyState = 1 as const;
+  onopen: WebSocket["onopen"] = null;
+  onmessage: WebSocket["onmessage"] = null;
+  onclose: WebSocket["onclose"] = null;
+  sent: string[] = [];
   closed = false;
   constructor(readonly url: string) {
-    FakeEventSource.latest = this;
+    FakeSocket.latest = this;
   }
-  message(value: unknown) {
-    this.onmessage?.({ data: JSON.stringify(value) });
+  send(data: string) {
+    this.sent.push(data);
   }
   close() {
     this.closed = true;
   }
 }
+const source = {
+  get closed() {
+    return FakeSocket.latest.closed;
+  },
+  message(value: unknown) {
+    FakeSocket.latest.onmessage?.call(
+      FakeSocket.latest as unknown as WebSocket,
+      new MessageEvent("message", {
+        data: typeof value === "string" ? value : JSON.stringify(value),
+      }),
+    );
+  },
+  drop() {
+    FakeSocket.latest.onclose?.call(
+      FakeSocket.latest as unknown as WebSocket,
+      new CloseEvent("close"),
+    );
+  },
+  async reconnect() {
+    const dropped = FakeSocket.latest;
+    while (FakeSocket.latest === dropped) await Bun.sleep(5);
+  },
+};
 
 function openEvents(onSnapshot: (snapshot: BuildSnapshot) => void = () => {}) {
-  Object.defineProperty(globalThis, "EventSource", {
-    configurable: true,
-    value: FakeEventSource,
-  });
-  const events = new ProjectBuildEvents("project", onSnapshot);
+  const events = new ProjectBuildEvents(
+    "project",
+    onSnapshot,
+    (url) => `${url}&share=token`,
+    (url) => new FakeSocket(url),
+  );
   streams.push(events);
-  return { events, source: FakeEventSource.latest };
+  return { events, source };
 }
 
 afterEach(() => {
   for (const stream of streams.splice(0)) stream.close();
   globalThis.fetch = originalFetch;
-  if (originalEventSource)
-    Object.defineProperty(globalThis, "EventSource", originalEventSource);
-  else Reflect.deleteProperty(globalThis, "EventSource");
 });
 
 for (const saveStatus of ["succeeded", "failed"] as const) {
@@ -395,20 +415,20 @@ test("pushed failure returns the engine error and log without downloading a PDF"
 test("a dropped stream recovers a completed job with one status read", async () => {
   const job = await compilation();
   job.setStatus("succeeded");
-  job.source.onerror?.();
-  job.source.onerror?.();
+  job.source.drop();
+  job.source.drop();
   expect(await job.result).toMatchObject({ jobId: job.jobId });
   expect(job.reads).toBe(1);
 });
 
 test("a running recovery read waits for the reconnect snapshot and deduplicates repeated errors", async () => {
   const job = await compilation();
-  job.source.onerror?.();
+  job.source.drop();
   await Bun.sleep(0);
-  job.source.onerror?.();
+  job.source.drop();
   expect(job.reads).toBe(1);
   expect(job.settled).toBe(false);
-  job.source.onopen?.();
+  await job.source.reconnect();
   job.setStatus("succeeded");
   job.source.message(snapshot(job.jobId, "succeeded"));
   job.source.message(snapshot(job.jobId, "succeeded"));
@@ -421,11 +441,11 @@ for (const failure of ["network", "server"] as const) {
   test(`reconnect still completes after a ${failure} recovery failure`, async () => {
     const job = await compilation();
     job.failRecovery(failure);
-    job.source.onerror?.();
+    job.source.drop();
     await Bun.sleep(0);
     expect(job.settled).toBe(false);
     job.failRecovery(null);
-    job.source.onopen?.();
+    await job.source.reconnect();
     job.setStatus("succeeded");
     job.source.message(snapshot(job.jobId, "succeeded"));
     expect(await job.result).toMatchObject({ jobId: job.jobId });
@@ -471,7 +491,7 @@ test("abort removes the waiter so later push and disconnect events do no work", 
   job.controller.abort();
   await expect(job.result).rejects.toMatchObject({ name: "AbortError" });
   job.source.message(snapshot(job.jobId, "succeeded"));
-  job.source.onerror?.();
+  job.source.drop();
   expect(job.reads).toBe(0);
   expect(job.downloads).toBe(0);
 });
@@ -480,7 +500,8 @@ test("a completion racing a running recovery response gets a fresh terminal read
   const job = await compilation();
   const recovery = Promise.withResolvers<Response>();
   job.deferStatus(recovery.promise);
-  job.source.onerror?.();
+  job.source.drop();
+  await job.source.reconnect();
   job.setStatus("succeeded");
   job.source.message(snapshot(job.jobId, "succeeded"));
   recovery.resolve(Response.json({ id: job.jobId, status: "running" }));
@@ -515,6 +536,42 @@ test("shared metadata permits retry queues but rejects older snapshots and termi
   ]);
   events.close();
   expect(source.closed).toBe(true);
+});
+
+test("a lost socket reconnects until the stream is closed and reports each outage once", async () => {
+  const snapshots: BuildSnapshot[] = [];
+  const { events } = openEvents((value) => snapshots.push(value));
+  const kinds: string[] = [];
+  events.subscribe((event) => kinds.push(event.kind));
+  const first = FakeSocket.latest;
+  expect(first.url).toBe("/api/compile/project?events=1&share=token");
+  source.message("pong");
+  source.message(snapshot(crypto.randomUUID(), "running", 1));
+  source.drop();
+  source.drop();
+  await source.reconnect();
+  source.drop();
+  await source.reconnect();
+  // A late frame from a replaced socket is not this stream's any more.
+  first.onmessage?.call(
+    first as unknown as WebSocket,
+    new MessageEvent("message", {
+      data: JSON.stringify(snapshot(crypto.randomUUID(), "running", 9)),
+    }),
+  );
+  source.message(snapshot(crypto.randomUUID(), "running", 2));
+  source.drop();
+  expect(kinds).toEqual([
+    "snapshot",
+    "disconnected",
+    "snapshot",
+    "disconnected",
+  ]);
+  expect(snapshots.map(({ revision }) => revision)).toEqual([1, 2]);
+  const last = FakeSocket.latest;
+  events.close();
+  await Bun.sleep(700);
+  expect(FakeSocket.latest).toBe(last);
 });
 
 test("superseding a job during its completion read prevents an old PDF download", async () => {

@@ -5,10 +5,10 @@ import { join } from "node:path";
 
 import { unknownEngineTiming } from "@texfolia/contracts";
 
+import { type TestEngine } from "../../../test/builds/engine";
 import { createBuildsRuntime } from "../../../test/builds/runtime";
 import { sourceText } from "../../../test/builds/stores";
 import { coordinatorSnapshotSchema } from "./coordinator";
-import type { Engine } from "./types";
 
 const output = (source: string) => ({
   pdf: new TextEncoder().encode(`%PDF-${source}`),
@@ -64,7 +64,7 @@ test("rapid revisions debounce; cancelled engines settle before replacement; lat
   const runs: string[] = [];
   let active = 0;
   let maxActive = 0;
-  const engine: Engine = async (project, context) => {
+  const engine: TestEngine = async (project, context) => {
     const text = await sourceText(project, context);
     runs.push(text);
     maxActive = Math.max(maxActive, ++active);
@@ -84,13 +84,6 @@ test("rapid revisions debounce; cancelled engines settle before replacement; lat
   const projectId = crypto.randomUUID();
   const ids = Array.from({ length: 4 }, () => crypto.randomUUID());
   try {
-    const stream = await runtime.fetch(
-      request(`/projects/${projectId}/events`),
-    );
-    const reader = stream.body!.getReader();
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
-      '"revision":0',
-    );
     expect((await submit(runtime, projectId, ids[0]!, "first")).status).toBe(
       202,
     );
@@ -141,7 +134,6 @@ test("rapid revisions debounce; cancelled engines settle before replacement; lat
     expect((await submit(runtime, projectId, ids[3]!, "newest")).status).toBe(
       202,
     );
-    await reader.cancel();
   } finally {
     release.resolve();
     await runtime.close();
@@ -160,7 +152,7 @@ test("project engines run independently and durable snapshots resume after a res
   const started = new Set<string>();
   const together = Promise.withResolvers<void>();
   const projectEngine =
-    (owner: string): Engine =>
+    (owner: string): TestEngine =>
     async (project, context) => {
       expect(context.projectId).toBe(owner);
       owners.push(owner);
@@ -224,7 +216,7 @@ test("out-of-order editor requests cannot replace a newer source revision", asyn
   const path = join(root, "state.sqlite");
   const projectId = crypto.randomUUID(),
     editorId = crypto.randomUUID();
-  const engine: Engine = async (project, context) =>
+  const engine: TestEngine = async (project, context) =>
     output(await sourceText(project, context));
   const submitVersion = (
     runtime: ReturnType<typeof createBuildsRuntime>,

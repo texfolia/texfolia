@@ -3,22 +3,34 @@ import type { ObjectStore, SourceStore } from "./types";
 // The Workers adapters for a coordinator's storage.
 
 export function artifactStore(bucket: R2Bucket): ObjectStore {
-  const open: ObjectStore["open"] = async (key) => {
-    const object = await bucket.get(key);
+  const open: ObjectStore["open"] = async (key, offset = 0) => {
+    const object = await bucket.get(
+      key,
+      offset ? { range: { offset } } : undefined,
+    );
     return object ? { size: object.size, body: object.body } : null;
   };
+  const createOptions = (key: string) => ({
+    onlyIf: new Headers({ "If-None-Match": "*" }),
+    httpMetadata: key.endsWith(".pdf")
+      ? { contentType: "application/pdf" }
+      : undefined,
+  });
   return {
     open,
     read: async (key) => (await open(key))?.body ?? null,
     async create(key, value) {
-      return (
-        (await bucket.put(key, value, {
-          onlyIf: new Headers({ "If-None-Match": "*" }),
-          httpMetadata: key.endsWith(".pdf")
-            ? { contentType: "application/pdf" }
-            : undefined,
-        })) !== null
-      );
+      return (await bucket.put(key, value, createOptions(key))) !== null;
+    },
+    upload(key, size, { create }) {
+      // R2 needs the length of a streamed body up front.
+      const { readable, writable } = new FixedLengthStream(size);
+      return {
+        body: writable,
+        saved: bucket
+          .put(key, readable, create ? createOptions(key) : undefined)
+          .then((object) => object !== null),
+      };
     },
     async write(key, value) {
       await bucket.put(key, value);
@@ -40,9 +52,9 @@ export function artifactStore(bucket: R2Bucket): ObjectStore {
 export function savedSources(bucket: R2Bucket): SourceStore["saved"] {
   return {
     size: async (key) => (await bucket.head(key))?.size ?? null,
-    async read(key) {
+    async open(key) {
       const object = await bucket.get(key);
-      return object ? new Uint8Array(await object.arrayBuffer()) : null;
+      return object ? { size: object.size, body: object.body } : null;
     },
   };
 }
