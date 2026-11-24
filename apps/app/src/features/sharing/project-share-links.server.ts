@@ -1,18 +1,28 @@
 import type { Db } from "@texfolia/db";
-import { projectShareLink } from "@texfolia/db/schema";
-import { and, asc, count, eq } from "drizzle-orm";
+import {
+  projectCollaborator,
+  projectShareLink,
+  user,
+} from "@texfolia/db/schema";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
   invalidateCollaborationAccess,
   type CollaborationAccess,
 } from "#/features/collaboration/server";
+import {
+  projectShareLinkEmail,
+  type EmailDelivery,
+  type EmailNotificationStatus,
+} from "#/features/email";
 import type { ProjectTransaction } from "#/features/projects/server";
 import { encodeSource } from "#/features/storage";
 
 import { lockProject, sharePrincipal } from "./project-access.server";
 import {
   shareLinkLimit,
+  sharePath,
   shareTokenSchema,
   type createShareLinkSchema,
   type revokeShareLinkSchema,
@@ -80,13 +90,16 @@ export async function createShareLink({
   db,
   userId,
   data,
+  email,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof createShareLinkSchema>;
+  email?: EmailDelivery;
 }) {
-  return db.transaction(async (tx) => {
-    await lockManagedProject(tx, data.projectId, userId);
+  const recipientEmail = data.recipientEmail?.trim().toLowerCase();
+  const created = await db.transaction(async (tx) => {
+    const found = await lockManagedProject(tx, data.projectId, userId);
     const [existing] = await tx
       .select({ count: count() })
       .from(projectShareLink)
@@ -95,6 +108,30 @@ export async function createShareLink({
       throw new Error(
         `A project can have at most ${shareLinkLimit} share links. Revoke one first.`,
       );
+    let senderName = "Someone";
+    if (recipientEmail) {
+      const [owner] = await tx
+        .select({ name: user.name, email: user.email })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1);
+      if (owner && owner.email.toLowerCase() === recipientEmail)
+        throw new Error("You already own this project.");
+      const [existingCollaborator] = await tx
+        .select({ userId: projectCollaborator.userId })
+        .from(projectCollaborator)
+        .innerJoin(user, eq(projectCollaborator.userId, user.id))
+        .where(
+          and(
+            eq(projectCollaborator.projectId, data.projectId),
+            sql`lower(${user.email}) = ${recipientEmail}`,
+          ),
+        )
+        .limit(1);
+      if (existingCollaborator)
+        throw new Error("That person already has access to this project.");
+      senderName = owner?.name ?? senderName;
+    }
     const token = createToken();
     const [link] = await tx
       .insert(projectShareLink)
@@ -111,8 +148,28 @@ export async function createShareLink({
       });
     if (!link) throw new Error("Share link could not be created.");
     // The token is returned only here; the database keeps its hash.
-    return { ...link, token };
+    return { link, token, projectName: found.name, senderName };
   });
+  let notification: EmailNotificationStatus = "none";
+  if (recipientEmail && email) {
+    const url = new URL(sharePath(created.token), email.baseURL);
+    try {
+      await email.send(
+        projectShareLinkEmail({
+          to: recipientEmail,
+          projectName: created.projectName,
+          senderName: created.senderName,
+          scope: created.link.scope,
+          url,
+        }),
+      );
+      notification = "sent";
+    } catch (error) {
+      console.error("Failed to send project share-link email", error);
+      notification = "failed";
+    }
+  }
+  return { ...created.link, token: created.token, notification };
 }
 
 export async function revokeShareLink({

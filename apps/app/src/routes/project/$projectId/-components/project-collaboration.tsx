@@ -43,14 +43,14 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  async function run(action: () => Promise<void>, notice: string) {
+  async function run(action: () => Promise<string | void>, notice?: string) {
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await action();
+      const nextNotice = await action();
       await refresh();
-      setNotice(notice);
+      setNotice(nextNotice ?? notice ?? "");
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -133,17 +133,15 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
                     <ContextMenuItem
                       disabled={busy || person.role === "viewer"}
                       onClick={() =>
-                        void run(
-                          () =>
-                            grantProjectAccess({
-                              data: {
-                                projectId,
-                                email: person.email,
-                                role: "viewer",
-                              },
-                            }),
-                          `Access updated for ${person.name}.`,
-                        )
+                        void run(async () => {
+                          await grantProjectAccess({
+                            data: {
+                              projectId,
+                              email: person.email,
+                              role: "viewer",
+                            },
+                          });
+                        }, `Access updated for ${person.name}.`)
                       }
                     >
                       Can view
@@ -151,17 +149,15 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
                     <ContextMenuItem
                       disabled={busy || person.role === "editor"}
                       onClick={() =>
-                        void run(
-                          () =>
-                            grantProjectAccess({
-                              data: {
-                                projectId,
-                                email: person.email,
-                                role: "editor",
-                              },
-                            }),
-                          `Access updated for ${person.name}.`,
-                        )
+                        void run(async () => {
+                          await grantProjectAccess({
+                            data: {
+                              projectId,
+                              email: person.email,
+                              role: "editor",
+                            },
+                          });
+                        }, `Access updated for ${person.name}.`)
                       }
                     >
                       Can edit
@@ -206,9 +202,14 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
               return;
             }
             void run(async () => {
-              await grantProjectAccess({ data: parsed.data });
+              const result = await grantProjectAccess({ data: parsed.data });
               form.current?.reset();
-            }, "Project access updated.");
+              if (result.notification === "sent")
+                return "Project shared and email notification sent.";
+              if (result.notification === "failed")
+                return "Project shared, but the email notification could not be sent.";
+              return "Project access updated.";
+            });
           }}
         >
           <label className="block space-y-1">
