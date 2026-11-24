@@ -160,8 +160,8 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
             setCreated({ id: link.id, url });
             setRecipientEmail("");
             await navigator.clipboard.writeText(url).catch(() => {});
-            if (link.notification === "sent")
-              return `Link created and emailed to ${parsed.data.recipientEmail}. Copy it now if you also need it; it won’t be shown again.`;
+            if (link.notification === "queued")
+              return `Link created. We’re emailing it to ${parsed.data.recipientEmail}. Copy it now if you also need it; it won’t be shown again.`;
             if (link.notification === "failed")
               return "Link created, but the email could not be sent. Copy it now; it won’t be shown again.";
             return "Link created. Copy it now; it won’t be shown again.";

@@ -119,7 +119,9 @@ export function TransferProject({
                 </NativeSelectOption>
                 {people?.map((person) => (
                   <NativeSelectOption key={person.id} value={person.id}>
-                    {person.name} ({person.email})
+                    {person.email
+                      ? `${person.name} (${person.email})`
+                      : person.name}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>

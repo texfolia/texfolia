@@ -1092,8 +1092,8 @@ try {
   await share.getByRole("textbox").fill(`${crypto.randomUUID()}@example.com`);
   await share.getByRole("button", { name: "Share", exact: true }).click();
   await owner
-    .getByRole("alert")
-    .filter({ hasText: "No Texfolia account" })
+    .getByRole("status")
+    .filter({ hasText: "If that email has a Texfolia account" })
     .waitFor();
   await share.getByRole("textbox").fill(`${readerId}@example.com`);
   await share.getByRole("button", { name: "Share", exact: true }).click();

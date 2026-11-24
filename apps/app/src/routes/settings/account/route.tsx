@@ -16,8 +16,10 @@ import {
   ItemDescription,
 } from "@texfolia/ui/item";
 import { useRef, useState } from "react";
+import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
 
 import { authClient } from "#/lib/auth/auth-client";
+import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
 export const Route = createFileRoute("/settings/account")({
   component: AccountPage,
 });
@@ -29,6 +31,14 @@ function AccountPage() {
   const [email, setEmail] = useState(user.email);
   const [emailSentTo, setEmailSentTo] = useState("");
   const [otp, setOtp] = useState("");
+  const turnstile = useRef<BoundTurnstileObject | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaError, setCaptchaError] = useState("");
+  const emailChanged = email.trim() !== user.email;
+  function captchaFailed(reason: string) {
+    setCaptchaToken("");
+    setCaptchaError(reason);
+  }
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState("");
@@ -128,9 +138,18 @@ function AccountPage() {
             onSubmit={(event) => {
               event.preventDefault();
               void run(async () => {
-                const result = await authClient.emailOtp.requestEmailChange({
-                  newEmail: email.trim(),
-                });
+                const result = await authClient.emailOtp
+                  .requestEmailChange({
+                    newEmail: email.trim(),
+                    fetchOptions: {
+                      headers: { "x-captcha-response": captchaToken },
+                    },
+                  })
+                  // Each token works once.
+                  .finally(() => {
+                    setCaptchaToken("");
+                    turnstile.current?.reset();
+                  });
                 if (result.error)
                   throw new Error(
                     result.error.message ?? "Could not send verification code.",
@@ -151,10 +170,63 @@ function AccountPage() {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </Field>
+            {emailChanged && (
+              <Turnstile
+                action={AUTH_EMAIL_CAPTCHA_ACTION}
+                sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY ?? ""}
+                theme="auto"
+                size="flexible"
+                className="w-full"
+                onLoad={(_id, widget) => {
+                  turnstile.current = widget;
+                }}
+                onVerify={(token) => {
+                  setCaptchaToken(token);
+                  setCaptchaError("");
+                }}
+                onError={() =>
+                  captchaFailed(
+                    "The security check is unavailable. Try again later.",
+                  )
+                }
+                onExpire={() =>
+                  captchaFailed(
+                    "The security check expired. Complete it again.",
+                  )
+                }
+                onTimeout={() =>
+                  captchaFailed(
+                    "The security check timed out. Complete it again.",
+                  )
+                }
+                onUnsupported={() =>
+                  captchaFailed(
+                    "The security check does not support this browser. Try another browser.",
+                  )
+                }
+              />
+            )}
+            {emailChanged && captchaError && (
+              <div className="space-y-2">
+                <p role="alert" className="text-destructive text-sm">
+                  {captchaError}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (turnstile.current) turnstile.current.reset();
+                    else window.location.reload();
+                  }}
+                >
+                  Retry security check
+                </Button>
+              </div>
+            )}
             <Button
               type="submit"
               variant="outline"
-              disabled={pending || email.trim() === user.email}
+              disabled={pending || !emailChanged || !captchaToken}
             >
               Send verification code
             </Button>

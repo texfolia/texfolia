@@ -13,7 +13,7 @@ through the wire in `@texfolia/contracts/compiler`.
 | `coordinator-api.ts`       | The HTTP routes of one project                                                                                                    |
 | `compiler.ts`              | Runs a build on the compiler: incremental requests, cache archives, cancellation, and per-plan priority                           |
 | `limits.ts`                | Plan timeouts, rolling fair use, and submission admission                                                                         |
-| `queues.ts`                | The Pro and Free overflow lanes, the dead-letter queue, and maintenance                                                           |
+| `queues.ts`                | The Pro and Free overflow lanes, the dead-letter queue, and background work (maintenance and queued email)                        |
 | `source-sync.ts`           | Source deltas, server resyncs, and snapshots                                                                                      |
 | `storage.ts`               | Workers storage: artifacts in `BUILD_ARTIFACTS`, saved sources read from `SOURCES`, and drafts in the Durable Object's own SQLite |
 

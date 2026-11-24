@@ -17,7 +17,7 @@ import { EngineError, HttpError, MissingSourceError } from "./project";
 import {
   backgroundDelay,
   deadLetterError,
-  type BackgroundMessage,
+  type MaintenanceMessage,
   type CompileMessage,
 } from "./queues";
 import {
@@ -126,7 +126,7 @@ export class ProjectCoordinatorCore {
         plan: z.infer<typeof planSchema>,
       ) => Promise<void>;
       background: (
-        message: BackgroundMessage,
+        message: MaintenanceMessage,
         delaySeconds: number,
       ) => Promise<void>;
       store: ObjectStore;

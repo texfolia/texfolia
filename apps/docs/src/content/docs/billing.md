@@ -4,8 +4,9 @@ title: Configure subscription billing
 
 Texfolia has two paid monthly plans in USD: personal Pro at $15/month and Team at
 $20 per organization member per month. Team has no base fee. Each member gets
-Pro compile and AI access, including in their personal projects. A personal Pro
-subscription and an organization Team subscription remain separate subscriptions.
+Pro compile access everywhere, and AI access in the organization's projects. A
+personal Pro subscription and an organization Team subscription remain separate
+subscriptions.
 
 The billing code lives in [`#/lib/billing`](../../../../app/src/lib/billing/README.md).
 
@@ -44,9 +45,18 @@ quantity through Better Auth's seat hooks, with prorations. Monitor authenticati
 logs for Stripe seat-sync failures; membership changes should be checked against
 Stripe if an API request fails.
 
-The organization pays for eligible members' AI usage on its subscription, with a
-separate spend cap for each user. The launch markup is 20%, and the default cap is
-$20 per user per UTC month. Each run retains its original payer. See the
+The organization pays for its members' AI usage in its own projects.
+Without an eligible Team subscription, the member's personal Pro subscription
+pays there instead. Everywhere else, including personal projects and
+other organizations' projects, a member needs a personal Pro subscription and
+pays for that usage. A collaborator who is not a member never bills the
+organization.
+
+Two monthly caps (UTC) bound each request. Every user has a cap across all of
+their usage, $20 by default, which they control. Every organization has a shared
+cap on all usage billed to it, $100 by default, which only its owners and admins
+change under **AI usage** on the billing page. The launch markup is 20%. Each run
+retains its original payer. See the
 [AI billing details](/ai-assistant/) for reservations and reconciliation.
 
 The pricing page advertises the enforced 10 MiB per source file and 50 MiB per

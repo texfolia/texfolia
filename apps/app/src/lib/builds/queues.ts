@@ -1,6 +1,8 @@
 import { jobIdSchema, type planSchema } from "@texfolia/contracts";
 import { z } from "zod";
 
+import { emailJobSchema, type DeliverEmail } from "#/lib/email";
+
 import type { ProjectCoordinatorCore } from "./coordinator";
 import { isPaid } from "./limits";
 
@@ -9,12 +11,16 @@ const compileMessageSchema = z.object({
   revision: z.number().int().positive(),
 });
 export type CompileMessage = z.infer<typeof compileMessageSchema>;
-const backgroundMessageSchema = z.object({
+const maintenanceMessageSchema = z.object({
   kind: z.literal("maintenance"),
   projectId: jobIdSchema,
   at: z.number().int().nonnegative(),
 });
-export type BackgroundMessage = z.infer<typeof backgroundMessageSchema>;
+export type MaintenanceMessage = z.infer<typeof maintenanceMessageSchema>;
+const backgroundMessageSchema = z.discriminatedUnion("kind", [
+  maintenanceMessageSchema,
+  emailJobSchema,
+]);
 export const deadLetterError =
   "Compilation service failed after one queue retry; moved to compile-dlq. Recompile to try again.";
 export const compileQueue = (plan: z.infer<typeof planSchema>) =>
@@ -29,6 +35,7 @@ export async function processQueueMessage(options: {
   coordinator: (
     projectId: string,
   ) => Pick<ProjectCoordinatorCore, "consume" | "fail" | "maintain">;
+  deliverEmail: DeliverEmail;
 }) {
   const { body, attempts, coordinator } = options;
   const queue = options.queue.replace(/-local$/, "");
@@ -42,7 +49,10 @@ export async function processQueueMessage(options: {
       });
       return true;
     }
-    await coordinator(task.data.projectId).maintain(task.data.at);
+    // A failed delivery throws, so the queue retries it.
+    if (task.data.kind === "email")
+      await options.deliverEmail(task.data.message);
+    else await coordinator(task.data.projectId).maintain(task.data.at);
     return true;
   }
   const parsed = compileMessageSchema.safeParse(body);

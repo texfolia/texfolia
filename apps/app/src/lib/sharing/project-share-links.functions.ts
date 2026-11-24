@@ -32,7 +32,7 @@ export const createShareLink = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
-      email: createEmailDelivery(env.EMAIL, process.env.BETTER_AUTH_URL),
+      email: createEmailDelivery(env.BACKGROUND, process.env.BETTER_AUTH_URL),
     });
   });
 

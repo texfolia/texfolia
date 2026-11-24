@@ -56,11 +56,14 @@ export function invitationEmail({
   organization: string;
   url: URL;
 }): EmailMessage {
+  const organizationName = cleanSubjectText(organization);
+  const safeOrganization = escapeHtml(organizationName);
+  const safeUrl = escapeHtml(url.href);
   return {
     to,
-    subject: `You're invited to join ${organization} on Texfolia`,
-    text: `You've been invited to join ${organization} on Texfolia. Sign in with this email address to review the invitation: ${url.href}`,
-    html: `<p>You've been invited to join an organization on Texfolia.</p><p>Sign in with this email address to <a href="${url.href}">review the invitation</a>.</p>`,
+    subject: `You're invited to join ${organizationName} on Texfolia`,
+    text: `You've been invited to join ${organizationName} on Texfolia. Sign in with this email address to review the invitation: ${url.href}`,
+    html: `<p>You've been invited to join <strong>${safeOrganization}</strong> on Texfolia.</p><p>Sign in with this email address to <a href="${safeUrl}">review the invitation</a>.</p>`,
   };
 }
 
@@ -128,6 +131,6 @@ export function deleteAccountEmail({
     to,
     subject: "Confirm deletion of your Texfolia account",
     text: `Confirm account deletion: ${url}. This permanently deletes your account and personal projects. If you did not request this, ignore this email.`,
-    html: `<p>Confirm deletion of your Texfolia account and personal projects:</p><p><a href="${url.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}">Delete my account</a></p><p>If you did not request this, ignore this email.</p>`,
+    html: `<p>Confirm deletion of your Texfolia account and personal projects:</p><p><a href="${escapeHtml(url)}">Delete my account</a></p><p>If you did not request this, ignore this email.</p>`,
   };
 }

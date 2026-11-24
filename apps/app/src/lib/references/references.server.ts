@@ -15,6 +15,8 @@ import { parseReferenceId, type ReferenceId } from "#/lib/editor/latex/bibtex";
 
 export const userAgent = "Texfolia/1.0 (+https://texfolia.com)";
 const timeout = 8_000;
+const maxBytes = 1024 * 1024;
+const maxRedirects = 5;
 
 export class ReferenceNotFoundError extends Error {}
 export class ReferenceSourceError extends Error {}
@@ -64,12 +66,19 @@ const stopWords = new Set(
   ),
 );
 
+function codePoint(code: number) {
+  // Surrogates and out-of-range values are not characters.
+  return code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff)
+    ? String.fromCodePoint(code)
+    : undefined;
+}
+
 function decodeEntities(value: string) {
   return value.replace(
     /&(?:#(\d+)|#x([\da-f]+)|(amp|lt|gt|quot|apos|nbsp));/gi,
     (match, decimal: string, hex: string, named: string) => {
-      if (decimal) return String.fromCodePoint(Number(decimal));
-      if (hex) return String.fromCodePoint(parseInt(hex, 16));
+      if (decimal) return codePoint(Number(decimal)) ?? match;
+      if (hex) return codePoint(parseInt(hex, 16)) ?? match;
       return (
         {
           amp: "&",
@@ -138,13 +147,19 @@ function ascii(value: string) {
     .toLowerCase();
 }
 
+/** The issued year, when it is one. Sources may send any text or number. */
+function issuedYear(item: CslItem) {
+  const year = String(item.issued?.["date-parts"]?.[0]?.[0] ?? "").trim();
+  return /^-?\d{1,4}$/.test(year) ? year : undefined;
+}
+
 /** A Google Scholar style key: family name, year, first significant word. */
 export function citationKey(item: CslItem) {
   const first = item.author?.[0] ?? item.editor?.[0];
   const family = ascii(
     plain(first?.family ?? first?.literal ?? first?.name ?? ""),
   ).slice(0, 20);
-  const year = item.issued?.["date-parts"]?.[0]?.[0] ?? "";
+  const year = issuedYear(item) ?? "";
   const word =
     plain(item.title ?? "")
       .split(/[\s\-–—:]+/)
@@ -194,7 +209,7 @@ export function cslToBibtex(
   { arxiv, isbn }: { arxiv?: string; isbn?: string } = {},
 ) {
   const type = entryType(item, !!arxiv);
-  const [year, month] = item.issued?.["date-parts"]?.[0] ?? [];
+  const month = item.issued?.["date-parts"]?.[0]?.[1];
   const container = item["container-title"];
   const fullTitle =
     item.title && item.subtitle && !item.title.includes(item.subtitle)
@@ -236,7 +251,7 @@ export function cslToBibtex(
           ? []
           : [["publisher", publisher] as [string, string | undefined]]),
     ["address", place && escape(place)],
-    ["year", year === undefined ? undefined : String(year)],
+    ["year", issuedYear(item)],
     ["month", typeof month === "number" ? months[month - 1] : undefined, true],
     ["eprint", arxiv],
     ["archivePrefix", arxiv && "arXiv"],
@@ -252,37 +267,108 @@ export function cslToBibtex(
 
 type Fetch = typeof fetch;
 
+/**
+ * The next hop of a redirect, when it may be followed. DOI agencies run their
+ * own hosts, so any public HTTPS name is allowed, but not IP addresses,
+ * single-label or internal names, credentials, or other ports.
+ */
+function redirectTarget(location: string | null, base: string) {
+  if (!location || !URL.canParse(location, base)) return null;
+  const url = new URL(location, base);
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  return url.protocol === "https:" &&
+    !url.port &&
+    !url.username &&
+    !url.password &&
+    /^([a-z\d]([a-z\d-]*[a-z\d])?\.)+[a-z][a-z\d-]*[a-z\d]$/.test(host) &&
+    !/\.(localhost|local|internal|intranet|lan|home|corp|test|invalid|home\.arpa)$/.test(
+      host,
+    )
+    ? url.href
+    : null;
+}
+
 async function send(fetcher: Fetch, url: string, accept: string) {
-  const init = (): RequestInit => ({
-    headers: { Accept: accept, "User-Agent": userAgent },
-    redirect: "follow",
-    signal: AbortSignal.timeout(timeout),
-  });
+  const signal = AbortSignal.timeout(timeout);
+  for (let next = url, hops = 0; ; hops++) {
+    const response = await fetcher(next, {
+      headers: { Accept: accept, "User-Agent": userAgent },
+      redirect: "manual",
+      signal,
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    await response.body?.cancel();
+    const target = redirectTarget(response.headers.get("Location"), next);
+    if (!target || hops >= maxRedirects)
+      throw new ReferenceSourceError(
+        "The metadata service sent a redirect that could not be followed.",
+      );
+    next = target;
+  }
+}
+
+async function sendWithRetry(fetcher: Fetch, url: string, accept: string) {
   try {
-    return await fetcher(url, init());
+    return await send(fetcher, url, accept);
   } catch (error) {
     // Open Library often resets connections; a timeout is not retried.
-    if (error instanceof DOMException && error.name === "TimeoutError")
+    if (
+      error instanceof ReferenceSourceError ||
+      (error instanceof DOMException && error.name === "TimeoutError")
+    )
       throw error;
-    return await fetcher(url, init());
+    return await send(fetcher, url, accept);
+  }
+}
+
+/** Reads a body up to the size cap, however it is encoded or framed. */
+async function readText(response: Response) {
+  const tooLarge = new ReferenceSourceError(
+    "The metadata service sent a record that is too large.",
+  );
+  if (Number(response.headers.get("Content-Length")) > maxBytes) {
+    await response.body?.cancel();
+    throw tooLarge;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let result = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return result + decoder.decode();
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      throw tooLarge;
+    }
+    result += decoder.decode(value, { stream: true });
   }
 }
 
 async function request(fetcher: Fetch, url: string, accept: string) {
-  let response: Response;
+  let body: string;
   try {
-    response = await send(fetcher, url, accept);
-  } catch {
+    const response = await sendWithRetry(fetcher, url, accept);
+    if (!response.ok) await response.body?.cancel();
+    if (response.status === 404 || response.status === 410)
+      throw new ReferenceNotFoundError("No reference was found for this ID.");
+    if (!response.ok)
+      throw new ReferenceSourceError(
+        `The metadata service answered ${response.status}.`,
+      );
+    body = await readText(response);
+  } catch (error) {
+    if (
+      error instanceof ReferenceNotFoundError ||
+      error instanceof ReferenceSourceError
+    )
+      throw error;
     throw new ReferenceSourceError("The metadata service did not respond.");
   }
-  if (response.status === 404 || response.status === 410)
-    throw new ReferenceNotFoundError("No reference was found for this ID.");
-  if (!response.ok)
-    throw new ReferenceSourceError(
-      `The metadata service answered ${response.status}.`,
-    );
   try {
-    return (await response.json()) as unknown;
+    return JSON.parse(body) as unknown;
   } catch {
     // Some agencies answer an unknown DOI with an HTML landing page.
     throw new ReferenceNotFoundError("No reference was found for this ID.");

@@ -20,6 +20,8 @@ import { useWorkspace } from "#/providers/workspace-provider";
 
 import { ProjectShareLinks } from "./project-share-links";
 
+type Person = Awaited<ReturnType<typeof getProjectAccess>>["people"][number];
+
 export function ProjectCollaboration() {
   const { projectId } = useWorkspace();
   return <ProjectAccessPanel projectId={projectId} />;
@@ -61,6 +63,13 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
       setBusy(false);
     }
   }
+  function setRole(person: Person, role: "viewer" | "editor") {
+    const { email } = person;
+    if (!email) return;
+    void run(async () => {
+      await grantProjectAccess({ data: { projectId, email, role } });
+    }, `Access updated for ${person.name}.`);
+  }
   return (
     <section aria-label="Collaboration" className="border-t text-xs">
       <div className="flex h-8 items-center justify-between border-b px-2">
@@ -92,7 +101,10 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
                 className="flex items-center gap-2 px-2 py-1.5"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate" title={person.email}>
+                  <span
+                    className="block truncate"
+                    title={person.email ?? undefined}
+                  >
                     {person.name}
                   </span>
                   <span className="text-muted-foreground">
@@ -132,33 +144,13 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
                   <>
                     <ContextMenuItem
                       disabled={busy || person.role === "viewer"}
-                      onClick={() =>
-                        void run(async () => {
-                          await grantProjectAccess({
-                            data: {
-                              projectId,
-                              email: person.email,
-                              role: "viewer",
-                            },
-                          });
-                        }, `Access updated for ${person.name}.`)
-                      }
+                      onClick={() => setRole(person, "viewer")}
                     >
                       Can view
                     </ContextMenuItem>
                     <ContextMenuItem
                       disabled={busy || person.role === "editor"}
-                      onClick={() =>
-                        void run(async () => {
-                          await grantProjectAccess({
-                            data: {
-                              projectId,
-                              email: person.email,
-                              role: "editor",
-                            },
-                          });
-                        }, `Access updated for ${person.name}.`)
-                      }
+                      onClick={() => setRole(person, "editor")}
                     >
                       Can edit
                     </ContextMenuItem>
@@ -202,14 +194,9 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
               return;
             }
             void run(async () => {
-              const result = await grantProjectAccess({ data: parsed.data });
+              await grantProjectAccess({ data: parsed.data });
               form.current?.reset();
-              if (result.notification === "sent")
-                return "Project shared and email notification sent.";
-              if (result.notification === "failed")
-                return "Project shared, but the email notification could not be sent.";
-              return "Project access updated.";
-            });
+            }, "If that email has a Texfolia account, it now has access.");
           }}
         >
           <label className="block space-y-1">

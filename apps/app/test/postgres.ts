@@ -17,6 +17,7 @@ import {
   getProjects,
   trashProject,
 } from "../src/lib/projects/project.server";
+import { checkAuthRateLimit } from "./postgres/auth-rate-limit";
 import { checkComments } from "./postgres/comments";
 import { checkSharingNotifications } from "./postgres/sharing-notifications";
 
@@ -315,6 +316,7 @@ try {
 
   await checkComments(db);
   await checkSharingNotifications(db);
+  await checkAuthRateLimit(connectionString);
 
   console.log(
     "Postgres integration passed: project listings and direct access, shared personal and organization projects, revocation and deletion, deleted project name reuse, concurrent active name uniqueness, transaction rollback, review comments, and sharing notifications",

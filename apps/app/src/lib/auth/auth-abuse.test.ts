@@ -49,7 +49,13 @@ function productionOptions(
 function createTestAuth(hostnames?: string | null) {
   const options = productionOptions(hostnames);
   const emails: EmailMessage[] = [];
-  const database = { user: [], session: [], account: [], verification: [] };
+  const database = {
+    user: [],
+    session: [],
+    account: [],
+    verification: [],
+    rateLimit: [],
+  };
   const stripePlugin = options.plugins.find((plugin) => plugin.id === "stripe");
   assert(stripePlugin && "options" in stripePlugin);
   assert("stripeClient" in stripePlugin.options);
@@ -219,13 +225,16 @@ for (const { path, body } of senders) {
     const { post, emails, seedUser } = createTestAuth();
     await seedUser();
     const verify = mockSiteverify();
-    const responses = await Promise.all(
-      Array.from({ length: 5 }, (_, i) =>
-        post(path, { email: "known@example.com", ...body }, `valid-${i}`, {
-          "x-forwarded-for": `198.51.100.${i + 1}`,
-        }),
-      ),
-    );
+    const send = (i: number) =>
+      post(path, { email: "known@example.com", ...body }, `valid-${i}`, {
+        "x-forwarded-for": `198.51.100.${i + 1}`,
+      });
+    // The memory adapter has no unique keys, so the first send creates the
+    // counter alone. test/postgres covers parallel first sends.
+    const responses = [
+      await send(0),
+      ...(await Promise.all([1, 2, 3, 4].map(send))),
+    ];
     expect(
       responses.filter((response) => response.status === 200),
     ).toHaveLength(3);
@@ -362,17 +371,55 @@ test("OTP helpers cannot expose or mint codes over HTTP", async () => {
   expect(emails).toHaveLength(0);
 });
 
+test("password sign-in requires CAPTCHA", async () => {
+  const { post, seedUser } = createTestAuth();
+  await seedUser();
+  const verify = mockSiteverify();
+  const body = { email: "known@example.com", password: "a-long-password-123" };
+  const missing = await post("/sign-in/email", body);
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toMatchObject({ code: "MISSING_RESPONSE" });
+  expect(verify).not.toHaveBeenCalled();
+  // A valid token reaches the password check.
+  expect((await post("/sign-in/email", body, "valid-token")).status).toBe(401);
+  expect(verify).toHaveBeenCalledTimes(1);
+});
+
+test("email change requires CAPTCHA before its session check", async () => {
+  const { post, emails } = createTestAuth();
+  const response = await post("/email-otp/request-email-change", {
+    newEmail: "new@example.com",
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "MISSING_RESPONSE" });
+  expect(emails).toHaveLength(0);
+});
+
+test("rate limits are counted in the database, except for session reads and Stripe webhooks", async () => {
+  const { auth, post, database } = createTestAuth();
+  await post("/sign-in/email-otp", { email: "known@example.com", otp: "1" });
+  expect(database.rateLimit).toMatchObject([{ count: 1 }]);
+  await auth.handler(
+    new Request("http://localhost:3000/api/auth/get-session", {
+      headers: { "cf-connecting-ip": "192.0.2.250" },
+    }),
+  );
+  await post("/stripe/webhook", {});
+  expect(database.rateLimit).toHaveLength(1);
+});
+
 test("email change and organization invitations require a session", async () => {
   const { post, emails } = createTestAuth();
+  mockSiteverify();
   for (const path of [
     "/email-otp/request-email-change",
     "/organization/invite-member",
   ]) {
-    const response = await post(path, {
-      newEmail: "new@example.com",
-      email: "new@example.com",
-      role: "member",
-    });
+    const response = await post(
+      path,
+      { newEmail: "new@example.com", email: "new@example.com", role: "member" },
+      "valid-token",
+    );
     expect(response.status).toBe(401);
   }
   expect(emails).toHaveLength(0);

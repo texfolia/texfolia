@@ -3,21 +3,19 @@ import { member, projectCollaborator, user } from "@texfolia/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { isOrgAdmin } from "#/lib/auth/roles";
 import {
   invalidateCollaborationAccess,
   type CollaborationAccess,
 } from "#/lib/collaboration/server";
-import {
-  projectCollaboratorEmail,
-  type EmailDelivery,
-  type EmailNotificationStatus,
-} from "#/lib/email";
+import { projectCollaboratorEmail, type EmailDelivery } from "#/lib/email";
 
 import { lockProject } from "./project-access.server";
 import type {
   grantProjectAccessSchema,
   revokeProjectAccessSchema,
 } from "./project-sharing.schema";
+import { takeSharingEmail } from "./sharing-limit.server";
 
 type AccessRequest = { db: Db; userId: string; projectId: string };
 
@@ -55,16 +53,32 @@ export async function getProjectAccess({
           columns: { id: true, name: true, email: true },
         })
       : undefined;
+    const canManage = found.ownerId === userId;
+    // Only people who manage access see emails: a personal project's owner, or
+    // an organization's owners and admins, who can transfer its projects.
+    const showEmails =
+      canManage ||
+      (!!found.organizationId &&
+        people.some(
+          (person) => person.id === userId && isOrgAdmin(person.role),
+        ));
     return {
-      canManage: found.ownerId === userId,
+      canManage,
       organization: !!found.organizationId,
-      people: [...(owner ? [{ ...owner, role: "owner" }] : []), ...people].sort(
-        (a, b) => a.name.localeCompare(b.name),
-      ),
+      people: [...(owner ? [{ ...owner, role: "owner" }] : []), ...people]
+        .map((person) => ({
+          ...person,
+          email: showEmails ? person.email : null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     };
   });
 }
 
+/**
+ * Gives the account with this email access, if there is one. The result is the
+ * same either way, so it doesn't tell whether the email has an account.
+ */
 export async function grantProjectAccess({
   db,
   userId,
@@ -77,8 +91,8 @@ export async function grantProjectAccess({
   data: z.infer<typeof grantProjectAccessSchema>;
   collaboration?: CollaborationAccess;
   email?: EmailDelivery;
-}): Promise<{ added: boolean; notification: EmailNotificationStatus }> {
-  const outcome = await db.transaction(async (tx) => {
+}) {
+  const added = await db.transaction(async (tx) => {
     const found = await lockProject({ tx, projectId: data.projectId, userId });
     if (found.ownerId !== userId)
       throw new Error("Only the project owner can manage access.");
@@ -88,21 +102,22 @@ export async function grantProjectAccess({
       .from(user)
       .where(sql`lower(${user.email}) = ${targetEmail}`)
       .limit(1);
-    if (!person)
-      throw new Error(
-        "No Texfolia account has that email. Ask them to sign in first, then try again.",
-      );
-    if (person.id === userId) throw new Error("You already own this project.");
-    const [existing] = await tx
-      .select({ role: projectCollaborator.role })
-      .from(projectCollaborator)
-      .where(
-        and(
-          eq(projectCollaborator.projectId, data.projectId),
-          eq(projectCollaborator.userId, person.id),
-        ),
-      )
-      .limit(1);
+    if (person?.id === userId) throw new Error("You already own this project.");
+    const [existing] = person
+      ? await tx
+          .select({ role: projectCollaborator.role })
+          .from(projectCollaborator)
+          .where(
+            and(
+              eq(projectCollaborator.projectId, data.projectId),
+              eq(projectCollaborator.userId, person.id),
+            ),
+          )
+          .limit(1)
+      : [];
+    // Changing a collaborator's role sends no email, so it isn't limited.
+    if (!existing) await takeSharingEmail(tx, userId);
+    if (!person) return;
     await tx
       .insert(projectCollaborator)
       .values({ projectId: data.projectId, userId: person.id, role: data.role })
@@ -114,22 +129,19 @@ export async function grantProjectAccess({
     await invalidateCollaborationAccess(collaboration, data.projectId, [
       person.id,
     ]);
-    if (existing) return { added: false as const };
+    if (existing) return;
     const [inviter] = await tx
       .select({ name: user.name })
       .from(user)
       .where(eq(user.id, userId))
       .limit(1);
     return {
-      added: true as const,
       recipientEmail: person.email,
       projectName: found.name,
       inviterName: inviter?.name ?? "Someone",
     };
   });
-  if (!outcome.added || !email) {
-    return { added: outcome.added, notification: "none" };
-  }
+  if (!added || !email) return;
   const url = new URL(
     `/project/${encodeURIComponent(data.projectId)}`,
     email.baseURL,
@@ -137,17 +149,15 @@ export async function grantProjectAccess({
   try {
     await email.send(
       projectCollaboratorEmail({
-        to: outcome.recipientEmail,
-        projectName: outcome.projectName,
-        inviterName: outcome.inviterName,
+        to: added.recipientEmail,
+        projectName: added.projectName,
+        inviterName: added.inviterName,
         role: data.role,
         url,
       }),
     );
-    return { added: true, notification: "sent" };
   } catch (error) {
-    console.error("Failed to send project collaborator email", error);
-    return { added: true, notification: "failed" };
+    console.error("Failed to queue project collaborator email", error);
   }
 }
 

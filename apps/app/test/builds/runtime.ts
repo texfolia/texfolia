@@ -255,6 +255,8 @@ export function createBuildsRuntime(options: {
             body: JSON.parse(row.body),
             attempts: row.attempts + 1,
             coordinator: (projectId) => coordinatorFor(projectId).core,
+            deliverEmail: () =>
+              Promise.reject(new Error("Builds do not send email")),
           });
         } catch (error) {
           console.error("Local compile queue processing failed", {

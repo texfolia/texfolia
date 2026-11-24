@@ -22,8 +22,8 @@ import {
   compileQueue,
   deadLetterError,
   processQueueMessage,
-  type BackgroundMessage,
   type CompileMessage,
+  type MaintenanceMessage,
 } from "./queues";
 import { sourceHash } from "./source-sync";
 import type { Engine } from "./types";
@@ -56,7 +56,7 @@ function harness(engine: Engine) {
   const store = memoryStore(objects);
   const drafts = new Map<string, Uint8Array>();
   const messages: { queue: string; body: CompileMessage }[] = [];
-  const background: { body: BackgroundMessage; delaySeconds: number }[] = [];
+  const background: { body: MaintenanceMessage; delaySeconds: number }[] = [];
   const state: {
     saved: string | null;
     sendFails: boolean;
@@ -86,7 +86,7 @@ function harness(engine: Engine) {
       messages.push({ queue: compileQueue(plan), body });
       state.onSend?.();
     },
-    async background(body: BackgroundMessage, delaySeconds: number) {
+    async background(body: MaintenanceMessage, delaySeconds: number) {
       if (state.backgroundFails)
         throw new Error("Background queue unavailable");
       background.push({ body, delaySeconds });
@@ -137,6 +137,7 @@ function harness(engine: Engine) {
         body,
         attempts,
         coordinator: () => core,
+        deliverEmail: () => Promise.reject(new Error("Unexpected email")),
       });
     },
   };
@@ -273,6 +274,11 @@ test.each(["", "-local"])(
         queue: `${queue}${suffix}`,
         body,
         attempts: 1,
+        async deliverEmail(message) {
+          if (message.to === "down@example.com")
+            throw new Error("email unavailable");
+          calls.push(["email", message.to]);
+        },
         coordinator: (projectId) => ({
           async consume(revision) {
             calls.push(["consume", projectId, revision]);
@@ -299,6 +305,18 @@ test.each(["", "-local"])(
       ["fail", projectId, 3],
       ["maintain", projectId, 5],
     ]);
+
+    calls.length = 0;
+    const email = (to: string) => ({
+      kind: "email",
+      message: { to, subject: "s", html: "h", text: "t" },
+    });
+    expect(await deliver("background", email("writer@example.com"))).toBe(true);
+    expect(calls).toEqual([["email", "writer@example.com"]]);
+    // A delivery failure rejects so the queue retries the message.
+    await expect(
+      deliver("background", email("down@example.com")),
+    ).rejects.toThrow("email unavailable");
   },
 );
 

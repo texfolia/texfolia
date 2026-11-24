@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { createDb } from "@texfolia/db";
 import {
+  aiOrganizationSettings,
   aiRequest,
   aiRun,
   aiSettings,
@@ -22,9 +23,13 @@ import { BillingError, markedUpNanos, nanoDollars } from "#/lib/billing";
 import {
   aiEntitlement,
   aiSpend,
+  billingOverview,
+  compilePlan,
   getAiSettings,
+  getOrganizationAiSettings,
   reconcileAiUsage,
   reserveAiRequest,
+  saveOrganizationAiCap,
   type MeterReporter,
 } from "#/lib/billing/server";
 
@@ -77,6 +82,7 @@ const report: MeterReporter = async (event) => {
 };
 async function run(
   status: "running" | "succeeded" | "failed" | "aborted" = "succeeded",
+  payer = { customerId: "cus_pro", subscriptionId: "sub_pro" },
 ) {
   const id = crypto.randomUUID();
   runIds.push(id);
@@ -86,8 +92,8 @@ async function run(
     clientRunId: id,
     projectId: crypto.randomUUID(),
     model: "@cf/test/model",
-    stripeCustomerId: "cus_pro",
-    stripeSubscriptionId: "sub_pro",
+    stripeCustomerId: payer.customerId,
+    stripeSubscriptionId: payer.subscriptionId,
     accountId: config.accountId,
     gatewayId: config.gatewayId,
     meterEventName: config.meterEventName,
@@ -136,7 +142,7 @@ try {
     })),
   );
   await assert.rejects(
-    aiEntitlement(db, freeId),
+    aiEntitlement(db, freeId, null),
     (e) => e instanceof BillingError && e.status === 403,
   );
   const subId = crypto.randomUUID();
@@ -149,9 +155,10 @@ try {
     stripeCustomerId: "cus_pro",
     stripeSubscriptionId: "sub_pro",
   });
-  assert.deepEqual(await aiEntitlement(db, userId), {
+  assert.deepEqual(await aiEntitlement(db, userId, null), {
     customerId: "cus_pro",
     subscriptionId: "sub_pro",
+    organizationId: null,
   });
   await db
     .insert(organization)
@@ -173,9 +180,37 @@ try {
     stripeCustomerId: "cus_team",
     stripeSubscriptionId: "sub_team",
   });
-  assert.equal((await aiEntitlement(db, teamId)).customerId, "cus_team");
+  assert.deepEqual(await aiEntitlement(db, teamId, orgId), {
+    customerId: "cus_team",
+    subscriptionId: "sub_team",
+    organizationId: orgId,
+  });
+  // The organization pays only in its own projects, never as a fallback.
+  await assert.rejects(
+    aiEntitlement(db, teamId, null),
+    (e) => e instanceof BillingError && e.status === 403,
+  );
+  await assert.rejects(
+    aiEntitlement(db, teamId, crypto.randomUUID()),
+    (e) => e instanceof BillingError && e.status === 403,
+  );
+  // Outside its organization, a Pro member pays for themselves.
+  assert.equal(
+    (await aiEntitlement(db, userId, orgId)).customerId,
+    "cus_pro",
+    "a non-member never bills the project's organization",
+  );
+  await db
+    .update(subscription)
+    .set({ periodEnd: new Date(Date.now() - 60_000) })
+    .where(eq(subscription.id, teamSub));
+  await assert.rejects(aiEntitlement(db, teamId, orgId));
+  await db
+    .update(subscription)
+    .set({ periodEnd: null })
+    .where(eq(subscription.id, teamSub));
   await db.delete(member).where(eq(member.userId, teamId));
-  await assert.rejects(aiEntitlement(db, teamId));
+  await assert.rejects(aiEntitlement(db, teamId, orgId));
   assert.equal(
     (await getAiSettings(db, userId)).monthlyCapNanos,
     20 * nanoDollars,
@@ -387,6 +422,11 @@ try {
     beforeUncertain,
     "genuine zero-cost usage is recorded without a Stripe event",
   );
+  const proPayer = {
+    customerId: "cus_pro",
+    subscriptionId: "sub_pro",
+    organizationId: null,
+  };
   const budget = await run("running");
   await db
     .update(aiSettings)
@@ -403,6 +443,7 @@ try {
         db,
         runId: budget,
         userId,
+        payer: proPayer,
         model: "@cf/test/model",
         reservedNanos: 6 * nanoDollars,
       }),
@@ -414,6 +455,108 @@ try {
     "concurrent calls cannot overspend the remaining cap",
   );
   assert.equal(reservations.filter((r) => r.status === "rejected").length, 1);
+  await assert.rejects(
+    reserveAiRequest({
+      db,
+      runId: budget,
+      userId,
+      payer: { ...proPayer, customerId: "cus_other" },
+      model: "@cf/test/model",
+      reservedNanos: 1,
+    }),
+    (e) => e instanceof BillingError && e.status === 409,
+    "reservations are keyed to the run's payer",
+  );
+  // The organization's cap bounds every member billed to it, whatever
+  // each member's own cap.
+  const orgPayer = {
+    customerId: "cus_team",
+    subscriptionId: "sub_team",
+    organizationId: orgId,
+  };
+  assert.equal(
+    (await getOrganizationAiSettings(db, orgId)).monthlyCapNanos,
+    100 * nanoDollars,
+  );
+  await db
+    .update(aiOrganizationSettings)
+    .set({ monthlyCapNanos: 5 * nanoDollars })
+    .where(eq(aiOrganizationSettings.organizationId, orgId));
+  await db
+    .update(aiSettings)
+    .set({ monthlyCapNanos: 10_000 * nanoDollars })
+    .where(eq(aiSettings.userId, userId));
+  const orgRun = await run("running", orgPayer);
+  await reserveAiRequest({
+    db,
+    runId: orgRun,
+    userId,
+    payer: orgPayer,
+    model: "@cf/test/model",
+    reservedNanos: 4 * nanoDollars,
+  });
+  await assert.rejects(
+    reserveAiRequest({
+      db,
+      runId: orgRun,
+      userId,
+      payer: orgPayer,
+      model: "@cf/test/model",
+      reservedNanos: 2 * nanoDollars,
+    }),
+    (e) => e instanceof BillingError && e.status === 402,
+    "an organization's cap is shared, not raised by a member's own cap",
+  );
+
+  // Only the organization's owners and admins change its cap or see its spend.
+  const insertMember = (id: string, role: string) =>
+    db.insert(member).values({
+      id: crypto.randomUUID(),
+      organizationId: orgId,
+      userId: id,
+      role,
+      createdAt: new Date(),
+    });
+  await insertMember(teamId, "member");
+  await insertMember(userId, "admin");
+  for (const id of [teamId, freeId])
+    await assert.rejects(
+      saveOrganizationAiCap(db, {
+        userId: id,
+        organizationId: orgId,
+        dollars: 10_000,
+      }),
+      (e) => e instanceof BillingError && e.status === 403,
+    );
+  await saveOrganizationAiCap(db, {
+    userId,
+    organizationId: orgId,
+    dollars: 6,
+  });
+  await reserveAiRequest({
+    db,
+    runId: orgRun,
+    userId,
+    payer: orgPayer,
+    model: "@cf/test/model",
+    reservedNanos: 2 * nanoDollars,
+  });
+  const overview = (id: string) =>
+    billingOverview(db, { userId: id, organizationId: orgId });
+  assert.deepEqual((await overview(userId)).ai, {
+    monthlyCapDollars: 6,
+    spentDollars: 0,
+    reservedDollars: 6,
+  });
+  assert.equal((await overview(teamId)).ai, null);
+
+  // A lapsed paid period no longer grants its compile plan.
+  assert.equal(await compilePlan(db, teamId), "team");
+  await db
+    .update(subscription)
+    .set({ periodEnd: new Date(Date.now() - 60_000) })
+    .where(eq(subscription.id, teamSub));
+  assert.equal(await compilePlan(db, teamId), "free");
   assert.equal(
     outbound.mock.calls.length,
     0,

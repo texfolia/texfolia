@@ -38,6 +38,7 @@ export function projectTools({
   projectId,
   userId,
   canWrite,
+  organizationId,
   headers,
   signal,
 }: AssistantContext & {
@@ -45,12 +46,14 @@ export function projectTools({
   projectId: string;
   userId: string;
   canWrite: boolean;
+  /** The project's organization: it pays only for its members' usage here. */
+  organizationId: string | null;
   headers: Headers;
   signal: AbortSignal;
 }) {
   async function files() {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId);
+    await aiEntitlement(db, userId, organizationId);
     return db.transaction(async (tx) => {
       await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
@@ -66,7 +69,7 @@ export function projectTools({
   /** Every live node, folders included, with paths keyed by node ID. */
   async function tree() {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId);
+    await aiEntitlement(db, userId, organizationId);
     return db.transaction(async (tx) => {
       await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
@@ -124,7 +127,7 @@ export function projectTools({
   }
   async function readFile(path: string) {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId);
+    await aiEntitlement(db, userId, organizationId);
     return db.transaction(async (tx) => {
       await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
@@ -147,7 +150,7 @@ export function projectTools({
   }
   async function gitAction(action: GitAction) {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId);
+    await aiEntitlement(db, userId, organizationId);
     const [user] = await db
       .select()
       .from(userTable)
@@ -266,7 +269,7 @@ export function projectTools({
       inputSchema: z.object({}),
     }).server(async () => {
       signal.throwIfAborted();
-      await aiEntitlement(db, userId);
+      await aiEntitlement(db, userId, organizationId);
       const bytes = new TextEncoder().encode(
         await workspace.readScratchpad({ projectId, userId }),
       );

@@ -2,13 +2,18 @@ import { defineRelationsPart } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-import { authRelations, subscription, verification } from "./auth-schema";
+import {
+  authRelations,
+  rateLimit,
+  subscription,
+  verification,
+} from "./auth-schema";
 import { relations } from "./schema";
 
 // The generator omits tables without foreign keys from the relations callback.
 const standaloneAuthRelations = defineRelationsPart(
-  { subscription, verification },
-  () => ({ subscription: {}, verification: {} }),
+  { rateLimit, subscription, verification },
+  () => ({ rateLimit: {}, subscription: {}, verification: {} }),
 );
 
 // Each db serves one request or operation, and Hyperdrive pools connections

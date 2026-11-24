@@ -18,8 +18,8 @@ import {
   deleteAccountEmail,
   invitationEmail,
   sendEmail,
+  type DeliverEmail,
   type EmailMessage,
-  type SendEmail,
 } from "#/lib/email";
 
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./captcha";
@@ -27,12 +27,13 @@ import { AUTH_EMAIL_CAPTCHA_ACTION } from "./captcha";
 // Loaded on first use because only Workers provide the binding module.
 async function deliver(message: EmailMessage) {
   const { env } = await import("cloudflare:workers");
-  await sendEmail(env.EMAIL, message);
+  await sendEmail(env, message);
 }
 
-export function createEmailOTPPlugin(sendOTPEmail: SendEmail) {
+export function createEmailOTPPlugin(sendOTPEmail: DeliverEmail) {
   return emailOTP({
     expiresIn: 300,
+    storeOTP: "hashed",
     changeEmail: { enabled: true },
     async sendVerificationOTP({ email, otp, type }) {
       await sendOTPEmail(codeEmail({ to: email, code: otp, type }));
@@ -45,7 +46,7 @@ export function createOrganizationPlugin({
   sendInvitationEmail,
 }: {
   baseURL: string;
-  sendInvitationEmail: SendEmail;
+  sendInvitationEmail: DeliverEmail;
 }) {
   return organization({
     requireEmailVerificationOnInvitation: true,
@@ -109,7 +110,18 @@ export function createAuth(db: Db, collaboration?: CollaborationAccess) {
       "/get-access-token",
       "/refresh-token",
     ],
-    rateLimit: { enabled: true },
+    // Counters live in Postgres: each Worker isolate has its own memory, so
+    // in-memory limits would reset per isolate.
+    rateLimit: {
+      enabled: true,
+      storage: "database",
+      customRules: {
+        // Session reads are frequent and neither send email nor check secrets.
+        "/get-session": false,
+        // Verified by signature, and all Stripe deliveries share a few IPs.
+        "/stripe/webhook": false,
+      },
+    },
     hooks: {
       before: enforceBillingScope,
       after: createAuthMiddleware(async (ctx) => {
@@ -167,7 +179,9 @@ export function createAuth(db: Db, collaboration?: CollaborationAccess) {
         allowedHostnames,
         expectedAction: AUTH_EMAIL_CAPTCHA_ACTION,
         endpoints: [
+          "/sign-in/email",
           "/email-otp/send-verification-otp",
+          "/email-otp/request-email-change",
           "/email-otp/request-password-reset",
           "/forget-password/email-otp",
         ],

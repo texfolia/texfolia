@@ -12,7 +12,10 @@ import { z } from "zod";
 import { authClient } from "#/lib/auth/auth-client";
 import { getSession } from "#/lib/auth/auth.functions";
 import { paidPlans } from "#/lib/billing";
-import { getBilling } from "#/lib/billing/billing.functions";
+import {
+  getBilling,
+  saveOrganizationCap,
+} from "#/lib/billing/billing.functions";
 import { webPath } from "#/lib/origins";
 
 export const Route = createFileRoute("/settings/billing")({
@@ -32,6 +35,11 @@ export const Route = createFileRoute("/settings/billing")({
   component: BillingRoutePage,
   errorComponent: BillingError,
 });
+
+const usd = (amount: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    amount,
+  );
 
 function BillingRoutePage() {
   const { organizationId, plan } = Route.useSearch();
@@ -64,13 +72,14 @@ function BillingError() {
 }
 
 function BillingPage() {
-  const { organizations, selected, canManage, subscriptions, userId } =
+  const { organizations, selected, canManage, ai, subscriptions, userId } =
     Route.useLoaderData();
   const { plan } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [cap, setCap] = useState(String(ai?.monthlyCapDollars ?? ""));
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState("");
@@ -191,10 +200,11 @@ function BillingPage() {
           >
             <h2 className="text-xl font-semibold">Start a Team plan</h2>
             <p className="text-muted-foreground leading-7">
-              Pro for every organization member, at ${paidPlans.team.monthlyUsd}{" "}
-              USD per user per month on one shared bill. Create your
-              organization, then continue to Stripe checkout. Personal and Team
-              subscriptions are billed separately.
+              Pro compiles for every organization member and AI in the
+              organization's projects, at ${paidPlans.team.monthlyUsd} USD per
+              user per month on one shared bill. Create your organization, then
+              continue to Stripe checkout. Personal and Team subscriptions are
+              billed separately.
             </p>
             <label htmlFor="team-name" className="block text-sm font-medium">
               Organization name
@@ -228,7 +238,7 @@ function BillingPage() {
               each run and invoiced monthly. Each user controls their own
               monthly spend cap (default $20).{" "}
               {selected &&
-                "Eligible Team usage is charged to the shared subscription. Personal and Team subscriptions are billed separately."}
+                "The organization pays for members' usage in its own projects, up to a shared monthly cap set by its owners and admins. Usage in personal projects needs a personal Pro plan, which is billed separately."}
             </p>
             {!canManage ? (
               <p>
@@ -283,6 +293,59 @@ function BillingPage() {
                 Compare plans
               </a>
             </p>
+          </section>
+        )}
+        {selected && ai && (
+          <section
+            className="space-y-4 border-t pt-8"
+            aria-labelledby="ai-heading"
+          >
+            <h2 id="ai-heading" className="text-xl font-semibold">
+              AI usage
+            </h2>
+            <p className="text-muted-foreground text-sm leading-6">
+              Members have used {usd(ai.spentDollars)} this month (UTC), with{" "}
+              {usd(ai.reservedDollars)} reserved for running requests. The
+              shared cap applies on top of each member's own cap.
+            </p>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void run(async () => {
+                  await saveOrganizationCap({
+                    data: { organizationId: selected.id, dollars: Number(cap) },
+                  });
+                  await router.invalidate();
+                  setStatus("Organization AI spend cap saved.");
+                });
+              }}
+            >
+              <label htmlFor="organization-cap" className="text-sm font-medium">
+                Organization monthly AI spend cap (USD)
+              </label>
+              <Input
+                id="organization-cap"
+                type="number"
+                min={0}
+                max={10000}
+                step="0.01"
+                required
+                value={cap}
+                disabled={pending}
+                onChange={(event) => setCap(event.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                A $0 cap prevents new AI requests billed to the organization.
+              </p>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={pending || Number(cap) === ai.monthlyCapDollars}
+              >
+                Save cap
+              </Button>
+            </form>
           </section>
         )}
         {selected && canManage && (

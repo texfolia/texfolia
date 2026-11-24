@@ -3,8 +3,9 @@ title: Configure the managed assistant
 ---
 
 The editor’s left **Agents** sidebar contains saved project chats. Open it from
-**View → Agents sidebar** or the status bar. Pro users and members of an active
-Pro or Team organization can use it. AI usage is separate from compile limits and
+**View → Agents sidebar** or the status bar. Pro users can use it in any
+project they can edit or view. Members of a Team organization can use it in that
+organization's projects. AI usage is separate from compile limits and
 the plan price. Chats are stored on the server, privately for each user and project.
 The history button in the bottom-left status bar opens a separate sidebar to
 the left of Agents, hidden by default. Its list creates, renames, deletes, and
@@ -69,9 +70,9 @@ user’s default model for new chats and the existing monthly spending cap.
    a message. Open the usage row to change the monthly cap or save a default
    model. Changing the chat picker alone does not change the saved default.
 
-A Team member uses their project's organization subscription when eligible,
-otherwise their personal Pro subscription, otherwise an eligible membership's
-subscription. The original customer and subscription are saved with each run,
+A member of a project's organization uses its subscription when eligible,
+otherwise their personal Pro subscription. An organization never pays in a
+personal project or another organization's project. The original customer and subscription are saved with each run,
 so later membership or subscription changes do not move existing charges.
 
 File tools can list, search, and read saved sources. Editors' runs can also
@@ -139,6 +140,9 @@ Each model request first creates an `ai_request` row. Its reservation includes
 framing overhead, with 2,048 output tokens. Concurrent requests lock the user's
 settings row and count both actual spend and outstanding reservations. The
 cap defaults to $20 per user per UTC calendar month; setting it to $0 pauses AI.
+When an organization pays, the request also locks the organization's settings row
+and counts all spend and reservations on its Stripe customer against the shared
+cap, $100 by default. A member cannot raise that cap with their own.
 A request can be refused before the displayed cap is exhausted because its
 maximum estimated cost does not fit the remaining budget. Provider prices and
 token accounting determine the eventual cost; reservations are not charges.

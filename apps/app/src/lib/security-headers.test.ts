@@ -50,6 +50,9 @@ test("API, errors, and PDF streams retain their body, status, and headers", asyn
     expect(secured.status).toBe(status);
     expect(secured.headers.get("Content-Type")).toBe("application/pdf");
     expect(secured.headers.get("Cache-Control")).toBe("no-store");
+    expect(secured.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
     expect(secured.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
     expect(secured.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(secured.headers.get("Referrer-Policy")).toBe(
@@ -71,6 +74,7 @@ test("development keeps Vite scripts working and retains baseline headers", () =
     development: true,
   });
   expect(response.headers.has("Content-Security-Policy")).toBe(false);
+  expect(response.headers.has("Strict-Transport-Security")).toBe(false);
   expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
   expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
 });

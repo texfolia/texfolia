@@ -27,6 +27,7 @@ import {
   type createShareLinkSchema,
   type revokeShareLinkSchema,
 } from "./project-share-links.schema";
+import { takeSharingEmail } from "./sharing-limit.server";
 
 export async function hashShareToken(token: string) {
   const digest = await crypto.subtle.digest(
@@ -130,6 +131,7 @@ export async function createShareLink({
         .limit(1);
       if (existingCollaborator)
         throw new Error("That person already has access to this project.");
+      await takeSharingEmail(tx, userId);
       senderName = owner?.name ?? senderName;
     }
     const token = createToken();
@@ -163,9 +165,9 @@ export async function createShareLink({
           url,
         }),
       );
-      notification = "sent";
+      notification = "queued";
     } catch (error) {
-      console.error("Failed to send project share-link email", error);
+      console.error("Failed to queue project share-link email", error);
       notification = "failed";
     }
   }
