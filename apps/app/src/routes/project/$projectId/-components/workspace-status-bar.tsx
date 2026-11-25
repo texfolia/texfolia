@@ -64,6 +64,7 @@ export function WorkspaceStatusBar({
   onChrome,
   onTogglePanel,
   problemCount,
+  unresolvedCommentCount,
   compileStatus,
   compileDisabled,
   onCompile,
@@ -72,6 +73,8 @@ export function WorkspaceStatusBar({
   git,
   scratchpadDisabled,
   onScratchpad,
+  paths,
+  onOpenFile,
   location,
   cursor,
 }: {
@@ -79,6 +82,7 @@ export function WorkspaceStatusBar({
   onChrome: (patch: Partial<WorkspaceChrome>) => void;
   onTogglePanel: (view: PanelView) => void;
   problemCount: number;
+  unresolvedCommentCount: number;
   compileStatus: CompileStatus;
   compileDisabled: boolean;
   onCompile: () => void;
@@ -88,6 +92,8 @@ export function WorkspaceStatusBar({
   git: GitBranchState;
   scratchpadDisabled: boolean;
   onScratchpad: () => void;
+  paths: ReadonlyMap<string, string>;
+  onOpenFile: (nodeId: string) => void;
   /** The active tab's path. */
   location: string;
   cursor: Store<Cursor | undefined>;
@@ -163,7 +169,10 @@ export function WorkspaceStatusBar({
       </Button>
       {words && <WordCountStatus words={words} onReveal={onRevealWords} />}
       <WorkspacePresence
-        onClick={() =>
+        paths={paths}
+        onOpenFile={onOpenFile}
+        onOpenScratchpad={onScratchpad}
+        onOpenCollaboration={() =>
           onChrome({ rightOpen: true, rightView: "collaboration" })
         }
       />
@@ -208,26 +217,39 @@ export function WorkspaceStatusBar({
         aria-label="Right sidebar views"
         className="ml-auto flex shrink-0 items-center gap-0.5"
       >
-        {sidebarViews.map(({ view, label, icon: Icon }) => (
-          <Button
-            key={view}
-            variant="ghost"
-            size="icon-xs"
-            className="aria-pressed:bg-muted"
-            aria-label={label}
-            title={label}
-            aria-controls="project-sidebar"
-            aria-pressed={chrome.rightOpen && chrome.rightView === view}
-            onClick={() =>
-              onChrome({
-                rightView: view,
-                rightOpen: !(chrome.rightOpen && chrome.rightView === view),
-              })
-            }
-          >
-            <Icon />
-          </Button>
-        ))}
+        {sidebarViews.map(({ view, label, icon: Icon }) => {
+          const commentBadge =
+            view === "comments" && unresolvedCommentCount > 0
+              ? unresolvedCommentCount
+              : 0;
+          const accessibleLabel =
+            commentBadge > 0 ? `${label} (${commentBadge} unresolved)` : label;
+          return (
+            <Button
+              key={view}
+              variant="ghost"
+              size={commentBadge > 0 ? "xs" : "icon-xs"}
+              className="aria-pressed:bg-muted gap-1"
+              aria-label={accessibleLabel}
+              title={accessibleLabel}
+              aria-controls="project-sidebar"
+              aria-pressed={chrome.rightOpen && chrome.rightView === view}
+              onClick={() =>
+                onChrome({
+                  rightView: view,
+                  rightOpen: !(chrome.rightOpen && chrome.rightView === view),
+                })
+              }
+            >
+              <Icon />
+              {commentBadge > 0 && (
+                <span className="bg-primary text-primary-foreground rounded-full px-1.5 text-[10px] leading-4 font-medium tabular-nums">
+                  {commentBadge > 99 ? "99+" : commentBadge}
+                </span>
+              )}
+            </Button>
+          );
+        })}
       </div>
     </footer>
   );

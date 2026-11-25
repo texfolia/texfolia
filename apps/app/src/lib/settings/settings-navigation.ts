@@ -5,6 +5,7 @@ import {
   IconSettings,
   IconChartBar,
   IconUser,
+  IconUsersGroup,
 } from "@tabler/icons-react";
 
 export const settingsLinks = [
@@ -12,6 +13,11 @@ export const settingsLinks = [
   { to: "/settings/preferences", label: "Preferences", icon: IconSettings },
   { to: "/settings/connections", label: "Connections", icon: IconPlug },
   { to: "/settings/ai", label: "AI", icon: IconBrain },
+  {
+    to: "/settings/organizations",
+    label: "Organizations",
+    icon: IconUsersGroup,
+  },
   { to: "/settings/billing", label: "Billing", icon: IconCreditCard },
   { to: "/settings/usage", label: "Usage", icon: IconChartBar },
 ] as const;

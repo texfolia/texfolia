@@ -6,10 +6,12 @@ import {
   notFound,
 } from "@tanstack/react-router";
 import { Button } from "@texfolia/ui/button";
+import { Textarea } from "@texfolia/ui/textarea";
 import { useState } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import { maxRejectionReason } from "#/lib/templates";
 import {
   getTemplateReviewQueue,
   getTemplateAccount,
@@ -41,11 +43,16 @@ function TemplateReviewPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  async function decide(templateId: string, decision: "approved" | "rejected") {
+  // The template being rejected, by the key of the item it was chosen from.
+  const [rejecting, setRejecting] = useState("");
+  const [reason, setReason] = useState("");
+  async function decide(data: Parameters<typeof reviewTemplate>[0]["data"]) {
     setBusy(true);
     setError("");
     try {
-      await reviewTemplate({ data: { templateId, decision } });
+      await reviewTemplate({ data });
+      setRejecting("");
+      setReason("");
       await router.invalidate();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Review failed");
@@ -53,20 +60,66 @@ function TemplateReviewPage() {
       setBusy(false);
     }
   }
-  const actions = (templateId: string) => (
-    <div className="mt-4 flex gap-3">
-      <Button disabled={busy} onClick={() => decide(templateId, "approved")}>
-        Approve / keep
-      </Button>
-      <Button
-        disabled={busy}
-        variant="outline"
-        onClick={() => decide(templateId, "rejected")}
+  const actions = (key: string, templateId: string) =>
+    rejecting === key ? (
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void decide({ templateId, decision: "rejected", reason });
+        }}
       >
-        Reject / remove
-      </Button>
-    </div>
-  );
+        <label htmlFor="rejection-reason" className="block text-sm font-medium">
+          Reason shown to the publisher
+        </label>
+        <Textarea
+          id="rejection-reason"
+          required
+          minLength={10}
+          maxLength={maxRejectionReason}
+          value={reason}
+          disabled={busy}
+          autoFocus
+          onChange={(event) => setReason(event.target.value)}
+        />
+        <div className="flex gap-3">
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={busy || reason.trim().length < 10}
+          >
+            Reject / remove
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setRejecting("")}
+          >
+            Cancel
+          </Button>
+        </div>
+      </form>
+    ) : (
+      <div className="mt-4 flex gap-3">
+        <Button
+          disabled={busy}
+          onClick={() => void decide({ templateId, decision: "approved" })}
+        >
+          Approve / keep
+        </Button>
+        <Button
+          disabled={busy}
+          variant="outline"
+          onClick={() => {
+            setReason("");
+            setRejecting(key);
+          }}
+        >
+          Reject / remove…
+        </Button>
+      </div>
+    );
   return (
     <div className="flex min-h-svh flex-col">
       <Header />
@@ -103,7 +156,7 @@ function TemplateReviewPage() {
                 {item.publisherName} · {item.license} · {item.visibility}
               </p>
               <p className="mt-2 whitespace-pre-wrap">{item.description}</p>
-              {actions(item.id)}
+              {actions(item.id, item.id)}
             </li>
           ))}
         </ul>
@@ -124,7 +177,7 @@ function TemplateReviewPage() {
               <p className="mt-3 break-words whitespace-pre-wrap">
                 {report.reason}
               </p>
-              {actions(report.templateId)}
+              {actions(report.id, report.templateId)}
             </li>
           ))}
         </ul>

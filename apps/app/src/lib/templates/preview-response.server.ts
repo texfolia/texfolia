@@ -22,12 +22,15 @@ export async function templatePreview({
   images: Pick<ImagesBinding, "input">;
   found: Pick<
     typeof template.$inferSelect,
-    "previewKey" | "status" | "visibility"
+    "previewKey" | "status" | "visibility" | "unpublishedAt"
   >;
 }) {
   const { previewKey } = found;
   if (!previewKey) return new Response("Not found", { status: 404 });
-  const listed = found.status === "approved" && found.visibility === "public";
+  const listed =
+    found.status === "approved" &&
+    found.visibility === "public" &&
+    !found.unpublishedAt;
   const headers = (contentType: string, key: string, maxAge: number) => ({
     "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",

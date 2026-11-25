@@ -92,8 +92,8 @@ function InvitationPage() {
             Join {invitation.organizationName}
           </h1>
           <p className="text-muted-foreground leading-relaxed wrap-anywhere">
-            {invitation.inviterEmail} invited {invitation.email} to join as a{" "}
-            {invitation.role}.
+            {invitation.inviterEmail} invited {invitation.email} to join as{" "}
+            {invitation.role === "member" ? "a" : "an"} {invitation.role}.
           </p>
           <p className="text-muted-foreground leading-relaxed wrap-anywhere">
             Your personal projects and subscription stay with your account.

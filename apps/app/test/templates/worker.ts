@@ -840,6 +840,7 @@ export default {
         reviewers: reviewerId,
         templateId: published.id,
         decision: "rejected",
+        reason: "Duplicate template submission.",
       });
       assert.equal(await getTemplate({ db, templateId: published.id }), null);
       await assert.rejects(

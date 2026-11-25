@@ -1,33 +1,38 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { Button } from "@texfolia/ui/button";
+import { Input } from "@texfolia/ui/input";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 
 import { Page } from "#/components/page";
 import { pageHead } from "#/lib/head";
 import { linkButton } from "#/lib/link-button";
 import {
   fetchTemplateCatalog,
-  parseTemplatePage,
+  maxTemplateQuery,
+  maxTemplateTag,
+  parseTemplateSearch,
+  templateLicenses,
   type PublicTemplate,
+  type TemplateSearch,
 } from "#/lib/templates";
 import { appPath, appUrl } from "#/lib/urls";
 
 // Runs on the web Worker, so browsers never call the app's API cross-origin.
 const loadTemplates = createServerFn({ method: "GET" })
-  .validator((page: unknown) => parseTemplatePage(page))
-  .handler(({ data: page }) => fetchTemplateCatalog(appUrl(), page));
+  .validator((search: TemplateSearch) => parseTemplateSearch(search))
+  .handler(({ data: search }) => fetchTemplateCatalog(appUrl(), search));
 
 // The widest layout's columns.
 const firstRow = 3;
 
 export const Route = createFileRoute("/templates")({
-  // Always return the key: the router keeps raw search values a validator omits.
-  validateSearch: (search: Record<string, unknown>): { page?: number } => ({
-    page: parseTemplatePage(search.page) || undefined,
-  }),
-  loaderDeps: ({ search }) => ({ page: search.page ?? 0 }),
+  // Always returns every key: the router keeps raw search values a validator omits.
+  validateSearch: parseTemplateSearch,
+  loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => ({
-    page: deps.page,
-    catalog: await loadTemplates({ data: deps.page }),
+    search: deps,
+    catalog: await loadTemplates({ data: deps }),
   }),
   head: () =>
     pageHead({
@@ -39,7 +44,9 @@ export const Route = createFileRoute("/templates")({
 });
 
 function Templates() {
-  const { page, catalog } = Route.useLoaderData();
+  const { search, catalog } = Route.useLoaderData();
+  const { page = 0, q, tag, license } = search;
+  const filtered = !!(q || tag || license);
   return (
     <Page>
       <main id="main-content" className="mx-auto max-w-6xl px-6 py-16">
@@ -61,6 +68,9 @@ function Templates() {
           </a>
         </div>
 
+        {/* Remounted per search, so that the fields always show it. */}
+        <Filters key={JSON.stringify([q, tag, license])} search={search} />
+
         {!catalog.ok ? (
           <Notice
             title="Templates are temporarily unavailable"
@@ -81,6 +91,11 @@ function Templates() {
             title="No more templates"
             body="Return to the previous page to keep browsing."
           />
+        ) : filtered ? (
+          <Notice
+            title="No matching templates"
+            body="Try fewer words, or clear a filter."
+          />
         ) : (
           <Notice
             title="The library is taking shape"
@@ -92,7 +107,7 @@ function Templates() {
           {page > 0 && (
             <Link
               to="/templates"
-              search={{ page: page - 1 || undefined }}
+              search={{ ...search, page: page - 1 || undefined }}
               className={linkButton({ variant: "outline" })}
             >
               Previous
@@ -101,7 +116,7 @@ function Templates() {
           {catalog.ok && catalog.hasNext && (
             <Link
               to="/templates"
-              search={{ page: page + 1 }}
+              search={{ ...search, page: page + 1 }}
               className={linkButton({ variant: "outline" })}
             >
               Next
@@ -110,6 +125,69 @@ function Templates() {
         </nav>
       </main>
     </Page>
+  );
+}
+
+// A plain GET form, so filtering works before the page hydrates.
+function Filters({ search }: { search: TemplateSearch }) {
+  const navigate = Route.useNavigate();
+  return (
+    <search className="mb-12 block">
+      <form
+        method="get"
+        action="/templates"
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void navigate({
+            search: parseTemplateSearch(
+              Object.fromEntries(new FormData(event.currentTarget)),
+            ),
+          });
+        }}
+      >
+        <label className="min-w-0 flex-1 basis-60 space-y-1 text-sm">
+          <span className="font-medium">Search</span>
+          <Input
+            type="search"
+            name="q"
+            maxLength={maxTemplateQuery}
+            placeholder="Title, description or publisher"
+            defaultValue={search.q ?? ""}
+          />
+        </label>
+        <label className="min-w-0 flex-1 basis-40 space-y-1 text-sm">
+          <span className="font-medium">Tag</span>
+          <Input
+            name="tag"
+            maxLength={maxTemplateTag}
+            placeholder="thesis"
+            defaultValue={search.tag ?? ""}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="block font-medium">License</span>
+          <NativeSelect name="license" defaultValue={search.license ?? ""}>
+            <NativeSelectOption value="">Any license</NativeSelectOption>
+            {Object.entries(templateLicenses).map(([id, label]) => (
+              <NativeSelectOption key={id} value={id}>
+                {label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </label>
+        <Button type="submit">Filter</Button>
+        {(search.q || search.tag || search.license) && (
+          <Link
+            to="/templates"
+            search={{}}
+            className={linkButton({ variant: "outline" })}
+          >
+            Clear
+          </Link>
+        )}
+      </form>
+    </search>
   );
 }
 
@@ -161,8 +239,14 @@ function TemplateCard({
         className="text-muted-foreground mt-3 flex flex-wrap gap-2 text-xs"
       >
         {item.tags.map((tag) => (
-          <li key={tag} className="bg-muted rounded px-2 py-1">
-            {tag}
+          <li key={tag}>
+            <Link
+              to="/templates"
+              search={{ tag }}
+              className="bg-muted hover:text-foreground block rounded px-2 py-1 hover:underline"
+            >
+              {tag}
+            </Link>
           </li>
         ))}
       </ul>

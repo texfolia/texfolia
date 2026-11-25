@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import {
   fetchTemplateCatalog,
   parseTemplatePage,
+  parseTemplateSearch,
   templatePageSize,
   type PublicTemplate,
 } from "./templates";
@@ -14,6 +15,28 @@ test("page numbers are clamped to the catalog API range", () => {
   expect(parseTemplatePage(-4)).toBe(0);
   expect(parseTemplatePage(5000)).toBe(1000);
   expect(parseTemplatePage("nope")).toBe(0);
+});
+
+test("only filters the catalog API accepts are kept", () => {
+  expect(
+    parseTemplateSearch({
+      page: 2,
+      q: "  grant proposal ",
+      tag: " Thesis ",
+      license: "MIT",
+      other: "x",
+    }),
+  ).toEqual({ page: 2, q: "grant proposal", tag: "thesis", license: "MIT" });
+  expect(parseTemplateSearch({ q: 2024 }).q).toBe("2024");
+  expect(
+    parseTemplateSearch({ page: 0, q: " ", tag: {}, license: "toString" }),
+  ).toEqual({
+    page: undefined,
+    q: undefined,
+    tag: undefined,
+    license: undefined,
+  });
+  expect(parseTemplateSearch({ q: "x".repeat(500) }).q).toHaveLength(100);
 });
 
 const template: PublicTemplate = {
@@ -28,22 +51,36 @@ const template: PublicTemplate = {
 
 test("the catalog is read from the app origin", async () => {
   let requested = "";
-  const page = await fetchTemplateCatalog("https://app.example", 2, (async (
-    input: URL,
-    _init?: RequestInit,
-  ) => {
+  const fetcher = (async (input: URL, _init?: RequestInit) => {
     requested = input.href;
     return Response.json([template]);
-  }) as typeof fetch);
+  }) as typeof fetch;
+  await fetchTemplateCatalog(
+    "https://app.example",
+    { q: "a&b", tag: "thesis", license: "MIT" },
+    fetcher,
+  );
+  expect(requested).toBe(
+    "https://app.example/api/templates?page=0&q=a%26b&tag=thesis&license=MIT",
+  );
+  const page = await fetchTemplateCatalog(
+    "https://app.example",
+    { page: 2 },
+    fetcher,
+  );
   expect(requested).toBe("https://app.example/api/templates?page=2");
   expect(page).toEqual({ ok: true, templates: [template], hasNext: false });
 });
 
 test("a full page offers a next page", async () => {
-  const page = await fetchTemplateCatalog("https://app.example", 0, (async () =>
-    Response.json(
-      Array(templatePageSize).fill(template),
-    )) as unknown as typeof fetch);
+  const page = await fetchTemplateCatalog(
+    "https://app.example",
+    {},
+    (async () =>
+      Response.json(
+        Array(templatePageSize).fill(template),
+      )) as unknown as typeof fetch,
+  );
   expect(page.ok && page.hasNext).toBe(true);
 });
 
@@ -51,13 +88,13 @@ test("app errors and network failures become an unavailable gallery", async () =
   expect(
     await fetchTemplateCatalog(
       "https://app.example",
-      0,
+      {},
       (async () =>
         new Response("", { status: 503 })) as unknown as typeof fetch,
     ),
   ).toEqual({ ok: false });
   expect(
-    await fetchTemplateCatalog("https://app.example", 0, (async () => {
+    await fetchTemplateCatalog("https://app.example", {}, (async () => {
       throw new TypeError("offline");
     }) as unknown as typeof fetch),
   ).toEqual({ ok: false });

@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import { TemplateActions } from "#/components/template-actions";
 import { webPath } from "#/lib/origins";
 import { templateLicenseLabels, templateLicenseUrls } from "#/lib/templates";
 import { useTemplatePreviews } from "#/lib/templates/template-preview";
@@ -49,7 +50,8 @@ export const Route = createFileRoute("/template/$templateId")({
               ? [{ property: "og:image", content: template.previewUrl }]
               : []),
             ...(template.visibility === "unlisted" ||
-            template.status !== "approved"
+            template.status !== "approved" ||
+            !template.published
               ? [{ name: "robots", content: "noindex, nofollow" }]
               : []),
           ]
@@ -174,66 +176,89 @@ function TemplatePage() {
                 the gallery.
               </p>
             )}
-            {template.status === "approved" ? (
-              <div className="mt-8 space-y-4">
-                {account.signedIn ? (
-                  <>
-                    <label
-                      htmlFor="destination"
-                      className="block text-sm font-medium"
-                    >
-                      Create your copy in
-                    </label>
-                    <NativeSelect
-                      id="destination"
-                      value={destination}
-                      onChange={(event) => setDestination(event.target.value)}
-                      className="w-full"
-                    >
-                      <NativeSelectOption value="">
-                        Personal projects
-                      </NativeSelectOption>
-                      {account.destinations.map((org) => (
-                        <NativeSelectOption key={org.id} value={org.id}>
-                          {org.name}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          const result = await openTemplate({
-                            data: {
-                              templateId: template.id,
-                              organizationId: destination || null,
-                            },
-                          });
-                          await navigate({
-                            to: "/project/$projectId",
-                            params: { projectId: result.id },
-                          });
-                        })
-                      }
-                    >
-                      {busy ? "Working…" : "Open in Texfolia"}
-                    </Button>
-                  </>
-                ) : (
-                  <Link
-                    to="/login"
-                    search={{ redirectTo: `/template/${template.id}` }}
-                    className={buttonVariants()}
-                  >
-                    Sign in to open in Texfolia
-                  </Link>
-                )}
+            {template.canManage && (
+              <div className="mt-6">
+                <TemplateActions
+                  template={template}
+                  onChanged={() => router.invalidate()}
+                  onDeleted={() => navigate({ to: "/templates/publish" })}
+                />
+              </div>
+            )}
+            {!template.published && (
+              <div
+                className="mt-8 space-y-4 rounded-lg border p-5"
+                role="status"
+              >
+                <h2 className="font-medium">Unpublished</h2>
                 <p className="text-muted-foreground text-sm">
-                  Your copy is independent. Changes here or in the original
-                  project won’t affect it. Follow the included license when
-                  reusing or redistributing the files.
+                  Only its publisher and reviewers can see this page.
+                  Republishing keeps the URL and the review.
                 </p>
               </div>
+            )}
+            {template.status === "approved" ? (
+              template.published && (
+                <div className="mt-8 space-y-4">
+                  {account.signedIn ? (
+                    <>
+                      <label
+                        htmlFor="destination"
+                        className="block text-sm font-medium"
+                      >
+                        Create your copy in
+                      </label>
+                      <NativeSelect
+                        id="destination"
+                        value={destination}
+                        onChange={(event) => setDestination(event.target.value)}
+                        className="w-full"
+                      >
+                        <NativeSelectOption value="">
+                          Personal projects
+                        </NativeSelectOption>
+                        {account.destinations.map((org) => (
+                          <NativeSelectOption key={org.id} value={org.id}>
+                            {org.name}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                      <Button
+                        disabled={busy}
+                        onClick={() =>
+                          run(async () => {
+                            const result = await openTemplate({
+                              data: {
+                                templateId: template.id,
+                                organizationId: destination || null,
+                              },
+                            });
+                            await navigate({
+                              to: "/project/$projectId",
+                              params: { projectId: result.id },
+                            });
+                          })
+                        }
+                      >
+                        {busy ? "Working…" : "Open in Texfolia"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Link
+                      to="/login"
+                      search={{ redirectTo: `/template/${template.id}` }}
+                      className={buttonVariants()}
+                    >
+                      Sign in to open in Texfolia
+                    </Link>
+                  )}
+                  <p className="text-muted-foreground text-sm">
+                    Your copy is independent. Changes here or in the original
+                    project won’t affect it. Follow the included license when
+                    reusing or redistributing the files.
+                  </p>
+                </div>
+              )
             ) : (
               <div
                 className="mt-8 space-y-4 rounded-lg border p-5"
@@ -247,42 +272,47 @@ function TemplatePage() {
                     }[template.status]
                   }
                 </h2>
+                {template.rejectionReason && (
+                  <p className="text-sm wrap-anywhere whitespace-pre-wrap">
+                    {template.rejectionReason}
+                  </p>
+                )}
                 <p className="text-muted-foreground text-sm">
-                  {template.error ||
-                    (template.status === "pending"
-                      ? "A reviewer checks each snapshot before it becomes available. Your snapshot will keep this URL."
-                      : "Only you and reviewers can see this page until the template is approved.")}
+                  {template.status === "pending"
+                    ? "A reviewer checks each snapshot before it becomes available. Your snapshot will keep this URL."
+                    : "Only you and reviewers can see this page until the template is approved."}
                 </p>
               </div>
             )}
-            {template.previewStatus === "failed" && template.canManage && (
-              <div className="mt-6 space-y-3" role="status">
-                <p className="text-sm">
-                  {template.error ||
-                    "Preview unavailable. You can retry this snapshot."}
-                </p>
-                <Button
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    run(async () => {
-                      await refreshTemplatePreview({
-                        data: { templateId: template.id, retry: true },
-                      });
-                      await router.invalidate();
-                    })
-                  }
-                >
-                  Retry preview
-                </Button>
-              </div>
-            )}
+            {template.previewStatus === "failed" &&
+              template.canRetryPreview && (
+                <div className="mt-6 space-y-3" role="status">
+                  <p className="text-sm">
+                    {template.error ||
+                      "Preview unavailable. You can retry this snapshot."}
+                  </p>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(async () => {
+                        await refreshTemplatePreview({
+                          data: { templateId: template.id, retry: true },
+                        });
+                        await router.invalidate();
+                      })
+                    }
+                  >
+                    Retry preview
+                  </Button>
+                </div>
+              )}
             {error && (
               <p role="alert" className="text-destructive mt-4">
                 {error}
               </p>
             )}
-            {template.status === "approved" && (
+            {template.status === "approved" && template.published && (
               <details className="mt-10 border-t pt-5">
                 <summary className="text-muted-foreground cursor-pointer text-sm">
                   Report this template

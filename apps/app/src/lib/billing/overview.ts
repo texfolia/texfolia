@@ -7,9 +7,9 @@ import { getOrganizationAiSettings, payerAiSpend } from "./metering";
 import { BillingError, nanoDollars } from "./usage";
 
 /**
- * The billing settings page: the user's organizations, the selected
- * organization's members and invitations, and the subscriptions of the
- * selected payer (the organization, or the user) when the user may manage them.
+ * The billing settings page: the user's organizations, and the subscriptions of
+ * the selected payer (the organization, or the user) when the user may manage
+ * them.
  */
 export async function billingOverview(
   db: Db,
@@ -29,11 +29,7 @@ export async function billingOverview(
         where: { id: organizationId },
         columns: { id: true, name: true },
         with: {
-          members: {
-            columns: { id: true, userId: true, role: true },
-            with: { user: { columns: { email: true } } },
-          },
-          invitations: { columns: { id: true, email: true, status: true } },
+          members: { columns: { userId: true, role: true } },
         },
       })
     : null;
@@ -68,10 +64,7 @@ export async function billingOverview(
       ? {
           id: selected.id,
           name: selected.name,
-          members: selected.members.flatMap((m) =>
-            m.user ? [{ ...m, user: m.user }] : [],
-          ),
-          invitations: selected.invitations,
+          seats: selected.members.length,
         }
       : null,
     canManage,
@@ -84,7 +77,6 @@ export async function billingOverview(
         cancelAtPeriodEnd,
       }),
     ),
-    userId,
   };
 }
 

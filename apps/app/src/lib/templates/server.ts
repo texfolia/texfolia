@@ -12,6 +12,7 @@ export {
 } from "./catalog.server";
 export { collectTemplateObjects } from "./cleanup.server";
 export { templatePreview } from "./preview-response.server";
+export { deleteTemplate, setTemplatePublished } from "./publication.server";
 export {
   refreshTemplatePreview,
   refreshTemplatePreviews,

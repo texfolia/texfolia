@@ -26,6 +26,13 @@ import {
 } from "#/lib/projects/live";
 
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "./captcha";
+import {
+  assertAccountDeletable,
+  assertOrganizationPolicy,
+  memberOrganizations,
+  organizationRoles,
+  syncSeats,
+} from "./organization-policy";
 
 // Loaded on first use because only Workers provide the binding module.
 async function deliver(message: EmailMessage) {
@@ -54,6 +61,7 @@ export function createOrganizationPlugin({
   deleting?: ReturnType<typeof deletionNotice>;
 }) {
   return organization({
+    roles: organizationRoles,
     organizationHooks: {
       async beforeDeleteOrganization({ organization }) {
         await deleting?.before({ organizationId: organization.id });
@@ -96,6 +104,8 @@ const authoritativePaths = ["/organization/", "/subscription/"];
 
 export const beforeAuth = createAuthMiddleware(async (ctx) => {
   assertBillingScope(ctx);
+  await assertOrganizationPolicy(ctx);
+  await assertAccountDeletable(ctx);
   const cookie = ctx.headers?.get("cookie");
   if (
     !cookie ||
@@ -132,6 +142,29 @@ const removedMemberResponseSchema = z.union([
   removedMemberSchema,
 ]);
 
+export function createAfterAuth({
+  db,
+  live,
+}: {
+  db: Db;
+  live: LiveProjects | undefined;
+}) {
+  return createAuthMiddleware(async (ctx) => {
+    // Browsers keep build files, which the next user must not find.
+    if (ctx.path === "/sign-out" || ctx.path === "/delete-user")
+      ctx.setHeader("Clear-Site-Data", '"cache"');
+    const leaving = ctx.path === "/organization/leave";
+    if (!leaving && ctx.path !== "/organization/remove-member") return;
+    const removed = removedMemberResponseSchema.safeParse(ctx.context.returned);
+    if (!removed.success) return;
+    await invalidateOrganizationAccess({ db, live, ...removed.data });
+    if (leaving)
+      await syncSeats(ctx, { id: removed.data.userId }, [
+        removed.data.organizationId,
+      ]);
+  });
+}
+
 // Reads its secrets from process.env. BETTER_AUTH_URL is the app origin
 // (https://app.texfolia.com in production), where OAuth callbacks land.
 export function createAuth(db: Db, live?: LiveProjects) {
@@ -155,6 +188,8 @@ export function createAuth(db: Db, live?: LiveProjects) {
   );
 
   const deleting = deletionNotice({ db, live });
+  // The organizations of an account being deleted. An instance serves one request.
+  let leaving: string[] = [];
 
   return betterAuth({
     baseURL,
@@ -187,27 +222,25 @@ export function createAuth(db: Db, live?: LiveProjects) {
     },
     hooks: {
       before: beforeAuth,
-      after: createAuthMiddleware(async (ctx) => {
-        // Browsers keep build files, which the next user must not find.
-        if (ctx.path === "/sign-out" || ctx.path === "/delete-user")
-          ctx.setHeader("Clear-Site-Data", '"cache"');
-        if (
-          ctx.path !== "/organization/remove-member" &&
-          ctx.path !== "/organization/leave"
-        )
-          return;
-        const removed = removedMemberResponseSchema.safeParse(
-          ctx.context.returned,
-        );
-        if (removed.success)
-          await invalidateOrganizationAccess({
-            db,
-            live,
-            ...removed.data,
-          });
-      }),
+      after: createAfterAuth({ db, live }),
     },
-    account: { encryptOAuthTokens: true, accountLinking: { enabled: true } },
+    account: {
+      encryptOAuthTokens: true,
+      // Everyone can sign in with an emailed code, so no account is the last way in.
+      accountLinking: { enabled: true, allowUnlinkingAll: true },
+    },
+    databaseHooks: {
+      user: {
+        delete: {
+          async before(user, ctx) {
+            if (ctx) leaving = await memberOrganizations(ctx, user.id);
+          },
+          async after(user, ctx) {
+            if (ctx) await syncSeats(ctx, user, leaving);
+          },
+        },
+      },
+    },
     user: {
       deleteUser: {
         enabled: true,

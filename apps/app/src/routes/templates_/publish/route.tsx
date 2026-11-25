@@ -1,4 +1,9 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useRouter,
+} from "@tanstack/react-router";
 import { Button } from "@texfolia/ui/button";
 import { Checkbox } from "@texfolia/ui/checkbox";
 import { Input } from "@texfolia/ui/input";
@@ -8,6 +13,7 @@ import { useState } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import { TemplateActions } from "#/components/template-actions";
 import { getSession } from "#/lib/auth/auth.functions";
 import { webPath } from "#/lib/origins";
 import { getProjects } from "#/lib/projects/project.functions";
@@ -49,6 +55,7 @@ export const Route = createFileRoute("/templates_/publish")({
 function PublishTemplatePage() {
   const { projects, templates } = Route.useLoaderData();
   const navigate = Route.useNavigate();
+  const router = useRouter();
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -241,16 +248,32 @@ function PublishTemplatePage() {
                   key={template.id}
                   className="flex flex-wrap items-center justify-between gap-3 py-4"
                 >
-                  <Link
-                    to="/template/$templateId"
-                    params={{ templateId: template.id }}
-                    className="underline underline-offset-4"
-                  >
-                    {template.title}
-                  </Link>
-                  <span className="text-muted-foreground text-sm">
-                    {template.status} · {template.visibility}
-                  </span>
+                  <div className="min-w-0">
+                    <Link
+                      to="/template/$templateId"
+                      params={{ templateId: template.id }}
+                      className="wrap-anywhere underline underline-offset-4"
+                    >
+                      {template.title}
+                    </Link>
+                    <p className="text-muted-foreground text-sm">
+                      {template.status} · {template.visibility}
+                      {template.published ? "" : " · unpublished"}
+                    </p>
+                    {template.status === "rejected" &&
+                      template.rejectionReason && (
+                        <p className="mt-1 text-sm wrap-anywhere whitespace-pre-wrap">
+                          {template.rejectionReason}
+                        </p>
+                      )}
+                  </div>
+                  {template.canManage && (
+                    <TemplateActions
+                      template={template}
+                      onChanged={() => router.invalidate()}
+                      onDeleted={() => router.invalidate()}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

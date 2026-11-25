@@ -58,13 +58,12 @@ function BillingError() {
 }
 
 function BillingPage() {
-  const { organizations, selected, canManage, ai, subscriptions, userId } =
+  const { organizations, selected, canManage, ai, subscriptions } =
     Route.useLoaderData();
   const { plan } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [cap, setCap] = useState(String(ai?.monthlyCapDollars ?? ""));
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
@@ -216,7 +215,7 @@ function BillingPage() {
             </h2>
             <p className="text-muted-foreground leading-7">
               {selected
-                ? `${selected.members.length} ${selected.members.length === 1 ? "member" : "members"} × $${paidPlans.team.monthlyUsd} USD/month = $${selected.members.length * paidPlans.team.monthlyUsd} USD/month. Every member, including owners and admins, is a paid seat. Seat changes are prorated.`
+                ? `${selected.seats} ${selected.seats === 1 ? "member" : "members"} × $${paidPlans.team.monthlyUsd} USD/month = $${selected.seats * paidPlans.team.monthlyUsd} USD/month. Every member, including owners and admins, is a paid seat. Seat changes are prorated.`
                 : `$${paidPlans.pro.monthlyUsd} USD/month for your personal account.`}
             </p>
             <p className="text-muted-foreground leading-7">
@@ -227,10 +226,7 @@ function BillingPage() {
                 "The organization pays for members' usage in its own projects, up to a shared monthly cap set by its owners and admins. Usage in personal projects needs a personal Pro plan, which is billed separately."}
             </p>
             {!canManage ? (
-              <p>
-                Only an organization owner or admin can manage billing and
-                members.
-              </p>
+              <p>Only an organization owner or admin can manage billing.</p>
             ) : subscription ? (
               <>
                 <p className="text-sm">
@@ -334,130 +330,15 @@ function BillingPage() {
             </form>
           </section>
         )}
-        {selected && canManage && (
-          <section
-            className="space-y-5 border-t pt-8"
-            aria-labelledby="members-heading"
-          >
-            <h2 id="members-heading" className="text-xl font-semibold">
-              Team members
-            </h2>
-            <p className="text-muted-foreground text-sm leading-6">
-              Invitations become paid seats when accepted. Removing a member
-              removes their Team access and updates your seat count.
-            </p>
-            <ul className="divide-y">
-              {selected.members.map((member) => (
-                <li
-                  key={member.id}
-                  className="flex flex-wrap items-center justify-between gap-3 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="wrap-anywhere">{member.user.email}</p>
-                    <p className="text-muted-foreground text-sm">
-                      {member.role}
-                    </p>
-                  </div>
-                  {member.userId !== userId && member.role === "member" && (
-                    <Button
-                      variant="outline"
-                      disabled={pending}
-                      onClick={() =>
-                        void run(async () => {
-                          const result =
-                            await authClient.organization.removeMember({
-                              organizationId: selected.id,
-                              memberIdOrEmail: member.id,
-                            });
-                          if (result.error)
-                            throw new Error(
-                              result.error.message ||
-                                "We couldn't remove this member. Please try again.",
-                            );
-                          await router.invalidate();
-                          setStatus(
-                            "Member removed. Billing follows current membership.",
-                          );
-                        })
-                      }
-                    >
-                      Remove member
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <form
-              className="space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run(async () => {
-                  const result = await authClient.organization.inviteMember({
-                    organizationId: selected.id,
-                    email: email.trim(),
-                    role: "member",
-                  });
-                  if (result.error)
-                    throw new Error(
-                      result.error.message ||
-                        "We couldn't send this invitation. Please try again.",
-                    );
-                  setEmail("");
-                  await router.invalidate();
-                  setStatus(
-                    "Invitation sent. A seat will be added when it is accepted.",
-                  );
-                });
-              }}
+        {selected && (
+          <section className="border-t pt-8">
+            <Link
+              to="/settings/organizations"
+              search={{ organizationId: selected.id }}
+              className="underline underline-offset-4"
             >
-              <label htmlFor="member-email" className="text-sm font-medium">
-                Invite by email
-              </label>
-              <Input
-                id="member-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              <Button type="submit" variant="outline" disabled={pending}>
-                Send invitation
-              </Button>
-            </form>
-            <ul className="space-y-3">
-              {selected.invitations
-                .filter((invite) => invite.status === "pending")
-                .map((invite) => (
-                  <li
-                    key={invite.id}
-                    className="flex flex-wrap items-center justify-between gap-3 text-sm"
-                  >
-                    <span className="wrap-anywhere">
-                      {invite.email} · Invited
-                    </span>
-                    <Button
-                      variant="ghost"
-                      disabled={pending}
-                      onClick={() =>
-                        void run(async () => {
-                          const result =
-                            await authClient.organization.cancelInvitation({
-                              invitationId: invite.id,
-                            });
-                          if (result.error)
-                            throw new Error(
-                              result.error.message ||
-                                "We couldn't cancel this invitation. Please try again.",
-                            );
-                          await router.invalidate();
-                        })
-                      }
-                    >
-                      Cancel invitation
-                    </Button>
-                  </li>
-                ))}
-            </ul>
+              {canManage ? "Manage members and roles" : "See members"}
+            </Link>
           </section>
         )}
         <Link

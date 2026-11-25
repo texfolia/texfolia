@@ -65,10 +65,16 @@ const serverControlSchema = z.discriminatedUnion("type", [
   // Everyone with a file open in the project, whichever file it is.
   z.object({
     type: z.literal("people"),
-    people: z.array(z.object({ name: z.string(), color: z.string() })),
+    people: z.array(
+      z.object({
+        name: z.string(),
+        color: z.string(),
+        nodeId: documentIdSchema.optional(),
+      }),
+    ),
   }),
 ]);
-export type Person = { name: string; color: string };
+export type Person = { name: string; color: string; nodeId?: string };
 
 export type ClientMessage =
   | { type: "sync"; vector: Uint8Array }

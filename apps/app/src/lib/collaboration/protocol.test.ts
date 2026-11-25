@@ -108,7 +108,14 @@ describe("collaboration protocol", () => {
         updatedAt: 1,
       },
       { type: "error", message: "nope" },
-      { type: "people", people: [{ name: "Ada", color: "#123456" }] },
+      {
+        type: "people",
+        people: [
+          { name: "Ada", color: "#123456" },
+          { name: "Grace", color: "#2563eb", nodeId: crypto.randomUUID() },
+          { name: "Alan", color: "#dc2626", nodeId: "scratchpad" },
+        ],
+      },
     ] satisfies ServerMessage[])
       expect(decodeServerMessage(buffer(encodeServerMessage(message)))).toEqual(
         message,

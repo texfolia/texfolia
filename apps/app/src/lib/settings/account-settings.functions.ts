@@ -9,9 +9,15 @@ export const getConnections = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     const session = await ensureSession();
     return context.db
-      .select({ provider: account.providerId, scope: account.scope })
+      .select({
+        id: account.id,
+        provider: account.providerId,
+        scope: account.scope,
+        createdAt: account.createdAt,
+      })
       .from(account)
-      .where(eq(account.userId, session.user.id));
+      .where(eq(account.userId, session.user.id))
+      .orderBy(account.createdAt);
   },
 );
 export const getAccountAiSettings = createServerFn({ method: "GET" }).handler(

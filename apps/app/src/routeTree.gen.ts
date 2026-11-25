@@ -21,12 +21,14 @@ import { Route as SettingsAccountRouteRouteImport } from './routes/settings/acco
 import { Route as SettingsAiRouteRouteImport } from './routes/settings/ai/route'
 import { Route as SettingsBillingRouteRouteImport } from './routes/settings/billing/route'
 import { Route as SettingsConnectionsRouteRouteImport } from './routes/settings/connections/route'
+import { Route as SettingsOrganizationsRouteRouteImport } from './routes/settings/organizations/route'
 import { Route as SettingsPreferencesRouteRouteImport } from './routes/settings/preferences/route'
 import { Route as SettingsUsageRouteRouteImport } from './routes/settings/usage/route'
 import { Route as ShareTokenRouteImport } from './routes/share/$token'
 import { Route as TemplateTemplateIdRouteRouteImport } from './routes/template/$templateId/route'
 import { Route as TemplatesPublishRouteRouteImport } from './routes/templates_/publish/route'
 import { Route as TemplatesReviewRouteRouteImport } from './routes/templates_/review/route'
+import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAiProjectIdRouteImport } from './routes/api/ai/$projectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api/compile/$projectId'
@@ -100,6 +102,12 @@ const SettingsConnectionsRouteRoute =
     path: '/connections',
     getParentRoute: () => SettingsRouteRoute,
   } as any)
+const SettingsOrganizationsRouteRoute =
+  SettingsOrganizationsRouteRouteImport.update({
+    id: '/organizations',
+    path: '/organizations',
+    getParentRoute: () => SettingsRouteRoute,
+  } as any)
 const SettingsPreferencesRouteRoute =
   SettingsPreferencesRouteRouteImport.update({
     id: '/preferences',
@@ -129,6 +137,11 @@ const TemplatesPublishRouteRoute = TemplatesPublishRouteRouteImport.update({
 const TemplatesReviewRouteRoute = TemplatesReviewRouteRouteImport.update({
   id: '/templates_/review',
   path: '/templates/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountExportRoute = ApiAccountExportRouteImport.update({
+  id: '/api/account/export',
+  path: '/api/account/export',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAiProjectIdRoute = ApiAiProjectIdRouteImport.update({
@@ -199,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/settings/ai': typeof SettingsAiRouteRoute
   '/settings/billing': typeof SettingsBillingRouteRoute
   '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/organizations': typeof SettingsOrganizationsRouteRoute
   '/settings/preferences': typeof SettingsPreferencesRouteRoute
   '/settings/usage': typeof SettingsUsageRouteRoute
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
@@ -206,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/templates/review': typeof TemplatesReviewRouteRoute
   '/share/$token': typeof ShareTokenRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -228,6 +243,7 @@ export interface FileRoutesByTo {
   '/settings/ai': typeof SettingsAiRouteRoute
   '/settings/billing': typeof SettingsBillingRouteRoute
   '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/organizations': typeof SettingsOrganizationsRouteRoute
   '/settings/preferences': typeof SettingsPreferencesRouteRoute
   '/settings/usage': typeof SettingsUsageRouteRoute
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
@@ -235,6 +251,7 @@ export interface FileRoutesByTo {
   '/templates/review': typeof TemplatesReviewRouteRoute
   '/share/$token': typeof ShareTokenRoute
   '/settings': typeof SettingsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -259,6 +276,7 @@ export interface FileRoutesById {
   '/settings/ai': typeof SettingsAiRouteRoute
   '/settings/billing': typeof SettingsBillingRouteRoute
   '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/organizations': typeof SettingsOrganizationsRouteRoute
   '/settings/preferences': typeof SettingsPreferencesRouteRoute
   '/settings/usage': typeof SettingsUsageRouteRoute
   '/template/$templateId': typeof TemplateTemplateIdRouteRoute
@@ -266,6 +284,7 @@ export interface FileRoutesById {
   '/templates_/review': typeof TemplatesReviewRouteRoute
   '/share/$token': typeof ShareTokenRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
@@ -291,6 +310,7 @@ export interface FileRouteTypes {
     | '/settings/ai'
     | '/settings/billing'
     | '/settings/connections'
+    | '/settings/organizations'
     | '/settings/preferences'
     | '/settings/usage'
     | '/template/$templateId'
@@ -298,6 +318,7 @@ export interface FileRouteTypes {
     | '/templates/review'
     | '/share/$token'
     | '/settings/'
+    | '/api/account/export'
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
@@ -320,6 +341,7 @@ export interface FileRouteTypes {
     | '/settings/ai'
     | '/settings/billing'
     | '/settings/connections'
+    | '/settings/organizations'
     | '/settings/preferences'
     | '/settings/usage'
     | '/template/$templateId'
@@ -327,6 +349,7 @@ export interface FileRouteTypes {
     | '/templates/review'
     | '/share/$token'
     | '/settings'
+    | '/api/account/export'
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
@@ -350,6 +373,7 @@ export interface FileRouteTypes {
     | '/settings/ai'
     | '/settings/billing'
     | '/settings/connections'
+    | '/settings/organizations'
     | '/settings/preferences'
     | '/settings/usage'
     | '/template/$templateId'
@@ -357,6 +381,7 @@ export interface FileRouteTypes {
     | '/templates_/review'
     | '/share/$token'
     | '/settings/'
+    | '/api/account/export'
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
@@ -381,6 +406,7 @@ export interface RootRouteChildren {
   TemplatesPublishRouteRoute: typeof TemplatesPublishRouteRoute
   TemplatesReviewRouteRoute: typeof TemplatesReviewRouteRoute
   ShareTokenRoute: typeof ShareTokenRoute
+  ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAiProjectIdRoute: typeof ApiAiProjectIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
@@ -479,6 +505,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsConnectionsRouteRouteImport
       parentRoute: typeof SettingsRouteRoute
     }
+    '/settings/organizations': {
+      id: '/settings/organizations'
+      path: '/organizations'
+      fullPath: '/settings/organizations'
+      preLoaderRoute: typeof SettingsOrganizationsRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
     '/settings/preferences': {
       id: '/settings/preferences'
       path: '/preferences'
@@ -519,6 +552,13 @@ declare module '@tanstack/react-router' {
       path: '/templates/review'
       fullPath: '/templates/review'
       preLoaderRoute: typeof TemplatesReviewRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/export': {
+      id: '/api/account/export'
+      path: '/api/account/export'
+      fullPath: '/api/account/export'
+      preLoaderRoute: typeof ApiAccountExportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ai/$projectId': {
@@ -599,6 +639,7 @@ interface SettingsRouteRouteChildren {
   SettingsAiRouteRoute: typeof SettingsAiRouteRoute
   SettingsBillingRouteRoute: typeof SettingsBillingRouteRoute
   SettingsConnectionsRouteRoute: typeof SettingsConnectionsRouteRoute
+  SettingsOrganizationsRouteRoute: typeof SettingsOrganizationsRouteRoute
   SettingsPreferencesRouteRoute: typeof SettingsPreferencesRouteRoute
   SettingsUsageRouteRoute: typeof SettingsUsageRouteRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -609,6 +650,7 @@ const SettingsRouteRouteChildren: SettingsRouteRouteChildren = {
   SettingsAiRouteRoute: SettingsAiRouteRoute,
   SettingsBillingRouteRoute: SettingsBillingRouteRoute,
   SettingsConnectionsRouteRoute: SettingsConnectionsRouteRoute,
+  SettingsOrganizationsRouteRoute: SettingsOrganizationsRouteRoute,
   SettingsPreferencesRouteRoute: SettingsPreferencesRouteRoute,
   SettingsUsageRouteRoute: SettingsUsageRouteRoute,
   SettingsIndexRoute: SettingsIndexRoute,
@@ -631,6 +673,7 @@ const rootRouteChildren: RootRouteChildren = {
   TemplatesPublishRouteRoute: TemplatesPublishRouteRoute,
   TemplatesReviewRouteRoute: TemplatesReviewRouteRoute,
   ShareTokenRoute: ShareTokenRoute,
+  ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAiProjectIdRoute: ApiAiProjectIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,

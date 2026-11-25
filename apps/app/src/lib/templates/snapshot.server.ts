@@ -5,9 +5,10 @@ import {
   project,
   projectNode,
   template,
+  templatePublication,
   user,
 } from "@texfolia/db/schema";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, lt } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
@@ -21,6 +22,7 @@ import {
   type SourceTransaction,
 } from "#/lib/storage/server";
 
+import { availableTemplate } from "./catalog.server";
 import {
   openTemplateSchema,
   publishTemplateSchema,
@@ -57,6 +59,11 @@ type Publication = {
   templateId: string;
 };
 
+// The publishing limits count publications since then.
+function limitStart() {
+  return new Date(Date.now() - 24 * 60 * 60_000);
+}
+
 // Checks the publisher, their limits, and their access to the project. The
 // user's row lock serializes the limits.
 async function checkPublication(
@@ -86,12 +93,12 @@ async function checkPublication(
     return null;
   }
   const recent = await tx
-    .select({ createdAt: template.createdAt })
-    .from(template)
+    .select({ createdAt: templatePublication.createdAt })
+    .from(templatePublication)
     .where(
       and(
-        eq(template.ownerId, userId),
-        gte(template.createdAt, new Date(Date.now() - 24 * 60 * 60_000)),
+        eq(templatePublication.userId, userId),
+        gte(templatePublication.createdAt, limitStart()),
       ),
     );
   if (
@@ -192,7 +199,16 @@ export async function publishTemplate({
   }));
   return db.transaction(async (tx) => {
     const publisher = await checkPublication(tx, publication);
-    if (publisher)
+    if (publisher) {
+      await tx
+        .delete(templatePublication)
+        .where(
+          and(
+            eq(templatePublication.userId, userId),
+            lt(templatePublication.createdAt, limitStart()),
+          ),
+        );
+      await tx.insert(templatePublication).values({ templateId, userId });
       await tx.insert(template).values({
         id: templateId,
         ownerId: userId,
@@ -205,6 +221,7 @@ export async function publishTemplate({
         mainFile: data.mainFile,
         snapshot: templateSnapshotSchema.parse(snapshot),
       });
+    }
     return { id: templateId };
   });
 }
@@ -226,9 +243,7 @@ async function checkOpening(
   const [source] = await tx
     .select()
     .from(template)
-    .where(
-      and(eq(template.id, data.templateId), eq(template.status, "approved")),
-    )
+    .where(and(eq(template.id, data.templateId), availableTemplate))
     .for("share");
   if (!source) throw new Error("Template not found");
   if (data.organizationId) {
