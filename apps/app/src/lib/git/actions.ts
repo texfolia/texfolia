@@ -2,7 +2,6 @@ import type { Db } from "@texfolia/db";
 import {
   account,
   member,
-  project,
   projectCollaboration,
   projectGit,
   projectNode,
@@ -11,21 +10,25 @@ import { and, eq, isNull, inArray } from "drizzle-orm";
 import * as git from "isomorphic-git";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
-import { requestCollaborationCleanup } from "#/lib/collaboration/server";
-import { mapLimit } from "#/lib/map-limit";
+import { ByteBudget } from "#/lib/map-limit";
 import { projectPaths } from "#/lib/projects";
 import type { LockProject, ProjectTransaction } from "#/lib/projects/server";
+import { maxSourceFileBytes, maxSourceProjectBytes } from "#/lib/storage";
 import {
   commitSources,
   deletePrefix,
   prepareSourceBytes,
-  retireSources,
+  sourceBytesInFlight,
+  sourceConcurrency,
+  storeSource,
   type SourceBucket,
   type SourceUpload,
 } from "#/lib/storage/server";
 
+import { saveArchive } from "./archive";
 import { gitProvider, gitProviders, hasRepositoryAccess } from "./providers";
-import { GitRepository, gitHttp, type GitFiles } from "./repository";
+import { replaceFiles, type GitNode, type StoredSource } from "./replace-files";
+import { GitRepository, gitHttp, type GitFile } from "./repository";
 import {
   gitRemoteSchema,
   type GitAction,
@@ -80,8 +83,6 @@ export type GitAccessToken = (request: {
   provider: GitProvider;
 }) => Promise<string>;
 
-type GitNode = typeof projectNode.$inferSelect;
-
 async function readNodes(tx: ProjectTransaction, projectId: string) {
   return tx
     .select()
@@ -107,35 +108,125 @@ function nodeVersions(nodes: GitNode[]) {
   );
 }
 
-const readConcurrency = 8;
-
 class MissingObjectError extends Error {}
 
-// Reads every file. `cache` holds sources read earlier, by key, so reading the
-// project again only loads what changed.
-async function readFiles(
-  bucket: SourceBucket,
+type ProjectFile = GitFile & { source: StoredSource };
+
+function sourceHash(objectKey: string | null) {
+  return objectKey?.slice(objectKey.lastIndexOf("/") + 1) ?? "";
+}
+
+// The project's files as a working tree, read from R2 one at a time and only
+// when Git needs them. `blobs` names the Git blob of sources already hashed.
+function projectFiles(
+  bucket: Pick<SourceBucket, "get">,
   nodes: GitNode[],
-  cache: Map<string, Uint8Array>,
+  blobs: ReadonlyMap<string, string>,
 ) {
   const paths = projectPaths(nodes);
-  const queue = nodes.flatMap((node) => {
-    const path = paths.get(node.id);
-    return path ? [{ objectKey: node.objectKey, path }] : [];
-  });
-  const files: GitFiles = {};
-  await mapLimit(queue, readConcurrency, async ({ objectKey, path }) => {
-    let bytes = objectKey ? cache.get(objectKey) : new Uint8Array();
-    if (objectKey && !bytes) {
-      const object = await bucket.get(objectKey);
-      if (!object)
-        throw new MissingObjectError("Saved project source is missing.");
-      bytes = new Uint8Array(await object.arrayBuffer());
-      cache.set(objectKey, bytes);
-    }
-    files[path] = bytes ?? new Uint8Array();
-  });
+  const files = new Map<string, ProjectFile>();
+  for (const { id, kind, objectKey, sizeBytes } of nodes) {
+    const path = paths.get(id);
+    if (!path || kind === "folder") continue;
+    files.set(path, {
+      oid: blobs.get(sourceHash(objectKey)),
+      sizeBytes: Number(sizeBytes),
+      source: { objectKey, sizeBytes, kind },
+      async read() {
+        if (!objectKey) return new Uint8Array();
+        const object = await bucket.get(objectKey);
+        if (!object)
+          throw new MissingObjectError("Saved project source is missing.");
+        return new Uint8Array(await object.arrayBuffer());
+      },
+    });
+  }
   return files;
+}
+
+function sourceKind(bytes: Uint8Array) {
+  if (bytes.includes(0)) return "binary";
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return "text";
+  } catch {
+    return "binary";
+  }
+}
+
+const sourceLimitMessage =
+  "Repository exceeds project source limits (10 MiB per file, 50 MiB total).";
+
+// Finds or stores the content of every file in the working tree. Files and blobs
+// that the project already has are not read, and objects that live nodes use are
+// not stored again; `live` holds their keys.
+async function storeFiles({
+  bucket,
+  projectId,
+  repo,
+  current,
+  live,
+}: {
+  bucket: SourceBucket;
+  projectId: string;
+  repo: GitRepository;
+  /** The project's files, whose blobs a clean working tree knows. */
+  current: ReadonlyMap<string, ProjectFile>;
+  live: ReadonlySet<string | null>;
+}) {
+  const sources = new Map<string, StoredSource>();
+  for (const { oid, source } of current.values())
+    if (oid) sources.set(oid, source);
+  const uploads = new Map<string, SourceUpload>();
+  const files = new Map<string, StoredSource>();
+  const budget = new ByteBudget({
+    limit: sourceConcurrency,
+    maxBytes: sourceBytesInFlight,
+  });
+  const writes: Promise<void>[] = [];
+  let failure: { error: unknown } | undefined;
+  let total = 0;
+  for (const [path, file] of repo.files) {
+    if (failure) break;
+    const { oid, read } = file;
+    const kept = current.get(path);
+    let source =
+      kept === file ? kept.source : oid ? sources.get(oid) : undefined;
+    if (!source) {
+      // Inflating is sequential anyway; only the writes run side by side.
+      const bytes = await read();
+      if (bytes.byteLength > maxSourceFileBytes)
+        throw new Error(sourceLimitMessage);
+      const { objectKey, sizeBytes } = await prepareSourceBytes(
+        projectId,
+        bytes,
+      );
+      source = { objectKey, sizeBytes, kind: sourceKind(bytes) };
+      if (!live.has(objectKey) && !uploads.has(objectKey)) {
+        uploads.set(objectKey, {
+          objectKey,
+          sizeBytes,
+          stored: true,
+          bytes: read,
+        });
+        const release = await budget.acquire(bytes.byteLength);
+        writes.push(
+          storeSource(bucket, { objectKey, bytes })
+            .catch((error: unknown) => {
+              failure ??= { error };
+            })
+            .finally(release),
+        );
+      }
+    }
+    if (oid) sources.set(oid, source);
+    total += Number(source.sizeBytes);
+    if (total > maxSourceProjectBytes) throw new Error(sourceLimitMessage);
+    files.set(path, source);
+  }
+  await Promise.all(writes);
+  if (failure) throw failure.error;
+  return { files, uploads: [...uploads.values()] };
 }
 
 async function requireRemoteManager(
@@ -159,106 +250,6 @@ async function requireRemoteManager(
       );
   } else if (found.ownerId !== userId)
     throw new Error("Only the project owner can link or unlink a remote.");
-}
-
-async function replaceFiles(
-  tx: ProjectTransaction,
-  projectId: string,
-  files: Map<string, SourceUpload>,
-  nodes: GitNode[],
-) {
-  const root = nodes.find(
-    (node) => node.parentId === null && node.kind === "folder",
-  );
-  if (!root) throw new Error("Project root is missing.");
-  const paths = projectPaths(nodes);
-  const byPath = new Map(
-    nodes.flatMap((node) => {
-      const path = paths.get(node.id);
-      return path ? [[path, node] as const] : [];
-    }),
-  );
-  // Rebuild folders and reuse file IDs so open Yjs rooms retain their identity.
-  const removed = nodes.filter(
-    (node) =>
-      node.id !== root.id &&
-      (node.kind === "folder" || !files.has(paths.get(node.id) ?? "")),
-  );
-  await retireSources(
-    tx,
-    projectId,
-    removed.map((node) => node.objectKey),
-  );
-  if (removed.length) {
-    await requestCollaborationCleanup(tx, projectId);
-    await tx
-      .update(projectNode)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(
-        inArray(
-          projectNode.id,
-          removed.map((n) => n.id),
-        ),
-      );
-  }
-  const parents = new Map([["", root.id]]);
-  for (const [path, { bytes, objectKey, sizeBytes }] of files) {
-    const parts = path.split("/");
-    const name = parts.pop();
-    if (!name) throw new Error("Invalid git file name");
-    let prefix = "";
-    let parentId = root.id;
-    for (const part of parts) {
-      prefix = prefix ? `${prefix}/${part}` : part;
-      const existing = parents.get(prefix);
-      if (existing) {
-        parentId = existing;
-        continue;
-      }
-      const id = crypto.randomUUID();
-      await tx.insert(projectNode).values({
-        id,
-        projectId,
-        parentId,
-        name: part,
-        kind: "folder",
-        sizeBytes: 0n,
-      });
-      parents.set(prefix, id);
-      parentId = id;
-    }
-    let kind: "text" | "binary" = "text";
-    try {
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      if (bytes.includes(0)) kind = "binary";
-    } catch {
-      kind = "binary";
-    }
-    const existing = byPath.get(path);
-    if (existing && existing.objectKey !== objectKey)
-      await retireSources(tx, projectId, [existing.objectKey]);
-    const values = {
-      parentId,
-      name,
-      kind,
-      objectKey,
-      sizeBytes,
-      updatedAt: new Date(),
-    };
-    if (existing)
-      await tx
-        .update(projectNode)
-        .set(values)
-        .where(eq(projectNode.id, existing.id));
-    else
-      await tx
-        .insert(projectNode)
-        .values({ id: crypto.randomUUID(), projectId, ...values });
-  }
-  await tx
-    .update(project)
-    .set({ updatedAt: new Date() })
-    .where(eq(project.id, projectId));
 }
 
 // Status bar branch from the cached row; the full status restores the repository.
@@ -297,6 +288,20 @@ export async function gitVersion(tx: ProjectTransaction, projectId: string) {
 
 // Repositories created by the removed "initialize" action have no remote. They can
 // still be read, linked to an empty remote (keeping history) or unlinked.
+const changedMessage =
+  "The project changed while Git was syncing. Nothing was applied; try again.";
+
+async function loadRepository(
+  bucket: Pick<SourceBucket, "get">,
+  objectKey: string,
+) {
+  const object = await bucket.get(objectKey);
+  if (!object) throw new MissingObjectError("Saved git repository is missing.");
+  return objectKey.endsWith(".json")
+    ? GitRepository.restoreLegacy(await object.text())
+    : GitRepository.restore(object.body);
+}
+
 const hostedRepositoryMessage =
   "Texfolia no longer hosts Git repositories. Link an empty repository to push this history, or unlink it.";
 
@@ -334,58 +339,30 @@ export async function runGit({
     commits: [],
   };
   let host = "the host";
-  try {
-    const changedMessage =
-      "The project changed while Git was syncing. Nothing was applied; try again.";
-    const cache = new Map<string, Uint8Array>();
-    const readSnapshot = () =>
-      db.transaction(async (tx) => {
-        const found = await lock({
-          tx,
-          projectId,
-          userId: user.id,
-          access,
-        });
-        if (action.kind === "link" || action.kind === "unlink")
-          await requireRemoteManager(tx, found, user.id);
-        if (action.kind === "unlink") {
-          await tx
-            .delete(projectGit)
-            .where(eq(projectGit.projectId, projectId));
-          return null;
-        }
-        const [linked] = await tx
-          .select()
-          .from(projectGit)
-          .where(eq(projectGit.projectId, projectId));
-        if (!linked && readOnly) return null;
-        const nodes = await readNodes(tx, projectId);
-        return { linked, nodes };
+  const readSnapshot = () =>
+    db.transaction(async (tx) => {
+      const found = await lock({
+        tx,
+        projectId,
+        userId: user.id,
+        access,
       });
-    const loadSnapshotObjects = async (
-      linked: typeof projectGit.$inferSelect | undefined,
-      nodes: GitNode[],
-    ) => {
-      const [saved, files] = await Promise.all([
-        linked
-          ? bucket.get(linked.objectKey).then(async (object) => {
-              if (!object)
-                throw new MissingObjectError(
-                  "Saved git repository is missing.",
-                );
-              return object.text();
-            })
-          : Promise.resolve(null),
-        action.kind === "import"
-          ? Promise.resolve<GitFiles>({})
-          : readFiles(bucket, nodes, cache),
-      ]);
-      return { saved, files };
-    };
-    // Short snapshot transaction: no R2 reads or Git host requests while the project row is locked.
-    const snapshot = await readSnapshot();
-    if (!snapshot) return { status: empty };
-    let { linked, nodes } = snapshot;
+      if (action.kind === "link" || action.kind === "unlink")
+        await requireRemoteManager(tx, found, user.id);
+      if (action.kind === "unlink") {
+        await tx.delete(projectGit).where(eq(projectGit.projectId, projectId));
+        return null;
+      }
+      const [linked] = await tx
+        .select()
+        .from(projectGit)
+        .where(eq(projectGit.projectId, projectId));
+      if (!linked && readOnly) return null;
+      const nodes = await readNodes(tx, projectId);
+      return { linked, nodes };
+    });
+  type Snapshot = NonNullable<Awaited<ReturnType<typeof readSnapshot>>>;
+  const runSnapshot = async ({ linked, nodes }: Snapshot) => {
     const connecting = action.kind === "link" || action.kind === "import";
     if (connecting && linked?.url)
       throw new Error(
@@ -397,33 +374,21 @@ export async function runGit({
           ? hostedRepositoryMessage
           : "Link a repository first, or import one as a new project.",
       );
-    let remote = connecting
+    const remote = connecting
       ? action.remote
       : linked?.url
         ? gitRemoteSchema.parse(linked.url)
         : null;
     if (remote) host = gitProvider(remote.provider).label;
-    let saved: string | null;
-    let files: GitFiles;
-    try {
-      ({ saved, files } = await loadSnapshotObjects(linked, nodes));
-    } catch (error) {
-      if (!(error instanceof MissingObjectError)) throw error;
-      // An object may have been retired and garbage-collected after the
-      // snapshot lock was released. Re-check the DB before reporting corruption.
-      const latest = await readSnapshot();
-      const changed =
-        latest?.linked?.objectKey !== linked?.objectKey ||
-        nodeVersions(latest?.nodes ?? []) !== nodeVersions(nodes);
-      if (!changed) throw error;
-      if (!readOnly) throw new Error(changedMessage);
-      if (!latest) return { status: empty };
-      ({ linked, nodes } = latest);
-      remote = linked?.url ? gitRemoteSchema.parse(linked.url) : null;
-      if (remote) host = gitProvider(remote.provider).label;
-      ({ saved, files } = await loadSnapshotObjects(linked, nodes));
-    }
-    const repo = saved ? GitRepository.restore(saved) : new GitRepository();
+    const repo = linked
+      ? await loadRepository(bucket, linked.objectKey)
+      : new GitRepository();
+    const blobs = await repo.sourceBlobs();
+    let worktree =
+      action.kind === "import"
+        ? new Map<string, ProjectFile>()
+        : projectFiles(bucket, nodes, blobs);
+    repo.overlay(worktree);
     let http: git.HttpClient | undefined;
     if (
       remote &&
@@ -443,17 +408,31 @@ export async function runGit({
     // Saves the repository and, when pulling or switching branches, its files.
     // Applies only if nothing changed since the snapshot.
     const save = async (replaced?: GitNode[]) => {
-      const files = new Map<string, SourceUpload>();
-      if (replaced)
-        for (const [path, bytes] of Object.entries(repo.sources()))
-          files.set(
-            path,
-            await prepareSourceBytes(projectId, new Uint8Array(bytes)),
-          );
-      const stored = new Set(replaced?.map((node) => node.objectKey));
+      const live = new Set(replaced?.map((node) => node.objectKey));
+      const stored =
+        replaced &&
+        (await storeFiles({
+          bucket,
+          projectId,
+          repo,
+          current: worktree,
+          live,
+        }));
+      repo.saveSourceBlobs(
+        new Map(
+          [...repo.files].flatMap(([path, { oid }]) => {
+            const source = stored
+              ? stored.files.get(path)
+              : worktree.get(path)?.source;
+            return oid && source?.objectKey
+              ? [[sourceHash(source.objectKey), oid] as const]
+              : [];
+          }),
+        ),
+      );
       // Collection leaves recent clones alone until a row refers to them.
-      const objectKey = `git/${projectId}/${crypto.randomUUID()}.json`;
-      await bucket.put(objectKey, repo.serialize());
+      const objectKey = `git/${projectId}/${crypto.randomUUID()}.bin`;
+      await saveArchive(bucket, objectKey, repo.metadata());
       const values = {
         provider: remote?.provider ?? null,
         url: remote?.url ?? null,
@@ -475,11 +454,11 @@ export async function runGit({
           .where(eq(projectGit.projectId, projectId));
         if (current?.objectKey !== linked?.objectKey)
           throw new Error(changedMessage);
-        if (replaced) {
+        if (replaced && stored) {
           const latest = await readNodes(tx, projectId);
           if (nodeVersions(latest) !== nodeVersions(replaced))
             throw new Error(changedMessage);
-          await replaceFiles(tx, projectId, files, latest);
+          await replaceFiles(tx, projectId, latest, stored.files);
         }
         await tx
           .insert(projectGit)
@@ -490,14 +469,12 @@ export async function runGit({
           .values({ projectId })
           .onConflictDoNothing();
       };
+      // Files that live nodes already store stay stored until this commits.
       await commitSources({
         db,
         bucket,
         projectId,
-        // Files that live nodes already store stay stored until this commits.
-        uploads: [...files.values()].filter(
-          (file) => !stored.has(file.objectKey),
-        ),
+        uploads: stored?.uploads ?? [],
         run,
       });
     };
@@ -507,14 +484,15 @@ export async function runGit({
         const latest = await readSnapshot();
         if (!latest || latest.linked?.objectKey !== linked?.objectKey)
           throw new Error(changedMessage);
-        if (action.kind !== "import")
-          repo.overlay(await readFiles(bucket, latest.nodes, cache));
+        if (action.kind !== "import") {
+          worktree = projectFiles(bucket, latest.nodes, blobs);
+          repo.overlay(worktree);
+        }
         await change();
         await save(latest.nodes);
       });
     if (action.kind === "link" && http && remote)
       await repo.requireEmptyRemote(remote.url, http);
-    if (action.kind !== "import") repo.overlay(files);
     switch (action.kind) {
       case "import":
         if (http && remote) await repo.clone(remote.url, http);
@@ -574,6 +552,26 @@ export async function runGit({
       status: { remote, ...status },
       ...(action.kind === "diff" ? { diff: await repo.diff() } : {}),
     };
+  };
+  try {
+    // Short snapshot transaction: no R2 reads or Git host requests while the
+    // project row is locked.
+    const snapshot = await readSnapshot();
+    if (!snapshot) return { status: empty };
+    try {
+      return await runSnapshot(snapshot);
+    } catch (error) {
+      if (!(error instanceof MissingObjectError)) throw error;
+      // An object may have been retired and garbage-collected after the
+      // snapshot lock was released. Re-check the DB before reporting corruption.
+      const latest = await readSnapshot();
+      const changed =
+        latest?.linked?.objectKey !== snapshot.linked?.objectKey ||
+        nodeVersions(latest?.nodes ?? []) !== nodeVersions(snapshot.nodes);
+      if (!changed) throw error;
+      if (!readOnly) throw new Error(changedMessage);
+      return latest ? await runSnapshot(latest) : { status: empty };
+    }
   } catch (error) {
     if (error instanceof git.Errors.MergeConflictError)
       throw new Error(

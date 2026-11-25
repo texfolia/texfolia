@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { RequestCost } from "#/lib/billing/server";
 
-import { AiError, type AiModel } from "./schema";
+import { AiError, aiModelSchema, type AiModel } from "./schema";
 
 export type AiFetch = (
   input: RequestInfo | URL,
@@ -68,8 +68,8 @@ const catalogModel = z.object({
 });
 
 // Cloudflare exposes the catalog in the documented OpenRouter marketplace format.
-export async function gatewayModels(
-  config: AiConfig,
+export async function fetchGatewayModels(
+  config: Pick<AiConfig, "accountId" | "apiToken">,
   fetcher: AiFetch = fetch,
 ): Promise<AiModel[]> {
   const models: AiModel[] = [];
@@ -108,6 +108,71 @@ export async function gatewayModels(
       return models.sort((a, b) => a.name.localeCompare(b.name));
   }
   throw new Error("AI model catalog pagination limit exceeded");
+}
+
+/** How long a model's price or removal can take to reach the assistant. */
+const catalogSeconds = 10 * 60;
+
+type Catalog = { models: AiModel[]; expiresAt: number };
+// Finished catalogs only: a Worker request cannot wait for another's fetch.
+const catalogs = new Map<string, Catalog>();
+
+// Survives isolates, which a quiet app starts for almost every request.
+function sharedCatalogs() {
+  return typeof caches === "undefined"
+    ? undefined
+    : // Only Workers have it, which the DOM types do not know.
+      (caches as CacheStorage & { default?: Cache }).default;
+}
+
+const catalogSchema = z.object({
+  models: z.array(aiModelSchema),
+  expiresAt: z.number(),
+});
+
+/**
+ * The models on offer, cached for ten minutes. Prices here only size
+ * reservations; a request is charged what its Gateway log says.
+ */
+export async function gatewayModels(
+  config: Pick<AiConfig, "accountId" | "apiToken">,
+  {
+    fetcher = fetch,
+    cache = sharedCatalogs(),
+    now = Date.now,
+  }: {
+    fetcher?: AiFetch;
+    cache?: Pick<Cache, "match" | "put">;
+    now?: () => number;
+  } = {},
+): Promise<AiModel[]> {
+  const { accountId } = config;
+  const local = catalogs.get(accountId);
+  if (local && local.expiresAt > now()) return local.models;
+  const url = `https://ai-models.texfolia.internal/${accountId}`;
+  const stored = await cache
+    ?.match(url)
+    .then((response) => response?.json())
+    .catch(() => undefined);
+  const shared = catalogSchema.safeParse(stored).data;
+  if (shared && shared.expiresAt > now()) {
+    catalogs.set(accountId, shared);
+    return shared.models;
+  }
+  const catalog = {
+    models: await fetchGatewayModels(config, fetcher),
+    expiresAt: now() + catalogSeconds * 1000,
+  };
+  catalogs.set(accountId, catalog);
+  await cache
+    ?.put(
+      url,
+      Response.json(catalog, {
+        headers: { "Cache-Control": `max-age=${catalogSeconds}` },
+      }),
+    )
+    .catch(() => {});
+  return catalog.models;
 }
 
 export const gatewayLogSchema = z.object({

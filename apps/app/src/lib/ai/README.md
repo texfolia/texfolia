@@ -6,9 +6,9 @@ the assistant panel. See [Configure the managed assistant](../../../../docs/src/
 
 | Entry point        | Contents                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#/lib/ai`         | Client-safe contracts. Configuration: `aiConfigurationSchema`, `aiModelSchema`, `aiPreferencesSchema`, `maxOutputTokens`. Threads: `threadSchema`, `threadHistorySchema`, `threadActionSchema`, `storedMessageSchema`. `AiError` (a refusal with an HTTP status)                                                                                                                                    |
+| `#/lib/ai`         | Client-safe contracts. Configuration: `aiConfigurationSchema`, `aiModelSchema`, `aiPreferencesSchema`, `maxOutputTokens`. Threads: `threadSchema`, `threadListSchema`, `threadHistorySchema`, `threadActionSchema`, `storedMessageSchema`. `AiError` (a refusal with an HTTP status)                                                                                                                |
 | `#/lib/ai/server`  | Chat: `aiAccess` (session, project access, and payer), `startAssistant` (streamed runs and Git commit messages), `assistantConfiguration`, `updateAiPreferences`, and the request helpers `checkAiOrigin`, `readAiBody`, `aiErrorResponse`. Tools: `projectTools`. Threads: `listAssistantThreads`, `readAssistantThread`, `manageAssistantThread`. Types: `AssistantWorkspace`, `AssistantContext` |
-| `#/lib/ai/gateway` | Server-only AI Gateway access without the chat stack: `parseAiConfig`, `gatewayModels` (the catalog), `gatewayRequestCost` (prices for reconciliation), and the `AiConfig` and `AiFetch` types                                                                                                                                                                                                      |
+| `#/lib/ai/gateway` | Server-only AI Gateway access without the chat stack: `parseAiConfig`, `gatewayModels` (the catalog, cached for ten minutes), `gatewayRequestCost` (prices for reconciliation), and the `AiConfig` and `AiFetch` types                                                                                                                                                                              |
 | `#/lib/ai/ui`      | `AssistantSidebar` (the chat panel and its history list) and the primitives it uses: `ModelSelector`, `PromptInput`, `Reasoning`, `Sources`, `Suggestion`, `Tool`                                                                                                                                                                                                                                   |
 
 The rest of the app imports the core only through these entry points. The
@@ -37,6 +37,8 @@ The core takes the rest as arguments:
 - `connectionString` and `createAuth`: `startAssistant` opens its own database
   client, because the reply stream outlives the request handler, and rechecks
   the session before every model request.
+- `waitUntil`: keeps the Worker running until a run is saved and settled, even when
+  the client leaves.
 - `endpoint`, `plansUrl`, sizes, and the history resize handle:
   `AssistantSidebar` knows nothing about the workspace layout or app routes.
 

@@ -1,11 +1,12 @@
 import type { Db } from "@texfolia/db";
 import {
+  aiMeterAttachment,
   aiOrganizationSettings,
   aiRequest,
   aiRun,
   aiSettings,
 } from "@texfolia/db/schema";
-import { and, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import Stripe from "stripe";
 
 import type { AiPayer } from "./entitlements";
@@ -45,11 +46,48 @@ function createAiStripe(config: MeteringConfig) {
   });
 }
 
-export async function ensureAiSubscription(
-  config: MeteringConfig,
-  payer: AiPayer,
-) {
-  const stripe = createAiStripe(config);
+// A webhook drops an attachment as soon as Stripe changes the subscription, so
+// this only bounds how long a missed webhook goes unnoticed.
+const attachmentMs = 24 * 60 * 60_000;
+
+/**
+ * Makes sure the payer's subscription carries the AI usage price. Asks Stripe
+ * only when that is not already known.
+ */
+export async function ensureAiSubscription({
+  db,
+  config,
+  payer,
+  stripe = createAiStripe(config),
+}: {
+  db: Db;
+  config: MeteringConfig;
+  payer: AiPayer;
+  stripe?: Pick<
+    Stripe,
+    "prices" | "subscriptions" | "subscriptionItems" | "billing"
+  >;
+}) {
+  const attachment = {
+    stripeCustomerId: payer.customerId,
+    priceId: config.priceId,
+    meterEventName: config.meterEventName,
+  };
+  const [known] = await db
+    .select({ checkedAt: aiMeterAttachment.checkedAt })
+    .from(aiMeterAttachment)
+    .where(
+      and(
+        eq(aiMeterAttachment.stripeSubscriptionId, payer.subscriptionId),
+        eq(aiMeterAttachment.stripeCustomerId, attachment.stripeCustomerId),
+        eq(aiMeterAttachment.priceId, attachment.priceId),
+        eq(aiMeterAttachment.meterEventName, attachment.meterEventName),
+        gt(aiMeterAttachment.checkedAt, new Date(Date.now() - attachmentMs)),
+      ),
+    );
+  if (known) return;
+  // Recorded as of now: a change during the checks is newer than this.
+  const checkedAt = new Date();
   const [price, subscription] = await Promise.all([
     stripe.prices.retrieve(config.priceId),
     stripe.subscriptions.retrieve(payer.subscriptionId),
@@ -98,6 +136,24 @@ export async function ensureAiSubscription(
       },
       { idempotencyKey: `ai-item-${subscription.id}-${price.id}` },
     );
+  await db
+    .insert(aiMeterAttachment)
+    .values({
+      stripeSubscriptionId: payer.subscriptionId,
+      ...attachment,
+      checkedAt,
+    })
+    .onConflictDoUpdate({
+      target: aiMeterAttachment.stripeSubscriptionId,
+      set: { ...attachment, checkedAt },
+    });
+}
+
+/** Has the next AI run check the subscription with Stripe again. */
+export async function forgetAiSubscription(db: Db, subscriptionId: string) {
+  await db
+    .delete(aiMeterAttachment)
+    .where(eq(aiMeterAttachment.stripeSubscriptionId, subscriptionId));
 }
 
 export async function getAiSettings(db: Db, userId: string) {

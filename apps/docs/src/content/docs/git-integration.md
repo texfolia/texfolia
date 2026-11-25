@@ -62,8 +62,11 @@ Viewers can read status, changes, and commits.
 
 ## Storage and collaboration
 
-`project_git` points to an immutable `git/<projectId>/<id>.json` R2 object containing
-real git objects, refs, configuration, and index. PostgreSQL project nodes and
+`project_git` points to an immutable `git/<projectId>/<id>.bin` R2 object containing
+real git objects, refs and configuration. It is one binary archive: a list of paths
+and sizes, then the raw files, streamed to and from R2. Clones saved before NAT-464
+are Base64 in a `.json` object. They are still read, and the next action that saves
+the clone rewrites it. PostgreSQL project nodes and
 content-addressed R2 sources are the working tree. Project locks serialize git
 with metadata and source writes; the collaboration Durable Object serializes git
 with Yjs updates and flushes accepted live edits before reading sources.
@@ -74,10 +77,27 @@ lock held, then apply results in a second short transaction. If the repository
 pointer, or for import, pull, and checkout any project node, changed in between,
 nothing is applied and the action asks the user to retry.
 
-Pull and checkout replace sources atomically with the repository pointer. File
-IDs survive for unchanged paths. Open text documents receive a new CRDT edit; a
-room interrupted after SQL commit reconciles from the source pointer on its next
-use. Offline edits still merge when the client reconnects. The editor waits for
+### Memory and request limits
+
+Git runs in the collaboration Durable Object, which has 128 MB for it and the open
+documents. The clone is in memory during an action, but project files are not:
+
+- There is no Git index. Status compares HEAD's tree with the blob of each source.
+  The clone records the blob of every stored source, so status and diff read only
+  files that changed since the last save, a few at a time.
+- A commit writes blobs for changed files and new trees for their folders.
+- Import, pull and checkout read only blobs the project lacks, one at a time, and
+  store each before reading the next few. Files that live nodes already store are
+  not stored again. One short transaction then updates only the nodes that differ.
+- A write past 20 MiB of Git data fails before it is held. A push is measured before
+  its pack is built, because packed deltas grow when they are sent in full.
+- Branch names from the host that Texfolia could not check out are left out.
+
+Pull and checkout replace sources atomically with the repository pointer. File and
+folder IDs survive for unchanged paths, and unchanged files are not touched. Ignored
+files stay; one that the new branch tracks with different content stops the checkout.
+Open text documents receive a new CRDT edit; a room interrupted after SQL commit
+reconciles from the source pointer on its next use. Offline edits still merge when the client reconnects. The editor waits for
 open files to reconnect and save before issuing git actions.
 
 Commits honor nested `.gitignore` rules. Tracked files keep normal git semantics.

@@ -48,6 +48,12 @@ export const threadSchema = z.object({
   updatedAt: z.string(),
 });
 export type AssistantThread = z.infer<typeof threadSchema>;
+/** How many more chats the history list loads at a time. */
+export const threadPageSize = 50;
+export const threadListSchema = z.object({
+  threads: z.array(threadSchema),
+  more: z.boolean(),
+});
 export const threadHistorySchema = z.object({
   thread: threadSchema,
   messages: z.array(storedMessageSchema),

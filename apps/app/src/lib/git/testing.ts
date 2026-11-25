@@ -1,8 +1,78 @@
 // Test helpers for Bun: a local Git smart HTTP server backed by
-// `git http-backend`, and a `git` command runner. Not for production code.
+// `git http-backend`, a `git` command runner, and working trees and archives in
+// memory. Not for production code.
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { encodeSource } from "#/lib/storage";
+
+import { saveArchive } from "./archive";
+import type { GitFile, GitRepository } from "./repository";
+
+/** A working tree whose files are already in memory. */
+export function memoryFiles(files: Record<string, string | Uint8Array>) {
+  return new Map<string, GitFile>(
+    Object.entries(files).map(([path, value]) => {
+      const bytes = new Uint8Array(
+        typeof value === "string" ? new TextEncoder().encode(value) : value,
+      );
+      return [path, { sizeBytes: bytes.byteLength, read: async () => bytes }];
+    }),
+  );
+}
+
+/** The text of one file in a working tree. */
+export async function readText(repo: GitRepository, path: string) {
+  const file = repo.files.get(path);
+  return file && new TextDecoder().decode(await file.read());
+}
+
+/** Workers have this; Bun does not. */
+export function provideFixedLengthStream() {
+  if (typeof FixedLengthStream !== "undefined") return;
+  Object.assign(globalThis, {
+    FixedLengthStream: class extends TransformStream {
+      constructor() {
+        super({});
+      }
+    },
+  });
+}
+
+/** The archive that the app stores for a repository. */
+export async function repositoryArchive(repo: GitRepository) {
+  provideFixedLengthStream();
+  let archive: Promise<Uint8Array> | undefined;
+  await saveArchive(
+    {
+      put: (async (_key: string, body: ReadableStream<Uint8Array>) => {
+        archive = new Response(body).bytes();
+        await archive;
+      }) as never,
+    },
+    "archive",
+    repo.metadata(),
+  );
+  if (!archive) throw new Error("Nothing was saved");
+  return new Uint8Array(await archive);
+}
+
+/** The Base64 JSON archive that the app stored before NAT-464. */
+export function legacyArchive(repo: GitRepository) {
+  return JSON.stringify(
+    Object.fromEntries(
+      repo
+        .metadata()
+        .map(([path, value]) => [`.git/${path}`, encodeSource(value)]),
+    ),
+  );
+}
+
+/** Restores a repository as the app does. */
+export function archiveBody(archive: Uint8Array) {
+  return new Blob([new Uint8Array(archive)]).stream();
+}
 
 export async function gitCommand(...args: string[]) {
   const child = Bun.spawn(["git", ...args], { stdout: "pipe", stderr: "pipe" });

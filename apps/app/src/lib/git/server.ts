@@ -10,4 +10,4 @@ export {
   runGit,
   type GitAccessToken,
 } from "./actions";
-export { GitRepository, gitHttp, type GitFiles } from "./repository";
+export { GitRepository, gitHttp, type GitFile } from "./repository";

@@ -24,8 +24,9 @@ import {
 import { z } from "zod";
 
 import {
-  threadSchema,
   threadHistorySchema,
+  threadListSchema,
+  threadPageSize,
   type AssistantThread,
   type StoredMessage,
 } from "../threads";
@@ -86,6 +87,10 @@ export function AssistantHistory({
 }) {
   const endpoint = `${assistantEndpoint}?threads=1`;
   const [threads, setThreads] = useState<AssistantThread[]>([]);
+  const [more, setMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Reloading the list keeps as many chats as were loaded.
+  const listed = useRef(threadPageSize);
   const [selected, setSelected] =
     useState<z.infer<typeof threadHistorySchema>>();
   const [error, setError] = useState("");
@@ -100,10 +105,15 @@ export function AssistantHistory({
   const loadSequence = useRef(0);
   const loadList = useCallback(
     async (signal?: AbortSignal) => {
-      const data = z
-        .object({ threads: z.array(threadSchema) })
-        .parse(await assistantJson(endpoint, undefined, signal));
+      const data = threadListSchema.parse(
+        await assistantJson(
+          `${endpoint}&limit=${listed.current}`,
+          undefined,
+          signal,
+        ),
+      );
       setThreads(data.threads);
+      setMore(data.more);
       return data.threads;
     },
     [endpoint],
@@ -169,6 +179,21 @@ export function AssistantHistory({
     } finally {
       setMutation(false);
       setLoading(false);
+    }
+  }
+  async function loadMore() {
+    setLoadingMore(true);
+    setError("");
+    listed.current += threadPageSize;
+    try {
+      await loadList();
+    } catch (failure) {
+      listed.current -= threadPageSize;
+      setError(
+        failure instanceof Error ? failure.message : "Could not load chats.",
+      );
+    } finally {
+      setLoadingMore(false);
     }
   }
   const refresh = useCallback(() => {
@@ -247,6 +272,17 @@ export function AssistantHistory({
               </DropdownMenu>
             </div>
           ))}
+          {more && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+            >
+              {loadingMore ? "Loading…" : "Show more"}
+            </Button>
+          )}
         </nav>
       </aside>
       {historyOpen && agentsOpen && historyResize}

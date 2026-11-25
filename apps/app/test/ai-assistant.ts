@@ -24,10 +24,11 @@ import { chromium } from "playwright";
 import * as Y from "yjs";
 import { z } from "zod";
 
-import { threadHistorySchema, threadSchema } from "#/lib/ai";
+import { threadHistorySchema, threadListSchema, threadSchema } from "#/lib/ai";
 import { encodeClientMessage, scratchpadId } from "#/lib/collaboration";
 import { hashSource } from "#/lib/compile";
 import { GitRepository } from "#/lib/git/server";
+import { memoryFiles, repositoryArchive } from "#/lib/git/testing";
 
 import { createProject } from "../src/lib/projects/project.server";
 import { withBuildsFixture } from "./builds/miniflare";
@@ -57,6 +58,8 @@ let mode: "tools" | "files" | "scratchpad" | "error" | "simple" | "slow" =
   "tools";
 let call = 0;
 let logCalls = 0;
+let stripeChecks = 0;
+let catalogCalls = 0;
 const streamingTimers = new Set<ReturnType<typeof setInterval>>();
 const inference: { headers: Pick<Headers, "get">; body: unknown }[] = [];
 const meterEvents: URLSearchParams[] = [];
@@ -118,6 +121,7 @@ const mf = new Miniflare({
       outboundService: async (request) => {
         const url = new URL(request.url);
         if (url.hostname === "api.stripe.com") {
+          if (!url.pathname.endsWith("/meter_events")) stripeChecks++;
           if (url.pathname === "/v1/prices/price_ai")
             return Response.json({
               id: "price_ai",
@@ -176,13 +180,15 @@ const mf = new Miniflare({
             request.headers.get("Authorization"),
             "Bearer fixture-ai-token",
           );
-          if (url.pathname.endsWith("/ai/models/search"))
+          if (url.pathname.endsWith("/ai/models/search")) {
+            catalogCalls++;
             return Response.json({
               data: [
                 model,
                 { ...model, id: "@cf/test/second", name: "Second model" },
               ],
             });
+          }
           if (url.pathname.includes("/logs/")) {
             logCalls++;
             return Response.json({
@@ -693,6 +699,12 @@ try {
     [...readTools, ...writeTools].sort(),
     "editors receive read and write tools",
   );
+  assert.equal(
+    stripeChecks,
+    3,
+    "the first run attaches the usage price, and later ones do not ask Stripe",
+  );
+  assert.equal(catalogCalls, 1, "requests share one model catalog");
   await actor(viewerId);
   await db.insert(subscription).values({
     id: viewerSubscriptionId,
@@ -816,13 +828,13 @@ try {
   assert.equal(await (await bucket.get(intro.objectKey))?.text(), "Intro.");
   const git = new GitRepository();
   await git.init("https://github.com/fixture/project.git");
-  git.overlay({ "main.tex": new TextEncoder().encode(source) });
+  git.overlay(memoryFiles({ "main.tex": source }));
   const initialCommit = await git.commit("Initial version", {
     name: "Test",
     email: "test@example.com",
   });
-  const gitKey = `git/${paidProject}/fixture.json`;
-  await bucket.put(gitKey, git.serialize());
+  const gitKey = `git/${paidProject}/fixture.bin`;
+  await bucket.put(gitKey, await repositoryArchive(git));
   await db.insert(projectGit).values({
     projectId: paidProject,
     provider: "github",
@@ -883,6 +895,79 @@ try {
     return r?.status === "reported";
   }, "provider errors still bill");
   mode = "simple";
+  mode = "slow";
+  const left = { ...chatBody(), threadId: failureThread.thread.id };
+  const leaving = new AbortController();
+  const abandoned = await fetch(`${origin}${path}`, {
+    method: "POST",
+    headers: {
+      Cookie: cookies.get(userId) ?? "",
+      Origin: origin,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(left),
+    signal: leaving.signal,
+  });
+  assert.equal(abandoned.status, 200);
+  await abandoned.body?.getReader().read();
+  const threadRun = async () =>
+    (
+      await db
+        .select({ activeRunId: aiThread.activeRunId })
+        .from(aiThread)
+        .where(eq(aiThread.id, left.threadId))
+    )[0]?.activeRunId;
+  assert.equal(await threadRun(), left.runId);
+  leaving.abort();
+  await eventually(
+    async () => (await threadRun()) === null,
+    "a client that leaves frees the chat",
+  );
+  await eventually(async () => {
+    const [abandonedRun] = await db
+      .select({ status: aiRun.status, request: aiRequest.status })
+      .from(aiRun)
+      .innerJoin(aiRequest, eq(aiRequest.runId, aiRun.id))
+      .where(eq(aiRun.clientRunId, left.runId));
+    return (
+      abandonedRun?.status === "aborted" && abandonedRun.request === "reported"
+    );
+  }, "a client that leaves still settles its run");
+  mode = "simple";
+  const again = await send(path, userId, "POST", {
+    ...chatBody(),
+    threadId: left.threadId,
+  });
+  assert.equal(again.status, 200, await again.clone().text());
+  assert(!(await again.text()).includes("RUN_ERROR"));
+  const listUrl = `/api/ai/${otherProject.id}?threads=1`;
+  await db.insert(aiThread).values(
+    Array.from({ length: 199 }, (_, i) => ({
+      userId,
+      projectId: otherProject.id,
+      title: `Chat ${i}`,
+      updatedAt: new Date(Date.now() - (i + 1) * 1000),
+    })),
+  );
+  const creations = await Promise.all(
+    [0, 1, 2].map(() => send(listUrl, userId, "POST", { kind: "create" })),
+  );
+  assert.deepEqual(
+    creations.map(({ status }) => status).sort(),
+    [200, 409, 409],
+    "concurrent creations cannot pass the limit of 200 chats",
+  );
+  const firstPage = threadListSchema.parse(
+    await (await send(listUrl, userId)).json(),
+  );
+  assert.equal(firstPage.threads.length, 50);
+  assert(firstPage.more);
+  assert.equal(firstPage.threads[1]?.title, "Chat 0");
+  const allThreads = threadListSchema.parse(
+    await (await send(`${listUrl}&limit=200`, userId)).json(),
+  );
+  assert.equal(allThreads.threads.length, 200);
+  assert(!allThreads.more);
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
   });

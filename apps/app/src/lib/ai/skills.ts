@@ -75,6 +75,8 @@ export function parseSkill(path: string, source: string): SkillSummary {
       problems.push(
         "name must be 1–64 lowercase letters, digits, and single hyphens.",
       );
+    // The name goes to the model, so a broken one must not be long either.
+    name = name.slice(0, maxNameLength);
     if (name !== folder)
       problems.push(`name must match its folder name (${folder}).`);
   } else problems.push("Missing name.");

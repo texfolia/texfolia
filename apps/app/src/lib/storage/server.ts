@@ -66,18 +66,24 @@ export async function copySource({
   return objectKey;
 }
 
-// One source's bytes, hashed and checked, ready for `commitSources`.
+// One source, hashed and checked, ready for `commitSources`. A stored one is in
+// the bucket already, and its bytes are read again only if that object is lost.
 export type SourceUpload = {
   objectKey: string;
   sizeBytes: bigint;
-  bytes: Uint8Array<ArrayBuffer>;
+  bytes: Uint8Array<ArrayBuffer> | (() => Promise<Uint8Array<ArrayBuffer>>);
+  stored?: boolean;
+};
+
+const sourceOptions = {
+  httpMetadata: { contentType: "application/octet-stream" },
 };
 
 // Prepares bytes the caller already has. Bytes of a text file must be UTF-8.
 export async function prepareSourceBytes(
   projectId: string,
   bytes: Uint8Array<ArrayBuffer>,
-): Promise<SourceUpload> {
+) {
   if (bytes.byteLength > maxSourceFileBytes)
     throw new Error("File exceeds 10 MiB");
   return {
@@ -85,6 +91,15 @@ export async function prepareSourceBytes(
     sizeBytes: BigInt(bytes.byteLength),
     bytes,
   };
+}
+
+// Stores one source ahead of `commitSources`, so that many of them need not be in
+// memory together.
+export async function storeSource(
+  bucket: Pick<SourceBucket, "put">,
+  { objectKey, bytes }: { objectKey: string; bytes: Uint8Array<ArrayBuffer> },
+) {
+  await bucket.put(objectKey, bytes, sourceOptions);
 }
 
 // Prepares base64 content from a request.
@@ -120,6 +135,8 @@ export async function checkProjectQuota(
 
 /** How many source objects one operation reads or writes at once. */
 export const sourceConcurrency = 6;
+/** How many source bytes one operation holds for those reads or writes. */
+export const sourceBytesInFlight = 16 * 1024 * 1024;
 
 // Collection is done with a claim after this long, even if it crashed.
 const claimTimeoutMs = 5 * 60_000;
@@ -150,12 +167,20 @@ export async function commitSources<T>({
   const byKey = new Map(uploads.map((upload) => [upload.objectKey, upload]));
   // Claims whose delete had finished before the last upload.
   const settled = new Set<string>();
-  let pending = [...byKey.values()];
+  let pending = [...byKey.values()].filter((upload) => !upload.stored);
   for (let attempt = 0; ; attempt++) {
-    await mapLimit(pending, sourceConcurrency, ({ objectKey, bytes }) =>
-      bucket.put(objectKey, bytes, {
-        httpMetadata: { contentType: "application/octet-stream" },
-      }),
+    await mapLimit(
+      pending,
+      sourceConcurrency,
+      async ({ objectKey, bytes }) =>
+        storeSource(bucket, {
+          objectKey,
+          bytes: typeof bytes === "function" ? await bytes() : bytes,
+        }),
+      {
+        maxBytes: sourceBytesInFlight,
+        size: ({ sizeBytes }) => Number(sizeBytes),
+      },
     );
     pending = [];
     let deleting = false;

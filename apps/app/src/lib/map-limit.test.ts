@@ -32,4 +32,35 @@ describe("mapLimit", () => {
     await run.catch(() => {});
     expect(started).toEqual([1, 2]);
   });
+
+  test("bounds the bytes in flight, and runs an oversized item alone", async () => {
+    let held = 0;
+    const peaks: number[] = [];
+    const results = await mapLimit(
+      [4, 4, 4, 30, 1, 1],
+      6,
+      async (bytes) => {
+        held += bytes;
+        peaks.push(held);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        held -= bytes;
+        return bytes;
+      },
+      { maxBytes: 10, size: (bytes) => bytes },
+    );
+    expect(results).toEqual([4, 4, 4, 30, 1, 1]);
+    expect(peaks.filter((peak) => peak > 10)).toEqual([30]);
+  });
+
+  test("a failure releases its bytes, so the call still settles", async () => {
+    const run = mapLimit(
+      [8, 8, 8],
+      3,
+      async () => {
+        throw new Error("boom");
+      },
+      { maxBytes: 10, size: (bytes) => bytes },
+    );
+    await expect(run).rejects.toThrow("boom");
+  });
 });

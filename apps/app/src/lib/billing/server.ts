@@ -7,6 +7,7 @@ export { aiEntitlement, compilePlan, type AiPayer } from "./entitlements";
 export {
   aiSpend,
   ensureAiSubscription,
+  forgetAiSubscription,
   getAiSettings,
   getOrganizationAiSettings,
   payerAiSpend,
