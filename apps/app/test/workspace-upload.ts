@@ -582,10 +582,12 @@ try {
     "legacy source preserved",
   );
   await page.getByRole("tab", { name: "recovered.tex", exact: true }).waitFor();
+  // The rename is also reported, with ?changed=1, before a slow click.
   const repairedCompile = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
-      new URL(response.url()).pathname === `/api/compile/${projectId}`,
+      new URL(response.url()).pathname === `/api/compile/${projectId}` &&
+      !new URL(response.url()).searchParams.has("changed"),
   );
   await page.getByRole("button", { name: /^Compile status:/ }).click();
   assert.equal((await repairedCompile).status(), 200);
