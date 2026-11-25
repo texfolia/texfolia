@@ -52,8 +52,9 @@ supported.
 GitHub incremental authorization requires an OAuth App. GitHub Apps use permissions from their registration instead of OAuth scope requests. Set the existing `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` and
 `GITLAB_CLIENT_ID` / `GITLAB_CLIENT_SECRET` in local development and deployment.
 Both registrations use Better Auth's existing callback URLs. GitLab must allow the
-repository scopes. Better Auth encrypts tokens in its account table and refreshes them on the server. Git functions return no tokens. Better Auth disables the public token retrieval and refresh endpoints. Reconnect an account to renew
-permissions after revocation or scope changes.
+repository scopes. Better Auth encrypts tokens in its account table and refreshes them on the server. Git functions return no tokens. Better Auth disables the public token retrieval and refresh endpoints. Reconnect an account in Settings → Connections to renew
+permissions after revocation or scope changes. Disconnecting one there stops push,
+pull, and import until it is connected again.
 
 Each user uses their own provider credentials; a collaborator never borrows the
 owner's token. Owners and organization admins manage remote linking. Writers can

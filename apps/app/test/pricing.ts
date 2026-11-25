@@ -8,6 +8,8 @@ import { createDb } from "@texfolia/db";
 import {
   member,
   organization,
+  project,
+  projectNode,
   session,
   subscription,
   user,
@@ -161,6 +163,39 @@ try {
       createdAt: new Date(),
     })),
   );
+  // The account export keeps reading after the request's connection closed.
+  const projectId = crypto.randomUUID();
+  await db
+    .insert(project)
+    .values({ id: projectId, ownerId: memberId, name: "Exported" });
+  const objectKey = `projects/${projectId}/sources/fixture`;
+  await db.insert(projectNode).values({
+    projectId,
+    name: "main.tex",
+    kind: "text",
+    objectKey,
+    sizeBytes: 15n,
+  });
+  const sources = await mf.getR2Bucket("SOURCES");
+  await sources.put(objectKey, "exported source");
+  const reader = await pageFor(memberId);
+  await reader.goto(`${origin}/settings/account`);
+  const link = reader.getByRole("link", { name: "Download my data" });
+  assert.equal(await link.getAttribute("href"), "/api/account/export");
+  const archive = await reader.request.get(`${origin}/api/account/export`);
+  assert.equal(archive.status(), 200);
+  assert.equal(archive.headers()["content-type"], "application/zip");
+  const exported = await archive.text();
+  for (const text of [
+    "account.json",
+    "projects/Exported/main.tex",
+    "exported source",
+  ])
+    assert(exported.includes(text), text);
+  assert(!exported.includes("missing-files.txt"));
+  assert.equal((await fetch(`${origin}/api/account/export`)).status, 401);
+  await reader.context().close();
+
   // Marketing /pricing lives on apps/web; this suite covers authenticated
   // billing on the product app (checkout bodies, portal, seats, authz).
   const owner = await pageFor(ownerId);

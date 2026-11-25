@@ -11,6 +11,8 @@ import {
 } from "better-auth/plugins/organization/access";
 import { z } from "zod";
 
+import { hasRenewingSubscription } from "#/lib/billing/stripe";
+
 import { hasOrgRole } from "./roles";
 
 type AuthContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
@@ -115,23 +117,57 @@ async function solelyOwned(ctx: AuthContext, userId: string) {
   return organizations;
 }
 
+/** Why the account cannot be deleted now, or null. */
+async function deletionBlock(
+  ctx: AuthContext,
+  user: { id: string; stripeCustomerId?: unknown },
+) {
+  const organizations = await solelyOwned(ctx, user.id);
+  if (organizations.length)
+    return {
+      reason: "blocked",
+      code: "SOLE_ORGANIZATION_OWNER",
+      message: `You are the only owner of ${organizations.map(({ name }) => name).join(", ")}. Make someone else an owner, or delete the organization, before deleting your account.`,
+    };
+  const stripeClient = ctx.context.getPlugin("stripe")?.options.stripeClient;
+  if (!stripeClient || typeof user.stripeCustomerId !== "string") return null;
+  try {
+    if (!(await hasRenewingSubscription(stripeClient, user.stripeCustomerId)))
+      return null;
+  } catch (error) {
+    ctx.context.logger.error("Subscriptions could not be checked", error);
+    return {
+      reason: "unchecked",
+      code: "SUBSCRIPTION_CHECK_FAILED",
+      message: "Your subscription could not be checked. Try again later.",
+    };
+  }
+  return {
+    reason: "subscribed",
+    code: "ACTIVE_SUBSCRIPTION",
+    message:
+      "Cancel your subscription in Billing settings before deleting your account.",
+  };
+}
+
 /**
  * Keeps accounts from leaving an organization without an owner, whom its
- * subscription needs.
+ * subscription needs, and from leaving a subscription that nobody can cancel.
  */
 export async function assertAccountDeletable(ctx: AuthContext) {
   const confirming = ctx.path === "/delete-user/callback";
   if (!confirming && ctx.path !== "/delete-user") return;
   const session = await getSessionFromCtx(ctx, { disableCookieCache: true });
   if (!session) return;
-  const organizations = await solelyOwned(ctx, session.user.id);
-  if (!organizations.length) return;
+  const block = await deletionBlock(ctx, session.user);
+  if (!block) return;
+  const { reason, code, message } = block;
   // The link in the confirmation email opens in the browser.
-  if (confirming) throw ctx.redirect("/settings/account?deletion=blocked");
-  throw new APIError("BAD_REQUEST", {
-    code: "SOLE_ORGANIZATION_OWNER",
-    message: `You are the only owner of ${organizations.map(({ name }) => name).join(", ")}. Make someone else an owner, or delete the organization, before deleting your account.`,
-  });
+  if (confirming) throw ctx.redirect(`/settings/account?deletion=${reason}`);
+  throw new APIError(
+    reason === "unchecked" ? "SERVICE_UNAVAILABLE" : "BAD_REQUEST",
+    { code, message },
+  );
 }
 
 /**

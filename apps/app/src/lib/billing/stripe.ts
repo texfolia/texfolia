@@ -35,6 +35,31 @@ export const enforceBillingScope = createAuthMiddleware(async (ctx) =>
   assertBillingScope(ctx),
 );
 
+// Nothing is left to renew in these, as in Better Auth's check of organizations.
+const endedStatuses = ["canceled", "incomplete", "incomplete_expired"];
+
+/**
+ * Whether Stripe would keep billing this customer. One that is set to cancel
+ * ends by itself.
+ */
+export async function hasRenewingSubscription(
+  stripeClient: Stripe,
+  customer: string,
+) {
+  for await (const subscription of stripeClient.subscriptions.list({
+    customer,
+    status: "all",
+    limit: 100,
+  }))
+    if (
+      !endedStatuses.includes(subscription.status) &&
+      !subscription.cancel_at_period_end &&
+      !subscription.cancel_at
+    )
+      return true;
+  return false;
+}
+
 export const authorizeOrganizationBilling: NonNullable<
   SubscriptionOptions["authorizeReference"]
 > = async ({ user, referenceId }, ctx) => {
