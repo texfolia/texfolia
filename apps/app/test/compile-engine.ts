@@ -76,7 +76,7 @@ const mf = new Miniflare({
     name: "compile-engine-test",
     modules: true,
     script,
-    compatibilityDate: "2026-10-30",
+    compatibilityDate: "2026-10-31",
     compatibilityFlags: ["nodejs_compat"],
     ...buildsBindings,
     serviceBindings: {

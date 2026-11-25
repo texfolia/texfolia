@@ -32,6 +32,7 @@ import { Route as ApiAccountExportRouteImport } from './routes/api/account/expor
 import { Route as ApiAiProjectIdRouteImport } from './routes/api/ai/$projectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api/compile/$projectId'
+import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
 import { Route as ApiReferencesIndexRouteImport } from './routes/api/references/index'
 import { Route as ApiTemplatesIndexRouteImport } from './routes/api/templates/index'
 import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api/collaboration/$projectId/$nodeId'
@@ -159,6 +160,11 @@ const ApiCompileProjectIdRoute = ApiCompileProjectIdRouteImport.update({
   path: '/api/compile/$projectId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthIndexRoute = ApiHealthIndexRouteImport.update({
+  id: '/api/health/',
+  path: '/api/health/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiReferencesIndexRoute = ApiReferencesIndexRouteImport.update({
   id: '/api/references/',
   path: '/api/references/',
@@ -224,6 +230,7 @@ export interface FileRoutesByFullPath {
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/health/': typeof ApiHealthIndexRoute
   '/api/references/': typeof ApiReferencesIndexRoute
   '/api/templates/': typeof ApiTemplatesIndexRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
@@ -255,6 +262,7 @@ export interface FileRoutesByTo {
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/health': typeof ApiHealthIndexRoute
   '/api/references': typeof ApiReferencesIndexRoute
   '/api/templates': typeof ApiTemplatesIndexRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
@@ -288,6 +296,7 @@ export interface FileRoutesById {
   '/api/ai/$projectId': typeof ApiAiProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/health/': typeof ApiHealthIndexRoute
   '/api/references/': typeof ApiReferencesIndexRoute
   '/api/templates/': typeof ApiTemplatesIndexRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
@@ -322,6 +331,7 @@ export interface FileRouteTypes {
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
+    | '/api/health/'
     | '/api/references/'
     | '/api/templates/'
     | '/api/collaboration/$projectId/$nodeId'
@@ -353,6 +363,7 @@ export interface FileRouteTypes {
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
+    | '/api/health'
     | '/api/references'
     | '/api/templates'
     | '/api/collaboration/$projectId/$nodeId'
@@ -385,6 +396,7 @@ export interface FileRouteTypes {
     | '/api/ai/$projectId'
     | '/api/auth/$'
     | '/api/compile/$projectId'
+    | '/api/health/'
     | '/api/references/'
     | '/api/templates/'
     | '/api/collaboration/$projectId/$nodeId'
@@ -410,6 +422,7 @@ export interface RootRouteChildren {
   ApiAiProjectIdRoute: typeof ApiAiProjectIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
+  ApiHealthIndexRoute: typeof ApiHealthIndexRoute
   ApiReferencesIndexRoute: typeof ApiReferencesIndexRoute
   ApiTemplatesIndexRoute: typeof ApiTemplatesIndexRoute
   ApiCollaborationProjectIdNodeIdRoute: typeof ApiCollaborationProjectIdNodeIdRoute
@@ -582,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCompileProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health/': {
+      id: '/api/health/'
+      path: '/api/health'
+      fullPath: '/api/health/'
+      preLoaderRoute: typeof ApiHealthIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/references/': {
       id: '/api/references/'
       path: '/api/references'
@@ -677,6 +697,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAiProjectIdRoute: ApiAiProjectIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
+  ApiHealthIndexRoute: ApiHealthIndexRoute,
   ApiReferencesIndexRoute: ApiReferencesIndexRoute,
   ApiTemplatesIndexRoute: ApiTemplatesIndexRoute,
   ApiCollaborationProjectIdNodeIdRoute: ApiCollaborationProjectIdNodeIdRoute,

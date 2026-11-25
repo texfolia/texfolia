@@ -55,7 +55,7 @@ const mf = new Miniflare({
         )
         .map((path) => ({ type: "ESModule", path: join(root, path) })),
       modulesRoot: root,
-      compatibilityDate: "2026-10-30",
+      compatibilityDate: "2026-10-31",
       compatibilityFlags: ["nodejs_compat"],
       assets: {
         directory: new URL("../dist/client/", import.meta.url).pathname,
@@ -327,10 +327,11 @@ try {
     .waitFor();
   await owner.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await owner.getByRole("heading", { name: "Research group · Team" }).waitFor();
-  assert.match(
-    await owner.locator("main").first().innerText(),
-    /1 member × \$20 USD\/month = \$20 USD\/month/,
-  );
+  await owner
+    .locator("main")
+    .first()
+    .filter({ hasText: /1 member × \$20 USD\/month = \$20 USD\/month/ })
+    .waitFor();
   assert.deepEqual(errors, []);
   console.info(
     "Billing UI passed: Pro/Team checkout bodies, failure recovery, seat totals, portal, team creation, and authorization.",

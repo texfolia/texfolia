@@ -5,8 +5,63 @@ import { pathToFileURL } from "node:url";
 const web = "apps/app/";
 const test = `${web}test/`;
 
-// Production browser suites load the entire app. Keep runtime inputs broad.
+// Browser suites load the entire app. Keep runtime inputs broad. Suites run in
+// the Postgres job unless they name another.
 export const suites = {
+  settings: { inputs: ["settings.ts"] },
+  pricing: { inputs: ["pricing.ts"], build: true, browser: true },
+  login: { job: "browser", inputs: ["login.ts"], browser: true },
+  "editor-keymaps": {
+    job: "browser",
+    inputs: ["editor-keymaps.ts", "editor-keymaps/"],
+    browser: true,
+  },
+  spelling: {
+    job: "browser",
+    inputs: ["spelling.ts", "spelling/"],
+    browser: true,
+  },
+  synctex: {
+    job: "browser",
+    inputs: [
+      "synctex.ts",
+      "fixtures/synctex/",
+      "editor-runtime/",
+      "workspace-upload/",
+    ],
+    browser: true,
+  },
+  themes: {
+    job: "browser",
+    inputs: ["theme-preview.ts", "editor-runtime/", "workspace-upload/"],
+    browser: true,
+  },
+  "editor-runtime": {
+    job: "browser",
+    inputs: [
+      "editor-runtime.ts",
+      "editor-runtime/",
+      "workspace-upload/",
+      "pdf-fixture.ts",
+    ],
+    browser: true,
+  },
+  "editor-features": {
+    job: "browser",
+    inputs: [
+      "editor-features.ts",
+      "editor-runtime/",
+      "workspace-upload/",
+      "pdf-fixture.ts",
+    ],
+    browser: true,
+  },
+  "compile-engine": { job: "engine", inputs: ["compile-engine.ts"] },
+  "workspace-upload": {
+    job: "engine",
+    inputs: ["workspace-upload.ts", "workspace-upload/", "editor-runtime/"],
+    browser: true,
+  },
   database: { inputs: ["postgres.ts", "postgres/"] },
   "compile-route": { inputs: ["compile-route.ts", "compile-route/"] },
   "ai-billing": { inputs: ["ai-billing.ts"] },
@@ -45,6 +100,13 @@ export const suites = {
     browser: true,
   },
 };
+
+// Run in Checks, with the production build.
+const productionAssetInputs = [
+  "production-assets.ts",
+  "login.ts",
+  "pdf-fixture.ts",
+];
 
 function matches(path, input) {
   return input.endsWith("/") ? path.startsWith(input) : path === input;
@@ -95,13 +157,15 @@ export function selectChecks(paths, { fallback = false } = {}) {
       !path.startsWith(test) &&
       !/\.(test|spec)\.[cm]?[jt]sx?$/.test(path),
   );
+  const changed = (inputs) =>
+    paths.some((path) => inputs.some((input) => matches(path, test + input)));
   const unknownTest = paths.some(
     (path) =>
       path.startsWith(test) &&
-      !Object.values(suites).some((suite) =>
-        suite.inputs.some((input) => matches(path, test + input)),
-      ) &&
-      path !== `${test}production-assets.ts`,
+      ![
+        ...Object.values(suites).flatMap((suite) => suite.inputs),
+        ...productionAssetInputs,
+      ].some((input) => matches(path, test + input)),
   );
   const selected = Object.fromEntries(
     Object.entries(suites).map(([name, suite]) => [
@@ -111,16 +175,18 @@ export function selectChecks(paths, { fallback = false } = {}) {
         unknownTest ||
         (crossPackage &&
           ["compile-route", "template-lifecycle"].includes(name)) ||
-        paths.some((path) =>
-          suite.inputs.some((input) => matches(path, test + input)),
-        ),
+        // The engine's image holds everything in the compiler.
+        (compiler && suite.job === "engine") ||
+        changed(suite.inputs),
     ]),
   );
   const productionAssets =
-    full ||
-    runtime ||
-    unknownTest ||
-    paths.includes(`${test}production-assets.ts`);
+    full || runtime || unknownTest || changed(productionAssetInputs);
+  const inJob = (job, setup = () => true) =>
+    Object.entries(suites).some(
+      ([name, suite]) =>
+        selected[name] && (suite.job ?? "postgres") === job && setup(suite),
+    );
   return {
     full,
     compiler,
@@ -128,13 +194,11 @@ export function selectChecks(paths, { fallback = false } = {}) {
     "package-checks": webChanged || compiler,
     "cross-package": crossPackage,
     "production-assets": productionAssets,
-    postgres: Object.values(selected).some(Boolean),
-    "postgres-build": Object.entries(suites).some(
-      ([name, suite]) => selected[name] && suite.build,
-    ),
-    "postgres-browser": Object.entries(suites).some(
-      ([name, suite]) => selected[name] && suite.browser,
-    ),
+    postgres: inJob("postgres"),
+    "postgres-build": inJob("postgres", (suite) => suite.build),
+    "postgres-browser": inJob("postgres", (suite) => suite.browser),
+    browser: inJob("browser"),
+    engine: inJob("engine"),
     ...selected,
   };
 }

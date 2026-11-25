@@ -2,11 +2,13 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "texfolia-web-local",
   "main": "src/worker.ts",
-  "compatibility_date": "2025-09-02",
+  "compatibility_date": "2026-10-31",
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
   "observability": {
     "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
   },
   "env": {
     "production": {

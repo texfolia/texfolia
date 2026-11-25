@@ -92,7 +92,7 @@ const mf = new Miniflare({
         )
         .map((p) => ({ type: "ESModule", path: join(root, p) })),
       modulesRoot: root,
-      compatibilityDate: "2026-10-30",
+      compatibilityDate: "2026-10-31",
       compatibilityFlags: ["nodejs_compat"],
       assets: {
         directory: new URL("../dist/client/", import.meta.url).pathname,

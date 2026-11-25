@@ -1,9 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "texfolia-docs-local",
-  "compatibility_date": "2025-09-02",
+  "compatibility_date": "2026-10-31",
   "assets": {
     "directory": "./dist",
+  },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
   },
   "env": {
     "production": {

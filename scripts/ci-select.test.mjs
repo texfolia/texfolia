@@ -31,13 +31,21 @@ test("documentation keeps repository checks but skips package tests and browsers
     "package-checks",
     "production-assets",
     "postgres",
+    "browser",
+    "engine",
   ])
     assert.equal(plan[key], false, key);
 });
 
-test("Go-only changes run compiler checks without browser or database suites", () => {
+test("Go-only changes run compiler and engine checks without browser or database suites", () => {
   const plan = selectChecks(["apps/compiler/engine/compile.go"]);
+  assert.deepEqual(selectedSuites(plan), [
+    "compile-engine",
+    "workspace-upload",
+  ]);
   assert.equal(plan.compiler, true);
+  assert.equal(plan.engine, true);
+  assert.equal(plan.browser, false);
   assert.equal(plan["package-checks"], true);
   assert.equal(plan["web-checks"], false);
   assert.equal(plan.postgres, false);
@@ -49,6 +57,8 @@ test("compiler runtime changes also exercise its web consumers", () => {
   assert.equal(plan["web-checks"], true);
   assert.equal(plan["cross-package"], true);
   assert.deepEqual(selectedSuites(plan), [
+    "compile-engine",
+    "workspace-upload",
     "compile-route",
     "template-lifecycle",
   ]);
@@ -67,6 +77,8 @@ test("web unit-only changes skip integration and production assets", () => {
   assert.equal(plan["web-checks"], true);
   assert.equal(plan.compiler, false);
   assert.equal(plan.postgres, false);
+  assert.equal(plan.browser, false);
+  assert.equal(plan.engine, false);
   assert.equal(plan["production-assets"], false);
 });
 
@@ -83,17 +95,18 @@ test("every mapped test input selects its owners and required setup", () => {
         owners.map(([name]) => name),
         path,
       );
-      assert.equal(plan.postgres, true, path);
-      assert.equal(
-        plan["postgres-build"],
-        owners.some(([, owner]) => Boolean(owner.build)),
-        path,
-      );
-      assert.equal(
-        plan["postgres-browser"],
-        owners.some(([, owner]) => Boolean(owner.browser)),
-        path,
-      );
+      const jobOwners = (job) =>
+        owners.flatMap(([, owner]) =>
+          (owner.job ?? "postgres") === job ? [owner] : [],
+        );
+      for (const job of ["postgres", "browser", "engine"])
+        assert.equal(plan[job], jobOwners(job).length > 0, `${path}: ${job}`);
+      for (const setup of ["build", "browser"])
+        assert.equal(
+          plan[`postgres-${setup}`],
+          jobOwners("postgres").some((owner) => Boolean(owner[setup])),
+          `${path}: ${setup}`,
+        );
     }
   }
 });
@@ -102,6 +115,33 @@ test("production asset test changes need only the Checks build and browser", () 
   const plan = selectChecks(["apps/app/test/production-assets.ts"]);
   assert.equal(plan["production-assets"], true);
   assert.equal(plan.postgres, false);
+  for (const input of ["login.ts", "pdf-fixture.ts"])
+    assert.equal(
+      selectChecks([`apps/app/test/${input}`])["production-assets"],
+      true,
+      input,
+    );
+});
+
+test("every selected suite runs in its own job", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/ci.yml", import.meta.url),
+    "utf8",
+  );
+  const jobs = Object.fromEntries(
+    workflow
+      .split(/^jobs:$/m)[1]
+      .split(/^ {2}(?=[\w-]+:$)/m)
+      .slice(1)
+      .map((job) => [job.slice(0, job.indexOf(":")), job]),
+  );
+  for (const [name, { job = "postgres" }] of Object.entries(suites))
+    for (const [id, source] of Object.entries(jobs))
+      assert.equal(
+        source.includes(`if: steps.select.outputs.${name} == 'true'`),
+        id === job,
+        `${name} in ${id}`,
+      );
 });
 
 test("runtime web changes keep every integration suite", () => {
@@ -327,7 +367,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
         result.tasks.map((task) => [task.taskId, task.hash]),
       );
       for (const task of invalidated)
-        assert.notEqual(updated[task], hashes[task], `${path}: ${task}`);
+        assert.notEqual(updated[task], hashes[task], [path, task].join(": "));
     }
     git("reset", "--hard", base);
     git("clean", "-fdx");

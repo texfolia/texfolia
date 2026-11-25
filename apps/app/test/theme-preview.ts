@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-import tailwindcss from "@tailwindcss/vite";
 import { chromium } from "playwright";
-import { createServer } from "vite";
 import * as Y from "yjs";
 
 import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
@@ -14,6 +12,7 @@ import {
 } from "#/lib/editor/themes/themes";
 
 import type { ProjectDetails } from "../src/lib/projects/project.functions";
+import { createWorkspaceServer } from "./editor-runtime/workspace-server";
 
 const projectId = crypto.randomUUID();
 const rootId = crypto.randomUUID();
@@ -110,51 +109,9 @@ const backend = Bun.serve({
     return new Response(null, { status: 404 });
   },
 });
-const webRoot = fileURLToPath(new URL("../", import.meta.url));
-const rpc = fileURLToPath(
-  new URL("./workspace-upload/rpc.ts", import.meta.url),
-);
-const vite = await createServer({
-  configFile: false,
-  root: webRoot,
-  optimizeDeps: {
-    entries: ["test/workspace-upload/browser.tsx"],
-    include: ["react-pdf"],
-  },
-  plugins: [
-    tailwindcss(),
-    {
-      name: "theme-fixture",
-      configureServer(server) {
-        server.middlewares.use((request, response, next) => {
-          if (request.url !== "/") return next();
-          response.setHeader("Content-Type", "text/html");
-          response.end(
-            '<!doctype html><html><body><div id="root"></div><script type="module" src="/test/workspace-upload/browser.tsx"></script></body></html>',
-          );
-        });
-      },
-    },
-  ],
-  resolve: {
-    alias: {
-      "#/lib/projects/project.functions": rpc,
-      "#/lib/projects/project-node.functions": rpc,
-      "#/lib/projects/project-source.functions": rpc,
-      "#/lib/git/git.functions": rpc,
-      "#/lib/sharing/project-sharing.functions": rpc,
-      "#": `${webRoot}src`,
-    },
-  },
-  server: {
-    host: "127.0.0.1",
-    port: 0,
-    forwardConsole: false,
-    proxy: {
-      "/fixture": backend.url.href,
-      "/api": { target: backend.url.href, ws: true },
-    },
-  },
+const vite = await createWorkspaceServer({
+  entry: "workspace-upload",
+  backend: backend.url,
 });
 const browser = await chromium.launch({ headless: true });
 const screenshots = fileURLToPath(

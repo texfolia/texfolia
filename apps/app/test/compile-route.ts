@@ -118,7 +118,7 @@ const mf = new Miniflare({
   ...convertV4MiniflareOptions({
     modules: true,
     script,
-    compatibilityDate: "2026-10-30",
+    compatibilityDate: "2026-10-31",
     compatibilityFlags: ["nodejs_compat", "enable_nodejs_fs_module"],
     hyperdrives: { HYPERDRIVE: connectionString },
     ...buildsBindings,

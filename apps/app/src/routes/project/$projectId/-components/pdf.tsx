@@ -410,6 +410,8 @@ function PdfPanel({
     if (!element) return;
     element.scrollTo({ top, ...(left === undefined ? {} : { left }) });
     requested.current = { page, top: element.scrollTop };
+    // The scroll event comes later; a new version may change the layout first.
+    keepPlace(element.clientWidth / 2, 0);
     measure();
   }
   function goToPage(next: number) {
@@ -721,7 +723,7 @@ function PdfPanel({
           </Button>
         </div>
       )}
-      {sync && (
+      {sync && current && (
         <p className="text-muted-foreground border-b px-3 py-1 text-xs">
           Cmd/Ctrl-click the PDF to reveal its source. Cmd/Ctrl-click source to
           reveal it here.

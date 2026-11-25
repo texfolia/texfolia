@@ -80,7 +80,7 @@ const mf = new Miniflare({
         )
         .map((path) => ({ type: "ESModule", path: join(root, path) })),
       modulesRoot: root,
-      compatibilityDate: "2026-10-30",
+      compatibilityDate: "2026-10-31",
       compatibilityFlags: ["nodejs_compat"],
       assets: {
         directory: new URL("../dist/client/", import.meta.url).pathname,
@@ -217,6 +217,9 @@ async function createFile(
 }
 try {
   const origin = (await mf.ready).origin;
+  const health = await fetch(`${origin}/api/health`);
+  assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { status: "ok" });
   const resolverFile = filenames.find(
     (name) =>
       name.includes("tanstack-start-server-fn-resolver") &&

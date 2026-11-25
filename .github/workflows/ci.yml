@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A newer push replaces a pull request's run. Every commit on main keeps its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CI_BUN_VERSION: 1.4.4
 
@@ -53,6 +58,12 @@ jobs:
       - name: Exercise app database operations
         if: steps.select.outputs.database == 'true'
         run: bun run apps/app/test/postgres.ts
+      - name: Exercise project settings and account usage
+        if: steps.select.outputs.settings == 'true'
+        run: bun run --cwd apps/app test:settings
+      - name: Exercise billing pages with Postgres
+        if: steps.select.outputs.pricing == 'true'
+        run: bun run --cwd apps/app test:pricing:prebuilt
       - name: Exercise authenticated compile retries with Postgres
         if: steps.select.outputs.compile-route == 'true'
         run: bun run --cwd apps/app test:compile-route
@@ -91,6 +102,102 @@ jobs:
       - name: Exercise template previews and retries in a browser without cron
         if: steps.select.outputs.template-lifecycle == 'true'
         run: bun run --cwd apps/app test:template-lifecycle:prebuilt
+  browser:
+    name: Browser suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Select affected checks
+        id: select
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_FULL_RUN: ${{ github.event_name == 'push' }}
+        run: node scripts/ci-select.mjs
+      - uses: ./.github/actions/setup-ci
+        if: steps.select.outputs.browser == 'true'
+        with:
+          playwright: "true"
+      - name: Copy browser assets
+        if: steps.select.outputs.browser == 'true'
+        run: |
+          bun run --cwd apps/app latex:assets
+          bun run --cwd apps/app spelling:assets
+      - name: Exercise sign-in on the development server
+        if: steps.select.outputs.login == 'true'
+        run: bun run --cwd apps/app test:login
+      - name: Exercise Vim and Emacs keymaps
+        if: steps.select.outputs.editor-keymaps == 'true'
+        run: bun run --cwd apps/app test:editor-keymaps
+      - name: Exercise spell check
+        if: steps.select.outputs.spelling == 'true'
+        run: bun run --cwd apps/app test:spelling
+      - name: Exercise SyncTeX navigation
+        if: steps.select.outputs.synctex == 'true'
+        run: bun run --cwd apps/app test:synctex
+      - name: Exercise themes and the settings dialog
+        if: steps.select.outputs.themes == 'true'
+        run: bun run --cwd apps/app test:themes
+      - name: Exercise editing, undo, and workspace rendering
+        if: steps.select.outputs.editor-runtime == 'true'
+        run: bun run --cwd apps/app test:editor-runtime
+      - name: Exercise previews, quick open, and AI change review
+        if: steps.select.outputs.editor-features == 'true'
+        run: bun run --cwd apps/app test:editor-features
+  engine:
+    name: LaTeX engine
+    runs-on: ubuntu-latest
+    env:
+      ENGINE_URL: http://127.0.0.1:8081
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Select affected checks
+        id: select
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_FULL_RUN: ${{ github.event_name == 'push' }}
+        run: node scripts/ci-select.mjs
+      - uses: ./.github/actions/setup-ci
+        if: steps.select.outputs.engine == 'true'
+        with:
+          playwright: ${{ steps.select.outputs.workspace-upload }}
+      - uses: docker/setup-buildx-action@v4
+        if: steps.select.outputs.engine == 'true'
+      - name: Build the engine image
+        if: steps.select.outputs.engine == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/compiler/Dockerfile
+          platforms: linux/amd64
+          tags: texfolia-latex-engine:local
+          load: true
+          provenance: false
+          cache-from: type=gha,scope=latex-engine
+          cache-to: type=gha,scope=latex-engine,mode=max,ignore-error=true
+      - name: Start the engine
+        if: steps.select.outputs.engine == 'true'
+        run: |
+          docker run -d --name engine -p 127.0.0.1:8081:8080 texfolia-latex-engine:local
+          curl --fail --silent --show-error --retry 30 --retry-delay 1 --retry-all-errors "$ENGINE_URL/health"
+      - name: Smoke test the engine
+        if: steps.select.outputs.engine == 'true'
+        run: |
+          bun run apps/compiler/test/path-policy.integration.ts
+          bun run apps/compiler/test/preview.integration.ts
+          bun run apps/compiler/scripts/verify-biber.ts
+      - name: Exercise builds with the real compiler
+        if: steps.select.outputs.compile-engine == 'true'
+        run: bun run --cwd apps/app test:compile-engine
+      - name: Exercise uploads, compile retries, and the PDF in a browser
+        if: steps.select.outputs.workspace-upload == 'true'
+        run: bun run --cwd apps/app test:workspace-upload
+      - name: Print engine logs
+        if: failure() && steps.select.outputs.engine == 'true'
+        run: docker logs engine
   checks:
     name: Checks
     runs-on: ubuntu-latest
