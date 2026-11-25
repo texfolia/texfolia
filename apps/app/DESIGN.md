@@ -164,9 +164,11 @@ Body controls use the body role. Panel headings and status controls use the labe
 
 From left to right: separate chat history, Agents, central Dockview, and one right sidebar. Chat history starts hidden and opens from the bottom-left status button. Agents starts visible. File, Edit, and View menus sit above the workspace; the status bar sits below it.
 
-The right sidebar switches among Files, Outline, Git, and Collaboration through bottom-right status icons or the View menu. It is one region, not parallel panels or an added activity rail. Git actions remain in the Git view.
+The right sidebar switches among Files, Outline, Search, Git, Comments, and Collaboration through bottom-right status icons or the View menu. It is one region, not parallel panels or an added activity rail. Git actions remain in the Git view.
 
-Default widths are history (240px), Agents (320px), and right sidebar (288px), bounded by the existing resize range (240–600px). The menu header is (40px) high, the status bar (32px), other sidebar headers (36px), and dock tabs (35px). Source authority is `src/lib/workspace/workspace-layout.ts` and `src/routes/project/$projectId/-components/project-workspace.tsx`.
+Problems, Logs, and Terminal share one bottom panel below the dock. It starts closed and opens only when the user asks for it, from the status bar, the View menu, or its shortcut.
+
+Default widths are history (240px), Agents (320px), and right sidebar (288px), bounded by the existing resize range (240–600px). The bottom panel's height is (240px), bounded by (120–640px). The menu header is (40px) high, the status bar (32px), other sidebar headers (36px), and dock tabs (35px). Source authority is `src/lib/workspace/workspace-layout.ts` and `src/routes/project/$projectId/-components/project-workspace.tsx`.
 
 Below the existing medium breakpoint (48rem), opening a sidebar closes the others; the sidebars overlay the dock and are capped at (85%) of its width. Layout preferences remain scoped to each user and project.
 
@@ -202,9 +204,9 @@ File, Edit, and View use the existing menubar. Sidebar switches live in the bott
 
 ### Dock tabs and PDF
 
-Settings opens as a standard dialog with a dimmed backdrop, User and Project tabs, and outlined settings items. The User tab and the Preferences page share their section controls. The theme list previews on hover and keyboard focus. Apply commits the draft while keeping Settings open; Save commits and closes; Cancel discards. Closing a dirty draft opens a confirmation prompt. Project formatting is shared on the server. User preferences and programmable shortcuts remain local to each account in this browser.
+Settings opens as a standard dialog with a dimmed backdrop, User and Project tabs, and outlined settings items. The User tab and the Preferences page share their section controls. On short screens the sections scroll and the footer's actions stay visible. The theme list previews on hover and keyboard focus. Apply commits the draft while keeping Settings open; Save commits and closes; Cancel discards. Closing a dirty draft opens a confirmation prompt. Project settings (main document, formatting, and spelling) are shared on the server. User preferences and programmable shortcuts remain local to each account in this browser.
 
-Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems remains a dock panel.
+Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems is in the bottom panel, not the dock.
 
 The functional reference is [Editor workspace](../docs/src/content/docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, zinc base, CSS variables, Tabler icons) and the primitives in [`packages/ui`](../../packages/ui/README.md).
 

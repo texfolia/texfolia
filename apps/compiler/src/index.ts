@@ -24,4 +24,4 @@ const server = Bun.serve({
   idleTimeout: 0,
   fetch: compiler.fetch,
 });
-console.log(`Compiler listening on ${server.url}`);
+console.log(`Compiler listening on ${server.url.href}`);

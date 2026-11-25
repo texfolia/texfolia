@@ -52,7 +52,7 @@ export function withBuildsFixture(options: WorkerOptions, handler: Service) {
     name: "builds-fixture",
     modules: true,
     script: fixtureScript,
-    compatibilityDate: "2026-10-30",
+    compatibilityDate: "2026-10-31",
     durableObjects: { BUILDS: "ProjectBuilds" },
     serviceBindings: { HANDLER: handler },
   });

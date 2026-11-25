@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 
-import tailwindcss from "@tailwindcss/vite";
 import type { BuildSnapshot } from "@texfolia/contracts";
-import { createServer } from "vite";
 import * as Y from "yjs";
 
 import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
 import { createNodeSchema } from "#/lib/projects";
 
 import type { ProjectDetails } from "../../src/lib/projects/project.functions";
+import { createWorkspaceServer } from "./workspace-server";
 
 type Node = ProjectDetails["nodes"][number];
 
@@ -209,49 +207,9 @@ export async function startWorkspace({
     },
   });
 
-  const webRoot = fileURLToPath(new URL("../../", import.meta.url));
-  const rpc = fileURLToPath(new URL("./rpc.ts", import.meta.url));
-  const vite = await createServer({
-    configFile: false,
-    root: webRoot,
-    optimizeDeps: {
-      entries: ["test/editor-runtime/browser.tsx"],
-      include: ["react-pdf", "wasm-latex-tools"],
-    },
-    plugins: [
-      tailwindcss(),
-      {
-        name: "editor-runtime-fixture",
-        configureServer(server) {
-          server.middlewares.use((request, response, next) => {
-            if (request.url !== "/") return next();
-            response.setHeader("Content-Type", "text/html");
-            response.end(
-              '<!doctype html><html><body><div id="root"></div><script type="module" src="/test/editor-runtime/browser.tsx"></script></body></html>',
-            );
-          });
-        },
-      },
-    ],
-    resolve: {
-      alias: [
-        {
-          // Every server function the workspace calls; settings are browser code.
-          find: /^#\/lib\/(?!settings\/).*\.functions$/,
-          replacement: rpc,
-        },
-        { find: "#", replacement: `${webRoot}src` },
-      ],
-    },
-    server: {
-      host: "127.0.0.1",
-      port: 0,
-      forwardConsole: false,
-      proxy: {
-        "/fixture": backend.url.href,
-        "/api": { target: backend.url.href, ws: true },
-      },
-    },
+  const vite = await createWorkspaceServer({
+    entry: "editor-runtime",
+    backend: backend.url,
   });
   await vite.listen();
   return {

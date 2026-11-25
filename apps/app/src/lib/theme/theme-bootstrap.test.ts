@@ -40,6 +40,7 @@ function boot({
       },
     },
   };
+  // oxlint-disable-next-line typescript/no-implied-eval -- The script under test.
   new Function(
     "localStorage",
     "matchMedia",

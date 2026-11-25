@@ -30,17 +30,18 @@ function PreferencesPage() {
     enableBeforeUnload: () => settings.dirty && !leaving.current,
     withResolver: true,
   });
+  const { ready, begin, discard, setSection } = settings;
   useEffect(() => {
-    if (settings.ready) settings.begin();
-  }, [settings.ready]);
+    if (ready) begin();
+  }, [ready, begin]);
   useEffect(() => {
-    if (section === "shortcuts") settings.setSection("Keyboard shortcuts");
-  }, [section]);
+    if (section === "shortcuts") setSection("Keyboard shortcuts");
+  }, [section, setSection]);
   useEffect(
     () => () => {
-      settings.discard();
+      discard();
     },
-    [],
+    [discard],
   );
   const exit = () => {
     leaving.current = true;

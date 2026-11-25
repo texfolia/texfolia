@@ -398,6 +398,6 @@ try {
   );
 } finally {
   await browser.close();
-  backend.stop(true);
+  await backend.stop(true);
   for (const source of sources.values()) source.destroy();
 }

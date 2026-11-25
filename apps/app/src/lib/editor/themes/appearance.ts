@@ -39,12 +39,15 @@ export function migrateAppearance(value: unknown): Appearance {
   };
 }
 
-export function selectedTheme(appearance: Appearance, dark: boolean) {
+export function selectedTheme(
+  selection: Appearance["selection"],
+  dark: boolean,
+) {
   return catalogTheme(
-    appearance.selection.kind === "system"
+    selection.kind === "system"
       ? dark
         ? "githubDark"
         : "githubLight"
-      : appearance.selection.id,
+      : selection.id,
   );
 }

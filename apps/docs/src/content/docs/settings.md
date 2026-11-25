@@ -4,7 +4,7 @@ title: Settings
 
 Settings opens as a dialog inside a project. Outside the editor, Settings opens
 `/settings/preferences`. The settings area contains Account, Preferences,
-Connections, AI, Billing, and Usage. `/billing` redirects to `/settings/billing`
+Connections, AI, Organizations, Billing, and Usage. `/billing` redirects to `/settings/billing`
 and preserves the selected plan and organization.
 
 ## User preferences
@@ -46,12 +46,12 @@ loader returns the committed formatting, which the editor uses for indentation
 and Format document. Collaborators see changes when they reload the project.
 
 Apply tries each changed storage owner in order: project formatting, project
-spelling, browser editor preferences, personal dictionary and shortcuts, then
+spelling, main document, browser editor preferences, personal dictionary and shortcuts, then
 appearance. A failed write does not block
 the others. Successful writes remain committed, errors name the failed owner,
 and the remaining draft can be retried. A failed Save never closes the form.
 Browser preference load failures disable only the editor and shortcut fields.
-Appearance and project formatting remain available.
+Appearance and the project settings remain available.
 
 When committed preferences or project formatting change outside Settings,
 untouched draft fields follow the new values. Fields edited in the draft keep
@@ -88,22 +88,23 @@ up to four chords separated by spaces. Enter finishes recording. Escape cancels
 it. Clear leaves an action unassigned. Reset restores one action, and Reset all
 restores every default.
 
-| Action                     | Default                     | VS Code equivalent                   |
-| -------------------------- | --------------------------- | ------------------------------------ |
-| Settings                   | Mod+,                       | Preferences: Open Settings           |
-| Keyboard shortcuts         | Mod+K Mod+S                 | Preferences: Open Keyboard Shortcuts |
-| Save                       | Mod+S                       | File: Save                           |
-| Save without compiling     | Mod+K S                     | File: Save without Formatting        |
-| Save & compile             | Mod+Shift+B                 | Tasks: Run Build Task                |
-| Clean build                | Unassigned                  | None                                 |
-| Format document            | Alt+Shift+F                 | Format Document                      |
-| Open Markdown/SVG preview  | Mod+Shift+V                 | Markdown: Open Preview               |
-| Next / previous editor tab | Ctrl+PageDown / Ctrl+PageUp | View: Open Next / Previous Editor    |
-| Toggle sidebar             | Mod+Alt+B                   | View: Toggle Secondary Side Bar      |
-| Go to file                 | Mod+P                       | Go to File                           |
-| Command palette            | Mod+Shift+P                 | Show All Commands                    |
-| Search projects            | Mod+P                       | Go to File                           |
-| Search in project          | Mod+Shift+F                 | Search: Find in Files                |
+| Action                       | Default                     | VS Code equivalent                   |
+| ---------------------------- | --------------------------- | ------------------------------------ |
+| Settings                     | Mod+,                       | Preferences: Open Settings           |
+| Keyboard shortcuts           | Mod+K Mod+S                 | Preferences: Open Keyboard Shortcuts |
+| Save                         | Mod+S                       | File: Save                           |
+| Save without compiling       | Mod+K S                     | File: Save without Formatting        |
+| Save & compile               | Mod+Shift+B                 | Tasks: Run Build Task                |
+| Clean build                  | Unassigned                  | None                                 |
+| Format document              | Alt+Shift+F                 | Format Document                      |
+| Open Markdown or SVG preview | Mod+Shift+V                 | Markdown: Open Preview               |
+| Next / previous editor tab   | Ctrl+PageDown / Ctrl+PageUp | View: Open Next / Previous Editor    |
+| Toggle sidebar               | Mod+Alt+B                   | View: Toggle Secondary Side Bar      |
+| Toggle panel                 | Mod+J                       | View: Toggle Panel Visibility        |
+| Go to file                   | Mod+P                       | Go to File                           |
+| Command palette              | Mod+Shift+P                 | Show All Commands                    |
+| Search projects              | Mod+P                       | Go to File                           |
+| Search in project            | Mod+Shift+F                 | Search: Find in Files                |
 
 Bold, Italic, Underline (Mod+B/I/U) and headings (Mod+Alt+0–6) keep the
 standard rich-text bindings. New project keeps the N P sequence because the
@@ -157,9 +158,15 @@ annotations in builds and in dev prebundling. Check it when you upgrade the pack
 ## Account pages
 
 Account saves profile name and image through Better Auth. Changing email uses
-Better Auth's email OTP flow. Account deletion requires a confirmation email.
+Better Auth's email OTP flow. It lists active sessions, which can be signed out,
+and **Download my data** exports the account's records as JSON, without project
+files, credentials, or tokens. Account deletion requires a confirmation email and
+is refused while the account is the only owner of an organization.
 Connections lists linked GitHub, GitLab, Google, and Microsoft accounts. GitHub
 and GitLab distinguish sign-in links from the repository scopes needed for Git.
+
+Organizations manages members, roles, and invitations. See
+[Organizations](/project-controls/#organizations).
 
 AI chooses the existing account-level preferred model for new conversations.
 Usage shows monthly metered AI spend, reserved amounts, pending requests, and

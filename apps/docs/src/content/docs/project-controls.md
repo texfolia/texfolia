@@ -10,8 +10,8 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 | Delete project     | The owner moves a personal project to the trash and can restore it for 30 days or delete it permanently. Collaborators have no delete control. See [Trash](#trash).                                                                                                                                                                             |
 | Duplicate project  | Anyone signed in who can read a project can copy it into a new personal project. See [Duplicates](#duplicates).                                                                                                                                                                                                                                 |
 | Transfer ownership | The owner can make a collaborator the owner. See [Ownership transfer](#ownership-transfer).                                                                                                                                                                                                                                                     |
-| Rename project     | No control is shown. Project renaming is outside v1.                                                                                                                                                                                                                                                                                            |
-| Download project   | **Export project** in the Files sidebar downloads a ZIP of current sources. Generated files are optional when a build exists.                                                                                                                                                                                                                   |
+| Rename project     | Anyone who can edit a project can rename it from its row menu in Projects.                                                                                                                                                                                                                                                                      |
+| Download project   | **Export project** in the workspace's File menu downloads a ZIP of current sources. Generated files are optional when a build exists. **Download ZIP** in Projects contains saved sources.                                                                                                                                                      |
 | Share project      | The owner grants **Can view** or **Can edit** by account email. Adding a new collaborator emails them a link to open the project; changing an existing collaborator's role does not send another email. Sharing does not create an account, and the answer is the same whether or not the email has one. See [Sharing limits](#sharing-limits). |
 | Share links        | The owner creates read-only links for people without an account: **Sources and PDF**, or **PDF only**. See [Share links](#share-links).                                                                                                                                                                                                         |
 | Change access      | Sharing with the same email updates that person's role.                                                                                                                                                                                                                                                                                         |
@@ -21,9 +21,26 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 | Scratchpad         | Each project has one shared Markdown scratchpad. Owners and editors edit it, viewers read it, and share links cannot see it. See [Scratchpad](#scratchpad).                                                                                                                                                                                     |
 | Access display     | The project list shows the actual collaborator count, **Personal** when there are none, or **Organization** for inherited membership. The workspace lists actual people and roles. Only people who manage access see email addresses: the owner, or an organization's owners and admins.                                                        |
 
-Organization projects inherit access from membership. Every organization member is an editor on every organization project, whatever their role (`owner`, `admin`, or `member`). Members can save sources, compile, write to collaboration, and use write assistant tools. Organization projects have no viewer role and no per-project roles. Owners and admins additionally can trash, restore, permanently delete, and transfer organization projects, and link or unlink a git remote. The workspace explains this and shows no personal-project sharing form. Organization creation, invitations, and membership administration have no management UI in v1. The invitation acceptance route remains available for existing invitations.
+Organization projects inherit access from membership. Every organization member is an editor on every organization project, whatever their role (`owner`, `admin`, or `member`). Members can save sources, compile, write to collaboration, and use write assistant tools. Organization projects have no viewer role and no per-project roles. Owners and admins additionally can trash, restore, permanently delete, and transfer organization projects, and link or unlink a git remote. The workspace explains this and shows no personal-project sharing form. See [Organizations](#organizations) for who manages membership.
 
 The public header links to Templates and Pricing. GitHub and GitLab integration is available from the right sidebar. Repositories can be imported from Projects. The Pro AI assistant is part of v1.
+
+## Organizations
+
+An organization is created with a Team plan in **Settings → Billing**. **Settings → Organizations** manages its name, members, and invitations.
+
+| Action                                    | Owner | Admin | Member |
+| ----------------------------------------- | ----- | ----- | ------ |
+| Edit organization projects                | Yes   | Yes   | Yes    |
+| Trash, transfer, and link projects to Git | Yes   | Yes   | No     |
+| Rename the organization                   | Yes   | Yes   | No     |
+| Invite and remove members                 | Yes   | Yes   | No     |
+| Manage billing and the shared AI cap      | Yes   | Yes   | No     |
+| Invite and remove owners and admins       | Yes   | No    | No     |
+| Change roles                              | Yes   | No    | No     |
+| Delete the organization                   | Yes   | No    | No     |
+
+Anyone can leave, except an organization's only owner, who first makes someone else an owner or deletes the organization. An account cannot be deleted while it is the only owner of an organization. The server enforces these rules in `organization-policy.ts`.
 
 ## Trash
 

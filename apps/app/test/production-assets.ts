@@ -100,7 +100,7 @@ const reservation = Bun.serve({
   fetch: () => new Response(),
 });
 const port = reservation.port;
-reservation.stop(true);
+await reservation.stop(true);
 assert(port);
 const runtime = new Miniflare({
   ...convertV4MiniflareOptions({
@@ -112,7 +112,7 @@ const runtime = new Miniflare({
       )
       .map((path) => ({ type: "ESModule", path: join(root, path) })),
     modulesRoot: root,
-    compatibilityDate: "2026-10-30",
+    compatibilityDate: "2026-10-31",
     compatibilityFlags: ["nodejs_compat"],
     assets: {
       directory: client.pathname,
@@ -216,6 +216,9 @@ try {
         );
     }
   }
+  const health = await fetch(new URL("/api/health", origin));
+  assert.equal(health.status, 503, "No database answers here");
+  assert.deepEqual(await health.json(), { status: "unavailable" });
   browser = await chromium.launch({ headless: true });
   // `/` redirects to /login, whose Turnstile widget rejects the empty test site key.
   const context = await browser.newContext();

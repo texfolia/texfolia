@@ -86,8 +86,12 @@ test("native UIW highlighting handles the inherited LaTeX tags", async () => {
 });
 
 test("appearance v2 is account-scoped, follows GitHub system modes, and has no import variant", () => {
-  expect(selectedTheme(defaultAppearance, false).id).toBe("githubLight");
-  expect(selectedTheme(defaultAppearance, true).id).toBe("githubDark");
+  expect(selectedTheme(defaultAppearance.selection, false).id).toBe(
+    "githubLight",
+  );
+  expect(selectedTheme(defaultAppearance.selection, true).id).toBe(
+    "githubDark",
+  );
   expect(appearanceStorageKey("alice")).not.toBe(appearanceStorageKey("bob"));
   expect(appearanceStorageKey("alice")).not.toBe(
     legacyAppearanceStorageKey("alice"),

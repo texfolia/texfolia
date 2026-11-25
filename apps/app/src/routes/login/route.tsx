@@ -115,11 +115,12 @@ function RouteComponent() {
   );
   const retryWait = Math.max(0, Math.ceil((retryAfter - now) / 1000));
 
+  const waiting = sendWait > 0 || retryWait > 0;
   useEffect(() => {
-    if (!sendWait && !retryWait) return;
+    if (!waiting) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [sendWait > 0, retryWait > 0]);
+  }, [waiting]);
 
   useEffect(() => {
     if (step === "otp" && pending === null)
@@ -283,7 +284,7 @@ function RouteComponent() {
           tabIndex={-1}
           onSubmit={(e) => {
             e.preventDefault();
-            form.handleSubmit();
+            void form.handleSubmit();
           }}
           className="w-full max-w-xs space-y-5 text-center"
           aria-label="Sign in"

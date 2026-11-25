@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
+  "cacheMaxSize": "200MB",
   "globalDependencies": [
     "tsconfig.base.json",
     "tsconfig.json",

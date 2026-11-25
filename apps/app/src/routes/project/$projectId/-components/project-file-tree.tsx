@@ -137,6 +137,7 @@ function ProjectFileIcon({ name, kind }: Pick<ProjectNode, "name" | "kind">) {
   const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
   const FileIcon =
     fileIcons.get(extension) ?? (kind === "text" ? IconFileText : IconFile);
+  // oxlint-disable-next-line react/static-components -- Looked up, not created.
   return <FileIcon aria-hidden="true" />;
 }
 

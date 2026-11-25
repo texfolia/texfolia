@@ -1,5 +1,4 @@
 // @ts-check
-import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
@@ -56,6 +55,5 @@ export default defineConfig({
         },
       ],
     }),
-    react(),
   ],
 });

@@ -188,7 +188,7 @@ export function createCompilerEngine(options: {
           signal: AbortSignal.timeout(cancelTimeoutMs),
         })
         .then(
-          async (response) => void (await response.body?.cancel()),
+          (response) => response.body?.cancel(),
           (error: unknown) =>
             console.warn("Compile cancellation failed", { id, error }),
         )

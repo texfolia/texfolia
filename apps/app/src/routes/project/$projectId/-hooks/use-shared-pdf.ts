@@ -35,10 +35,11 @@ export function useSharedPdf({
     step.kind === "keep" || step.kind === "clear" ? null : step.url;
   const reportError = useEffectEvent(onError);
   useEffect(() => {
-    if (step.kind === "adopt") dispatch({ type: "adopted", url: step.url });
     if (step.kind === "clear") dispatch({ type: "cleared" });
+    if (!stepUrl) return;
+    if (step.kind === "adopt") dispatch({ type: "adopted", url: stepUrl });
     if (step.kind !== "load") return;
-    const url = step.url;
+    const url = stepUrl;
     const controller = new AbortController();
     void (async () => {
       try {

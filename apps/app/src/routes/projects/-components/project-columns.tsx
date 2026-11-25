@@ -74,6 +74,7 @@ export const columns = columnHelper.columns([
         {row.original.people.slice(0, 4).map((person) => (
           <Tooltip key={person.id}>
             <TooltipTrigger
+              // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Shows the tooltip by keyboard.
               render={<span tabIndex={0} />}
               aria-label={`${person.name} (${person.role})`}
             >

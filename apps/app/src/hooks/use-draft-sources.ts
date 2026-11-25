@@ -28,6 +28,7 @@ export function useDraftSources(
   }, [drafts, active]);
   return useMemo(
     () => (active ? draftSources(paths, drafts) : []),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `drafts` is mutable; a revision is a change to it.
     [drafts, paths, active, revision],
   );
 }

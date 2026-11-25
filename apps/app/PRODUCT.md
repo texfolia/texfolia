@@ -12,9 +12,9 @@ Texfolia is the AI-native LaTeX workspace. People edit project sources, collabor
 
 ## Capabilities and Constraints
 
-NAT-314 establishes the editor workspace: agents on the left, a central dock for files and Problems, a separate usually hidden chat-history sidebar on the far left, and one right sidebar switching Files, Outline, Git and Collaboration through bottom-right icons, a top menu and bottom status bar. Git is optional. Generated output is read-only, presented within the ordinary file tree. Layout preferences belong to each user and project; assistant threads belong to each user and project on the server.
+NAT-314 establishes the editor workspace: agents on the left, a central dock for files, a separate usually hidden chat-history sidebar on the far left, and one right sidebar switching Files, Outline, Search, Git, Comments and Collaboration through bottom-right icons, a top menu and bottom status bar. Problems, Logs and Terminal share a bottom panel that is closed by default; Terminal is a placeholder. Git is optional. Generated output is read-only, presented within the ordinary file tree. Layout preferences belong to each user and project; assistant threads belong to each user and project on the server.
 
-Existing compilation, collaboration permissions, assistant tools and metering, and themes remain authoritative. Settings opens as an editor dialog with User and Project tabs, drafts, and Apply, Save, and Cancel controls. Outside the editor, the settings pages share the User controls. File opening follows preview and pin semantics. The user confirmed File, Edit and View menus; Git actions stay in the Git sidebar.
+Existing compilation, collaboration permissions, assistant tools and metering, and themes remain authoritative. Settings opens as an editor dialog with User and Project tabs, drafts, and Apply, Save, and Cancel controls. Outside the editor, the Preferences page shares the User controls, beside the Account, Connections, AI, Organizations, Billing and Usage pages. File opening follows preview and pin semantics. The user confirmed File, Edit and View menus; Git actions stay in the Git sidebar.
 
 ## Brand Commitments
 

@@ -461,7 +461,11 @@ export async function lookupReference(
 const cacheSeconds = 7 * 24 * 60 * 60;
 const noStore = { "Cache-Control": "no-store" };
 
-function failure(error: string, status: number, headers: HeadersInit = {}) {
+function failure(
+  error: string,
+  status: number,
+  headers: Record<string, string> = {},
+) {
   return Response.json(
     { error },
     { status, headers: { ...noStore, ...headers } },

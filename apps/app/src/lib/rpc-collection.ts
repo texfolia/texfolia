@@ -15,7 +15,7 @@ export function createRpcCollection<T extends { id: string }>({
     replace(rows: T[]) {
       sync.begin({ snapshot: true });
       for (const row of rows) sync.write({ type: "insert", value: row });
-      sync.commit();
+      void sync.commit();
     },
     // Add a further server page without disturbing rows already synced.
     append(rows: T[]) {
@@ -23,7 +23,7 @@ export function createRpcCollection<T extends { id: string }>({
       if (!fresh.length) return;
       sync.begin();
       for (const row of fresh) sync.write({ type: "insert", value: row });
-      sync.commit();
+      void sync.commit();
     },
   };
   const collection = createCollection<T, string, typeof utils>({
@@ -37,7 +37,7 @@ export function createRpcCollection<T extends { id: string }>({
         sync = callbacks;
         sync.begin({ snapshot: true });
         for (const row of initial) sync.write({ type: "insert", value: row });
-        sync.commit();
+        void sync.commit();
         sync.markReady();
       },
     },
@@ -50,7 +50,7 @@ export function createRpcCollection<T extends { id: string }>({
       sync.write({ type: "insert", value: row });
       // Acknowledgements apply when the optimistic transaction settles. Awaiting
       // the sync receipt here would deadlock that transaction.
-      sync.commit();
+      void sync.commit();
     },
     ...(remove && {
       onDelete: async ({ transaction }) => {
@@ -60,7 +60,7 @@ export function createRpcCollection<T extends { id: string }>({
         await remove(mutation.original);
         sync.begin();
         sync.write({ type: "delete", key: mutation.key });
-        sync.commit();
+        void sync.commit();
       },
     }),
   });

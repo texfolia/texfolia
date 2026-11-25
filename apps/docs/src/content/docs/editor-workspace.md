@@ -8,8 +8,9 @@ bottom-right icons or View menu to switch Files, Outline, Search, Git, Comments
 or Collaboration.
 Git actions stay in the Git view. Settings opens as a dialog with User and Project tabs. Changes use Apply, Save, and Cancel. Closing a dirty draft prompts before discarding. See [Settings](/settings/).
 
-The status bar shows compile state, Problems, compile logs, live collaborators,
-the git branch when a repository exists, and the active editor’s line and column.
+The status bar shows Problems, compile logs, compile state, the main document's
+word count, live collaborators, the scratchpad, the git branch when a repository
+exists, and the active file and the editor’s line and column.
 Compile state also starts a build. PDF files open as ordinary preview tabs when
 selected in the Files tree; no empty PDF viewer opens with the workspace.
 
@@ -100,9 +101,9 @@ previews, and the assistant's changes in Chromium.
 
 ## Bottom panel
 
-Problems and Logs share a bottom panel below the dock. It is closed by default
-and opens only when you choose it: View > Panel, Problems or Logs, the status-bar
-Problems and logs buttons, or Mod+J. A failed compile does not open it. Drag the
+Problems, Logs, and Terminal share a bottom panel below the dock. It is closed by default
+and opens only when you choose it: View > Panel, Problems, Logs, or Terminal, the
+status-bar Problems and logs buttons, or Mod+J. A failed compile does not open it. Drag the
 divider or use its arrow keys to resize it.
 
 Problems lists browser diagnostics and parsed compile-log diagnostics. Selecting
@@ -122,7 +123,9 @@ The container row distinguishes a cold start, with or without a restored cache,
 from a warm or editor-prewarmed container. LaTeX run duration is positioned from
 engine durations, so it has no clock time of its own. Logs never shows usage or
 fair-use limits. Project members and full-project share links can read logs and
-timelines; PDF-only links cannot. A Terminal tab is not planned in this panel.
+timelines; PDF-only links cannot.
+
+Terminal is a placeholder that points to Logs. Texfolia offers no shell.
 
 Files shows only folders and files, with compact square rows flush to the panel
 edges. Create, upload, export and path repair open from the File menu; row

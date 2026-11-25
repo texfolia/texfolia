@@ -3,11 +3,11 @@ import {
   type RefObject,
   useCallback,
   useEffect,
-  useEffectEvent,
   useLayoutEffect,
   useState,
 } from "react";
 
+import { useStableCallback } from "#/hooks/use-stable-callback";
 import { documentCachingStopped } from "#/lib/collaboration/browser";
 import { debounce } from "#/lib/debounce";
 import {
@@ -111,14 +111,12 @@ export function useWorkspaceChrome({
     return () => narrow.removeEventListener("change", adapt);
   }, []);
 
-  const writeLayout = useEffectEvent(() => {
+  const writeLayout = useStableCallback(() => {
     if (documentCachingStopped()) return;
     const api = dock.current;
     if (api) writeWorkspaceLayout(layoutKey, chrome, api.toJSON());
   });
-  const [persist] = useState(() =>
-    debounce(() => writeLayout(), persistDelayMs),
-  );
+  const [persist] = useState(() => debounce(writeLayout, persistDelayMs));
   useEffect(() => {
     if (ready) persist.schedule();
   }, [chrome, ready, persist]);

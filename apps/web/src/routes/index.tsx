@@ -37,7 +37,7 @@ const features = [
   },
   {
     title: "Room to change your mind.",
-    body: "Compare document versions, name the milestones, and restore an earlier draft when you need a fresh start.",
+    body: "Undo your edits, review and revert the assistant’s changes, and commit your work to your own GitHub or GitLab repository.",
   },
 ];
 

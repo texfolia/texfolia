@@ -1,6 +1,6 @@
 # Documentation site
 
-Astro + Starlight + React documentation site for Texfolia, built as static
+Astro + Starlight documentation site for Texfolia, built as static
 assets for Cloudflare Workers (`texfolia-docs`; local runs use
 `texfolia-docs-local`).
 
@@ -13,8 +13,7 @@ Open [localhost:4322](http://localhost:4322).
 ## Content
 
 Documentation pages live in `src/content/docs/` as Markdown or MDX files with
-Starlight frontmatter. React components can be rendered in `.mdx` pages via
-`@astrojs/react`.
+Starlight frontmatter.
 
 ## Commands
 

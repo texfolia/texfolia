@@ -96,9 +96,11 @@ export function SettingsDialog() {
           </DialogHeader>
           <fieldset
             disabled={!settings.ready || settings.saving}
-            className="flex min-h-0 flex-1 flex-col"
+            // A fieldset does not shrink its contents, so it takes no part in
+            // the layout.
+            className="contents"
           >
-            <Tabs defaultValue="user" className="min-h-0 gap-4">
+            <Tabs defaultValue="user" className="min-h-0 flex-1 gap-4">
               <TabsList aria-label="Settings scope" className="shrink-0">
                 <TabsTrigger value="user" className="px-5">
                   User

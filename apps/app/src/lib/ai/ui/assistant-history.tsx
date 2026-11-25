@@ -166,6 +166,7 @@ export function AssistantHistory({
       });
     return () => {
       abort.abort();
+      // oxlint-disable-next-line react-hooks/exhaustive-deps -- A counter, not an element: it must be the latest one.
       loadSequence.current++;
     };
   }, [loadList, open]);

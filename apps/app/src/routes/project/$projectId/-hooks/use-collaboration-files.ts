@@ -1,11 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useStableCallback } from "#/hooks/use-stable-callback";
 import {
   CollaborativeDocuments,
   type CollaborativeFile,
@@ -44,12 +39,12 @@ export function useCollaborationFiles({
 }) {
   const [revision, setRevision] = useState(0);
   const bump = () => setRevision((value) => value + 1);
-  const saved = useEffectEvent<Options["onSaved"]>((...args) => {
+  const saved = useStableCallback<Options["onSaved"]>((...args) => {
     onSaved(...args);
     bump();
   });
-  const changed = useEffectEvent(onChange);
-  const closed = useEffectEvent(onClose);
+  const changed = useStableCallback(onChange);
+  const closed = useStableCallback(onClose);
   // The route remounts per project, so the project and user never change.
   const [documents] = useState(
     () =>
@@ -57,15 +52,16 @@ export function useCollaborationFiles({
         projectId,
         userId,
         recoverUnmarked,
-        onSaved: (...args) => saved(...args),
-        onChange: (...args) => changed(...args),
-        onClose: (...args) => closed(...args),
+        onSaved: saved,
+        onChange: changed,
+        onClose: closed,
         onDocuments: bump,
       }),
   );
   // A new map each revision lets context consumers notice new documents.
   const snapshot = useMemo<ReadonlyMap<string, CollaborativeFile>>(
     () => documents.snapshot(),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `documents` is mutable; a revision is a change to it.
     [documents, revision],
   );
 

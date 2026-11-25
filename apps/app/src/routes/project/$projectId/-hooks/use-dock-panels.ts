@@ -98,10 +98,13 @@ export function useDockPanels({
     [cursor],
   );
 
-  const fileTitle = (node: ProjectNode) => {
-    const draft = drafts.get(node.id);
-    return `${node.name}${draft && draft.value !== draft.savedValue ? " ●" : ""}`;
-  };
+  const fileTitle = useCallback(
+    (node: ProjectNode) => {
+      const draft = drafts.get(node.id);
+      return `${node.name}${draft && draft.value !== draft.savedValue ? " ●" : ""}`;
+    },
+    [drafts],
+  );
   /** Marks a file's tab when its text differs from the saved copy. */
   function refreshTitle(id: string) {
     const node = files.nodes.get(id);
@@ -127,7 +130,7 @@ export function useDockPanels({
         ?.api.setTitle(`Preview: ${node.name}`);
     }
     previousPaths.current = paths;
-  }, [nodes, paths, ready, updateAnalysis, drafts]);
+  }, [nodes, paths, ready, updateAnalysis, drafts, fileTitle]);
 
   useEffect(
     () => () => {

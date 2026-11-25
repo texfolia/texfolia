@@ -78,7 +78,7 @@ const portReservation = Bun.serve({
   fetch: () => new Response(),
 });
 const port = portReservation.port;
-portReservation.stop(true);
+await portReservation.stop(true);
 assert(port);
 const origin = `http://127.0.0.1:${port}`;
 const mf = new Miniflare({
@@ -92,7 +92,7 @@ const mf = new Miniflare({
         )
         .map((p) => ({ type: "ESModule", path: join(root, p) })),
       modulesRoot: root,
-      compatibilityDate: "2026-10-30",
+      compatibilityDate: "2026-10-31",
       compatibilityFlags: ["nodejs_compat"],
       assets: {
         directory: new URL("../dist/client/", import.meta.url).pathname,

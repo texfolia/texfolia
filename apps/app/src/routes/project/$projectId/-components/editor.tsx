@@ -249,7 +249,7 @@ export function Editor({
     formatting,
     format,
     onToggleWrap: () =>
-      updateEditor({ ...preferences, wrapLines: !preferences.wrapLines }),
+      void updateEditor({ ...preferences, wrapLines: !preferences.wrapLines }),
     onToggleSymbols: () => setShowSymbols((open) => !open),
     onError: setError,
     onCommands,

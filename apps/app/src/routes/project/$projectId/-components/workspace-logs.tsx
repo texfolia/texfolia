@@ -108,7 +108,7 @@ export function WorkspaceLogs({ openedAt }: { openedAt: number }) {
   useEffect(() => () => request.current?.abort(), []);
   const entry =
     jobs?.find((job) => job.id === selected) ?? jobs?.[0] ?? undefined;
-  const zone = useMemo(timeZoneLabel, []);
+  const zone = useMemo(() => timeZoneLabel(), []);
 
   return (
     <section

@@ -30,8 +30,10 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.4",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
+    "oxlint-tsgolint": "^7.0.2008",
     "postcss": "8.5.33",
     "turbo": "2.11.10"
   },

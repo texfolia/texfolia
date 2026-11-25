@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import postcss from "postcss";
 
+import { headingIds, withoutFences } from "./markdown-headings.mjs";
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 const docsContentRoot = resolve(root, "apps/docs/src/content/docs");
 const files = execFileSync(
@@ -19,7 +21,8 @@ const files = execFileSync(
   .filter(Boolean);
 const errors = [];
 
-function starlightRouteExists(target) {
+/** The page that a site path such as `/projects/` shows, if there is one. */
+function starlightPage(target) {
   const slug = target.replace(/^\/+|\/+$/g, "");
   const candidates = slug
     ? [
@@ -32,7 +35,17 @@ function starlightRouteExists(target) {
         resolve(docsContentRoot, "index.md"),
         resolve(docsContentRoot, "index.mdx"),
       ];
-  return candidates.some((candidate) => existsSync(candidate));
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+const fragments = new Map();
+function hasFragment(path, fragment) {
+  let ids = fragments.get(path);
+  if (!ids) {
+    ids = headingIds(readFileSync(path, "utf8"));
+    fragments.set(path, ids);
+  }
+  return ids.has(decodeURIComponent(fragment));
 }
 
 for (const file of files) {
@@ -43,25 +56,25 @@ for (const file of files) {
     !existsSync(resolve(root, file))
   )
     continue;
-  const markdown = readFileSync(resolve(root, file), "utf8").replace(
-    /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm,
-    "",
-  );
+  const markdown = withoutFences(readFileSync(resolve(root, file), "utf8"));
   for (const match of markdown.matchAll(
     /\[[^\]\n]*\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/g,
   )) {
-    const target = match[1].split(/[?#]/)[0];
-    if (!target || /^(?:[a-z][\w+.-]*:|\/\/)/i.test(target)) continue;
-    if (isDocsContent && target.startsWith("/")) {
-      if (!starlightRouteExists(target))
-        errors.push(`${file}: broken local link ${match[1]}`);
-      continue;
-    }
-    const path = target.startsWith("/")
-      ? resolve(root, `.${target}`)
-      : resolve(root, dirname(file), decodeURIComponent(target));
-    if (!existsSync(path))
+    if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(match[1])) continue;
+    const [address, fragment] = match[1].split("#");
+    const target = address.split("?")[0];
+    const path = !target
+      ? resolve(root, file)
+      : isDocsContent && target.startsWith("/")
+        ? starlightPage(target)
+        : target.startsWith("/")
+          ? resolve(root, `.${target}`)
+          : resolve(root, dirname(file), decodeURIComponent(target));
+    if (!path || !existsSync(path))
       errors.push(`${file}: broken local link ${match[1]}`);
+    // Other files have fragments of their own, such as a line number.
+    else if (fragment && /\.mdx?$/.test(path) && !hasFragment(path, fragment))
+      errors.push(`${file}: broken heading link ${match[1]}`);
   }
 }
 
@@ -111,5 +124,7 @@ if (errors.length) {
   console.error(errors.join("\n"));
   process.exitCode = 1;
 } else {
-  console.info("Local Markdown links and Tailwind-only styles passed.");
+  console.info(
+    "Local Markdown links, heading links, and Tailwind-only styles passed.",
+  );
 }

@@ -210,7 +210,7 @@ export abstract class CollaborationRoom<
       "CREATE INDEX IF NOT EXISTS updates_by_node ON updates (node_id, id)",
     );
     this.alarms = new DutyAlarm(ctx.storage);
-    ctx.blockConcurrencyWhile(async () => {
+    void ctx.blockConcurrencyWhile(async () => {
       if ((await ctx.storage.getAlarm()) !== null) return;
       const now = Date.now();
       if (this.dirtyDocuments().length)
