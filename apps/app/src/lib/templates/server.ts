@@ -11,6 +11,7 @@ export {
   templateDestinations,
 } from "./catalog.server";
 export { collectTemplateObjects } from "./cleanup.server";
+export { templatePreview } from "./preview-response.server";
 export {
   refreshTemplatePreview,
   refreshTemplatePreviews,

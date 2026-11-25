@@ -26,14 +26,24 @@ export function createProjectFilesStore({
   initial,
   projectId,
   initialSourceVersions,
+  commentsVersion,
+  gitVersion,
 }: {
   initial: ProjectNode[];
   projectId: string;
   initialSourceVersions: ProjectDetails["sourceVersions"];
+  commentsVersion?: string;
+  gitVersion?: string;
 }) {
   const sourceVersions = { ...initialSourceVersions };
   const createdTextSources = new Map<string, string>();
   let mutation = 0;
+  // The last response applied, while no local write has followed it.
+  let applied: {
+    etag: string;
+    mutation: number;
+    metadata: ProjectMetadata;
+  } | null = null;
   let refreshQueue = Promise.resolve();
   let knownNodeIds = new Set(initial.map((node) => node.id));
   let status: {
@@ -47,8 +57,8 @@ export function createProjectFilesStore({
     canWrite: undefined,
     error: "",
     deleted: new Set(),
-    commentsVersion: undefined,
-    gitVersion: undefined,
+    commentsVersion,
+    gitVersion,
     sourcesVersion: projectSourcesFingerprint({
       nodes: initial,
       sourceVersions,
@@ -186,13 +196,23 @@ export function createProjectFilesStore({
           signal?.throwIfAborted();
           const started = mutation;
           const versionsAtStart = { ...sourceVersions };
+          // Local writes may have changed what the last response left here.
+          const known = applied?.mutation === started ? applied : null;
           const response = await fetch(`/api/projects/${projectId}/metadata`, {
             cache: "no-store",
+            headers: known ? { "If-None-Match": known.etag } : {},
             signal: signal
               ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
               : AbortSignal.timeout(10_000),
           });
+          if (known && response.status === 304) {
+            signal?.throwIfAborted();
+            if (started !== mutation || pending.size) continue;
+            for (const listener of refreshListeners) listener();
+            return known.metadata;
+          }
           if (!response.ok) {
+            applied = null;
             const denied = response.status === 401 || response.status === 404;
             const error = denied
               ? "Project access is no longer available. Local drafts are kept in this browser."
@@ -223,6 +243,8 @@ export function createProjectFilesStore({
               sourceVersions,
             }),
           });
+          const etag = response.headers.get("ETag");
+          applied = etag ? { etag, mutation: started, metadata } : null;
           for (const listener of refreshListeners) listener();
           return metadata;
         }
@@ -270,8 +292,19 @@ export function ProjectFilesProvider({
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let refreshing = false;
+    // Hidden tabs do not poll; they refresh when they are shown again.
+    const schedule = () => {
+      clearTimeout(timer);
+      if (!controller.signal.aborted && document.visibilityState !== "hidden")
+        timer = setTimeout(refresh, 2000);
+    };
     const refresh = async () => {
-      if (refreshing || controller.signal.aborted) return;
+      if (
+        refreshing ||
+        controller.signal.aborted ||
+        document.visibilityState === "hidden"
+      )
+        return;
       clearTimeout(timer);
       refreshing = true;
       try {
@@ -280,13 +313,15 @@ export function ProjectFilesProvider({
         // Offline sessions retain their metadata and Yjs recovery cache.
       } finally {
         refreshing = false;
-        if (!controller.signal.aborted) timer = setTimeout(refresh, 2000);
+        schedule();
       }
     };
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "hidden") clearTimeout(timer);
+      else void refresh();
     };
-    void refresh();
+    // The route has just loaded this store.
+    schedule();
     window.addEventListener("online", refresh);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", onVisibility);

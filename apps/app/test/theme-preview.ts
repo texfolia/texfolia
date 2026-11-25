@@ -38,6 +38,8 @@ const project: ProjectDetails = {
     { id: mainId, projectId, parentId: rootId, name: "main.tex", kind: "text" },
   ],
   sourceContents: { [mainId]: source },
+  commentsVersion: "0:0",
+  gitVersion: "",
   sourceVersions: { [mainId]: { objectKey: null, updatedAt: 0 } },
 };
 const doc = new Y.Doc();

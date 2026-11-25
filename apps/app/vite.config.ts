@@ -6,6 +6,7 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 
 import { assertLocalEnvironment } from "../../scripts/local-environment.mts";
+import { dockviewThemes } from "./scripts/vite-dockview-themes";
 import { emacsKeymap } from "./scripts/vite-emacs-keymap";
 
 export default defineConfig(({ command, mode }) => {
@@ -20,6 +21,7 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       devtools(),
       cloudflare({ viteEnvironment: { name: "ssr" }, remoteBindings: false }),
+      dockviewThemes(),
       tailwindcss(),
       tanstackStart(),
       viteReact(),

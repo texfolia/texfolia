@@ -573,6 +573,14 @@ test("an absent hostname list allows only the configured auth hostname", async (
   expect(emails).toHaveLength(1);
 });
 
+test("signing out clears the build files the browser kept", async () => {
+  const { post } = createTestAuth();
+  const response = await post("/sign-out", {});
+  expect(response.headers.get("Clear-Site-Data")).toBe('"cache"');
+  const other = await post("/sign-in/email", {});
+  expect(other.headers.has("Clear-Site-Data")).toBe(false);
+});
+
 test("hostname configuration accepts whitespace and normalizes case", async () => {
   const { post, emails } = createTestAuth(" LOCALHOST, WWW.TEXFOLIA.COM ");
   mockSiteverify();

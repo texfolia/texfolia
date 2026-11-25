@@ -9,17 +9,17 @@ import {
 } from "react";
 
 import { useStableActions } from "#/hooks/use-stable-callback";
-import { editorTheme } from "#/lib/editor/themes/theme-editor";
 import {
   type Appearance,
-  appearanceStorageKey,
   defaultAppearance,
-  legacyAppearanceStorageKey,
-  loadedThemeExtension,
-  loadThemeExtension,
   migrateAppearance,
-  resolveTheme,
   selectedTheme,
+} from "#/lib/editor/themes/appearance";
+import {
+  appearanceStorageKey,
+  legacyAppearanceStorageKey,
+  resolveTheme,
+  type ThemeId,
 } from "#/lib/editor/themes/themes";
 import { appearanceSnapshot } from "#/lib/theme/theme-bootstrap";
 
@@ -46,7 +46,13 @@ function readAppearance(userId: string): {
   }
 }
 
-function useAppearance(userId: string) {
+/** The CodeMirror themes of a page with editors, such as the workspace. */
+export type EditorThemes = {
+  loaded: (id: ThemeId) => boolean;
+  load: (id: ThemeId) => Promise<unknown>;
+};
+
+function useAppearance(userId: string, editorThemes?: EditorThemes) {
   const [initial] = useState(() => readAppearance(userId));
   const [appearance, setAppearance] = useState(initial.appearance);
   const [draft, setDraft] = useState<Appearance | null>(null);
@@ -61,30 +67,20 @@ function useAppearance(userId: string) {
     () => selectedTheme(effective, dark),
     [effective.selection, dark],
   );
-  const requestedExtension = loadedThemeExtension(requested.id);
-  // The last theme whose extension had loaded. A newly requested theme is shown
-  // only once its extension arrives, so app colors and the editor switch
-  // together. The first theme is shown at once to match the bootstrap colors.
-  const [ready, setReady] = useState(() => ({
-    definition: requested,
-    extension: requestedExtension,
-  }));
+  const loaded = !editorThemes || editorThemes.loaded(requested.id);
+  // On a page with editors, a newly requested theme is shown only once its
+  // editor theme arrives, so app colors and the editor switch together. The
+  // first theme is shown at once to match the bootstrap colors.
+  const [ready, setReady] = useState(requested);
   const [, setLoaded] = useState(0);
-  const shown = requestedExtension
-    ? { definition: requested, extension: requestedExtension }
-    : ready;
+  const shown = loaded ? requested : ready;
   useEffect(() => {
-    if (requestedExtension) {
-      setReady((current) =>
-        current.definition === requested &&
-        current.extension === requestedExtension
-          ? current
-          : { definition: requested, extension: requestedExtension },
-      );
+    if (loaded) {
+      setReady(requested);
       return;
     }
     let live = true;
-    loadThemeExtension(requested.id).then(
+    editorThemes.load(requested.id).then(
       () => {
         if (live) setLoaded((count) => count + 1);
       },
@@ -98,15 +94,8 @@ function useAppearance(userId: string) {
     return () => {
       live = false;
     };
-  }, [requested, requestedExtension]);
-  const theme = useMemo(
-    () => resolveTheme(shown.definition),
-    [shown.definition],
-  );
-  const extension = useMemo(
-    () => editorTheme(theme, shown.extension ?? []),
-    [theme, shown.extension],
-  );
+  }, [requested, loaded, editorThemes]);
+  const theme = useMemo(() => resolveTheme(shown), [shown]);
 
   function persist(
     next: Appearance,
@@ -206,20 +195,16 @@ function useAppearance(userId: string) {
       draft !== null && JSON.stringify(draft) !== JSON.stringify(appearance),
     [draft, appearance],
   );
-  const shownTheme = useMemo(
-    () => ({ ...theme, extension }),
-    [theme, extension],
-  );
   return useMemo(
     () => ({
-      theme: shownTheme,
+      theme,
       appearance: displayed,
       error,
       dirty,
       preview: setPreview,
       ...actions,
     }),
-    [shownTheme, displayed, error, dirty, actions],
+    [theme, displayed, error, dirty, actions],
   );
 }
 
@@ -227,28 +212,18 @@ const ThemeContext = createContext<ReturnType<typeof useAppearance> | null>(
   null,
 );
 
-export function ThemeProvider({
-  userId,
-  children,
-}: {
+type ThemeProviderProps = {
   userId: string;
+  editorThemes?: EditorThemes;
   children: ReactNode;
-}) {
-  return (
-    <AccountTheme key={userId} userId={userId}>
-      {children}
-    </AccountTheme>
-  );
+};
+
+export function ThemeProvider(props: ThemeProviderProps) {
+  return <AccountTheme key={props.userId} {...props} />;
 }
 
-function AccountTheme({
-  userId,
-  children,
-}: {
-  userId: string;
-  children: ReactNode;
-}) {
-  const value = useAppearance(userId);
+function AccountTheme({ userId, editorThemes, children }: ThemeProviderProps) {
+  const value = useAppearance(userId, editorThemes);
   return <ThemeContext value={value}>{children}</ThemeContext>;
 }
 

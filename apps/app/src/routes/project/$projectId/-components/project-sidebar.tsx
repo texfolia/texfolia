@@ -9,6 +9,8 @@ import {
 } from "@texfolia/ui/dialog";
 import { useMemo, useState, type RefObject } from "react";
 
+import { lazyPanel } from "#/components/lazy-panel";
+import { useHasBeen } from "#/hooks/use-has-been";
 import { buildFileUrl } from "#/lib/compile/build";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import type { SourceFiles } from "#/lib/storage";
@@ -23,18 +25,35 @@ import {
 
 import { CreateNodeForm, type CreateNodeHandle } from "./create-node-form";
 import { generatedTreeNodes } from "./generated-files";
-import { GitPanel } from "./git-panel";
-import { ProjectCollaboration } from "./project-collaboration";
-import { ProjectComments } from "./project-comments";
 import { ProjectExport, type ProjectExportHandle } from "./project-export";
 import { ProjectFileTree } from "./project-file-tree";
-import { ProjectOutline } from "./project-outline";
-import { ProjectSearch, type SearchRequest } from "./project-search";
+import type { SearchRequest } from "./project-search";
 import {
   RepairSourcePaths,
   type RepairSourcePathsHandle,
 } from "./repair-source-paths";
 import { UploadSource, type UploadSourceHandle } from "./upload-source";
+
+const GitPanel = lazyPanel("Git", async () => {
+  const { GitPanel } = await import("./git-panel");
+  return GitPanel;
+});
+const ProjectCollaboration = lazyPanel("Collaboration", async () => {
+  const { ProjectCollaboration } = await import("./project-collaboration");
+  return ProjectCollaboration;
+});
+const ProjectComments = lazyPanel("Comments", async () => {
+  const { ProjectComments } = await import("./project-comments");
+  return ProjectComments;
+});
+const ProjectOutline = lazyPanel("The outline", async () => {
+  const { ProjectOutline } = await import("./project-outline");
+  return ProjectOutline;
+});
+const ProjectSearch = lazyPanel("Search", async () => {
+  const { ProjectSearch } = await import("./project-search");
+  return ProjectSearch;
+});
 
 export function ProjectSidebar({
   name,
@@ -79,6 +98,9 @@ export function ProjectSidebar({
     [nodes, build, root?.id],
   );
   const [error, setError] = useState("");
+  const searching = open && view === "search";
+  const [searchRestored] = useState(searching);
+  const searchUsed = useHasBeen(searching);
   async function download(node: ProjectNode) {
     setError("");
     try {
@@ -206,10 +228,13 @@ export function ProjectSidebar({
         hidden={view !== "search"}
         className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
       >
-        <ProjectSearch
-          active={open && view === "search"}
-          request={searchRequest}
-        />
+        {searchUsed && (
+          <ProjectSearch
+            active={searching}
+            restored={searchRestored}
+            request={searchRequest}
+          />
+        )}
       </div>
       {view === "git" && (
         <div className="min-h-0 flex-1 overflow-auto">

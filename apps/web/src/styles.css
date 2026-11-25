@@ -1,8 +1,12 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
 
-/* @texfolia/ui renders Tailwind classes from outside this app. */
-@source "../../../packages/ui/src";
+/* @texfolia/ui renders Tailwind classes from outside this app. Only the
+   components the site uses, because the others' classes would triple this file;
+   a test keeps the list complete. */
+@source "../../../packages/ui/src/button.tsx";
+@source "../../../packages/ui/src/card.tsx";
+@source "../../../packages/ui/src/table.tsx";
 
 /* The site is light only. Without this, dark: classes follow the visitor's OS. */
 @custom-variant dark (&:is(.dark *));

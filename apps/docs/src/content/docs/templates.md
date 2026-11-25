@@ -66,6 +66,16 @@ stores the build and PNG. After success, the web service
 copies the PNG into `templates/{id}/previews/{jobId}.png` and atomically records its
 key and ready state. The sources and metadata remain immutable.
 
+The gallery shows a 600-pixel-wide WebP, `/api/templates/{id}/preview?size=thumbnail`.
+The app makes it from the PNG the first time it is asked for, with the Cloudflare
+Images binding `IMAGES`, and stores it beside the PNG as
+`{jobId}.thumbnail.webp`. While one cannot be made, the PNG is sent instead.
+
+Previews of approved public templates are sent with
+`Cache-Control: public, max-age=86400` and an `ETag`, without reading the session.
+A withdrawn template's image can therefore stay in browsers for up to a day.
+Previews of unlisted or unapproved templates are always `private, no-store`.
+
 ## Retention
 
 The hourly web sweep removes objects unreferenced by live template manifests or

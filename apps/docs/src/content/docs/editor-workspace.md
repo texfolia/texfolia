@@ -37,7 +37,7 @@ Web Worker with [nspell](https://github.com/wooorm/nspell), a Hunspell-compatibl
 checker, and the `dictionary-*` Hunspell dictionaries. `bun run spelling:assets`
 copies them into `public/dictionaries` before dev and build (0.5–1.4 MB each).
 A dictionary is fetched only when a project uses it and stays loaded for the
-tab. nspell does not support Hunspell compound rules, so some German compounds
+tab. Its URL has the package version, so browsers can keep it forever. nspell does not support Hunspell compound rules, so some German compounds
 are flagged.
 
 The personal dictionary is in Settings → User → Spelling, where you can add or

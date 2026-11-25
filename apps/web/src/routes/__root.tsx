@@ -1,3 +1,4 @@
+import geistLatin from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import {
   createRootRoute,
@@ -23,6 +24,13 @@ export const Route = createRootRoute({
       { title: "Texfolia" },
     ],
     links: [
+      {
+        rel: "preload",
+        href: geistLatin,
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      },
       { rel: "stylesheet", href: css },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
     ],

@@ -127,6 +127,7 @@
         "esbuild": "0.25.12",
         "miniflare": "5.20261023.3-beta",
         "playwright": "^1.61.0",
+        "postcss": "8.5.33",
         "shadcn": "^4.23.0",
         "typescript": "^6.0.2",
         "vite": "^8.3.6",

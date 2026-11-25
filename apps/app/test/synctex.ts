@@ -67,6 +67,8 @@ const project: ProjectDetails = {
     },
   ],
   sourceContents: {},
+  commentsVersion: "0:0",
+  gitVersion: "",
   sourceVersions: {},
 };
 const documents = new Map<string, Y.Doc>();

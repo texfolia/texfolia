@@ -174,3 +174,6 @@ export function similarKeys(
     .slice(0, count)
     .map(({ candidate }) => candidate);
 }
+
+/** The file a project without a bibliography gets for its first reference. */
+export const newBibFile = "references.bib";

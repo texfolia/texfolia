@@ -27,8 +27,12 @@ test("static assets get the same headers as Worker responses", async () => {
   const file = await Bun.file(
     new URL("../../public/_headers", import.meta.url),
   ).text();
-  const [path, ...lines] = file.trim().split("\n");
+  const [path, ...rest] = file.trim().split("\n");
   expect(path).toBe("/*");
+  const lines = rest.slice(
+    0,
+    rest.findIndex((line) => !line.startsWith(" ")),
+  );
   const headers = Object.fromEntries(
     lines.map((line) => {
       const [name = "", ...value] = line.trim().split(": ");

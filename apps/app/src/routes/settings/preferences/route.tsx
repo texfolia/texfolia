@@ -4,7 +4,6 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import { z } from "zod";
 
 import {
   SettingsCloseGuard,
@@ -13,7 +12,11 @@ import {
 } from "#/components/settings-dialog";
 import { useSettingsEditing } from "#/providers/settings-provider";
 export const Route = createFileRoute("/settings/preferences")({
-  validateSearch: z.object({ section: z.literal("shortcuts").optional() }),
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { section?: "shortcuts" } => ({
+    section: search.section === "shortcuts" ? "shortcuts" : undefined,
+  }),
   component: PreferencesPage,
 });
 function PreferencesPage() {

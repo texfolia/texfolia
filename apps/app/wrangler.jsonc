@@ -36,6 +36,8 @@
       "new_sqlite_classes": ["ProjectBuilds", "CompileUsage"],
     },
   ],
+  // Makes the template gallery's thumbnails.
+  "images": { "binding": "IMAGES", "remote": false },
   // Builds the direct path could not run, by plan, and delayed cleanup.
   "queues": {
     "producers": [
@@ -138,6 +140,7 @@
           "bucket_name": "texfolia-compilations",
         },
       ],
+      "images": { "binding": "IMAGES" },
       "durable_objects": {
         "bindings": [
           { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },

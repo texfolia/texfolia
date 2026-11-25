@@ -339,7 +339,7 @@ Syntax linting runs in open editors and reports to the workspace Problems panel.
 
 Editor-owned linting uses the package's public `EditorView` API. Keeping syntax linting in the analysis worker would require a fabricated editor view, so the integration does not use that approach.
 
-[wasm-latex-tools](https://github.com/TeXlyre/wasm-latex-tools) supplies `TexFmt` in the formatting worker. Formatting retains minimal edits, isolated undo, and rejection of results after the source changes. `bun run dev` and `bun run build` copy package assets into the ignored `public/core` directory. Use `bun run latex:assets` to refresh those assets separately. Keep `core/texfmt/tex_fmt.js` and `core/texfmt/tex_fmt_bg.wasm` in deployed static assets; `TexFmt` loads them at runtime.
+[wasm-latex-tools](https://github.com/TeXlyre/wasm-latex-tools) supplies `TexFmt` in the formatting worker. Formatting retains minimal edits, isolated undo, and rejection of results after the source changes. `bun run dev` and `bun run build` copy package assets into the ignored `public/core` directory. Use `bun run latex:assets` to refresh those assets separately. Keep `core/<version>/texfmt/tex_fmt.js` and `core/<version>/texfmt/tex_fmt_bg.wasm` in deployed static assets; `TexFmt` loads them at runtime. The version is `latexToolsVersion`; change it when you upgrade the package.
 
 **Settings > Appearance** previews UIW themes across the app and editor on hover
 or keyboard focus. In the editor, Settings opens as a dock panel. Theme selection

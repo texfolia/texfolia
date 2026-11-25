@@ -25,18 +25,26 @@ import { authClient } from "#/lib/auth/auth-client";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
 import { webPath } from "#/lib/origins";
 
-export const loginSearchSchema = z.object({
-  redirectTo: z
-    .string()
-    // oxlint-disable-next-line no-control-regex -- Redirect targets must reject control characters.
-    .regex(/^\/(?!\/)[^\u0000-\u0020\\]*$/)
-    .catch("/projects")
-    .optional(),
-  error: z.string().optional().catch(undefined),
-});
+// oxlint-disable-next-line no-control-regex -- Redirect targets must reject control characters.
+const redirectTarget = /^\/(?!\/)[^\u0000-\u0020\\]*$/;
+
+// Always return the keys: the router keeps raw search values a validator omits.
+export function loginSearch({ redirectTo, error }: Record<string, unknown>): {
+  redirectTo?: string;
+  error?: string;
+} {
+  return {
+    redirectTo:
+      redirectTo === undefined ||
+      (typeof redirectTo === "string" && redirectTarget.test(redirectTo))
+        ? redirectTo
+        : "/projects",
+    error: typeof error === "string" ? error : undefined,
+  };
+}
 
 export const Route = createFileRoute("/login")({
-  validateSearch: loginSearchSchema,
+  validateSearch: loginSearch,
   head: () => ({ meta: [{ title: "Sign in | Texfolia" }] }),
   component: RouteComponent,
 });

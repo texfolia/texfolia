@@ -16,6 +16,9 @@ const loadTemplates = createServerFn({ method: "GET" })
   .validator((page: unknown) => parseTemplatePage(page))
   .handler(({ data: page }) => fetchTemplateCatalog(appUrl(), page));
 
+// The widest layout's columns.
+const firstRow = 3;
+
 export const Route = createFileRoute("/templates")({
   // Always return the key: the router keeps raw search values a validator omits.
   validateSearch: (search: Record<string, unknown>): { page?: number } => ({
@@ -65,8 +68,12 @@ function Templates() {
           />
         ) : catalog.templates.length ? (
           <div className="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
-            {catalog.templates.map((item) => (
-              <TemplateCard key={item.id} item={item} />
+            {catalog.templates.map((item, index) => (
+              <TemplateCard
+                key={item.id}
+                item={item}
+                eager={index < firstRow}
+              />
             ))}
           </div>
         ) : page ? (
@@ -108,7 +115,14 @@ function Templates() {
 
 // Each card links to the template's page on the app, which opens a copy and
 // sends signed-out visitors through sign-in or account creation first.
-function TemplateCard({ item }: { item: PublicTemplate }) {
+function TemplateCard({
+  item,
+  eager,
+}: {
+  item: PublicTemplate;
+  /** Whether the card is on screen at first, where lazy loading only delays it. */
+  eager: boolean;
+}) {
   return (
     <article>
       <a
@@ -118,9 +132,10 @@ function TemplateCard({ item }: { item: PublicTemplate }) {
         <div className="bg-muted overflow-hidden rounded-lg border">
           {item.previewStatus === "ready" ? (
             <img
-              src={appPath(`/api/templates/${item.id}/preview`)}
+              src={appPath(`/api/templates/${item.id}/preview?size=thumbnail`)}
               alt={`First page of ${item.title}`}
-              loading="lazy"
+              loading={eager ? "eager" : "lazy"}
+              fetchPriority={eager ? "high" : "auto"}
               width="600"
               height="780"
               className="aspect-[10/13] w-full object-cover object-top transition-transform duration-200 motion-safe:group-hover:scale-[1.02]"

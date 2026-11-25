@@ -10,6 +10,7 @@ import CodeMirror, {
 } from "@uiw/react-codemirror";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
+import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { useStableCallback } from "#/hooks/use-stable-callback";
 import { documentCachingStopped } from "#/lib/collaboration/browser";
@@ -23,7 +24,6 @@ import {
 import { addLatexPackage, insertLatexSymbol } from "#/lib/editor/latex/symbols";
 import { downloadFile } from "#/lib/storage/browser";
 import { useSettings } from "#/providers/settings-provider";
-import { useTheme } from "#/providers/theme-provider";
 
 import { useEditorCommands } from "../-hooks/use-editor-commands";
 import {
@@ -122,7 +122,7 @@ export function Editor({
   initialSnapshot,
   onSnapshot,
 }: EditorProps) {
-  const { theme } = useTheme();
+  const theme = useEditorTheme();
   const editor = useRef<ReactCodeMirrorRef>(null);
   const container = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -479,7 +479,7 @@ export function Editor({
           onUpdate={viewUpdated}
           extensions={extensions}
           height="100%"
-          theme={theme.extension}
+          theme={theme}
           placeholder={
             labels?.placeholder ??
             (isMarkdown

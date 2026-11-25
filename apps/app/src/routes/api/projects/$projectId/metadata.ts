@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { requestPrincipal } from "#/lib/auth/request-principal.server";
+import { matchesEtag, weakEtag } from "#/lib/etag";
+import { projectMetadataHash } from "#/lib/projects";
 import { getProjectMetadata } from "#/lib/projects/project-metadata.server";
 
 export const Route = createFileRoute("/api/projects/$projectId/metadata")({
@@ -25,7 +27,12 @@ export const Route = createFileRoute("/api/projects/$projectId/metadata")({
             projectId: params.projectId,
             userId: principal.userId,
           });
-          return Response.json(metadata, { headers });
+          // Open workspaces poll this, and most polls find nothing new.
+          const etag = weakEtag(await projectMetadataHash(metadata));
+          const tagged = { ...headers, ETag: etag };
+          return matchesEtag(request, etag)
+            ? new Response(null, { status: 304, headers: tagged })
+            : Response.json(metadata, { headers: tagged });
         } catch (error) {
           if (error instanceof Error && error.message === "Project not found")
             return new Response("Project not found", { status: 404, headers });

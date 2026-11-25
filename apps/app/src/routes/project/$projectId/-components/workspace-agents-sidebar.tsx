@@ -1,8 +1,14 @@
-import { AssistantSidebar } from "#/lib/ai/ui";
+import { lazyPanel } from "#/components/lazy-panel";
+import { useHasBeen } from "#/hooks/use-has-been";
 import { webPath } from "#/lib/origins";
 import type { WorkspaceChrome } from "#/lib/workspace/workspace-layout";
 
 import { SidebarResize } from "./sidebar-resize";
+
+const AssistantSidebar = lazyPanel("The assistant", async () => {
+  const { AssistantSidebar } = await import("#/lib/ai/ui");
+  return AssistantSidebar;
+});
 
 /** The agents and chat-history sidebars on the left of the editor. */
 export function WorkspaceAgentsSidebar({
@@ -14,6 +20,9 @@ export function WorkspaceAgentsSidebar({
   chrome: WorkspaceChrome;
   onChrome: (patch: Partial<WorkspaceChrome>) => void;
 }) {
+  const shown = chrome.agentsOpen || chrome.historyOpen;
+  // Stays mounted once opened, so that hiding it does not stop a reply.
+  const used = useHasBeen(shown);
   const width =
     (chrome.agentsOpen ? chrome.agentsWidth : 0) +
     (chrome.historyOpen
@@ -22,31 +31,35 @@ export function WorkspaceAgentsSidebar({
   return (
     <>
       <div
-        hidden={!chrome.agentsOpen && !chrome.historyOpen}
+        hidden={!shown}
         style={{ width }}
         className="z-30 h-full min-w-0 shrink-0 max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:max-w-[85%] [&[hidden]]:hidden"
       >
-        <AssistantSidebar
-          endpoint={`/api/ai/${projectId}`}
-          plansUrl={webPath("/pricing")}
-          open={chrome.agentsOpen}
-          onClose={() => onChrome({ agentsOpen: false })}
-          historyOpen={chrome.historyOpen}
-          historyWidth={chrome.historyWidth}
-          agentsWidth={chrome.agentsWidth}
-          onHistoryToggle={() => onChrome({ historyOpen: !chrome.historyOpen })}
-          historyResize={
-            <SidebarResize
-              side="left"
-              width={chrome.historyWidth}
-              onResize={(historyWidth) => onChrome({ historyWidth })}
-              label="Resize history sidebar"
-            />
-          }
-          onShowAgents={() => onChrome({ agentsOpen: true })}
-        />
+        {used && (
+          <AssistantSidebar
+            endpoint={`/api/ai/${projectId}`}
+            plansUrl={webPath("/pricing")}
+            open={chrome.agentsOpen}
+            onClose={() => onChrome({ agentsOpen: false })}
+            historyOpen={chrome.historyOpen}
+            historyWidth={chrome.historyWidth}
+            agentsWidth={chrome.agentsWidth}
+            onHistoryToggle={() =>
+              onChrome({ historyOpen: !chrome.historyOpen })
+            }
+            historyResize={
+              <SidebarResize
+                side="left"
+                width={chrome.historyWidth}
+                onResize={(historyWidth) => onChrome({ historyWidth })}
+                label="Resize history sidebar"
+              />
+            }
+            onShowAgents={() => onChrome({ agentsOpen: true })}
+          />
+        )}
       </div>
-      {(chrome.agentsOpen || chrome.historyOpen) && (
+      {shown && (
         <SidebarResize
           side="left"
           width={chrome.agentsOpen ? chrome.agentsWidth : chrome.historyWidth}

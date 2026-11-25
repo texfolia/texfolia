@@ -5,29 +5,28 @@ import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
 import * as uiw from "@uiw/codemirror-themes-all";
 import { EditorState, EditorView, type Extension } from "@uiw/react-codemirror";
 
-import {
-  catalogPath,
-  renderThemeCatalog,
-} from "../../../../scripts/generate-theme-catalog";
+import { renderThemeCatalog } from "../../../../scripts/generate-theme-catalog";
 import { bibtexLanguage, themedLatex } from "../latex/highlight";
 import { latexTags } from "../latex/tags";
-import { editorTheme } from "./theme-editor";
 import {
   appearanceSchema,
-  appearanceStorageKey,
-  legacyAppearanceStorageKey,
-  loadedThemeExtension,
-  loadThemeExtension,
-  themeCatalog,
-  catalogTheme,
-  migrateAppearance,
   defaultAppearance,
-  resolveTheme,
+  migrateAppearance,
   selectedTheme,
+} from "./appearance";
+import { editorTheme } from "./theme-editor";
+import { loadedThemeExtension, loadThemeExtension } from "./theme-extensions";
+import {
+  appearanceStorageKey,
+  catalogTheme,
+  legacyAppearanceStorageKey,
+  resolveTheme,
+  themeCatalog,
 } from "./themes";
 
 test("generated theme catalog is current", async () => {
-  expect(await Bun.file(catalogPath).text()).toBe(await renderThemeCatalog());
+  for (const [path, text] of Object.entries(await renderThemeCatalog()))
+    expect(await Bun.file(path).text()).toBe(text);
 });
 
 test("catalog includes exactly every exported UIW theme with its native settings and mode", async () => {
@@ -96,7 +95,7 @@ test("appearance v2 is account-scoped, follows GitHub system modes, and has no i
   const saved = {
     selection: { kind: "theme", id: "dracula" },
     pdfMode: "match",
-  } satisfies import("./themes").Appearance;
+  } satisfies import("./appearance").Appearance;
   expect(appearanceSchema.parse(JSON.parse(JSON.stringify(saved)))).toEqual(
     saved,
   );
@@ -195,4 +194,17 @@ test("BibTeX field names and nested values are independently themeable", () => {
       (span) => span.style === "string" && span.text.includes("nested"),
     ),
   ).toBe(true);
+});
+
+test("theme metadata loads neither CodeMirror nor Zod, which every page would load", async () => {
+  const build = await Bun.build({
+    entrypoints: [
+      new URL("../../theme/theme-bootstrap.ts", import.meta.url).pathname,
+    ],
+    target: "browser",
+    metafile: true,
+  });
+  const inputs = Object.keys(build.metafile?.inputs ?? {});
+  expect(inputs.some((input) => input.endsWith("themes.ts"))).toBe(true);
+  expect(inputs.filter((input) => input.includes("node_modules"))).toEqual([]);
 });

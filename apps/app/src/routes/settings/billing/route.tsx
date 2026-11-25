@@ -1,17 +1,11 @@
-import {
-  createFileRoute,
-  Link,
-  redirect,
-  useRouter,
-} from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
 import { useRef, useState } from "react";
-import { z } from "zod";
 
 import { authClient } from "#/lib/auth/auth-client";
-import { getSession } from "#/lib/auth/auth.functions";
 import { paidPlans } from "#/lib/billing";
+import { billingSearch } from "#/lib/billing/billing-search";
 import {
   getBilling,
   saveOrganizationCap,
@@ -20,15 +14,7 @@ import { webPath } from "#/lib/origins";
 
 export const Route = createFileRoute("/settings/billing")({
   ssr: false,
-  validateSearch: z.object({
-    plan: z.enum(["pro", "team"]).optional(),
-    organizationId: z.string().min(1).optional(),
-  }),
-  beforeLoad: async ({ location }) => {
-    if (!(await getSession())) {
-      throw redirect({ to: "/login", search: { redirectTo: location.href } });
-    }
-  },
+  validateSearch: billingSearch,
   loaderDeps: ({ search }) => ({ organizationId: search.organizationId }),
   loader: ({ deps }) => getBilling({ data: deps }),
   head: () => ({ meta: [{ title: "Billing | Texfolia" }] }),

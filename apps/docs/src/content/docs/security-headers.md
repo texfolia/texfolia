@@ -6,6 +6,15 @@ The [app Worker](../../../../app/src/worker.ts) applies security headers to ever
 TanStack Start HTTP response, including HTML, APIs, redirects, and errors.
 It passes response bodies through as streams and leaves WebSocket upgrades intact.
 Static assets served directly by Cloudflare do not pass through this wrapper.
+[public/_headers](../../../../app/public/_headers) adds `nosniff` and lets browsers
+keep `/assets/*`, `/core/*`, and `/dictionaries/*` forever. Vite hashes the names in
+`/assets`. The other two carry their package's version in the URL; see
+`latexToolsVersion` and `spellingDictionaries`. Update those with the packages; a
+unit test fails until they match.
+
+Build files whose URL names their build are `private, max-age=31536000, immutable`.
+Signing out and deleting the account send `Clear-Site-Data: "cache"`, so the next
+user of the browser does not find them.
 
 The [policy](../../../../app/src/lib/security-headers.ts) enforces CSP in production.
 It sets `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`,

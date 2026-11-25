@@ -26,6 +26,7 @@ import {
   connectBuilds,
   fetchBuilds,
   invalidateSourceBuild,
+  immutableArtifact,
   liveUserHeader,
 } from "#/lib/builds/client";
 
@@ -742,7 +743,10 @@ export function createCompileHandlers<Context extends { db: Db }>(
           if (!pdf.ok || pdf.headers.get("Content-Type") !== "application/pdf")
             throw new Error("Invalid compiler PDF response");
           return new Response(pdf.body, {
-            headers: { ...noStore, "Content-Type": "application/pdf" },
+            headers: {
+              "Cache-Control": immutableArtifact,
+              "Content-Type": "application/pdf",
+            },
           });
         }
 

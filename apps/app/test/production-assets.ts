@@ -6,6 +6,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Browser } from "playwright";
 
 import type { FormatResponse } from "#/lib/editor/latex/format";
+import { latexToolsPath } from "#/lib/editor/latex/tools";
 
 import { pdfFixture } from "./pdf-fixture";
 
@@ -43,7 +44,55 @@ const javascript = (
 for (const worker of [formatter, pdf])
   assert(javascript.includes(worker), `Worker is not referenced: ${worker}`);
 
+// Every page loads the root route's scripts, so what its modules import counts
+// against all of them.
 const root = new URL("../dist/server/", import.meta.url).pathname;
+const serverAssets = await readdir(join(root, "assets"));
+const manifestFile = serverAssets.find((name) =>
+  name.startsWith("_tanstack-start-manifest"),
+);
+assert(manifestFile, "Missing route manifest");
+const { tsrStartManifest } = (await import(
+  join(root, "assets", manifestFile)
+)) as {
+  tsrStartManifest: () => {
+    routes: { __root__: { preloads: (string | { href: string })[] } };
+  };
+};
+const rootScripts = new Map<string, string>();
+const pendingScripts = tsrStartManifest().routes.__root__.preloads.flatMap(
+  (preload) =>
+    (typeof preload === "string" ? preload : preload.href).split("/").at(-1) ??
+    [],
+);
+for (let name = pendingScripts.pop(); name; name = pendingScripts.pop()) {
+  if (rootScripts.has(name) || !name.endsWith(".js")) continue;
+  const source = await readFile(new URL(`assets/${name}`, client), "utf8");
+  rootScripts.set(name, source);
+  for (const match of source.matchAll(
+    /(?:from|import)\s*["'`]\.\/([^"'`]+\.js)["'`]/g,
+  ))
+    if (match[1]) pendingScripts.push(match[1]);
+}
+const rootBytes = [...rootScripts.values()].reduce(
+  (total, source) => total + Buffer.byteLength(source),
+  0,
+);
+assert(rootBytes > 100_000, "The root scripts were not found");
+assert(
+  rootBytes < 700 * 1024,
+  `Every page loads ${Math.round(rootBytes / 1024)} KiB of scripts; the budget is 700 KiB`,
+);
+for (const [library, marker] of [
+  ["CodeMirror", "cm-editor"],
+  ["Zod", "invalid_union"],
+  ["TanStack DB", "CollectionConfigurationError"],
+] as const) {
+  assert(javascript.includes(marker), `${library} no longer has ${marker}`);
+  for (const [name, source] of rootScripts)
+    assert(!source.includes(marker), `Every page loads ${library} in ${name}`);
+}
+
 const modules = await readdir(root, { recursive: true });
 const reservation = Bun.serve({
   hostname: "127.0.0.1",
@@ -95,6 +144,25 @@ const runtime = new Miniflare({
 let browser: Browser | undefined;
 try {
   const origin = (await runtime.ready).origin;
+  for (const path of [
+    formatter,
+    `/${latexToolsPath}/texfmt/tex_fmt.js`,
+    "/dictionaries/en-US.aff",
+  ]) {
+    const response = await fetch(new URL(path, origin));
+    assert.equal(response.status, 200, path);
+    await response.body?.cancel();
+    assert.equal(
+      response.headers.get("Cache-Control"),
+      "public, max-age=31536000, immutable",
+      path,
+    );
+  }
+  const loginPage = await (await fetch(new URL("/login", origin))).text();
+  assert.match(
+    loginPage,
+    /<link rel="preload" href="\/assets\/geist-latin-wght-normal-[^"]+\.woff2" as="font"/,
+  );
   const nonces = new Set<string>();
   for (const path of ["/", "/login", "/api/auth/get-session", "/projects"]) {
     const response = await runtime.dispatchFetch(new URL(path, origin), {

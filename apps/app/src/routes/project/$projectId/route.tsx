@@ -5,11 +5,9 @@ import {
   defaultSpellingLanguage,
   spellingLanguageSchema,
 } from "#/lib/editor/spelling/languages";
+import { editorThemes } from "#/lib/editor/themes/theme-extensions";
 import { getProject } from "#/lib/projects/project.functions";
-import {
-  createProjectFilesStore,
-  ProjectFilesProvider,
-} from "#/providers/project-files-provider";
+import { ProjectFilesProvider } from "#/providers/project-files-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
 
@@ -31,16 +29,18 @@ export const Route = createFileRoute("/project/$projectId")({
     return { user };
   },
   loader: async ({ params }) => {
-    const project = await getProject({
-      data: {
-        projectId: params.projectId,
-      },
-    });
+    // Loaders are part of every page's first bundle; the store is not.
+    const [project, { createProjectFilesStore }] = await Promise.all([
+      getProject({ data: { projectId: params.projectId } }),
+      import("#/providers/project-files-provider"),
+    ]);
 
     const files = createProjectFilesStore({
       initial: project.nodes,
       projectId: project.id,
       initialSourceVersions: project.sourceVersions,
+      commentsVersion: project.commentsVersion,
+      gitVersion: project.gitVersion,
     });
     await files.nodes.preload();
     return { project, files };
@@ -78,7 +78,7 @@ function ThemedWorkspace() {
     [project],
   );
   return (
-    <ThemeProvider userId={user.id}>
+    <ThemeProvider userId={user.id} editorThemes={editorThemes}>
       <SettingsProvider key={project.id} userId={user.id} project={settings}>
         <WorkspacePage />
       </SettingsProvider>

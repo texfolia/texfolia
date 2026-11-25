@@ -12,9 +12,9 @@ import {
 import {
   createShareLinkSchema,
   shareLinkScopeSchema,
-  sharePath,
   type ShareLinkScope,
 } from "#/lib/sharing/project-share-links.schema";
+import { sharePath } from "#/lib/sharing/share-token";
 
 const scopeLabels: Record<ShareLinkScope, string> = {
   project: "Sources and PDF",

@@ -1,7 +1,7 @@
 import nspell from "nspell";
 
 import type { SpellRequest, SpellResponse } from "./checker";
-import { dictionaryPath, type SpellingDictionary } from "./languages";
+import { dictionaryUrl, type SpellingDictionary } from "./languages";
 
 type Speller = ReturnType<typeof nspell>;
 const spellers = new Map<SpellingDictionary, Promise<Speller>>();
@@ -18,8 +18,8 @@ function speller(language: SpellingDictionary) {
   let loaded = spellers.get(language);
   if (!loaded) {
     loaded = Promise.all([
-      fetchText(dictionaryPath(language, "aff")),
-      fetchText(dictionaryPath(language, "dic")),
+      fetchText(dictionaryUrl(language, "aff")),
+      fetchText(dictionaryUrl(language, "dic")),
     ]).then(([aff, dic]) => nspell(aff, dic));
     loaded.catch(() => spellers.delete(language));
     spellers.set(language, loaded);

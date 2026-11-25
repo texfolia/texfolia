@@ -13,6 +13,7 @@ import {
 } from "dockview-react";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
+import { lazyPanel } from "#/components/lazy-panel";
 import { type LatexProblem } from "#/lib/editor/latex/analysis";
 import { downloadFile } from "#/lib/storage/browser";
 import {
@@ -26,10 +27,18 @@ import type { FilePanelParams } from "../-hooks/use-dock-panels";
 import { DocumentEditor } from "./document-editor";
 import type { EditorComments } from "./editor";
 import { GeneratedFile } from "./generated-file";
-import { MarkdownPreview } from "./markdown-preview";
+import type { MarkdownPreviewParams } from "./markdown-preview";
 import { ScratchpadEditor } from "./scratchpad-editor";
 import { SourcePdf } from "./source-pdf";
 import type { SymbolPreambleSource } from "./symbol-palette";
+
+const MarkdownPreview = lazyPanel<IDockviewPanelProps<MarkdownPreviewParams>>(
+  "The Markdown preview",
+  async () => {
+    const { MarkdownPreview } = await import("./markdown-preview");
+    return MarkdownPreview;
+  },
+);
 
 const noProblems: LatexProblem[] = [];
 
