@@ -31,6 +31,13 @@ void fetch(`${import.meta.env.BASE_URL}latex-packages.json`)
   .catch(() => {});
 
 self.onmessage = ({ data }: MessageEvent<AnalyzeRequest>) => {
+  // The worker outlives its files, so it forgets the ones that are gone.
+  const paths = new Set(data.paths);
+  for (const path of files.keys())
+    if (!paths.has(path)) {
+      files.delete(path);
+      words.delete(path);
+    }
   for (const [path, text] of data.updates) {
     files.set(path, scanFile(path, text));
     if (/\.(?:tex|ltx)$/i.test(path)) words.set(path, wordEvents(text));

@@ -1,10 +1,26 @@
 import { Button } from "@texfolia/ui/button";
+import { useMemo } from "react";
 
-import type { OutlineEntry } from "#/lib/editor/latex/outline";
-import { useWorkspace } from "#/providers/workspace-provider";
+import { useDraftSources } from "#/hooks/use-draft-sources";
+import { type OutlineEntry, projectOutline } from "#/lib/editor/latex/outline";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+} from "#/providers/workspace-provider";
 
-export function ProjectOutline({ entries }: { entries: OutlineEntry[] }) {
-  const { reveal } = useWorkspace();
+export function ProjectOutline({ open }: { open: boolean }) {
+  const { drafts, reveal } = useWorkspaceActions();
+  const { paths, main } = useWorkspace();
+  const sources = useDraftSources(drafts, paths, open);
+  const mainPath = main?.path;
+  const entries = useMemo(
+    () =>
+      projectOutline(
+        new Map(sources.map(({ path, text }) => [path, text])),
+        mainPath,
+      ),
+    [sources, mainPath],
+  );
   function branch(items: OutlineEntry[]) {
     return (
       <ul className="space-y-0.5">

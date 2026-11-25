@@ -63,7 +63,7 @@ import {
 } from "#/lib/shortcuts/shortcuts";
 import {
   type SettingsSection,
-  useSettings,
+  useSettingsEditing,
 } from "#/providers/settings-provider";
 
 const sections = [
@@ -74,7 +74,7 @@ const sections = [
 ] satisfies { title: SettingsSection; icon: typeof IconCode }[];
 
 export function SettingsDialog() {
-  const settings = useSettings();
+  const settings = useSettingsEditing();
   return (
     <>
       <Dialog open={settings.open} onOpenChange={settings.setOpen}>
@@ -144,7 +144,7 @@ export function SettingsDialog() {
 }
 
 export function UserSettingsSections() {
-  const { section, setSection, userReady } = useSettings();
+  const { section, setSection, userReady } = useSettingsEditing();
   return (
     <div className="flex h-[min(34rem,calc(100dvh-19rem))] min-h-32 flex-col gap-5 sm:flex-row">
       <nav
@@ -196,7 +196,7 @@ export function UserSettingsSections() {
 }
 
 function EditorSettingsFields() {
-  const { draft, setDraft } = useSettings();
+  const { draft, setDraft } = useSettingsEditing();
   const id = useId();
   return (
     <Item variant="outline">
@@ -324,7 +324,7 @@ function EditorSettingsFields() {
 }
 
 function ProjectSpellingFields() {
-  const settings = useSettings();
+  const settings = useSettingsEditing();
   const id = useId();
   if (!settings.draftSpelling) return null;
   return (
@@ -367,7 +367,7 @@ function ProjectSpellingFields() {
 }
 
 function PersonalDictionaryFields() {
-  const { draft, setDraft } = useSettings();
+  const { draft, setDraft } = useSettingsEditing();
   const id = useId();
   const [word, setWord] = useState("");
   const words = draft.spelling.words;
@@ -459,7 +459,7 @@ function PersonalDictionaryFields() {
 }
 
 function ShortcutSettingsFields() {
-  const { draft, setDraft } = useSettings();
+  const { draft, setDraft } = useSettingsEditing();
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [chords, setChords] = useState<string[]>([]);
   const conflicts = shortcutConflicts(draft.shortcuts);
@@ -612,7 +612,7 @@ export function SettingsFooter({
   onSave?: () => void;
   onCancel?: () => void;
 }) {
-  const settings = useSettings();
+  const settings = useSettingsEditing();
   return (
     <footer className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t pt-4">
       <div className="mr-auto min-w-0 basis-full text-sm sm:basis-auto">
@@ -673,7 +673,7 @@ export function SettingsCloseGuard({
   onDiscard?: () => void;
   onApply?: () => void;
 }) {
-  const settings = useSettings();
+  const settings = useSettingsEditing();
   return (
     <AlertDialog
       open={open ?? settings.closeGuard}

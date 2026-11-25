@@ -8,8 +8,16 @@ import {
 } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
-import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
+import { useDraftSources } from "#/hooks/use-draft-sources";
 import { mapLimit } from "#/lib/map-limit";
 import {
   planSingleReplacement,
@@ -17,7 +25,11 @@ import {
   searchProject,
   type ProjectSearchMatch,
 } from "#/lib/projects";
-import { useWorkspace } from "#/providers/workspace-provider";
+import { draftSources } from "#/lib/workspace/file-drafts";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+} from "#/providers/workspace-provider";
 
 export type SearchRequest = { sequence: number; query?: string };
 
@@ -30,7 +42,8 @@ export function ProjectSearch({
   active: boolean;
   request: SearchRequest;
 }) {
-  const { drafts, paths, reveal, canWrite, editDocument } = useWorkspace();
+  const { drafts, reveal, editDocument } = useWorkspaceActions();
+  const { paths, canWrite } = useWorkspace();
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [matchCase, setMatchCase] = useState(false);
@@ -39,7 +52,6 @@ export function ProjectSearch({
   const [replacing, setReplacing] = useState(false);
   const [replaceError, setReplaceError] = useState("");
   const [replaceNotice, setReplaceNotice] = useState("");
-  const [, setRevision] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const searchId = useId();
   const replaceId = useId();
@@ -62,25 +74,26 @@ export function ProjectSearch({
 
   // Drafts hold the live text of open files and the saved text of the others,
   // so results include unsaved edits. Binary files have no draft.
-  const textEntries = [...paths].flatMap(([nodeId, path]) => {
-    const draft = drafts.get(nodeId);
-    return draft ? [{ nodeId, path, text: draft.value }] : [];
-  });
-  const idsByPath = new Map(
-    textEntries.map(({ nodeId, path }) => [path, nodeId]),
+  const textEntries = useDraftSources(drafts, paths, active);
+  const idsByPath = useMemo(
+    () => new Map(textEntries.map(({ nodeId, path }) => [path, nodeId])),
+    [textEntries],
   );
 
-  const result = active
-    ? searchProject(
-        textEntries.map(({ path, text }) => [path, text] as [string, string]),
-        deferred,
-        {
-          matchCase,
-          regex: useRegex,
-          replacement: replaceVisible ? deferredReplacement : undefined,
-        },
-      )
-    : undefined;
+  const shownReplacement = replaceVisible ? deferredReplacement : undefined;
+  const result = useMemo(
+    () =>
+      active
+        ? searchProject(
+            textEntries.map(
+              ({ path, text }) => [path, text] as [string, string],
+            ),
+            deferred,
+            { matchCase, regex: useRegex, replacement: shownReplacement },
+          )
+        : undefined,
+    [active, textEntries, deferred, matchCase, useRegex, shownReplacement],
+  );
 
   const canReplace =
     canWrite &&
@@ -107,7 +120,6 @@ export function ProjectSearch({
         const edit = planSingleReplacement(file.text.toString(), match, insert);
         if (edit) applied = file.applyEdits([edit]);
       });
-      setRevision((value) => value + 1);
       setReplaceNotice(
         applied
           ? `Replaced 1 match in ${match.path}.`
@@ -152,7 +164,6 @@ export function ProjectSearch({
           replacedCount = plan.edits.length;
         }
       });
-      setRevision((value) => value + 1);
       setReplaceNotice(
         replacedCount
           ? `Replaced ${replacedCount} ${replacedCount === 1 ? "match" : "matches"} in ${path}.`
@@ -179,7 +190,7 @@ export function ProjectSearch({
       setReplaceError(check.error);
       return;
     }
-    const targets = textEntries.filter(({ text }) => {
+    const targets = draftSources(paths, drafts).filter(({ text }) => {
       const plan = planTextReplacements(text, query, replacement, {
         matchCase,
         regex: useRegex,
@@ -214,7 +225,6 @@ export function ProjectSearch({
           );
         }
       });
-      setRevision((value) => value + 1);
       if (failures.length) {
         setReplaceError(
           `Failed to replace in ${failures.length} ${failures.length === 1 ? "file" : "files"} (${failures[0]}).`,

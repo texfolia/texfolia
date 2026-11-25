@@ -10,13 +10,16 @@ import {
 import { useMemo, useState, type RefObject } from "react";
 
 import { buildFileUrl } from "#/lib/compile/build";
-import type { OutlineEntry } from "#/lib/editor/latex/outline";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import type { SourceFiles } from "#/lib/storage";
 import { downloadFile } from "#/lib/storage/browser";
 import { type SidebarView } from "#/lib/workspace/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+  useWorkspaceBuild,
+} from "#/providers/workspace-provider";
 
 import { CreateNodeForm, type CreateNodeHandle } from "./create-node-form";
 import { generatedTreeNodes } from "./generated-files";
@@ -44,7 +47,6 @@ export function ProjectSidebar({
   sources,
   view,
   onClose,
-  outline,
   searchRequest,
   createRef,
   uploadRef,
@@ -61,7 +63,6 @@ export function ProjectSidebar({
   sources: () => Promise<SourceFiles>;
   view: SidebarView;
   onClose: () => void;
-  outline: OutlineEntry[];
   searchRequest: SearchRequest;
   createRef: RefObject<CreateNodeHandle | null>;
   uploadRef: RefObject<UploadSourceHandle | null>;
@@ -69,7 +70,9 @@ export function ProjectSidebar({
   repairRef: RefObject<RepairSourcePathsHandle | null>;
 }) {
   const files = useProjectFiles();
-  const { canWrite, build, projectId, drafts } = useWorkspace();
+  const { projectId, drafts } = useWorkspaceActions();
+  const { canWrite } = useWorkspace();
+  const { build } = useWorkspaceBuild();
   const root = nodes.find((node) => node.kind === "folder" && !node.parentId);
   const tree = useMemo(
     () => [...nodes, ...generatedTreeNodes(build, root?.id)],
@@ -195,7 +198,7 @@ export function ProjectSidebar({
       </Dialog>
       {view === "outline" && (
         <div className="min-h-0 flex-1 overflow-auto">
-          <ProjectOutline entries={outline} />
+          <ProjectOutline open={open} />
         </div>
       )}
       {/* Stays mounted so the query survives switching views. */}
@@ -203,7 +206,10 @@ export function ProjectSidebar({
         hidden={view !== "search"}
         className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden"
       >
-        <ProjectSearch active={view === "search"} request={searchRequest} />
+        <ProjectSearch
+          active={open && view === "search"}
+          request={searchRequest}
+        />
       </div>
       {view === "git" && (
         <div className="min-h-0 flex-1 overflow-auto">

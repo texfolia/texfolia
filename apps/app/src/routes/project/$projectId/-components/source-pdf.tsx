@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import type { ProjectNode } from "#/lib/projects/project.functions";
-import { useWorkspace } from "#/providers/workspace-provider";
+import { useWorkspaceActions } from "#/providers/workspace-provider";
 
 const PdfViewer = lazy(() => import("./pdf"));
 
 export function SourcePdf({ node }: { node: ProjectNode }) {
-  const { projectId } = useWorkspace();
+  const { projectId } = useWorkspaceActions();
   const [file, setFile] = useState<File>();
   const [error, setError] = useState("");
   useEffect(() => {

@@ -14,7 +14,10 @@ hooks that drive it stay in `src/routes` and `src/hooks`.
 | `#/lib/editor/theme-editor`  | The CodeMirror extension for the selected theme                                                                                          |
 
 Workers are created with `new URL("./x.worker.ts", import.meta.url)` inside the
-feature, so the app's Vite build emits each one as its own asset. The format
+feature, so the app's Vite build emits each one as its own asset. Every editor tab
+shares one format worker and one spelling worker, and `LatexAnalyzer` keeps one
+analysis worker per workspace while files come and go. A worker that fails is
+terminated and replaced on the next request. The format
 worker loads `core/texfmt` and the spelling worker loads `dictionaries/` from the
 app's origin; the app copies those assets before `dev` and `build`.
 
@@ -35,6 +38,10 @@ bun run --cwd apps/app themes:catalog
 ```sh
 bun test apps/app/src/lib/editor
 ```
+
+`bun run --cwd apps/app test:editor-runtime` runs the workspace in a browser and
+checks what typing renders, undo across settings and access changes, the
+clipboard, worker counts, and layout writes. It needs `latex:assets`.
 
 The SyncTeX fixture in `apps/app/test/fixtures/synctex` is also used by the
 `test:synctex` browser suite.

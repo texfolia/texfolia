@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 
+import { useStableActions } from "#/hooks/use-stable-callback";
 import { type FormatSettings } from "#/lib/editor/latex/format";
 import type { SpellingLanguage } from "#/lib/editor/spelling/languages";
 import {
@@ -264,45 +265,86 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       );
     }
   }
-  return {
-    editor: preferences.editor,
-    compile: preferences.compile,
-    shortcuts: preferences.shortcuts,
-    spelling: preferences.spelling,
+  const actions = useStableActions({
     addWord,
     updateEditor,
-    draft: draft ?? preferences,
-    setDraft,
-    project,
-    formatting: committedFormatting,
-    draftFormatting,
+    setOpen,
+    begin,
+    discard,
+    apply,
     setDraftFormatting: (next: FormatSettings) => {
       if (project?.canWrite) setDraftFormatting(next);
     },
-    spellingLanguage: committedSpelling,
-    draftSpelling,
     setDraftSpelling: (next: SpellingLanguage) => {
       if (project?.canWrite) setDraftSpelling(next);
     },
-    dirty,
-    error: error ?? userLoadError ?? store.warning,
-    ready,
-    userReady,
-    open,
-    setOpen,
-    begin,
-    closeGuard,
-    setCloseGuard,
-    discard,
-    apply,
-    saving,
-    section,
-    setSection,
-  };
+  });
+  const applied = useMemo(
+    () => ({
+      editor: preferences.editor,
+      compile: preferences.compile,
+      shortcuts: preferences.shortcuts,
+      spelling: preferences.spelling,
+      formatting: committedFormatting,
+      spellingLanguage: committedSpelling,
+      open,
+      setOpen: actions.setOpen,
+      addWord: actions.addWord,
+      updateEditor: actions.updateEditor,
+    }),
+    [preferences, committedFormatting, committedSpelling, open, actions],
+  );
+  const shownError = error ?? userLoadError ?? store.warning;
+  const editing = useMemo(
+    () => ({
+      draft: draft ?? preferences,
+      setDraft,
+      project,
+      draftFormatting,
+      draftSpelling,
+      dirty,
+      error: shownError,
+      ready,
+      userReady,
+      open,
+      closeGuard,
+      setCloseGuard,
+      saving,
+      section,
+      setSection,
+      setOpen: actions.setOpen,
+      begin: actions.begin,
+      discard: actions.discard,
+      apply: actions.apply,
+      setDraftFormatting: actions.setDraftFormatting,
+      setDraftSpelling: actions.setDraftSpelling,
+    }),
+    [
+      draft,
+      preferences,
+      project,
+      draftFormatting,
+      draftSpelling,
+      dirty,
+      shownError,
+      ready,
+      userReady,
+      open,
+      closeGuard,
+      saving,
+      section,
+      actions,
+    ],
+  );
+  return { applied, editing };
 }
-const SettingsContext = createContext<ReturnType<
-  typeof useSettingsState
-> | null>(null);
+type SettingsState = ReturnType<typeof useSettingsState>;
+const AppliedSettingsContext = createContext<SettingsState["applied"] | null>(
+  null,
+);
+const SettingsEditingContext = createContext<SettingsState["editing"] | null>(
+  null,
+);
 export function SettingsProvider({
   userId,
   project,
@@ -312,21 +354,23 @@ export function SettingsProvider({
   project?: SettingsProject;
   children: ReactNode;
 }) {
-  const value = useSettingsState(userId, project);
+  const { applied, editing } = useSettingsState(userId, project);
   return (
-    <SettingsContext value={value}>
-      <ShortcutsProvider
-        map={value.shortcuts}
-        editorKeymap={value.editor.keymap}
-      >
-        <SettingsShortcuts />
-        {children}
-      </ShortcutsProvider>
-    </SettingsContext>
+    <AppliedSettingsContext value={applied}>
+      <SettingsEditingContext value={editing}>
+        <ShortcutsProvider
+          map={applied.shortcuts}
+          editorKeymap={applied.editor.keymap}
+        >
+          <SettingsShortcuts />
+          {children}
+        </ShortcutsProvider>
+      </SettingsEditingContext>
+    </AppliedSettingsContext>
   );
 }
 function SettingsShortcuts() {
-  const settings = useSettings();
+  const settings = useSettingsEditing();
   const navigate = useNavigate();
   const open = (shortcuts: boolean) => {
     settings.setSection(shortcuts ? "Keyboard shortcuts" : "Appearance");
@@ -341,8 +385,15 @@ function SettingsShortcuts() {
   useAppShortcut("shortcuts", () => open(true));
   return null;
 }
+/** The settings in effect. These change only when a change is applied. */
 export function useSettings() {
-  const settings = useContext(SettingsContext);
+  const settings = useContext(AppliedSettingsContext);
+  if (!settings) throw new Error("Missing settings provider");
+  return settings;
+}
+/** The settings dialog and its draft, which changes with every edit in it. */
+export function useSettingsEditing() {
+  const settings = useContext(SettingsEditingContext);
   if (!settings) throw new Error("Missing settings provider");
   return settings;
 }

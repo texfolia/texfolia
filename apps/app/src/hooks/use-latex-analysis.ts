@@ -1,67 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
-  type AnalyzeRequest,
   type AnalyzeResponse,
   emptyAnalysis,
 } from "#/lib/editor/latex/analysis";
+import { LatexAnalyzer } from "#/lib/editor/latex/analyzer";
 import { emptyWordCount } from "#/lib/editor/latex/word-count";
 import { createAnalysisWorker } from "#/lib/editor/latex/workers";
 
 export function useLatexAnalysis(paths: string[], main?: string) {
-  const worker = useRef<Worker | null>(null);
-  const contents = useRef(new Map<string, string>());
-  const pending = useRef(new Set<string>());
-  const revision = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [analyzer] = useState(() => new LatexAnalyzer(createAnalysisWorker));
   const [result, setResult] = useState<AnalyzeResponse>({
     revision: 0,
     analysis: emptyAnalysis,
     words: emptyWordCount,
   });
-
-  const flush = useCallback(() => {
-    if (!worker.current) return;
-    const request: AnalyzeRequest = {
-      revision: revision.current,
-      paths,
-      main,
-      updates: [...pending.current].map((path) => [
-        path,
-        contents.current.get(path) ?? "",
-      ]),
-    };
-    worker.current.postMessage(request);
-    pending.current.clear();
-  }, [paths, main]);
-
   useEffect(() => {
-    const instance = createAnalysisWorker();
-    worker.current = instance;
-    pending.current = new Set(
-      paths.filter((path) => contents.current.has(path)),
-    );
-    instance.onmessage = ({ data }: MessageEvent<AnalyzeResponse>) => {
-      if (data.revision === revision.current) setResult(data);
-    };
-    flush();
-    return () => {
-      clearTimeout(timer.current);
-      worker.current = null;
-      instance.terminate();
-    };
-  }, [flush, paths]);
-
+    analyzer.open(setResult);
+    return () => analyzer.close();
+  }, [analyzer]);
+  useEffect(() => analyzer.setProject(paths, main), [analyzer, paths, main]);
   const update = useCallback(
-    (path: string, text: string) => {
-      revision.current++;
-      contents.current.set(path, text);
-      pending.current.add(path);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(flush, 250);
-    },
-    [flush],
+    (path: string, text: string) => analyzer.update(path, text),
+    [analyzer],
   );
-
-  return { result, update, revision };
+  return { result, update, revision: analyzer.revision };
 }

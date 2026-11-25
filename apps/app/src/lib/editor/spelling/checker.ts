@@ -1,3 +1,6 @@
+import { LruCache } from "#/lib/lru-cache";
+import { createWorkerClient } from "#/lib/worker-client";
+
 import type { SpellingDictionary } from "./languages";
 
 export type SpellRequest =
@@ -14,7 +17,9 @@ export type SpellResponse =
   | { id: number; suggestions: string[] }
   | { id: number; error: string };
 
-type WithoutId<T> = T extends unknown ? Omit<T, "id"> : never;
+// Enough for the vocabulary of a large project, per language.
+const maxVerdicts = 50_000;
+const maxSuggestions = 500;
 
 export type SpellChecker = {
   /** Resolves to the words that are not in the dictionary. */
@@ -23,43 +28,35 @@ export type SpellChecker = {
 };
 
 /**
- * Talks to a spelling worker and remembers each word's verdict per language,
- * so a lint pass only sends words it has not seen before.
+ * Talks to a spelling worker and remembers recent words' verdicts per
+ * language, so a lint pass mostly sends only words it has not seen before.
  */
-export function createSpellChecker(createWorker: () => Worker): SpellChecker {
-  let worker: Worker | undefined;
-  let nextId = 0;
-  const pending = new Map<number, (response: SpellResponse) => void>();
-  const verdicts = new Map<SpellingDictionary, Map<string, boolean>>();
-  const suggestions = new Map<string, Promise<string[]>>();
-
-  function request(message: WithoutId<SpellRequest>) {
-    if (!worker) {
-      worker = createWorker();
-      worker.onmessage = ({ data }: MessageEvent<SpellResponse>) => {
-        pending.get(data.id)?.(data);
-        pending.delete(data.id);
-      };
-      worker.onerror = () => {
-        for (const [id, resolve] of pending)
-          resolve({ id, error: "The spell checker failed to start." });
-        pending.clear();
-        worker = undefined;
-      };
-    }
-    const id = ++nextId;
-    const target = worker;
-    return new Promise<SpellResponse>((resolve) => {
-      pending.set(id, resolve);
-      target.postMessage({ ...message, id } as SpellRequest);
-    });
-  }
+export function createSpellChecker(
+  createWorker: () => Worker,
+  limits = { verdicts: maxVerdicts, suggestions: maxSuggestions },
+): SpellChecker {
+  const request = createWorkerClient<SpellRequest, SpellResponse>(
+    createWorker,
+    "The spell checker failed to start.",
+  );
+  const verdicts = new Map<SpellingDictionary, LruCache<string, boolean>>();
+  const suggestions = new LruCache<string, Promise<string[]>>(
+    limits.suggestions,
+  );
 
   return {
     async check(language, words) {
       let known = verdicts.get(language);
-      if (!known) verdicts.set(language, (known = new Map()));
-      const unknown = [...new Set(words)].filter((word) => !known.has(word));
+      if (!known)
+        verdicts.set(language, (known = new LruCache(limits.verdicts)));
+      // Collected here, as remembering new words may evict older ones.
+      const misspelled = new Set<string>();
+      const unknown: string[] = [];
+      for (const word of new Set(words)) {
+        const correct = known.get(word);
+        if (correct === undefined) unknown.push(word);
+        else if (!correct) misspelled.add(word);
+      }
       if (unknown.length) {
         const response = await request({
           type: "check",
@@ -69,9 +66,12 @@ export function createSpellChecker(createWorker: () => Worker): SpellChecker {
         if ("error" in response) throw new Error(response.error);
         if (!("misspelled" in response)) return new Set();
         const wrong = new Set(response.misspelled);
-        for (const word of unknown) known.set(word, !wrong.has(word));
+        for (const word of unknown) {
+          known.set(word, !wrong.has(word));
+          if (wrong.has(word)) misspelled.add(word);
+        }
       }
-      return new Set(words.filter((word) => known.get(word) === false));
+      return misspelled;
     },
     suggest(language, word) {
       const key = `${language}\u0000${word}`;

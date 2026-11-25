@@ -15,14 +15,17 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
+import { useSyncExternalStore } from "react";
 
 import type { WordCount } from "#/lib/editor/latex/word-count";
+import type { Store } from "#/lib/external-store";
 import type {
   PanelView,
   WorkspaceChrome,
 } from "#/lib/workspace/workspace-layout";
 
 import type { CompileStatus } from "../-hooks/use-compilation";
+import type { Cursor } from "../-hooks/use-dock-panels";
 import type { GitBranchState } from "../-hooks/use-workspace-session";
 import { WordCountStatus } from "./word-count-status";
 import { WorkspacePresence } from "./workspace-presence";
@@ -39,6 +42,22 @@ const sidebarViews = [
   label: string;
   icon: typeof IconFiles;
 }[];
+
+/** Subscribes by itself, so a moving cursor renders nothing else. */
+function CursorPosition({ cursor }: { cursor: Store<Cursor | undefined> }) {
+  const position = useSyncExternalStore(cursor.subscribe, cursor.get);
+  if (!position) return null;
+  return (
+    <span className="shrink-0 px-2 tabular-nums">
+      <span className="max-sm:hidden">
+        Ln {position.line}, Col {position.column}
+      </span>
+      <span className="sm:hidden">
+        {position.line}:{position.column}
+      </span>
+    </span>
+  );
+}
 
 export function WorkspaceStatusBar({
   chrome,
@@ -71,7 +90,7 @@ export function WorkspaceStatusBar({
   onScratchpad: () => void;
   /** The active tab's path. */
   location: string;
-  cursor: { line: number; column: number } | undefined;
+  cursor: Store<Cursor | undefined>;
 }) {
   return (
     <footer
@@ -183,16 +202,7 @@ export function WorkspaceStatusBar({
       <span className="min-w-0 flex-1 truncate px-2 text-right max-sm:hidden">
         {location}
       </span>
-      {cursor && (
-        <span className="shrink-0 px-2 tabular-nums">
-          <span className="max-sm:hidden">
-            Ln {cursor.line}, Col {cursor.column}
-          </span>
-          <span className="sm:hidden">
-            {cursor.line}:{cursor.column}
-          </span>
-        </span>
-      )}
+      <CursorPosition cursor={cursor} />
       <div
         role="toolbar"
         aria-label="Right sidebar views"

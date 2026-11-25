@@ -26,7 +26,10 @@ import {
 } from "#/lib/git";
 import { gitAction } from "#/lib/git/git.functions";
 import { useProjectFiles } from "#/providers/project-files-provider";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+} from "#/providers/workspace-provider";
 
 import {
   decideGitStatusRefresh,
@@ -39,15 +42,9 @@ const hostedNotice =
 type GitError = { source: "status" | "action"; message: string };
 
 export function GitPanel({ visible }: { visible: boolean }) {
-  const {
-    projectId,
-    canWrite,
-    collaboration,
-    drafts,
-    reveal,
-    reportGitBranch,
-    reportGitFailure,
-  } = useWorkspace();
+  const { projectId, drafts, reveal, reportGitBranch, reportGitFailure } =
+    useWorkspaceActions();
+  const { canWrite, collaboration } = useWorkspace();
   const files = useProjectFiles();
   const sourcesVersion = useSyncExternalStore(
     files.subscribe,

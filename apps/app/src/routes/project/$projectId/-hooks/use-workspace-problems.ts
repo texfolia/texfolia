@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { useStableValue } from "#/hooks/use-stable-value";
 import type { LatexProblem } from "#/lib/editor/latex/analysis";
 
 function sameProblem(a: LatexProblem, b: LatexProblem) {
@@ -9,7 +10,9 @@ function sameProblem(a: LatexProblem, b: LatexProblem) {
     a.message === b.message &&
     a.severity === b.severity &&
     a.range?.from === b.range?.from &&
-    a.range?.to === b.range?.to
+    a.range?.to === b.range?.to &&
+    a.citation?.key === b.citation?.key &&
+    a.citation?.suggestions.join("\n") === b.citation?.suggestions.join("\n")
   );
 }
 
@@ -25,7 +28,7 @@ function sameProblems(a: readonly LatexProblem[], b: readonly LatexProblem[]) {
  * of files no longer in the project are dropped.
  */
 export function useWorkspaceProblems({
-  analysis,
+  analysis: latestAnalysis,
   compile,
   filenames,
 }: {
@@ -33,6 +36,8 @@ export function useWorkspaceProblems({
   compile: LatexProblem[];
   filenames: string[];
 }) {
+  // Each analysis is a new list; most edits leave its problems as they were.
+  const analysis = useStableValue(latestAnalysis, sameProblems);
   const [syntax, setSyntax] = useState(new Map<string, LatexProblem[]>());
   const reportSyntax = useCallback((path: string, problems: LatexProblem[]) => {
     const next = problems.map((problem) => ({ ...problem, path }));

@@ -9,13 +9,18 @@ import type { LatexProblem } from "#/lib/editor/latex/analysis";
 import type { latexCompletion } from "#/lib/editor/latex/completion";
 import type { FormatSettings } from "#/lib/editor/latex/format";
 import type { SyncTexIndex, SyncTexLocation } from "#/lib/editor/latex/synctex";
+import type { FileDrafts } from "#/lib/workspace/file-drafts";
 
-export type FileState = { value: string; savedValue: string };
-export type Workspace = {
-  /** Live documents: files that are open, or whose edits are unsaved. */
-  collaboration: ReadonlyMap<string, CollaborativeFile>;
-  /** The scratchpad's live document, while its tab or preview is open. */
-  scratchpad: CollaborativeFile | undefined;
+export type { FileState } from "#/lib/workspace/file-drafts";
+
+/**
+ * What never changes while the workspace is open: its actions, the project, and
+ * the drafts. Reading it never renders again.
+ */
+export type WorkspaceActions = {
+  projectId: string;
+  /** Each file's text. Subscribe to it to show text that changes. */
+  drafts: FileDrafts;
   /**
    * Connects a text file's document, or the scratchpad's, until the returned
    * function is called.
@@ -26,25 +31,22 @@ export type Workspace = {
     id: string,
     run: (file: CollaborativeFile) => void,
   ) => Promise<void>;
-  projectId: string;
-  canWrite: boolean;
-  build: BuildSnapshot | null;
-  stale: boolean;
-  drafts: Map<string, FileState>;
-  paths: ReadonlyMap<string, string>;
-  completion: ReturnType<typeof latexCompletion>;
-  problems: ReadonlyMap<string, LatexProblem[]>;
-  allProblems: LatexProblem[];
   reveal: (
     path: string,
     line?: number,
     column?: number,
     length?: number,
   ) => void;
+  // Opens a text file and scrolls to a range without moving its selection.
+  revealRange: (nodeId: string, range: { from: number; to: number }) => void;
+  revealPdf: (path: string, line: number) => void;
   closeTabs: (id: string, mode: "one" | "others" | "all" | "right") => void;
-  reportGitBranch: (branch: string | null) => void;
-  /** Logs the failure and shows "Git unavailable" in the status bar. */
-  reportGitFailure: (error: unknown) => void;
+  keepOpen: (id: string) => void;
+  openMarkdownPreview: (id: string) => void;
+  addSymbolPackage: (packageName: string) => void;
+  /** Opens Add reference; `key` names an undefined citation to define. */
+  addReference: (key?: string) => void;
+  registerEditor: (id: string, view: EditorView | null) => void;
   registerCommands: (
     id: string,
     run: ((command: EditorCommand) => void) | null,
@@ -54,6 +56,22 @@ export type Workspace = {
     position: { line: number; column: number },
   ) => void;
   reportSyntax: (path: string, problems: LatexProblem[]) => void;
+  reportGitBranch: (branch: string | null) => void;
+  /** Logs the failure and shows "Git unavailable" in the status bar. */
+  reportGitFailure: (error: unknown) => void;
+};
+
+/** The project's files and the editors' state. */
+export type Workspace = {
+  /** Live documents: files that are open, or whose edits are unsaved. */
+  collaboration: ReadonlyMap<string, CollaborativeFile>;
+  /** The scratchpad's live document, while its tab or preview is open. */
+  scratchpad: CollaborativeFile | undefined;
+  canWrite: boolean;
+  paths: ReadonlyMap<string, string>;
+  /** The main LaTeX file, if there is one. */
+  main: { id: string; path: string } | undefined;
+  completion: ReturnType<typeof latexCompletion>;
   jump:
     | {
         id: string;
@@ -64,37 +82,71 @@ export type Workspace = {
       }
     | undefined;
   comments: Comments;
-  // Opens a text file and scrolls to a range without moving its selection.
-  revealRange: (nodeId: string, range: { from: number; to: number }) => void;
-  pdf: File | null;
-  synctex: SyncTexIndex | null;
-  pdfJump: { index: SyncTexIndex; location: SyncTexLocation } | null;
-  revealPdf: (path: string, line: number) => void;
-  pdfSaveState: "saved" | "saving" | "not-saved";
   formatSettings: FormatSettings;
-  keepOpen: (id: string) => void;
-  openMarkdownPreview: (id: string) => void;
-  symbolPreamble: { source: string; filename: string } | undefined;
-  addSymbolPackage: (packageName: string) => void;
-  /** Opens Add reference; `key` names an undefined citation to define. */
-  addReference: (key?: string) => void;
-  registerEditor: (id: string, view: EditorView | null) => void;
 };
 
-const WorkspaceContext = createContext<Workspace | null>(null);
+/** The latest build and the PDF on screen. */
+export type WorkspaceBuild = {
+  build: BuildSnapshot | null;
+  stale: boolean;
+  pdf: File | null;
+  pdfSaveState: "saved" | "saving" | "not-saved";
+  synctex: SyncTexIndex | null;
+  pdfJump: { index: SyncTexIndex; location: SyncTexLocation } | null;
+};
 
+/** Problems, which change as the analysis follows edits. */
+export type WorkspaceDiagnostics = {
+  problems: ReadonlyMap<string, LatexProblem[]>;
+  allProblems: LatexProblem[];
+};
+
+const ActionsContext = createContext<WorkspaceActions | null>(null);
+const WorkspaceContext = createContext<Workspace | null>(null);
+const BuildContext = createContext<WorkspaceBuild | null>(null);
+const DiagnosticsContext = createContext<WorkspaceDiagnostics | null>(null);
+
+/** Memoize each value: consumers of one are not rendered for the others. */
 export function WorkspaceProvider({
-  value,
+  actions,
+  workspace,
+  build,
+  diagnostics,
   children,
 }: {
-  value: Workspace;
+  actions: WorkspaceActions;
+  workspace: Workspace;
+  build: WorkspaceBuild;
+  diagnostics: WorkspaceDiagnostics;
   children: ReactNode;
 }) {
-  return <WorkspaceContext value={value}>{children}</WorkspaceContext>;
+  return (
+    <ActionsContext value={actions}>
+      <WorkspaceContext value={workspace}>
+        <BuildContext value={build}>
+          <DiagnosticsContext value={diagnostics}>
+            {children}
+          </DiagnosticsContext>
+        </BuildContext>
+      </WorkspaceContext>
+    </ActionsContext>
+  );
 }
 
+function required<T>(value: T | null) {
+  if (!value) throw new Error("Missing project workspace");
+  return value;
+}
+
+export function useWorkspaceActions() {
+  return required(useContext(ActionsContext));
+}
 export function useWorkspace() {
-  const workspace = useContext(WorkspaceContext);
-  if (!workspace) throw new Error("Missing project workspace");
-  return workspace;
+  return required(useContext(WorkspaceContext));
+}
+export function useWorkspaceBuild() {
+  return required(useContext(BuildContext));
+}
+export function useWorkspaceDiagnostics() {
+  return required(useContext(DiagnosticsContext));
 }

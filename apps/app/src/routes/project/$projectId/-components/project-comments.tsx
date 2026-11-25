@@ -27,7 +27,10 @@ import {
   updateComment,
 } from "#/lib/comments/project-comments.functions";
 import { maxCommentLength } from "#/lib/comments/project-comments.schema";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+} from "#/providers/workspace-provider";
 
 type Filter = "open" | "resolved";
 type Located = CommentThread & {
@@ -61,11 +64,10 @@ function composerKeys(onSubmit: () => void, onCancel?: () => void) {
 }
 
 export function ProjectComments() {
-  const workspace = useWorkspace();
-  const { comments } = workspace;
+  const { holdDocument } = useWorkspaceActions();
+  const { comments, collaboration, paths } = useWorkspace();
   const [filter, setFilter] = useState<Filter>("open");
   const threads = comments.data?.threads;
-  const { collaboration, holdDocument, paths } = workspace;
   // Positions resolve against the live documents of commented files.
   const commented = [...new Set((threads ?? []).map((thread) => thread.nodeId))]
     .sort()
@@ -178,8 +180,8 @@ export function ProjectComments() {
 }
 
 function DraftComposer() {
-  const workspace = useWorkspace();
-  const { comments } = workspace;
+  const { projectId } = useWorkspaceActions();
+  const { comments, paths } = useWorkspace();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -199,7 +201,7 @@ function DraftComposer() {
     try {
       const { threadId } = await run(() =>
         createCommentThread({
-          data: { projectId: workspace.projectId, ...draft, body },
+          data: { projectId, ...draft, body },
         }),
       );
       cancelDraft();
@@ -217,7 +219,7 @@ function DraftComposer() {
       onSubmit={(event) => void submit(event)}
     >
       <p className="text-muted-foreground truncate">
-        {workspace.paths.get(draft.nodeId)}
+        {paths.get(draft.nodeId)}
       </p>
       <Quote text={draft.quote} />
       <Textarea
@@ -263,8 +265,8 @@ function Quote({ text }: { text: string }) {
 }
 
 function ThreadCard({ thread }: { thread: Located }) {
-  const workspace = useWorkspace();
-  const { comments } = workspace;
+  const { projectId, revealRange } = useWorkspaceActions();
+  const { comments } = useWorkspace();
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -272,7 +274,6 @@ function ThreadCard({ thread }: { thread: Located }) {
   const { data, run, selectThread, activeId } = comments;
   const active = activeId === thread.id;
   const canDelete = data.canModerate || thread.createdBy === data.userId;
-  const projectId = workspace.projectId;
   // The anchored text was deleted when its range collapsed.
   const detached =
     thread.range !== null && thread.range.from === thread.range.to;
@@ -304,7 +305,7 @@ function ThreadCard({ thread }: { thread: Located }) {
   }
   function show() {
     selectThread(thread.id);
-    if (thread.range) workspace.revealRange(thread.nodeId, thread.range);
+    if (thread.range) revealRange(thread.nodeId, thread.range);
   }
 
   return (

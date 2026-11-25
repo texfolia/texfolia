@@ -17,6 +17,8 @@ export const keymapHistory = Facet.define<
   KeymapHistory | undefined
 >({ combine: (values) => values[0] });
 
+// One value, so an editor with the default keys is not reconfigured for it.
+const defaultKeys: Extension = [];
 const loaded = new Map<Exclude<EditorKeymap, "default">, Extension>();
 const pending = new Map<Exclude<EditorKeymap, "default">, Promise<Extension>>();
 const loaders: Record<
@@ -54,7 +56,7 @@ const loaders: Record<
 export function loadedKeymapExtension(
   keymap: EditorKeymap,
 ): Extension | undefined {
-  return keymap === "default" ? [] : loaded.get(keymap);
+  return keymap === "default" ? defaultKeys : loaded.get(keymap);
 }
 
 /**
@@ -62,7 +64,7 @@ export function loadedKeymapExtension(
  * precedence, as both packages require, so it sees keys before other keymaps.
  */
 export function loadKeymapExtension(keymap: EditorKeymap): Promise<Extension> {
-  if (keymap === "default") return Promise.resolve([]);
+  if (keymap === "default") return Promise.resolve(defaultKeys);
   const ready = loaded.get(keymap);
   if (ready) return Promise.resolve(ready);
   let request = pending.get(keymap);

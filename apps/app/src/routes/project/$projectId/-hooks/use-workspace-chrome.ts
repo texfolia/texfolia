@@ -1,7 +1,15 @@
 import type { DockviewApi } from "dockview-react";
-import { type RefObject, useEffect, useEffectEvent, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useState,
+} from "react";
 
 import { documentCachingStopped } from "#/lib/collaboration/browser";
+import { debounce } from "#/lib/debounce";
 import {
   defaultWorkspaceChrome,
   readWorkspaceLayout,
@@ -11,6 +19,8 @@ import {
 } from "#/lib/workspace/workspace-layout";
 
 const narrowQuery = "(max-width: 767px)";
+// Dragging a divider changes the layout on every frame.
+const persistDelayMs = 200;
 
 /** On narrow screens only one sidebar overlays the editor at a time. */
 export function applyChromePatch(
@@ -55,28 +65,34 @@ export function useWorkspaceChrome({
   });
   const [chrome, setChrome] = useState(initialLayout.chrome);
 
-  const updateChrome = (
-    patch:
-      | Partial<WorkspaceChrome>
-      | ((previous: WorkspaceChrome) => Partial<WorkspaceChrome>),
-  ) =>
-    setChrome((previous) =>
-      applyChromePatch(
-        previous,
-        typeof patch === "function" ? patch(previous) : patch,
-        window.matchMedia(narrowQuery).matches,
+  const updateChrome = useCallback(
+    (
+      patch:
+        | Partial<WorkspaceChrome>
+        | ((previous: WorkspaceChrome) => Partial<WorkspaceChrome>),
+    ) =>
+      setChrome((previous) =>
+        applyChromePatch(
+          previous,
+          typeof patch === "function" ? patch(previous) : patch,
+          window.matchMedia(narrowQuery).matches,
+        ),
       ),
-    );
+    [],
+  );
 
   // Status-bar buttons toggle their own view; the menu always shows it.
-  const togglePanel = (view?: PanelView) =>
-    updateChrome((current) =>
-      !view
-        ? { panelOpen: !current.panelOpen }
-        : current.panelOpen && current.panelView === view
-          ? { panelOpen: false }
-          : { panelOpen: true, panelView: view },
-    );
+  const togglePanel = useCallback(
+    (view?: PanelView) =>
+      updateChrome((current) =>
+        !view
+          ? { panelOpen: !current.panelOpen }
+          : current.panelOpen && current.panelView === view
+            ? { panelOpen: false }
+            : { panelOpen: true, panelView: view },
+      ),
+    [updateChrome],
+  );
 
   useEffect(() => {
     const narrow = window.matchMedia(narrowQuery);
@@ -95,21 +111,37 @@ export function useWorkspaceChrome({
     return () => narrow.removeEventListener("change", adapt);
   }, []);
 
-  /** Writes the chrome and dock layout; also called on dock layout changes. */
-  const persistLayout = useEffectEvent(() => {
+  const writeLayout = useEffectEvent(() => {
     if (documentCachingStopped()) return;
     const api = dock.current;
     if (api) writeWorkspaceLayout(layoutKey, chrome, api.toJSON());
   });
+  const [persist] = useState(() =>
+    debounce(() => writeLayout(), persistDelayMs),
+  );
   useEffect(() => {
-    if (ready) persistLayout();
-  }, [chrome, ready]);
+    if (ready) persist.schedule();
+  }, [chrome, ready, persist]);
+  // A layout effect's cleanup, so the dock is still there when leaving.
+  useLayoutEffect(() => {
+    const hidden = () => {
+      if (document.visibilityState === "hidden") persist.flush();
+    };
+    window.addEventListener("pagehide", persist.flush);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("pagehide", persist.flush);
+      document.removeEventListener("visibilitychange", hidden);
+      persist.flush();
+    };
+  }, [persist]);
 
   return {
     chrome,
     updateChrome,
     togglePanel,
-    persistLayout,
+    /** Writes the chrome and dock layout soon; call on dock layout changes. */
+    persistLayout: persist.schedule,
     initialDock: initialLayout.dock,
   };
 }

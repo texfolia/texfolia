@@ -11,9 +11,14 @@ import {
 import * as Y from "yjs";
 
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
-import { useWorkspace, type Workspace } from "#/providers/workspace-provider";
+import {
+  useWorkspaceActions,
+  type Workspace,
+} from "#/providers/workspace-provider";
 
 import { Editor, type EditorSnapshot } from "./editor";
+
+type EditorProps = ComponentProps<typeof Editor>;
 
 const emptySubscribe = () => () => {};
 const noCollaborationStatus = () => undefined;
@@ -32,7 +37,7 @@ export function DocumentEditor({
   onAddReference,
   ...props
 }: Omit<
-  ComponentProps<typeof Editor>,
+  EditorProps,
   | "collaboration"
   | "jump"
   | "readOnly"
@@ -49,9 +54,17 @@ export function DocumentEditor({
   canWrite: boolean;
   jump?: Workspace["jump"];
 }) {
-  const workspace = useWorkspace();
+  const { registerEditor, registerCommands, reportCursor, holdDocument } =
+    useWorkspaceActions();
   const editor = useRef<EditorView | null>(null);
-  const { registerEditor, holdDocument } = workspace;
+  const commandsChanged = useCallback<NonNullable<EditorProps["onCommands"]>>(
+    (run) => registerCommands(id, run),
+    [id, registerCommands],
+  );
+  const cursorMoved = useCallback<NonNullable<EditorProps["onCursorPosition"]>>(
+    (position) => reportCursor(id, position),
+    [id, reportCursor],
+  );
   useEffect(() => {
     if (editor.current) registerEditor(id, editor.current);
     return () => registerEditor(id, null);
@@ -129,10 +142,11 @@ export function DocumentEditor({
       )}
       <Editor
         {...props}
-        onCommands={(run) => workspace.registerCommands(id, run)}
-        onCursorPosition={(position) => workspace.reportCursor(id, position)}
+        onCommands={commandsChanged}
+        onCursorPosition={cursorMoved}
         collaboration={collaboration}
-        key={id}
+        // The editor binds one document for its whole life.
+        key={collaboration.doc.clientID}
         readOnly={readOnly}
         onAddReference={readOnly ? undefined : onAddReference}
         onCreateEditor={(view) => {
@@ -140,7 +154,6 @@ export function DocumentEditor({
           registerEditor(id, view);
           if (panelApi.isActive) view.focus();
         }}
-        defaultValue={collaboration.text.toString()}
         jump={jump}
         initialSnapshot={initialSnapshot}
         onSnapshot={({ anchor, head, scroll }) => {

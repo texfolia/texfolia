@@ -11,13 +11,13 @@ import {
   SettingsFooter,
   UserSettingsSections,
 } from "#/components/settings-dialog";
-import { useSettings } from "#/providers/settings-provider";
+import { useSettingsEditing } from "#/providers/settings-provider";
 export const Route = createFileRoute("/settings/preferences")({
   validateSearch: z.object({ section: z.literal("shortcuts").optional() }),
   component: PreferencesPage,
 });
 function PreferencesPage() {
-  const settings = useSettings();
+  const settings = useSettingsEditing();
   const { section } = Route.useSearch();
   const navigate = useNavigate();
   const leaving = useRef(false);

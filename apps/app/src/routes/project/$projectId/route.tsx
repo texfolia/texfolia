@@ -1,4 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useMemo } from "react";
 
 import {
   defaultSpellingLanguage,
@@ -61,24 +62,24 @@ function WorkspacePage() {
 function ThemedWorkspace() {
   const { user } = Route.useRouteContext();
   const { project } = Route.useLoaderData();
+  const settings = useMemo(
+    () => ({
+      id: project.id,
+      canWrite: project.canWrite,
+      formatting: {
+        indent: project.formatIndent,
+        wrap: project.formatWrap,
+        width: project.formatWidth,
+      },
+      spelling: spellingLanguageSchema
+        .catch(defaultSpellingLanguage)
+        .parse(project.spellcheckLanguage),
+    }),
+    [project],
+  );
   return (
     <ThemeProvider userId={user.id}>
-      <SettingsProvider
-        key={project.id}
-        userId={user.id}
-        project={{
-          id: project.id,
-          canWrite: project.canWrite,
-          formatting: {
-            indent: project.formatIndent,
-            wrap: project.formatWrap,
-            width: project.formatWidth,
-          },
-          spelling: spellingLanguageSchema
-            .catch(defaultSpellingLanguage)
-            .parse(project.spellcheckLanguage),
-        }}
-      >
+      <SettingsProvider key={project.id} userId={user.id} project={settings}>
         <WorkspacePage />
       </SettingsProvider>
     </ThemeProvider>

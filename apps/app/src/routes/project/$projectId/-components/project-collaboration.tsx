@@ -16,14 +16,14 @@ import {
   revokeProjectAccess,
 } from "#/lib/sharing/project-sharing.functions";
 import { grantProjectAccessSchema } from "#/lib/sharing/project-sharing.schema";
-import { useWorkspace } from "#/providers/workspace-provider";
+import { useWorkspaceActions } from "#/providers/workspace-provider";
 
 import { ProjectShareLinks } from "./project-share-links";
 
 type Person = Awaited<ReturnType<typeof getProjectAccess>>["people"][number];
 
 export function ProjectCollaboration() {
-  const { projectId } = useWorkspace();
+  const { projectId } = useWorkspaceActions();
   return <ProjectAccessPanel projectId={projectId} />;
 }
 

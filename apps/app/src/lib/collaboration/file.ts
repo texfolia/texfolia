@@ -61,6 +61,7 @@ export class CollaborativeFile {
   private persistence: IndexeddbPersistence | undefined;
   private socket: WebSocket | undefined;
   private stopped = false;
+  private destroyed = false;
   private cacheReady = false;
   private synchronized = false;
   private reconnect: ReturnType<typeof setTimeout> | undefined;
@@ -79,6 +80,8 @@ export class CollaborativeFile {
   // Markers for unsynced edits that this document's cache includes.
   private markers = new Set<string>();
   private status: FileStatus;
+  // Callers of `whenReady` and `whenConnected` still waiting.
+  private waiting = new Set<(error: Error) => void>();
   private saves = new Map<
     string,
     {
@@ -159,11 +162,14 @@ export class CollaborativeFile {
           this.destroy();
           window.location.replace("/");
         });
-        if ((await this.persistence.get("initialized")) === 1) {
+        const initialized = await this.persistence.get("initialized");
+        if (this.destroyed) return;
+        if (initialized === 1) {
           this.setStatus({ ready: true });
           this.options.onChange(this.text.toString());
         }
       } catch {
+        if (this.destroyed) return;
         this.setStatus({
           error:
             "Offline collaboration could not be cached. Keep this page open until connected.",
@@ -211,10 +217,20 @@ export class CollaborativeFile {
 
   private offline = () => this.disconnect();
 
-  private disconnect() {
+  /** Closes the socket; nothing it still delivers reaches this file. */
+  private detach() {
     const socket = this.socket;
     this.socket = undefined;
-    socket?.close();
+    if (!socket) return;
+    socket.onopen = null;
+    socket.onmessage = null;
+    socket.onclose = null;
+    socket.onerror = null;
+    socket.close();
+  }
+
+  private disconnect() {
+    this.detach();
     clearInterval(this.heartbeat);
     this.synchronized = false;
     this.setStatus({ connected: false, people: [] });
@@ -504,25 +520,43 @@ export class CollaborativeFile {
   }
 
   private when(check: (status: FileStatus) => boolean, message: string) {
-    if (check(this.status)) return Promise.resolve();
+    if (!this.destroyed && check(this.status)) return Promise.resolve();
+    if (this.stopped) return Promise.reject(new Error(this.stopReason()));
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        unsubscribe();
-        reject(new Error(message));
-      }, 10_000);
-      const unsubscribe = this.subscribe(() => {
-        if (!check(this.status)) return;
+      const settle = () => {
         clearTimeout(timer);
         unsubscribe();
+        this.waiting.delete(fail);
+      };
+      const fail = (error: Error) => {
+        settle();
+        reject(error);
+      };
+      const timer = setTimeout(() => fail(new Error(message)), 10_000);
+      const unsubscribe = this.subscribe(() => {
+        if (!check(this.status)) return;
+        settle();
         resolve();
       });
+      this.waiting.add(fail);
     });
+  }
+
+  private stopReason() {
+    return this.destroyed ? "This file was closed." : "This file was deleted.";
+  }
+
+  /** Nothing can become ready or connected any more. */
+  private stopWaiting() {
+    const reason = this.stopReason();
+    for (const fail of this.waiting) fail(new Error(reason));
   }
 
   retire() {
     if (this.stopped) return;
     this.stopped = true;
     this.disconnect();
+    this.stopWaiting();
     this.setStatus({
       canWrite: false,
       error:
@@ -531,18 +565,29 @@ export class CollaborativeFile {
   }
 
   destroy() {
+    if (this.destroyed) return;
     this.stopped = true;
+    this.destroyed = true;
+    // Tells the room before the socket closes.
     this.awareness.setLocalState(null);
     window.removeEventListener("online", this.online);
     window.removeEventListener("offline", this.offline);
     clearTimeout(this.reconnect);
     clearInterval(this.heartbeat);
-    this.socket?.close();
+    this.detach();
+    this.synchronized = false;
+    this.status = {
+      ...this.status,
+      connected: false,
+      canWrite: false,
+      people: [],
+    };
     for (const pending of this.saves.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error("Project closed"));
     }
     this.saves.clear();
+    this.stopWaiting();
     this.awareness.destroy();
     this.undoManager.destroy();
     this.doc.off("update", this.documentChanged);

@@ -17,7 +17,10 @@ import {
   sessionHistoryParam,
   type TimelineEvent,
 } from "#/lib/compile";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspaceActions,
+  useWorkspaceBuild,
+} from "#/providers/workspace-provider";
 
 const logSchema = z.object({ log: z.string() });
 
@@ -57,7 +60,8 @@ type LogScope = "session" | "recent";
 // timeline of the selected compile, and its raw TeX log. It fetches only while
 // visible.
 export function WorkspaceLogs({ openedAt }: { openedAt: number }) {
-  const { projectId, build } = useWorkspace();
+  const { projectId } = useWorkspaceActions();
+  const { build } = useWorkspaceBuild();
   const [scope, setScope] = useState<LogScope>("session");
   const [jobs, setJobs] = useState<CompileHistoryEntry[] | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -369,7 +373,7 @@ function TimelineRow({
 }
 
 function RawLog({ jobId, done }: { jobId: string; done: boolean }) {
-  const { projectId } = useWorkspace();
+  const { projectId } = useWorkspaceActions();
   const [open, setOpen] = useState(false);
   const [log, setLog] = useState<string | null>(null);
   const [error, setError] = useState("");
