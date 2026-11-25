@@ -111,7 +111,9 @@ architecture, Bun version, and lockfile, with a fallback for older lockfiles.
 
 Turbo's local `.turbo` cache persists through GitHub Actions caches. Keys include
 the runner OS, architecture, Bun version, job, lockfile, and commit. Restore keys
-allow task reuse across commits. Turbo validates individual task hashes after
+allow task reuse across commits. `cacheMaxSize` in `turbo.json` drops the oldest
+entries over 200 MB, because each run restores the previous cache and GitHub
+evicts caches once the repository's exceed 10 GB. Turbo validates individual task hashes after
 restoration. No remote cache service or credentials are required. GitHub's cache
 scope rules still apply, so a new PR may start cold if no accessible cache exists.
 
