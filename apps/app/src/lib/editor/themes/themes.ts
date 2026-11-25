@@ -106,7 +106,7 @@ export function resolveTheme(definition: ThemeDefinition) {
     "--tab-header": surface,
     "--selection": settings.selection ?? accent,
     "--selection-foreground": fg,
-    "--overlay": "#00000066",
+    "--overlay": "rgba(0, 0, 0, 0.1)",
     "--pdf-surround": mix(9),
     "--pdf-original-surround": "#e4e4e7",
     "--pdf-original-foreground": "#242424",

@@ -195,6 +195,11 @@ try {
 
   console.info("Checking the resize handles");
   const sidebar = page.getByRole("separator", { name: "Resize right sidebar" });
+  assert.equal(
+    (await sidebar.boundingBox())?.width,
+    1,
+    "The handle shows as a hairline",
+  );
   await sidebar.focus();
   await page.keyboard.press("Home");
   assert.equal(await value(sidebar), 240);
@@ -290,7 +295,7 @@ try {
   const overlay = still.locator('[data-slot="dialog-overlay"]');
   assert.equal(
     await style(overlay, "background-color"),
-    "rgba(0, 0, 0, 0.4)",
+    "rgba(0, 0, 0, 0.1)",
     "The backdrop is the theme's",
   );
   await settings.getByRole("button", { name: "Editor", exact: true }).click();

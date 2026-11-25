@@ -31,7 +31,8 @@ themes. Downloads and exports retain the original PDF bytes.
 
 Appearance is stored per account in `texfolia.appearance.v2:<userId>` in this
 browser, including the selection, PDF mode, and a cached CSS preview for the head
-bootstrap. It is shared between browser tabs and does not sync between devices.
+bootstrap. A preview saved before a newer variable existed still applies, with its mode's
+default for that variable. It is shared between browser tabs and does not sync between devices.
 Hover and focus previews never write storage. If saving fails, Settings remains
 open with the draft and an error so the user can retry.
 

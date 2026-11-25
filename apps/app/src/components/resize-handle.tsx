@@ -52,12 +52,13 @@ export function ResizeHandle({
       aria-valuemax={bounds.max}
       aria-valuenow={size}
       className={cn(
-        // The line is thin. Its target is wider, and 24px for touch.
-        "bg-border hover:bg-ring focus-visible:bg-ring focus-visible:ring-ring relative shrink-0 touch-none outline-none select-none before:absolute focus-visible:ring-1",
+        // Only a hairline shows. An invisible target around it is easier to hit,
+        // and 25px for touch.
+        "bg-border hover:bg-ring focus-visible:bg-ring relative shrink-0 touch-none outline-none select-none before:absolute",
         axis === "x"
-          ? "w-1 cursor-col-resize before:-inset-x-0.5 before:inset-y-0 pointer-coarse:before:-inset-x-2.5"
+          ? "w-px cursor-col-resize before:-inset-x-1 before:inset-y-0 pointer-coarse:before:-inset-x-3"
           : // Grows away from the panel's own controls.
-            "h-1 cursor-row-resize before:inset-x-0 before:-top-1 before:bottom-0 pointer-coarse:before:-top-5",
+            "h-px cursor-row-resize before:inset-x-0 before:-top-1.5 before:-bottom-0.5 pointer-coarse:before:-top-6 pointer-coarse:before:bottom-0",
         className,
       )}
       onKeyDown={(event) => {

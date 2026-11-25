@@ -32,7 +32,7 @@ export function WorkspaceAgentsSidebar({
   const width =
     (chrome.agentsOpen ? chrome.agentsWidth : 0) +
     (chrome.historyOpen
-      ? chrome.historyWidth + (chrome.agentsOpen ? 4 : 0)
+      ? chrome.historyWidth + (chrome.agentsOpen ? 1 : 0)
       : 0);
   return (
     <>

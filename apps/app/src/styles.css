@@ -110,7 +110,7 @@
   --tab-header: var(--muted);
   --selection: var(--accent);
   --selection-foreground: var(--accent-foreground);
-  --overlay: #0000004d;
+  --overlay: rgba(0, 0, 0, 0.1);
   --pdf-original-surround: #e4e4e7;
   --pdf-mark: #ffdf2080;
   --pdf-mark-current: #ff690099;
@@ -181,6 +181,17 @@
   --dv-drag-over-border-color: var(--ring);
   --dv-active-sash-color: var(--ring);
   --dv-sash-color: var(--border);
+  /* Sashes stay 4px to grab, and show as a hairline over the separator. */
+  & .dv-sash-container > .dv-sash {
+    border: 0 solid transparent;
+    background-clip: padding-box;
+  }
+  & .dv-horizontal > .dv-sash-container > .dv-sash {
+    border-width: 0 1px 0 2px;
+  }
+  & .dv-vertical > .dv-sash-container > .dv-sash {
+    border-width: 2px 0 1px;
+  }
   --dv-scrollbar-background-color: var(--border);
   --dv-tabs-container-scrollbar-color: var(--border);
   --dv-icon-hover-background-color: var(--accent);
