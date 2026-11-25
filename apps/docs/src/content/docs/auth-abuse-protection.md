@@ -44,6 +44,23 @@ invitation. Subscription changes require account ownership or an organization
 owner/admin role. `/email-otp/request-email-change` also requires Turnstile, which
 runs before the session check, and allows three requests per IP in 60 seconds.
 
+## Session cache
+
+`session.cookieCache` keeps a signed copy of the session and user in a cookie for
+five minutes, so most requests do not read the session from Postgres. A session
+that was revoked, or whose user was deleted, keeps working for up to five minutes
+where only the cookie is checked. These always read the database:
+
+- Project access and roles, on every request.
+- WebSocket upgrades, through `requestPrincipal`. Reading the database there also
+  sets no cookie, which would make TanStack Start rebuild the 101 response and fail
+  the upgrade.
+- `/organization/*` and `/subscription/*`, whose requests lose the cached cookie
+  in `beforeAuth`.
+- Better Auth's own account, email, and deletion endpoints.
+
+## Unused routes
+
 These unused routes cannot send email or create accounts:
 
 - POST `/sign-up/email` returns the same signup-disabled error for every address.

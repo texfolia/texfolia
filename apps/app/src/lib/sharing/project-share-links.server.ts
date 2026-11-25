@@ -22,11 +22,11 @@ import { encodeSource } from "#/lib/storage";
 import { lockProject, sharePrincipal } from "./project-access.server";
 import {
   shareLinkLimit,
-  sharePath,
   shareTokenSchema,
   type createShareLinkSchema,
   type revokeShareLinkSchema,
 } from "./project-share-links.schema";
+import { sharePath } from "./share-token";
 import { takeSharingEmail } from "./sharing-limit.server";
 
 export async function hashShareToken(token: string) {

@@ -31,6 +31,24 @@ export const projectMetadataSchema = z.object({
 });
 export type ProjectMetadata = z.infer<typeof projectMetadataSchema>;
 
+/** Changes with the metadata, whatever order its files are listed in. */
+export function projectMetadataHash({
+  nodes,
+  sourceVersions,
+  ...rest
+}: ProjectMetadata) {
+  const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  return sha256Hex(
+    new TextEncoder().encode(
+      JSON.stringify([
+        [...nodes].sort((a, b) => byId(a.id, b.id)),
+        Object.entries(sourceVersions).sort(([a], [b]) => byId(a, b)),
+        rest,
+      ]),
+    ),
+  );
+}
+
 export function projectSourcesFingerprint({
   nodes,
   sourceVersions,

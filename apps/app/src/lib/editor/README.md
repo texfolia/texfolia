@@ -18,7 +18,7 @@ feature, so the app's Vite build emits each one as its own asset. Every editor t
 shares one format worker and one spelling worker, and `LatexAnalyzer` keeps one
 analysis worker per workspace while files come and go. A worker that fails is
 terminated and replaced on the next request. The format
-worker loads `core/texfmt` and the spelling worker loads `dictionaries/` from the
+worker loads `core/<version>/texfmt` and the spelling worker loads `dictionaries/` from the
 app's origin; the app copies those assets before `dev` and `build`.
 
 Compile integration (build history, compile logs, source sync, shared PDFs) is
@@ -26,8 +26,11 @@ not part of this feature. It lives in `#/lib/compile`.
 
 ## Theme catalog
 
-`themes/theme-catalog.gen.ts` is generated from `@uiw/codemirror-themes-all`.
-Regenerate it after upgrading the UIW theme packages:
+`themes/theme-catalog.gen.ts` and `themes/theme-loaders.gen.ts` are generated from
+`@uiw/codemirror-themes-all`. Every page loads `themes.ts` and the catalog to apply
+the theme's colors, so they must import neither CodeMirror nor Zod. Only pages with
+an editor load `theme-extensions.ts` and the loaders; a test checks this. Regenerate
+both files after upgrading the UIW theme packages:
 
 ```sh
 bun run --cwd apps/app themes:catalog

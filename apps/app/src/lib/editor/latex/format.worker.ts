@@ -5,10 +5,14 @@ import {
   type FormatRequest,
   type FormatResponse,
 } from "./format";
+import { latexToolsPath } from "./tools";
 
 const formatter = new TexFmt(
   false,
-  new URL(`${import.meta.env.BASE_URL}core/texfmt`, self.location.origin).href,
+  new URL(
+    `${import.meta.env.BASE_URL}${latexToolsPath}/texfmt`,
+    self.location.origin,
+  ).href,
 );
 
 async function respond({

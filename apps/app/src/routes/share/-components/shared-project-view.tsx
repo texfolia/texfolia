@@ -1,33 +1,29 @@
-import { markdown } from "@codemirror/lang-markdown";
 import { IconEye, IconFile, IconFileText } from "@tabler/icons-react";
 import { type BuildSnapshot } from "@texfolia/contracts";
-import CodeMirror, { EditorState } from "@uiw/react-codemirror";
 import { cn } from "cn";
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
+import { lazyPanel } from "#/components/lazy-panel";
 import { PanelHeader } from "#/components/panel-header";
-import { CollaborativeFile } from "#/lib/collaboration/browser";
 import { ProjectBuildEvents } from "#/lib/compile";
 import { buildFileUrl } from "#/lib/compile/build";
-import { bibtexLanguage, themedLatex } from "#/lib/editor/latex/highlight";
 import { projectPaths } from "#/lib/projects";
 import type { getSharedProject } from "#/lib/sharing/project-share-links.functions";
-import { withShareToken } from "#/lib/sharing/project-share-links.schema";
-import { useTheme } from "#/providers/theme-provider";
+import { withShareToken } from "#/lib/sharing/share-token";
+import { extensionOf } from "#/lib/storage/extension";
 
 const PdfViewer = lazy(
   () => import("#/routes/project/$projectId/-components/pdf"),
 );
 
+// PDF-only links load neither the editor nor the collaboration client.
+const SharedText = lazyPanel("The source", async () => {
+  const { SharedText } = await import("./shared-text");
+  return SharedText;
+});
+
 type SharedProject = NonNullable<Awaited<ReturnType<typeof getSharedProject>>>;
-type SharedNode = SharedProject["nodes"][number];
+export type SharedNode = SharedProject["nodes"][number];
 
 const imageTypes: Record<string, string> = {
   png: "image/png",
@@ -37,10 +33,6 @@ const imageTypes: Record<string, string> = {
   svg: "image/svg+xml",
   webp: "image/webp",
 };
-
-function extensionOf(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
 
 function sourceUrl(projectId: string, nodeId: string, token: string) {
   return withShareToken(`/api/sources/${projectId}/${nodeId}`, token);
@@ -181,72 +173,6 @@ function SharedSource({
       ) : (
         <SharedBinary projectId={projectId} node={node} token={token} />
       )}
-    </>
-  );
-}
-
-function SharedText({
-  projectId,
-  node,
-  token,
-}: {
-  projectId: string;
-  node: SharedNode;
-  token: string;
-}) {
-  const { theme } = useTheme();
-  const [value, setValue] = useState("");
-  // Follow live edits through the collaboration room, read-only.
-  const [file] = useState(
-    () =>
-      new CollaborativeFile({
-        projectId,
-        nodeId: node.id,
-        userId: "share-guest",
-        canWrite: false,
-        anonymous: true,
-        decorateUrl: (url) => withShareToken(url, token),
-        onChange: setValue,
-      }),
-  );
-  useEffect(() => () => file.destroy(), [file]);
-  const status = useSyncExternalStore(file.subscribe, file.getStatus);
-  const extensions = useMemo(() => {
-    const extension = extensionOf(node.name);
-    const language = ["tex", "ltx", "sty", "cls"].includes(extension)
-      ? [themedLatex(node.name)]
-      : extension === "md"
-        ? [markdown()]
-        : extension === "bib"
-          ? [bibtexLanguage]
-          : [];
-    return [EditorState.readOnly.of(true), ...language];
-  }, [node.name]);
-  if (!status.ready)
-    return (
-      <p
-        role={status.error ? "alert" : "status"}
-        className={cn("p-3 text-sm", status.error && "text-destructive")}
-      >
-        {status.error || "Loading source…"}
-      </p>
-    );
-  return (
-    <>
-      {status.error && (
-        <p role="alert" className="text-destructive border-b px-2 py-1 text-xs">
-          {status.error}
-        </p>
-      )}
-      <CodeMirror
-        value={value}
-        extensions={extensions}
-        readOnly
-        height="100%"
-        theme={theme.extension}
-        aria-label={`${node.name} source, read only`}
-        className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
-      />
     </>
   );
 }

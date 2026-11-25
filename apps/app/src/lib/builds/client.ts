@@ -13,6 +13,12 @@ export function buildsFetcher(
   };
 }
 
+/**
+ * Build files named by their build never change. Only the browser that was
+ * allowed to read one may keep it; signing out clears what it kept.
+ */
+export const immutableArtifact = "private, max-age=31536000, immutable";
+
 /** Who a live response is for. It ends when they lose access to the project. */
 export const liveUserHeader = "X-Live-User";
 

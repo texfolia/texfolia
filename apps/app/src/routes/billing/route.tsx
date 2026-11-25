@@ -1,10 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { z } from "zod";
+
+import { billingSearch } from "#/lib/billing/billing-search";
+
 export const Route = createFileRoute("/billing")({
-  validateSearch: z.object({
-    plan: z.enum(["pro", "team"]).optional(),
-    organizationId: z.string().min(1).optional(),
-  }),
+  validateSearch: billingSearch,
   beforeLoad: ({ search }) => {
     throw redirect({ to: "/settings/billing", search, replace: true });
   },

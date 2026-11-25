@@ -9,7 +9,7 @@ import Stripe from "stripe";
 import { z } from "zod";
 
 import { forgetAiSubscription } from "#/lib/billing/metering";
-import { createBillingPlugin, enforceBillingScope } from "#/lib/billing/stripe";
+import { assertBillingScope, createBillingPlugin } from "#/lib/billing/stripe";
 import {
   codeEmail,
   deleteAccountEmail,
@@ -18,6 +18,7 @@ import {
   type DeliverEmail,
   type EmailMessage,
 } from "#/lib/email";
+import { lazy } from "#/lib/lazy";
 import {
   deletionNotice,
   invalidateOrganizationAccess,
@@ -79,6 +80,48 @@ export function createOrganizationPlugin({
   });
 }
 
+/**
+ * Sessions are cached in a signed cookie, so most requests do not read them from
+ * the database. A session that was revoked, or whose user was deleted, keeps
+ * working for up to this long where only the cookie is checked. Project access
+ * is still read from the database every time, and so is the session for changes
+ * to an account, organization or subscription and for live connections.
+ */
+export const sessionOptions = {
+  cookieCache: { enabled: true, maxAge: 5 * 60 },
+};
+
+// Better Auth reads the database itself before changing an account.
+const authoritativePaths = ["/organization/", "/subscription/"];
+
+export const beforeAuth = createAuthMiddleware(async (ctx) => {
+  assertBillingScope(ctx);
+  const cookie = ctx.headers?.get("cookie");
+  if (
+    !cookie ||
+    !authoritativePaths.some((prefix) => ctx.path.startsWith(prefix))
+  )
+    return;
+  // Without the cached session, the endpoint reads it from the database. A cached
+  // user can also lack the Stripe customer that another request just created.
+  const cached = ctx.context.authCookies.sessionData.name;
+  return {
+    context: {
+      headers: new Headers({
+        cookie: cookie
+          .split(";")
+          .map((pair) => pair.trim())
+          .filter(
+            (pair) =>
+              // Large sessions are split into `name.0`, `name.1` and so on.
+              !pair.startsWith(`${cached}=`) && !pair.startsWith(`${cached}.`),
+          )
+          .join("; "),
+      }),
+    },
+  };
+});
+
 const removedMemberSchema = z.object({
   organizationId: z.string(),
   userId: z.string(),
@@ -102,9 +145,14 @@ export function createAuth(db: Db, live?: LiveProjects) {
         .map((hostname) => hostname.trim().toLowerCase())
         .filter(Boolean),
     );
-  const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2026-10-28.endive",
-  });
+  // Most requests never reach Stripe.
+  const stripeKey = process.env.STRIPE_SECRET_KEY!;
+  const stripeClient = lazy(
+    () =>
+      new Stripe(stripeKey, {
+        apiVersion: "2026-10-28.endive",
+      }),
+  );
 
   const deleting = deletionNotice({ db, live });
 
@@ -114,6 +162,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
       provider: "pg",
       schema,
     }),
+    session: sessionOptions,
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
@@ -137,8 +186,11 @@ export function createAuth(db: Db, live?: LiveProjects) {
       },
     },
     hooks: {
-      before: enforceBillingScope,
+      before: beforeAuth,
       after: createAuthMiddleware(async (ctx) => {
+        // Browsers keep build files, which the next user must not find.
+        if (ctx.path === "/sign-out" || ctx.path === "/delete-user")
+          ctx.setHeader("Clear-Site-Data", '"cache"');
         if (
           ctx.path !== "/organization/remove-member" &&
           ctx.path !== "/organization/leave"

@@ -1,6 +1,6 @@
 import type { BuildSnapshot } from "@texfolia/contracts";
 
-import { withShareToken } from "#/lib/sharing/project-share-links.schema";
+import { withShareToken } from "#/lib/sharing/share-token";
 
 export type BuildFile = NonNullable<
   BuildSnapshot["artifacts"]

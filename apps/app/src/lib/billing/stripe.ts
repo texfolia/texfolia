@@ -9,7 +9,12 @@ import { isOrgAdmin } from "#/lib/auth/roles";
 
 import { subscriptionPlans } from "./plans";
 
-export const enforceBillingScope = createAuthMiddleware(async (ctx) => {
+type BillingRequest = {
+  path?: string;
+  body?: any;
+};
+
+export function assertBillingScope(ctx: BillingRequest) {
   if (ctx.path !== "/subscription/upgrade") return;
   const { plan, customerType, annual, seats } = ctx.body ?? {};
   if (
@@ -24,7 +29,11 @@ export const enforceBillingScope = createAuthMiddleware(async (ctx) => {
         "Choose Pro for a personal account or Team for an organization. Plans are billed monthly; Team seats follow organization membership.",
     });
   }
-});
+}
+
+export const enforceBillingScope = createAuthMiddleware(async (ctx) =>
+  assertBillingScope(ctx),
+);
 
 export const authorizeOrganizationBilling: NonNullable<
   SubscriptionOptions["authorizeReference"]

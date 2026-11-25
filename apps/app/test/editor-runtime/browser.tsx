@@ -8,6 +8,7 @@ import { EditorView } from "@uiw/react-codemirror";
 import { Profiler } from "react";
 import { createRoot } from "react-dom/client";
 
+import { editorThemes } from "../../src/lib/editor/themes/theme-extensions";
 import type { ProjectDetails } from "../../src/lib/projects/project.functions";
 import {
   createProjectFilesStore,
@@ -37,7 +38,7 @@ const settings = {
 };
 const route = createRootRoute({
   component: () => (
-    <ThemeProvider userId="runtime-test">
+    <ThemeProvider userId="runtime-test" editorThemes={editorThemes}>
       <SettingsProvider userId="runtime-test" project={settings}>
         <ProjectFilesProvider store={files}>
           <Profiler

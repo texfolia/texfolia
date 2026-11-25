@@ -1,8 +1,8 @@
 import type { Db } from "@texfolia/db";
 
 import { sharePrincipal } from "#/lib/sharing/project-access.server";
-import { shareSearchParam } from "#/lib/sharing/project-share-links.schema";
 import { resolveShareToken } from "#/lib/sharing/project-share-links.server";
+import { shareSearchParam } from "#/lib/sharing/share-token";
 
 import type { createAuth } from "./auth";
 
@@ -32,7 +32,15 @@ export async function requestPrincipal({
     if (!link || link.projectId !== projectId) return null;
     return { userId: sharePrincipal(link.id), name: "Guest", share: true };
   }
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await auth.api.getSession({
+    headers: request.headers,
+    // A live connection outlasts the cached session. Reading the database also
+    // sets no cookie, which Start could only add by rebuilding the response, and
+    // a WebSocket upgrade cannot be rebuilt.
+    query: request.headers.has("Upgrade")
+      ? { disableCookieCache: true, disableRefresh: true }
+      : {},
+  });
   if (!session) return null;
   return { userId: session.user.id, name: session.user.name, share: false };
 }

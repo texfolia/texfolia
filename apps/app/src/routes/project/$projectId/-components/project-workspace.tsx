@@ -14,8 +14,9 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { SettingsDialog } from "#/components/settings-dialog";
+import { lazyPanel } from "#/components/lazy-panel";
 import { useComments } from "#/hooks/use-comments";
+import { useHasBeen } from "#/hooks/use-has-been";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import {
   useStableActions,
@@ -24,7 +25,7 @@ import {
 import { useStableValue } from "#/hooks/use-stable-value";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { scratchpadId } from "#/lib/collaboration";
-import { entryAppendix } from "#/lib/editor/latex/bibtex";
+import { entryAppendix, newBibFile } from "#/lib/editor/latex/bibtex";
 import { latexCompletion } from "#/lib/editor/latex/completion";
 import { addLatexPackage, packageInsertion } from "#/lib/editor/latex/symbols";
 import { sourceToPdf } from "#/lib/editor/latex/synctex";
@@ -56,11 +57,7 @@ import {
   useGitBranch,
 } from "../-hooks/use-workspace-session";
 import { useWorkspaceShortcuts } from "../-hooks/use-workspace-shortcuts";
-import {
-  AddReferenceDialog,
-  type AddReferenceRequest,
-  newBibFile,
-} from "./add-reference-dialog";
+import type { AddReferenceRequest } from "./add-reference-dialog";
 import type { CreateNodeHandle } from "./create-node-form";
 import { dockComponents, dockTabComponents, FileTab } from "./dock-panels";
 import { DraftRecovery } from "./draft-recovery";
@@ -72,8 +69,20 @@ import { SidebarResize } from "./sidebar-resize";
 import type { UploadSourceHandle } from "./upload-source";
 import { WorkspaceAgentsSidebar } from "./workspace-agents-sidebar";
 import { WorkspaceMenu } from "./workspace-menu";
-import { WorkspacePanel } from "./workspace-panel";
 import { WorkspaceStatusBar } from "./workspace-status-bar";
+
+const SettingsDialog = lazyPanel("Settings", async () => {
+  const { SettingsDialog } = await import("#/components/settings-dialog");
+  return SettingsDialog;
+});
+const AddReferenceDialog = lazyPanel("Add reference", async () => {
+  const { AddReferenceDialog } = await import("./add-reference-dialog");
+  return AddReferenceDialog;
+});
+const WorkspacePanel = lazyPanel("This panel", async () => {
+  const { WorkspacePanel } = await import("./workspace-panel");
+  return WorkspacePanel;
+});
 
 const defaultFormatSettings = { indent: 2, wrap: true, width: 80 };
 const dockTheme = { name: "texfolia", className: "dockview-theme-texfolia" };
@@ -249,6 +258,9 @@ export function ProjectWorkspace({
   });
   const [referenceRequest, setReferenceRequest] =
     useState<AddReferenceRequest | null>(null);
+  // Dialogs stay mounted once used, so that they can animate closed.
+  const settingsUsed = useHasBeen(settingsOpen);
+  const referencesUsed = useHasBeen(!!referenceRequest);
   const bibFiles = useMemo(
     () =>
       [...paths]
@@ -482,16 +494,18 @@ export function ProjectWorkspace({
           "h-svh min-h-0 flex-col overflow-hidden [--workspace-footer-height:2rem] [--workspace-header-height:2.5rem] **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none [&_[data-slot=sidebar-footer]]:p-0 [&_[data-slot=sidebar-group]]:p-0 [&_[data-slot=sidebar-menu]]:gap-0",
         )}
       >
-        <SettingsDialog />
-        <AddReferenceDialog
-          request={referenceRequest}
-          onClose={() => setReferenceRequest(null)}
-          bibFiles={bibFiles}
-          knownKeys={result.analysis.citations}
-          readBib={readBib}
-          appendBib={appendBib}
-          createBib={createBib}
-        />
+        {settingsUsed && <SettingsDialog />}
+        {referencesUsed && (
+          <AddReferenceDialog
+            request={referenceRequest}
+            onClose={() => setReferenceRequest(null)}
+            bibFiles={bibFiles}
+            knownKeys={result.analysis.citations}
+            readBib={readBib}
+            appendBib={appendBib}
+            createBib={createBib}
+          />
+        )}
         <WorkspaceMenu
           name={name}
           canWrite={writable && ready}

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 
+import { immutableArtifact } from "./client";
 import {
   editorVersionSchema,
   type ProjectCoordinatorCore,
@@ -53,16 +54,15 @@ export function createCoordinatorApp(
   });
   app.get("/projects/:projectId/build/files", async (c) => {
     const path = c.req.query("path");
-    const file = path
-      ? await coordinator.file(path, c.req.query("version"))
-      : null;
+    const version = c.req.query("version");
+    const file = path ? await coordinator.file(path, version) : null;
     return file
       ? new Response(file, {
           headers: {
             "Content-Type": path?.endsWith(".pdf")
               ? "application/pdf"
               : "application/octet-stream",
-            "Cache-Control": "no-store",
+            "Cache-Control": version ? immutableArtifact : "no-store",
             "X-Content-Type-Options": "nosniff",
           },
         })

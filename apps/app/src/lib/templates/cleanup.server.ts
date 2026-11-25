@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { SourceBucket } from "#/lib/storage/server";
 
 import { templateSnapshotSchema } from "./schema";
+import { thumbnailKey } from "./thumbnail.server";
 
 type Context = { db: Db; bucket: SourceBucket };
 export async function collectTemplateObjects({
@@ -44,6 +45,7 @@ export async function collectTemplateObjects({
           found
             ? [
                 found.previewKey,
+                found.previewKey && thumbnailKey(found.previewKey),
                 ...templateSnapshotSchema
                   .parse(found.snapshot)
                   .map((node) => node.objectKey),

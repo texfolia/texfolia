@@ -5,11 +5,12 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import Stripe from "stripe";
 
-import { createBillingPlugin, enforceBillingScope } from "#/lib/billing/server";
+import { createBillingPlugin } from "#/lib/billing/server";
 import type { EmailMessage } from "#/lib/email";
-import { loginSearchSchema } from "#/routes/login/route";
+import { loginSearch } from "#/routes/login/route";
 
-import { createOrganizationPlugin } from "./auth";
+import { beforeAuth, createOrganizationPlugin, sessionOptions } from "./auth";
+import { requestPrincipal } from "./request-principal.server";
 
 function createTestAuth() {
   const emails: EmailMessage[] = [];
@@ -27,7 +28,8 @@ function createTestAuth() {
       subscription: [],
     }),
     emailAndPassword: { enabled: true },
-    hooks: { before: enforceBillingScope },
+    session: sessionOptions,
+    hooks: { before: beforeAuth },
     plugins: [
       createOrganizationPlugin({
         baseURL: "http://localhost:3000",
@@ -87,7 +89,12 @@ test("organizations are optional and switching organizations preserves the perso
   });
   assert(organization);
   expect(organization.id).not.toBe(owner.user.id);
-  const session = await auth.api.getSession({ headers: owner.headers });
+  // These headers keep the cookies from sign-up, which a browser would replace.
+  const current = {
+    headers: owner.headers,
+    query: { disableCookieCache: true },
+  };
+  const session = await auth.api.getSession(current);
   expect(session?.user.id).toBe(owner.user.id);
   expect(session?.session.activeOrganizationId).toBe(organization.id);
 
@@ -95,7 +102,7 @@ test("organizations are optional and switching organizations preserves the perso
     headers: owner.headers,
     body: { organizationId: null },
   });
-  const personalSession = await auth.api.getSession({ headers: owner.headers });
+  const personalSession = await auth.api.getSession(current);
   expect(personalSession?.user.id).toBe(owner.user.id);
   expect(personalSession?.session.activeOrganizationId).toBeNull();
   expect(
@@ -277,8 +284,8 @@ test("members cannot change organization billing through POST endpoints", async 
 
 test("login returns to invitation paths and rejects external redirect targets", () => {
   const redirectTo = "/accept-invitation/invitation-id";
-  expect(loginSearchSchema.parse({ redirectTo }).redirectTo).toBe(redirectTo);
-  expect(loginSearchSchema.parse({}).redirectTo).toBeUndefined();
+  expect(loginSearch({ redirectTo }).redirectTo).toBe(redirectTo);
+  expect(loginSearch({}).redirectTo).toBeUndefined();
   for (const target of [
     "https://example.com",
     "//example.com",
@@ -286,9 +293,7 @@ test("login returns to invitation paths and rejects external redirect targets", 
     "/\n/example.com",
     "javascript:alert(1)",
   ]) {
-    expect(loginSearchSchema.parse({ redirectTo: target }).redirectTo).toBe(
-      "/projects",
-    );
+    expect(loginSearch({ redirectTo: target }).redirectTo).toBe("/projects");
   }
 });
 
@@ -316,4 +321,70 @@ test("billing rejects personal Team, organization Pro, annual and multi-seat per
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
   }
+});
+
+test("a revoked session keeps working only where the cached cookie is trusted", async () => {
+  const { auth } = createTestAuth();
+  const owner = await createUser(auth, "revoked@example.com");
+  expect(owner.headers.get("cookie")).toContain("session_data");
+  const request = (headers: Record<string, string> = {}) =>
+    new Request("http://localhost:3000/api/projects/x", {
+      headers: { ...Object.fromEntries(owner.headers), ...headers },
+    });
+  const principal = (request: Request) =>
+    requestPrincipal({
+      request,
+      auth: auth as never,
+      db: undefined as never,
+      projectId: "x",
+    });
+  expect(await principal(request({ Upgrade: "websocket" }))).toMatchObject({
+    userId: owner.user.id,
+  });
+
+  const ctx = await auth.$context;
+  await ctx.internalAdapter.deleteUserSessions(owner.user.id);
+  expect(await principal(request())).toMatchObject({ userId: owner.user.id });
+  expect(await principal(request({ Upgrade: "websocket" }))).toBeNull();
+  for (const path of ["/organization/create", "/subscription/upgrade"]) {
+    const response = await auth.handler(
+      new Request(`http://localhost:3000/api/auth${path}`, {
+        method: "POST",
+        headers: {
+          ...Object.fromEntries(owner.headers),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          path === "/organization/create"
+            ? { name: "Revoked", slug: "revoked" }
+            : { plan: "pro", successUrl: "/", cancelUrl: "/" },
+        ),
+      }),
+    );
+    expect([path, response.status]).toEqual([path, 401]);
+  }
+});
+
+test("reading the session for a WebSocket upgrade sets no cookie", async () => {
+  const { auth } = createTestAuth();
+  const owner = await createUser(auth, "upgrade@example.com");
+  // As when the cached session has expired.
+  const token = owner.headers
+    .get("cookie")!
+    .split("; ")
+    .filter((cookie) => !cookie.includes("session_data"))
+    .join("; ");
+  const read = (query: object) =>
+    auth.api.getSession({
+      headers: new Headers({ cookie: token }),
+      query,
+      returnHeaders: true,
+    });
+  expect((await read({})).headers.getSetCookie()).not.toEqual([]);
+  const upgrade = await read({
+    disableCookieCache: true,
+    disableRefresh: true,
+  });
+  expect(upgrade.response?.user.id).toBe(owner.user.id);
+  expect(upgrade.headers.getSetCookie()).toEqual([]);
 });

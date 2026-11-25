@@ -3,7 +3,6 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import { indentLess, indentMore } from "@codemirror/commands";
-import { markdown } from "@codemirror/lang-markdown";
 import { indentUnit } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import {
@@ -42,6 +41,7 @@ import {
   editorLanguage,
   projectProblemsChanged,
 } from "#/lib/editor/latex/language";
+import { markdownSupport } from "#/lib/editor/markdown";
 
 export type ScrollAnchor = { pos: number; margin: number };
 
@@ -246,8 +246,8 @@ export function useEditorExtensions({
     () => [EditorState.tabSize.of(indent), indentUnit.of(" ".repeat(indent))],
     [indent],
   );
-  const markdownSupport = useMemo(
-    () => (isMarkdown ? markdown() : none),
+  const markdown = useMemo(
+    () => (isMarkdown ? markdownSupport() : none),
     [isMarkdown],
   );
 
@@ -261,7 +261,7 @@ export function useEditorExtensions({
       comments: commentExtension,
       language,
       spelling: spellingExtension,
-      markdown: markdownSupport,
+      markdown,
       font,
       indent: indentation,
       wrapping: wrapLines ? EditorView.lineWrapping : none,

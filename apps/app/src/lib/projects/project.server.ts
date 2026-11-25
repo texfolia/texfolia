@@ -3,6 +3,8 @@ import {
   cleanupDeletedCollaboration,
   type CollaborationCleanup,
 } from "#/lib/collaboration/server";
+import { commentsVersion } from "#/lib/comments/project-comments.server";
+import { gitVersion } from "#/lib/git/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
 
 import { invalidateProjectAccess, type LiveProjects } from "./live";
@@ -47,10 +49,16 @@ export function setProjectTags(
   return projects.setProjectTags({ ...args, lock: lockProject });
 }
 
-export function getProject(
+export async function getProject(
   args: Locked<Parameters<typeof projects.getProject>[0]>,
 ) {
-  return projects.getProject({ ...args, lock: lockProject });
+  const project = await projects.getProject({ ...args, lock: lockProject });
+  // The versions the metadata poll reports, so a workspace starts with them.
+  const versions = await args.db.transaction(async (tx) => ({
+    commentsVersion: await commentsVersion(tx, args.projectId),
+    gitVersion: await gitVersion(tx, args.projectId),
+  }));
+  return { ...project, ...versions };
 }
 
 export function duplicateProject(

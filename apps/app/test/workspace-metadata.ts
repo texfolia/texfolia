@@ -484,10 +484,8 @@ try {
     where: { id: main.id },
   });
   assert(version?.objectKey);
-  const savedResponse = await editor.waitForResponse(
-    (response) =>
-      response.url().endsWith(`/api/projects/${projectId}/metadata`) &&
-      response.status() === 200,
+  const savedResponse = await editorContext.request.get(
+    `${origin}/api/projects/${projectId}/metadata`,
   );
   const savedMetadata = projectMetadataSchema.parse(await savedResponse.json());
   assert.equal(
@@ -550,6 +548,64 @@ try {
       : null,
   };
   emit();
+  console.info("Checking live connections open without a cached session");
+  // Only the session token: reading it refreshes the cached session, and a
+  // WebSocket upgrade cannot carry that cookie.
+  for (const path of [
+    `/api/collaboration/${projectId}/${main.id}`,
+    `/api/compile/${projectId}?events=1`,
+  ]) {
+    // Bun's WebSocket takes headers, which the DOM types do not have.
+    const socket = Reflect.construct(WebSocket, [
+      new URL(path, origin.replace(/^http/, "ws")),
+      {
+        headers: {
+          Cookie: `better-auth.session_token=${cookies.get(editorId)}`,
+          Origin: origin,
+        },
+      },
+    ]) as WebSocket;
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+    socket.addEventListener("open", resolve);
+    socket.addEventListener("error", reject);
+    socket.addEventListener("close", reject);
+    await promise.catch(() => assert.fail(`${path} did not connect`));
+    socket.close();
+  }
+  console.info("Checking unchanged metadata is not sent again");
+  const unchanged = await editor.waitForResponse(
+    (response) =>
+      response.url().endsWith(`/api/projects/${projectId}/metadata`) &&
+      response.status() === 304,
+  );
+  assert.equal((await unchanged.allHeaders())["cache-control"], "no-store");
+  console.info(
+    "Checking a hidden tab pauses polling and catches up when shown",
+  );
+  const setVisibility = (state: "hidden" | "visible") =>
+    editor.evaluate((state) => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => state,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, state);
+  await setVisibility("hidden");
+  // Lets a request that was already running finish.
+  await editor.waitForTimeout(1_000);
+  let hiddenRequests = 0;
+  const countRequest = (request: { url: () => string }) => {
+    if (request.url().endsWith("/metadata")) hiddenRequests++;
+  };
+  editor.on("request", countRequest);
+  await createFile(owner, "while-hidden.tex");
+  await editor.waitForTimeout(5_000);
+  assert.equal(hiddenRequests, 0, "A hidden tab does not poll");
+  editor.off("request", countRequest);
+  await setVisibility("visible");
+  await editor
+    .getByRole("button", { name: "while-hidden.tex", exact: true })
+    .waitFor();
   console.info("Checking export refreshes a paused metadata session");
   await editor.route(`**/api/projects/${projectId}/metadata`, (route) =>
     route.abort(),

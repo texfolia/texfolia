@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 
 import { getSharedProject } from "#/lib/sharing/project-share-links.functions";
-import { shareTokenSchema } from "#/lib/sharing/project-share-links.schema";
+import { shareTokenPattern } from "#/lib/sharing/share-token";
 import { ThemeProvider } from "#/providers/theme-provider";
 
 import { SharedProjectView } from "./-components/shared-project-view";
@@ -9,7 +9,7 @@ import { SharedProjectView } from "./-components/shared-project-view";
 export const Route = createFileRoute("/share/$token")({
   ssr: false,
   loader: async ({ params }) => {
-    if (!shareTokenSchema.safeParse(params.token).success) throw notFound();
+    if (!shareTokenPattern.test(params.token)) throw notFound();
     const project = await getSharedProject({ data: { token: params.token } });
     if (!project) throw notFound();
     return { project };

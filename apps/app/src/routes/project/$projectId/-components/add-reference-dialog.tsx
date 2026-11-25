@@ -20,6 +20,7 @@ import { useId, useState } from "react";
 
 import {
   entryAppendix,
+  newBibFile,
   parseReferenceId,
   setEntryKey,
   uniqueEntryKey,
@@ -35,7 +36,6 @@ export type AddReferenceRequest = {
 
 type Lookup = { key: string; bibtex: string };
 
-export const newBibFile = "references.bib";
 const newTarget = "new";
 
 /** Whether a .bib source mentions `doi`, compared without case. */

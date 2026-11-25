@@ -160,6 +160,20 @@ test("shared build and archive survive a failed compile and restart", async () =
     expect(
       (await request("/build/files?path=main.pdf&version=old")).status,
     ).toBe(404);
+    // Only a file named by its version can be kept, and only privately.
+    const { key } = good.artifacts!.files.find(
+      ({ path }) => path === "main.pdf",
+    )!;
+    const cacheControl = async (path: string) =>
+      (await request(path)).headers.get("Cache-Control");
+    expect(
+      await cacheControl(
+        `/build/files?path=main.pdf&version=${encodeURIComponent(key)}`,
+      ),
+    ).toBe("private, max-age=31536000, immutable");
+    expect(await cacheControl("/build/files?path=main.pdf&version=")).toBe(
+      "no-store",
+    );
     expect(
       (await request("/build/files?path=main.aux", { method: "DELETE" }))
         .status,

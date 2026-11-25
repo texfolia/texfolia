@@ -59,6 +59,8 @@ const project: ProjectDetails = {
     chapterNode,
   ],
   sourceContents: { [mainNode.id]: main, [chapterNode.id]: chapter },
+  commentsVersion: "0:0",
+  gitVersion: "",
   sourceVersions: {
     [mainNode.id]: { objectKey: null, updatedAt: 0 },
     [chapterNode.id]: { objectKey: null, updatedAt: 0 },

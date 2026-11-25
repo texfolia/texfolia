@@ -6,10 +6,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@texfolia/ui/dropdown-menu";
+import { type ComponentType, lazy, Suspense } from "react";
 
-import { NavigationShortcuts } from "#/components/navigation-shortcuts";
 import { authClient } from "#/lib/auth/auth-client";
 import { webPath } from "#/lib/origins";
+
+// Only signed-in visitors have shortcuts, and they bring the settings store.
+const NavigationShortcuts = lazy<ComponentType<{ userId: string }>>(() =>
+  import("#/components/navigation-shortcuts").then(
+    (module) => ({ default: module.NavigationShortcuts }),
+    // The page works without them.
+    () => ({ default: () => null }),
+  ),
+);
 
 export function Header() {
   const { data: session } = authClient.useSession();
@@ -17,7 +26,12 @@ export function Header() {
     <header className="bg-background border-b">
       <ClientOnly>
         {session && (
-          <NavigationShortcuts key={session.user.id} userId={session.user.id} />
+          <Suspense>
+            <NavigationShortcuts
+              key={session.user.id}
+              userId={session.user.id}
+            />
+          </Suspense>
         )}
       </ClientOnly>
       <a

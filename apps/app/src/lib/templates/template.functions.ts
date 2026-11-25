@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestUrl, setResponseHeader } from "@tanstack/react-start/server";
+import type { Db } from "@texfolia/db";
 import { env } from "cloudflare:workers";
 
 import { ensureSession, getSession } from "#/lib/auth/auth.functions";
@@ -29,47 +30,51 @@ export const listMyTemplates = createServerFn({ method: "GET" }).handler(
   },
 );
 
-export const getTemplate = createServerFn({ method: "GET" })
+async function templateAccount(db: Db, userId: string | undefined) {
+  const server = await import("./server");
+  return userId
+    ? {
+        signedIn: true,
+        destinations: await server.templateDestinations({ db, userId }),
+        canReview: server.isTemplateReviewer(
+          userId,
+          env.TEMPLATE_REVIEWER_IDS ?? "",
+        ),
+      }
+    : { signedIn: false, destinations: [], canReview: false };
+}
+
+/** A template and what its viewer can do with it, from one session read. */
+export const getTemplatePage = createServerFn({ method: "GET" })
   .validator(templateIdSchema)
   .handler(async ({ context, data }) => {
     const server = await import("./server");
     const session = await getSession();
     setResponseHeader("Cache-Control", "private, no-store");
-    const result = await server.getTemplate({
+    const template = await server.getTemplate({
       db: context.db,
       ...data,
       userId: session?.user.id,
       reviewers: env.TEMPLATE_REVIEWER_IDS,
     });
-    return result
-      ? {
-          ...result,
-          previewUrl: result.hasPreview
-            ? new URL(`/api/templates/${result.id}/preview`, getRequestUrl())
-                .href
-            : null,
-        }
-      : null;
+    if (!template) return null;
+    return {
+      template: {
+        ...template,
+        previewUrl: template.hasPreview
+          ? new URL(`/api/templates/${template.id}/preview`, getRequestUrl())
+              .href
+          : null,
+      },
+      account: await templateAccount(context.db, session?.user.id),
+    };
   });
 
 export const getTemplateAccount = createServerFn({ method: "GET" }).handler(
   async ({ context }) => {
     setResponseHeader("Cache-Control", "private, no-store");
-    const server = await import("./server");
     const session = await getSession();
-    return session
-      ? {
-          signedIn: true,
-          destinations: await server.templateDestinations({
-            db: context.db,
-            userId: session.user.id,
-          }),
-          canReview: server.isTemplateReviewer(
-            session.user.id,
-            env.TEMPLATE_REVIEWER_IDS ?? "",
-          ),
-        }
-      : { signedIn: false, destinations: [], canReview: false };
+    return templateAccount(context.db, session?.user.id);
   },
 );
 

@@ -37,9 +37,12 @@ const replaceConcurrency = 4;
 
 export function ProjectSearch({
   active,
+  restored,
   request,
 }: {
   active: boolean;
+  /** Whether it was open in the restored layout, rather than just opened. */
+  restored: boolean;
   request: SearchRequest;
 }) {
   const { drafts, reveal, editDocument } = useWorkspaceActions();
@@ -55,7 +58,7 @@ export function ProjectSearch({
   const input = useRef<HTMLInputElement>(null);
   const searchId = useId();
   const replaceId = useId();
-  const wasActive = useRef(active);
+  const wasActive = useRef(restored);
   useEffect(() => {
     if (request.query) setQuery(request.query);
   }, [request]);

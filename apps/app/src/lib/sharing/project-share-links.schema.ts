@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-// 32 random bytes, base64url without padding.
-export const shareTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+import { shareTokenPattern } from "./share-token";
+
+export const shareTokenSchema = z.string().regex(shareTokenPattern);
 export const shareLinkScopeSchema = z.enum(["project", "pdf"]);
 export type ShareLinkScope = z.infer<typeof shareLinkScopeSchema>;
 
@@ -16,14 +17,3 @@ export const revokeShareLinkSchema = shareLinksSchema.extend({
 export const sharedProjectSchema = z.object({ token: shareTokenSchema });
 
 export const shareLinkLimit = 10;
-export const shareSearchParam = "share";
-
-export function sharePath(token: string) {
-  return `/share/${token}`;
-}
-
-// Appends the share token to an API URL so anonymous requests carry it.
-export function withShareToken(url: string, token: string | undefined) {
-  if (!token) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}${shareSearchParam}=${encodeURIComponent(token)}`;
-}

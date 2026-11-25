@@ -1,12 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { SidebarProvider, useSidebar } from "@texfolia/ui/sidebar";
-import { z } from "zod";
 
 import { getProjects } from "#/lib/projects/project.functions";
-import {
-  createProjectsStore,
-  ProjectsProvider,
-} from "#/providers/projects-provider";
+import { ProjectsProvider } from "#/providers/projects-provider";
 import { SettingsProvider } from "#/providers/settings-provider";
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 import { ThemeProvider } from "#/providers/theme-provider";
@@ -15,8 +11,9 @@ import { ProjectList } from "./-components/project-list";
 
 export const Route = createFileRoute("/projects")({
   ssr: false,
-  validateSearch: z.object({
-    view: z.literal("trash").optional().catch(undefined),
+  // Always return the key: the router keeps raw search values a validator omits.
+  validateSearch: (search: Record<string, unknown>): { view?: "trash" } => ({
+    view: search.view === "trash" ? "trash" : undefined,
   }),
   head: () => ({
     meta: [
@@ -39,10 +36,12 @@ export const Route = createFileRoute("/projects")({
     return { user };
   },
   loader: async ({ context }) => {
-    const store = createProjectsStore({
-      initial: await getProjects(),
-      ownerId: context.user.id,
-    });
+    // Loaders are part of every page's first bundle; the store is not.
+    const [initial, { createProjectsStore }] = await Promise.all([
+      getProjects(),
+      import("#/providers/projects-provider"),
+    ]);
+    const store = createProjectsStore({ initial, ownerId: context.user.id });
     await store.projects.preload();
     return { store };
   },

@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { createRoot } from "react-dom/client";
 
+import { editorThemes } from "../../src/lib/editor/themes/theme-extensions";
 import type { ProjectDetails } from "../../src/lib/projects/project.functions";
 import {
   createProjectFilesStore,
@@ -27,7 +28,7 @@ await files.nodes.preload();
 
 const route = createRootRoute({
   component: () => (
-    <ThemeProvider userId="upload-test">
+    <ThemeProvider userId="upload-test" editorThemes={editorThemes}>
       <SettingsProvider
         userId="upload-test"
         project={{

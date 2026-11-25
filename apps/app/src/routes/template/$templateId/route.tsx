@@ -8,7 +8,6 @@ import { Button, buttonVariants } from "@texfolia/ui/button";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { Textarea } from "@texfolia/ui/textarea";
 import { useState } from "react";
-import { z } from "zod";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
@@ -16,22 +15,19 @@ import { webPath } from "#/lib/origins";
 import { templateLicenseLabels, templateLicenseUrls } from "#/lib/templates";
 import { useTemplatePreviews } from "#/lib/templates/template-preview";
 import {
-  getTemplate,
-  getTemplateAccount,
+  getTemplatePage,
   openTemplate,
   refreshTemplatePreview,
   reportTemplate,
 } from "#/lib/templates/template.functions";
+import { isUuid } from "#/lib/uuid";
 
 export const Route = createFileRoute("/template/$templateId")({
   loader: async ({ params }) => {
-    if (!z.uuid().safeParse(params.templateId).success) throw notFound();
-    const [template, account] = await Promise.all([
-      getTemplate({ data: params }),
-      getTemplateAccount(),
-    ]);
-    if (!template) throw notFound();
-    return { template, account };
+    if (!isUuid(params.templateId)) throw notFound();
+    const page = await getTemplatePage({ data: params });
+    if (!page) throw notFound();
+    return page;
   },
   head: ({ loaderData }) => {
     const template = loaderData?.template;

@@ -4,9 +4,9 @@ import CodeMirror from "@uiw/react-codemirror";
 import type { IDockviewPanelProps } from "dockview-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
+import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { buildFileUrl } from "#/lib/compile/build";
 import { downloadFile } from "#/lib/storage/browser";
-import { useTheme } from "#/providers/theme-provider";
 import {
   useWorkspaceActions,
   useWorkspaceBuild,
@@ -24,7 +24,7 @@ export function GeneratedFile({
     synctex,
     pdfJump,
   } = useWorkspaceBuild();
-  const { theme } = useTheme();
+  const theme = useEditorTheme();
   const file = build?.artifacts?.files.find(
     (file) => file.path === params.path,
   );
@@ -167,7 +167,7 @@ export function GeneratedFile({
           value={content.text}
           readOnly
           editable={false}
-          theme={theme.extension}
+          theme={theme}
           height="100%"
           aria-label={`Generated file out/${file.path} (read-only)`}
           className="min-h-0 flex-1 overflow-auto"
