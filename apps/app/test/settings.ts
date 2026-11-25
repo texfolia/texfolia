@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 
 import { createDb } from "@texfolia/db";
 import {
+  aiMessage,
+  aiRequest,
+  aiRun,
   aiSettings,
+  aiThread,
   member,
   organization,
   project,
@@ -20,6 +24,10 @@ import {
   getProject,
   updateProjectFormatting,
 } from "../src/lib/projects/project.server";
+import {
+  accountArchive,
+  exportAccountData,
+} from "../src/lib/settings/account-export.server";
 import {
   getAccountUsage,
   saveAccountAiSettings,
@@ -177,8 +185,125 @@ try {
       ?.defaultModel,
     "existing-model",
   );
+  // The export: the owner's files, all their chats, and nothing of others'.
+  await db.insert(projectNode).values([
+    {
+      projectId: personalId,
+      parentId: root.id,
+      name: "lost.tex",
+      kind: "text",
+      objectKey: "fixture/lost",
+      sizeBytes: 1n,
+    },
+    {
+      projectId: personalId,
+      parentId: root.id,
+      name: "deleted.tex",
+      kind: "text",
+      objectKey: "fixture/deleted",
+      sizeBytes: 1n,
+      deletedAt: new Date(),
+    },
+  ]);
+  const chats = await db
+    .insert(aiThread)
+    .values([
+      { userId: owner, projectId: personalId, title: "Owned" },
+      { userId: editor, projectId: personalId, title: "Shared" },
+      { userId: editor, projectId: orgProjectId, title: "Team" },
+    ])
+    .returning({ id: aiThread.id });
+  await db.insert(aiMessage).values(
+    chats.map(({ id: threadId }) => ({
+      threadId,
+      id: "reply",
+      position: 0,
+      message: {
+        id: "reply",
+        role: "assistant",
+        parts: [
+          { type: "text", content: "said" },
+          { type: "thinking", content: "quoted-source" },
+          {
+            type: "tool-result",
+            toolCallId: "call",
+            content: "quoted-source",
+            state: "complete",
+          },
+        ],
+      },
+    })),
+  );
+  const runId = crypto.randomUUID();
+  await db.insert(aiRun).values({
+    id: runId,
+    userId: owner,
+    clientRunId: runId,
+    projectId: personalId,
+    model: "model",
+    stripeCustomerId: "cus",
+    stripeSubscriptionId: "sub",
+    accountId: "account",
+    gatewayId: "gateway",
+    meterEventName: "meter",
+  });
+  await db.insert(aiRequest).values(
+    [250_000_000, 500_000_000].map((chargedNanos) => ({
+      runId,
+      model: "model",
+      reservedNanos: 0,
+      chargedNanos,
+    })),
+  );
+  let closed = 0;
+  async function exported(userId: string) {
+    const archive = accountArchive({
+      openDb() {
+        const own = createDb(connection!);
+        const end = own.$client.end.bind(own.$client);
+        own.$client.end = (async () => {
+          closed++;
+          await end();
+        }) as typeof own.$client.end;
+        return own;
+      },
+      bucket: {
+        get: (async (key: string) =>
+          key === "fixture/source"
+            ? new Response("source text")
+            : null) as never,
+      },
+      userId,
+      data: await exportAccountData(db, userId),
+    });
+    return new TextDecoder().decode(await new Response(archive).arrayBuffer());
+  }
+  // Archives are uncompressed.
+  const owned = await exported(owner);
+  for (const text of [
+    "account.json",
+    '"chargedDollars": 0.75',
+    `ai-chats/${chats[0]!.id}.json`,
+    "quoted-source",
+    "projects/Settings access/sized.tex",
+    "source text",
+    "missing-files.txt",
+    "projects/Settings access/lost.tex",
+  ])
+    assert(owned.includes(text), text);
+  assert(!owned.includes("deleted.tex"));
+  assert(!owned.includes(chats[1]!.id));
+  const others = await exported(editor);
+  assert(others.includes(`ai-chats/${chats[1]!.id}.json`));
+  assert(others.includes(`ai-chats/${chats[2]!.id}.json`));
+  assert(others.includes("said"));
+  for (const text of ["quoted-source", "projects/", "source text", runId])
+    assert(!others.includes(text), text);
+  assert.equal(closed, 2);
+  await db.delete(aiRequest).where(eq(aiRequest.runId, runId));
+  await db.delete(aiRun).where(eq(aiRun.id, runId));
   console.info(
-    "Settings integration passed: project defaults, owner/editor/viewer/outsider and organization access, shared reads, validation, source/compile totals, and independent AI cap updates",
+    "Settings integration passed: account export, project defaults, owner/editor/viewer/outsider and organization access, shared reads, validation, source/compile totals, and independent AI cap updates",
   );
 } finally {
   await db

@@ -37,6 +37,29 @@ test("standard ZIP readers recover Unicode paths and binary build files without 
   }
 });
 
+test("archives past the 16-bit entry count use ZIP64", async () => {
+  const count = 70_000;
+  async function* entries() {
+    for (let index = 0; index < count; index++)
+      yield { path: `${index}`, open: async () => new Uint8Array() };
+  }
+  const archive = await new Response(zipStream(entries())).arrayBuffer();
+  const root = await mkdtemp(join(tmpdir(), "account-export-"));
+  try {
+    const path = join(root, "account.zip");
+    await writeFile(path, new Uint8Array(archive));
+    const read = Bun.spawnSync([
+      "python3",
+      "-c",
+      "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(len(z.namelist()), z.namelist()[-1])",
+      path,
+    ]);
+    expect(read.stdout.toString().trim()).toBe(`${count} ${count - 1}`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("checksums match zlib", () => {
   expect(crc32(new Uint8Array())).toBe(0);
   for (const size of [1, 3, 255, 4096, 65_536]) {

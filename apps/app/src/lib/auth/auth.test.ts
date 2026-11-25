@@ -562,6 +562,61 @@ test("leaving updates the paid seats, and the last owner cannot leave", async ()
   expect(update).toHaveBeenCalledTimes(1);
 });
 
+test("an account with a renewing subscription cannot be deleted", async () => {
+  const { auth, stripeClient } = createTestAuth();
+  const { user, headers } = await createUser(auth, "pro@example.com");
+  const request = () => auth.api.deleteUser({ headers, body: {} });
+  const list = spyOn(stripeClient.subscriptions, "list");
+  // Accounts that never subscribed do not need Stripe.
+  expect(await request()).toMatchObject({ success: true });
+  expect(list).not.toHaveBeenCalled();
+
+  const ctx = await auth.$context;
+  await ctx.internalAdapter.updateUser(user.id, {
+    stripeCustomerId: "cus_pro",
+  });
+  const subscribe = (...subscriptions: object[]) =>
+    list.mockImplementation((() =>
+      (async function* () {
+        yield* subscriptions;
+      })()) as never);
+  const ended = { status: "canceled" };
+  for (const status of ["active", "trialing", "past_due", "unpaid", "paused"]) {
+    subscribe(ended, { status });
+    await expect(request()).rejects.toMatchObject({
+      statusCode: 400,
+      body: { code: "ACTIVE_SUBSCRIPTION" },
+    });
+  }
+  expect(list.mock.calls.at(-1)?.[0]).toMatchObject({ customer: "cus_pro" });
+  const confirm = async () => {
+    const response = await auth.handler(
+      new Request(
+        "http://localhost:3000/api/auth/delete-user/callback?token=any&callbackURL=/",
+        { headers },
+      ),
+    );
+    return response.headers.get("location");
+  };
+  expect(await confirm()).toBe("/settings/account?deletion=subscribed");
+
+  list.mockImplementation(() => {
+    throw new Error("Stripe is down");
+  });
+  await expect(request()).rejects.toMatchObject({ statusCode: 503 });
+  expect(await confirm()).toBe("/settings/account?deletion=unchecked");
+
+  for (const subscription of [
+    ended,
+    { status: "incomplete_expired" },
+    { status: "active", cancel_at_period_end: true },
+    { status: "active", cancel_at: 1_800_000_000 },
+  ]) {
+    subscribe(subscription);
+    expect(await request()).toMatchObject({ success: true });
+  }
+});
+
 test("an organization's only owner cannot delete their account", async () => {
   const { auth, owner, organizationId, join } = await createTeam();
   const admin = await join("admin@example.com", "admin");

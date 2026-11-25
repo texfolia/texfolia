@@ -6,7 +6,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
 } from "@texfolia/ui/alert-dialog";
-import { Button } from "@texfolia/ui/button";
+import { Button, buttonVariants } from "@texfolia/ui/button";
 import { Field, FieldLabel } from "@texfolia/ui/field";
 import { Input } from "@texfolia/ui/input";
 import {
@@ -65,11 +65,14 @@ function summarizeUserAgent(userAgent: string | null | undefined) {
   return os ? `${browser} on ${os}` : browser;
 }
 
+// Why the emailed deletion link was refused, as `organization-policy.ts` names it.
+const deletionBlocks = ["blocked", "subscribed", "unchecked"] as const;
+
 export const Route = createFileRoute("/settings/account")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { deletion?: "blocked" } => ({
-    deletion: search.deletion === "blocked" ? "blocked" : undefined,
+  ): { deletion?: (typeof deletionBlocks)[number] } => ({
+    deletion: deletionBlocks.find((reason) => reason === search.deletion),
   }),
   component: AccountPage,
 });
@@ -101,7 +104,6 @@ function AccountPage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState("");
-  const [exporting, setExporting] = useState(false);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -152,35 +154,6 @@ function AccountPage() {
     }
   }
 
-  async function downloadAccountData() {
-    setExporting(true);
-    setError("");
-    setMessage("");
-    try {
-      const response = await fetch("/api/account/export");
-      if (!response.ok)
-        throw new Error("Could not export your account data. Try again.");
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `texfolia-account-export-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-      setMessage("Account data exported.");
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not export your account data. Try again.",
-      );
-    } finally {
-      setExporting(false);
-    }
-  }
-
   const otherSessionCount = sessions.filter(
     (item) => item.id !== currentSessionId,
   ).length;
@@ -201,6 +174,22 @@ function AccountPage() {
             Organizations settings
           </Link>{" "}
           first.
+        </p>
+      )}
+      {deletion === "subscribed" && (
+        <p role="alert" className="text-destructive text-sm">
+          Your account could not be deleted because your subscription would keep
+          renewing. Cancel it in{" "}
+          <Link to="/settings/billing" className="underline">
+            Billing settings
+          </Link>{" "}
+          first. You need not wait for it to end.
+        </p>
+      )}
+      {deletion === "unchecked" && (
+        <p role="alert" className="text-destructive text-sm">
+          Your account could not be deleted because your subscription could not
+          be checked. Try again later.
         </p>
       )}
       {error && (
@@ -509,19 +498,20 @@ function AccountPage() {
         <ItemContent>
           <ItemTitle>Export account data</ItemTitle>
           <ItemDescription>
-            Download a JSON archive of your profile, connected accounts, active
-            sessions, organization memberships, personal projects, tags,
-            comments, and published templates.
+            Download a ZIP of your account data, AI chats and usage, and the
+            saved files of the personal projects you own. Files of projects
+            shared with you are not included.
           </ItemDescription>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4 w-fit"
-            disabled={exporting || pending}
-            onClick={() => void downloadAccountData()}
+          <a
+            href="/api/account/export"
+            download
+            className={buttonVariants({
+              variant: "outline",
+              className: "mt-4 w-fit",
+            })}
           >
-            {exporting ? "Exporting…" : "Download my data"}
-          </Button>
+            Download my data
+          </a>
         </ItemContent>
       </Item>
       <Item variant="outline">

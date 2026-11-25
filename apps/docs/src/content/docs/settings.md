@@ -159,11 +159,18 @@ annotations in builds and in dev prebundling. Check it when you upgrade the pack
 
 Account saves profile name and image through Better Auth. Changing email uses
 Better Auth's email OTP flow. It lists active sessions, which can be signed out,
-and **Download my data** exports the account's records as JSON, without project
-files, credentials, or tokens. Account deletion requires a confirmation email and
-is refused while the account is the only owner of an organization.
+and **Download my data** exports it; see [Account export](#account-export).
+Account deletion requires a confirmation email. It is refused while the account is
+the only owner of an organization, or while its Pro subscription would renew. The
+second check asks Stripe, so a subscription set to cancel does not block deletion.
+Both checks run when the email is requested and again when its link is followed.
+
 Connections lists linked GitHub, GitLab, Google, and Microsoft accounts. GitHub
 and GitLab distinguish sign-in links from the repository scopes needed for Git.
+**Reconnect** repeats the provider's authorization, for access that was revoked
+there. **Disconnect** deletes the account and its tokens, and needs a sign-in from
+the last 24 hours. Any account can be disconnected, because everyone can sign in
+with an emailed code.
 
 Organizations manages members, roles, and invitations. See
 [Organizations](/project-controls/#organizations).
@@ -175,9 +182,30 @@ exclude deleted sources and compile artifacts. Compile counts cover the current
 UTC month across accessible projects. The page uses stored data and does not
 estimate physical R2 usage or compile CPU time.
 
+Storage totals use binary units, and hovering shows the exact byte count.
+
+## Account export
+
+`GET /api/account/export` streams a ZIP:
+
+| Path                 | Contents                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `account.json`       | Profile, connected accounts, sessions, organizations, AI settings and usage, project records, tags, comments, templates |
+| `ai-chats/<id>.json` | Each of the user's AI chats                                                                                             |
+| `projects/<name>/…`  | Saved files of personal projects the user owns, including those in the trash                                            |
+| `missing-files.txt`  | Present only when some files could not be read from storage                                                             |
+
+It holds no credentials, OAuth tokens, or session tokens. Files of shared and
+organization projects stay out. Chats in those projects keep only their text,
+because tool calls and reasoning quote files. Unsaved edits are not included.
+
+The account's records are read before the response starts. The rest is read while
+the archive streams, over its own database connection, with one file in memory at
+a time. Archives of more than 65,535 files or 4 GiB use ZIP64.
+
 ## Verification
 
-`bun run --cwd apps/app test:settings` checks the project access gate and Usage
+`bun run --cwd apps/app test:settings` checks the project access gate, the account export, and Usage
 queries against an isolated database named by `INTEGRATION_DATABASE_URL`.
 `bun run --cwd apps/app test:editor-keymaps` checks Vim and Emacs in a browser:
 switching without a reload, undo through Yjs, and shortcut yielding.

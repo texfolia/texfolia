@@ -11,6 +11,9 @@ Git actions stay in the Git view. Settings opens as a dialog with User and Proje
 The status bar shows Problems, compile logs, compile state, the main document's
 word count, live collaborators, the scratchpad, the git branch when a repository
 exists, and the active file and the editor’s line and column.
+The Comments button shows how many threads are unresolved. The collaborators menu
+lists who is online and the file each person has active. Choosing a person opens that
+file, and following them keeps opening the file they move to.
 Compile state also starts a build. PDF files open as ordinary preview tabs when
 selected in the Files tree; no empty PDF viewer opens with the workspace.
 

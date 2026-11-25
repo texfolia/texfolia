@@ -29,12 +29,30 @@ require a cross-storage backfill and put large binary files in the database.
 Curated-only templates would remove moderation, but would also remove user
 publishing. This implementation retains user publishing with simpler review.
 
-## Review and previews
+## Review
 
 Moderation is `pending`, `approved`, or `rejected`. Every new user snapshot starts
 pending. Reviewers cannot review their own snapshots. Approval controls public
 access, gallery membership, source downloads, and project copies. Unlisted
 approved snapshots are accessible by URL and carry `noindex, nofollow`.
+
+Rejecting requires a reason of 10 to 2,000 characters, which the publisher and the
+organization's owners and admins see. It is kept in `rejection_reason`, apart from
+preview errors in `error`, and cleared on approval.
+
+A personal template's publisher, or an owner or admin of the organization it was
+published for, can unpublish, republish, or delete it. Unpublishing sets
+`unpublished_at` and keeps the review status, so republishing needs no new review.
+Deleting removes the row and leaves the objects to the sweep. Publishing limits count
+`template_publication` rows, so deleting a template does not make room for another.
+
+## Gallery filters
+
+`GET /api/templates` takes `q`, `tag`, `license`, and `page`. Every word of `q` must
+appear in the title, description, publisher name, or tags. `tag` matches a whole tag
+and uses the GIN index on `template.tags`. The gallery keeps the filters in its URL.
+
+## Previews
 
 Preview state is independently `queued`, `ready`, or `failed`. Review and copying
 can proceed without an image. An approved template with a failed preview remains
