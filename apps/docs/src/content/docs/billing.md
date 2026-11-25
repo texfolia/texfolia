@@ -21,7 +21,7 @@ The billing code lives in [`#/lib/billing`](../../../../app/src/lib/billing/READ
 4. Enable Stripe's customer portal for invoices, payment methods, and subscription
    cancellation. Disable customer changes to plans and quantities in the portal;
    Team seat quantities are managed by organization membership.
-5. Forward webhooks as described in the [local setup](../../../../../README.md#forward-stripe-webhooks).
+5. Forward webhooks as described in the [local setup](/local-development/#forward-stripe-webhooks).
    Include `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated`, and `customer.subscription.deleted` for the
    deployed webhook endpoint.
@@ -34,9 +34,10 @@ Sandbox prices and signing secrets cannot be used in production.
 
 ## Use shared billing
 
-Open **Billing** from Projects or select **Upgrade to Team** on `/pricing`.
+Open **Settings → Billing** or select **Upgrade to Team** on `/pricing`.
 Choose an existing organization or create one, then continue to Stripe checkout.
-Only owners and admins can change billing or manage members from this page.
+Only owners and admins can change billing. Members are managed in
+**Settings → Organizations**; see [Organizations](/project-controls/#organizations).
 
 Every organization member is a seat, including owners and admins. Checkout counts
 members on the server. Pending invitations do not count. Accepting an invitation,

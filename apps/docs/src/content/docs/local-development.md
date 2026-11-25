@@ -53,7 +53,7 @@ Run `bun run db:push` again after changing the schema. To add the original
 templates to Postgres and local R2, run `bun run db:seed` after applying the schema.
 Schema changes and seeds are explicit operations. `bun run dev` runs neither.
 
-Start both apps:
+Start every app:
 
 ```sh
 bun run dev
@@ -79,12 +79,14 @@ Development and build commands delegate to Turbo. To run one app independently:
 ```sh
 bun run dev:app
 bun run dev:web
+bun run dev:docs
 bun run dev:compiler
 ```
 
 Run these in separate terminals when you need them. `dev:app` starts Postgres
 and the product app. `dev:web` starts the TanStack Start marketing site at
-[localhost:4321](http://localhost:4321). `dev:compiler` builds the engine image
+[localhost:4321](http://localhost:4321), and `dev:docs` this documentation at
+[localhost:4322](http://localhost:4322). `dev:compiler` builds the engine image
 and starts only the compiler API at `http://localhost:8080`.
 Template previews run as project builds on the same compiler. See
 [Template lifecycle](/templates/).
@@ -108,7 +110,7 @@ and integration checks. For deployed environments, follow
 
 1. Open [localhost:3000](http://localhost:3000) and sign in.
 2. Create a project and paste the example below into `main.tex`.
-3. Press Cmd/Ctrl+S or select **File → Save & compile**. The PDF Preview panel shows the result.
+3. Press Cmd/Ctrl+S or select **File → Save & compile**, then open the PDF under `out` in Files.
 
 ```latex
 \documentclass{article}

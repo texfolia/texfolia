@@ -10,6 +10,9 @@ A browser-based LaTeX workspace. Edit project files, check LaTeX errors, and com
 ## Features
 
 - LaTeX editing with syntax highlighting, folding, and completions for labels, citations, and file paths
+- Real-time collaboration, review comments, and read-only share links
+- Git commits, pushes, and pulls with a linked GitHub or GitLab repository
+- An AI assistant that edits project files, with changes to review and revert
 - Spell check in each project's language, with a personal dictionary
 - TexFmt formatting and a Problems panel for editor, project, and compiler diagnostics
 - Side-by-side Markdown and PDF preview
@@ -47,7 +50,7 @@ Secrets, Stripe webhooks, and running each app on its own are covered in the [lo
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
 - **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
 - **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered; the templates gallery reads the app's public catalog API.
-- **Compiler:** a Hono API. Each project gets its own LaTeX engine container, and the PDF streams back to the preview.
+- **Compiler:** an Effect Worker in front of an autoscaled pool of Tectonic containers that projects share. A container keeps one caller's sources and cache between compiles and wipes them before it serves another. The PDF streams back to the preview.
 
 ### Where editing and storage happen
 
@@ -109,7 +112,7 @@ apps/
                        compile, editor, email, git, projects, references, settings,
                        sharing, shortcuts, storage, templates, theme, workspace
   compiler/            Compile service: Effect Worker, autoscaler, and the Go LaTeX engine
-  docs/                Astro + Starlight + React documentation site
+  docs/                Astro + Starlight documentation site
   web/                 React marketing site: landing, pricing, policies, templates gallery
 packages/
   contracts/           Schemas, hosts, and plan prices shared by the apps

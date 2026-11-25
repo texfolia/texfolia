@@ -214,8 +214,8 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           playwright: ${{ steps.select.outputs.production-assets }}
-      - name: Verify CI selection rules
-        run: node --test scripts/ci-select.test.mjs
+      - name: Verify repository scripts
+        run: node --test scripts/ci-select.test.mjs scripts/markdown-headings.test.mjs
       - uses: actions/setup-go@v6
         if: steps.select.outputs.compiler == 'true'
         with:

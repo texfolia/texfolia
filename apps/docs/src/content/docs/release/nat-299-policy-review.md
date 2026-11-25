@@ -102,7 +102,7 @@ Fair use applies to compilation on all plans. Compile timeouts and request rate 
 
 #### First-release scope
 
-The templates describe the implemented editor, compilation, optional Git history and remote integration, personal-project collaboration, reviewed templates, and managed assistant. They do not promise planned compile-engine options or other unimplemented features. Organization creation, invitations, and membership administration have no management UI in v1. Existing organization invitations can still be accepted. Project renaming is available from the projects table. Projects can be duplicated, transferred, and restored from the trash.
+The templates describe the implemented editor, compilation, optional Git history and remote integration, personal-project collaboration, reviewed templates, and managed assistant. They do not promise planned compile-engine options or other unimplemented features. Organizations are created in Billing and managed in Settings. Project renaming is available from the projects table. Projects can be duplicated, transferred, and restored from the trash.
 
 ## Owner decisions needed
 
