@@ -896,6 +896,10 @@ export function ProjectWorkspace({
           onChrome={updateChrome}
           onTogglePanel={togglePanel}
           problemCount={allProblems.length}
+          unresolvedCommentCount={
+            comments.data?.threads.filter((thread) => !thread.resolvedAt)
+              .length ?? 0
+          }
           compileStatus={compilation.status}
           compileDisabled={!main || !writable || !ready || sources.saving}
           onCompile={() => compile()}
@@ -904,6 +908,11 @@ export function ProjectWorkspace({
           git={git.state}
           scratchpadDisabled={!ready}
           onScratchpad={panels.openScratchpad}
+          paths={paths}
+          onOpenFile={(nodeId) => {
+            const node = nodes.find((item) => item.id === nodeId);
+            if (node) panels.openFile(node, false);
+          }}
           location={
             activeId === scratchpadId
               ? scratchpadTitle

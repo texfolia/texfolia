@@ -528,12 +528,18 @@ export const template = pgTable(
     })
       .notNull()
       .defaultNow(),
+    // Why the preview failed.
     error: text("error"),
+    // What a reviewer told the publisher. Set only while rejected.
+    rejectionReason: text("rejection_reason"),
+    // Set while its publisher hides it. The review status is kept meanwhile.
+    unpublishedAt: timestamp("unpublished_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+    index("template_tags_idx").using("gin", table.tags),
     index("template_gallery_idx").on(
       table.visibility,
       table.status,
@@ -553,6 +559,26 @@ export const template = pgTable(
       "template_curated_owner_check",
       sql`${table.ownerId} IS NOT NULL OR ${table.organizationId} IS NULL`,
     ),
+  ],
+);
+
+/**
+ * When each user published, which the publishing limits count. Apart from the
+ * templates, so that deleting one does not make room for another.
+ */
+export const templatePublication = pgTable(
+  "template_publication",
+  {
+    templateId: uuid("template_id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("template_publication_user_id_idx").on(table.userId, table.createdAt),
   ],
 );
 

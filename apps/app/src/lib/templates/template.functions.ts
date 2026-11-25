@@ -11,6 +11,7 @@ import {
   refreshTemplatePreviewSchema,
   reportTemplateSchema,
   reviewTemplateSchema,
+  setTemplatePublishedSchema,
   templateIdSchema,
 } from "#/lib/templates";
 
@@ -18,7 +19,7 @@ export const listTemplates = createServerFn({ method: "GET" })
   .validator(listTemplatesSchema)
   .handler(async ({ context, data }) => {
     const server = await import("./server");
-    return server.listTemplates({ db: context.db, page: data.page });
+    return server.listTemplates({ db: context.db, ...data });
   });
 
 export const listMyTemplates = createServerFn({ method: "GET" }).handler(
@@ -90,6 +91,30 @@ export const publishTemplate = createServerFn({ method: "POST" })
       lock: lockProject,
       userId: session.user.id,
       data,
+    });
+  });
+
+export const setTemplatePublished = createServerFn({ method: "POST" })
+  .validator(setTemplatePublishedSchema)
+  .handler(async ({ context, data }) => {
+    const session = await ensureSession();
+    const server = await import("./server");
+    await server.setTemplatePublished({
+      db: context.db,
+      userId: session.user.id,
+      ...data,
+    });
+  });
+
+export const deleteTemplate = createServerFn({ method: "POST" })
+  .validator(templateIdSchema)
+  .handler(async ({ context, data }) => {
+    const session = await ensureSession();
+    const server = await import("./server");
+    await server.deleteTemplate({
+      db: context.db,
+      userId: session.user.id,
+      ...data,
     });
   });
 

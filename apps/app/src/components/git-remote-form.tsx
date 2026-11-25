@@ -14,11 +14,16 @@ import {
 } from "#/lib/git";
 import { getGitAccounts } from "#/lib/git/git.functions";
 
-export async function connectGitAccount(provider: GitProvider) {
+export async function connectGitAccount(
+  provider: GitProvider,
+  // Where to go when the provider or Texfolia refuses. It gets `?error=`.
+  urls: { callbackURL?: string; errorCallbackURL?: string } = {},
+) {
   const result = await authClient.linkSocial({
     provider,
     scopes: [...gitProvider(provider).scopes],
     callbackURL: window.location.href,
+    ...urls,
   });
   if (result.error)
     throw new Error(result.error.message ?? "Could not connect account.");

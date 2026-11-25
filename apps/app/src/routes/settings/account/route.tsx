@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -15,16 +15,68 @@ import {
   ItemTitle,
   ItemDescription,
 } from "@texfolia/ui/item";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
 
 import { authClient } from "#/lib/auth/auth-client";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
+
+type ActiveSession = {
+  id: string;
+  token: string;
+  createdAt: Date | string;
+  expiresAt: Date | string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
+const dateFormat = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
+function formatSessionDate(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : dateFormat.format(date);
+}
+
+function summarizeUserAgent(userAgent: string | null | undefined) {
+  if (!userAgent) return "Unknown device";
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /Chrome\//.test(userAgent)
+      ? "Chrome"
+      : /Firefox\//.test(userAgent)
+        ? "Firefox"
+        : /Safari\//.test(userAgent)
+          ? "Safari"
+          : "Browser";
+  const os = /Windows/.test(userAgent)
+    ? "Windows"
+    : /Mac OS X|Macintosh/.test(userAgent)
+      ? "macOS"
+      : /Android/.test(userAgent)
+        ? "Android"
+        : /iPhone|iPad|iOS/.test(userAgent)
+          ? "iOS"
+          : /Linux/.test(userAgent)
+            ? "Linux"
+            : null;
+  return os ? `${browser} on ${os}` : browser;
+}
+
 export const Route = createFileRoute("/settings/account")({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { deletion?: "blocked" } => ({
+    deletion: search.deletion === "blocked" ? "blocked" : undefined,
+  }),
   component: AccountPage,
 });
+
 function AccountPage() {
   const { user } = Route.useRouteContext();
+  const { deletion } = Route.useSearch();
   const router = useRouter();
   const [name, setName] = useState(user.name);
   const [image, setImage] = useState(user.image ?? "");
@@ -44,6 +96,42 @@ function AccountPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const [sessions, setSessions] = useState<ActiveSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState("");
+  const [exporting, setExporting] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError("");
+    try {
+      const [current, list] = await Promise.all([
+        authClient.getSession(),
+        authClient.listSessions(),
+      ]);
+      if (list.error)
+        throw new Error(
+          list.error.message ?? "Could not load active sessions.",
+        );
+      setCurrentSessionId(current.data?.session.id ?? null);
+      setSessions((list.data ?? []) as ActiveSession[]);
+    } catch (cause) {
+      setSessionsError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not load active sessions.",
+      );
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [loadSessions]);
+
   async function run(operation: () => Promise<void>) {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -63,14 +151,58 @@ function AccountPage() {
       setPending(false);
     }
   }
+
+  async function downloadAccountData() {
+    setExporting(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/account/export");
+      if (!response.ok)
+        throw new Error("Could not export your account data. Try again.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `texfolia-account-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setMessage("Account data exported.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not export your account data. Try again.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const otherSessionCount = sessions.filter(
+    (item) => item.id !== currentSessionId,
+  ).length;
+
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-semibold">Account</h2>
         <p className="text-muted-foreground mt-2 text-sm">
-          Manage your profile and sign-in email.
+          Manage your profile, sign-in email, active sessions, and account data.
         </p>
       </div>
+      {deletion === "blocked" && (
+        <p role="alert" className="text-destructive text-sm">
+          Your account could not be deleted because you are the only owner of an
+          organization. Transfer ownership or delete the organization in{" "}
+          <Link to="/settings/organizations" className="underline">
+            Organizations settings
+          </Link>{" "}
+          first.
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-destructive text-sm">
           {error}
@@ -273,6 +405,123 @@ function AccountPage() {
               </Button>
             </form>
           )}
+        </ItemContent>
+      </Item>
+      <Item variant="outline">
+        <ItemContent className="gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <ItemTitle>Active sessions</ItemTitle>
+              <ItemDescription>
+                Devices currently signed in to your account.
+              </ItemDescription>
+            </div>
+            {otherSessionCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  void run(async () => {
+                    const result = await authClient.revokeOtherSessions();
+                    if (result.error)
+                      throw new Error(
+                        result.error.message ??
+                          "Could not sign out other sessions.",
+                      );
+                    await loadSessions();
+                    setMessage("Signed out of other sessions.");
+                  })
+                }
+              >
+                Sign out other sessions
+              </Button>
+            )}
+          </div>
+          {sessionsError && (
+            <p role="alert" className="text-destructive text-sm">
+              {sessionsError}
+            </p>
+          )}
+          {sessionsLoading ? (
+            <p className="text-muted-foreground text-sm">Loading sessions…</p>
+          ) : sessions.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No active sessions found.
+            </p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {sessions.map((item) => {
+                const isCurrent = item.id === currentSessionId;
+                return (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-sm"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="font-medium">
+                        {summarizeUserAgent(item.userAgent)}
+                        {isCurrent && (
+                          <span className="bg-muted text-muted-foreground ml-2 rounded px-1.5 py-0.5 text-xs font-normal">
+                            Current session
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {item.ipAddress ? `${item.ipAddress} · ` : ""}
+                        Signed in {formatSessionDate(item.createdAt)} · Expires{" "}
+                        {formatSessionDate(item.expiresAt)}
+                      </p>
+                    </div>
+                    {!isCurrent && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() =>
+                          void run(async () => {
+                            const result = await authClient.revokeSession({
+                              token: item.token,
+                            });
+                            if (result.error)
+                              throw new Error(
+                                result.error.message ??
+                                  "Could not revoke session.",
+                              );
+                            await loadSessions();
+                            setMessage("Session revoked.");
+                          })
+                        }
+                      >
+                        Revoke
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </ItemContent>
+      </Item>
+      <Item variant="outline">
+        <ItemContent>
+          <ItemTitle>Export account data</ItemTitle>
+          <ItemDescription>
+            Download a JSON archive of your profile, connected accounts, active
+            sessions, organization memberships, personal projects, tags,
+            comments, and published templates.
+          </ItemDescription>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 w-fit"
+            disabled={exporting || pending}
+            onClick={() => void downloadAccountData()}
+          >
+            {exporting ? "Exporting…" : "Download my data"}
+          </Button>
         </ItemContent>
       </Item>
       <Item variant="outline">

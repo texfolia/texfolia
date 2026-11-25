@@ -1,8 +1,14 @@
 import type { Db } from "@texfolia/db";
 import { template, templateReport } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import type { z } from "zod";
 
-import { isTemplateReviewer, publicColumns } from "./catalog.server";
+import {
+  availableTemplate,
+  isTemplateReviewer,
+  publicColumns,
+} from "./catalog.server";
+import type { reviewTemplateSchema } from "./schema";
 
 export async function reportTemplate({
   db,
@@ -18,7 +24,7 @@ export async function reportTemplate({
   const [found] = await db
     .select({ id: template.id })
     .from(template)
-    .where(and(eq(template.id, templateId), eq(template.status, "approved")));
+    .where(and(eq(template.id, templateId), availableTemplate));
   if (!found) throw new Error("Template not found");
   await db
     .insert(templateReport)
@@ -44,7 +50,7 @@ export async function templateReviewQueue({
   const pending = await db
     .select(publicColumns)
     .from(template)
-    .where(eq(template.status, "pending"))
+    .where(and(eq(template.status, "pending"), isNull(template.unpublishedAt)))
     .orderBy(template.createdAt)
     .limit(100);
   const reports = await db
@@ -67,15 +73,13 @@ export async function reviewTemplate({
   db,
   userId,
   reviewers,
-  templateId,
-  decision,
+  ...review
 }: {
   db: Db;
   userId: string;
   reviewers: string;
-  templateId: string;
-  decision: "approved" | "rejected";
-}) {
+} & z.infer<typeof reviewTemplateSchema>) {
+  const { templateId, decision } = review;
   ensureReviewer(userId, reviewers);
   await db.transaction(async (tx) => {
     const [found] = await tx
@@ -88,7 +92,10 @@ export async function reviewTemplate({
       throw new Error("Another reviewer must review your template");
     await tx
       .update(template)
-      .set({ status: decision })
+      .set({
+        status: decision,
+        rejectionReason: review.decision === "rejected" ? review.reason : null,
+      })
       .where(eq(template.id, templateId));
     await tx
       .update(templateReport)

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { hasOrgRole, isOrgAdmin } from "./roles";
+import { hasOrgRole, isOrgAdmin, mainOrgRole } from "./roles";
 
 test("owners and admins are organization admins", () => {
   expect(isOrgAdmin("owner")).toBe(true);
@@ -25,4 +25,11 @@ test("hasOrgRole checks the given roles", () => {
   expect(hasOrgRole("member", "member")).toBe(true);
   expect(hasOrgRole("owner", "member")).toBe(false);
   expect(hasOrgRole("owner")).toBe(false);
+});
+
+test("the highest stored role decides", () => {
+  expect(mainOrgRole("member,owner")).toBe("owner");
+  expect(mainOrgRole("admin, member")).toBe("admin");
+  expect(mainOrgRole("member")).toBe("member");
+  expect(mainOrgRole("unknown")).toBe("member");
 });

@@ -758,12 +758,19 @@ export abstract class CollaborationRoom<
   }
 
   // Signed-in users with an open file, leaving out the `closing` socket.
+  // When a user has several files open, prefer the socket with the most recent
+  // awareness activity so `nodeId` reflects their active file.
   private present(closing?: WebSocket) {
     const users = new Map<string, Attachment>();
     for (const ws of this.openSockets()) {
       if (ws === closing) continue;
       const info = this.info(ws);
-      if (info.binary && !this.isAnonymous(info.userId))
+      if (!info.binary || this.isAnonymous(info.userId)) continue;
+      const existing = users.get(info.userId);
+      if (
+        !existing ||
+        (info.awareness?.at ?? 0) >= (existing.awareness?.at ?? 0)
+      )
         users.set(info.userId, info);
     }
     return users;
@@ -772,9 +779,10 @@ export abstract class CollaborationRoom<
   private people(closing?: WebSocket): ServerMessage {
     return {
       type: "people",
-      people: [...this.present(closing).values()].map((info) =>
-        this.user(info),
-      ),
+      people: [...this.present(closing).values()].map((info) => ({
+        ...this.user(info),
+        nodeId: info.nodeId,
+      })),
     };
   }
 
@@ -978,9 +986,11 @@ export abstract class CollaborationRoom<
           if (this.isAnonymous(info.userId)) break;
           const { clock, cursor } = readAwareness(data.update, info.clientId);
           if (info.awareness && clock < info.awareness.clock) break;
+          const previousActiveNodeId = this.present().get(info.userId)?.nodeId;
           info.awareness = { clock, cursor, at: Date.now() };
           ws.serializeAttachment(info);
           await this.broadcast(nodeId, this.presence(info), ws);
+          if (previousActiveNodeId !== info.nodeId) this.broadcastPeople(ws);
           break;
         }
       }

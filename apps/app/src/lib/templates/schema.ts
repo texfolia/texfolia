@@ -36,8 +36,27 @@ export const publishTemplateSchema = z.object({
   visibility: z.enum(["public", "unlisted"]),
   redistributionConfirmed: z.literal(true),
 });
+// Postgres text cannot hold a NUL.
+const filterSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !value.includes("\0"));
+/** Tags as they are stored, so that filters match them. */
+const tagSchema = filterSchema.toLowerCase().max(32);
+const searchSchema = filterSchema.max(100);
 export const listTemplatesSchema = z.object({
   page: z.number().int().min(0).max(1000).default(0),
+  q: searchSchema.optional(),
+  tag: tagSchema.optional(),
+  license: z.enum(templateLicenses).optional(),
+});
+/** The catalog request of a URL. Values it cannot use do not filter. */
+export const templateQuerySchema = z.object({
+  page: z.coerce.number().int().min(0).max(1000).catch(0),
+  q: searchSchema.optional().catch(undefined),
+  tag: tagSchema.optional().catch(undefined),
+  license: z.enum(templateLicenses).optional().catch(undefined),
 });
 export const refreshTemplatePreviewSchema = templateIdSchema.extend({
   retry: z.boolean().default(false),
@@ -49,8 +68,16 @@ export const openTemplateSchema = templateIdSchema.extend({
 export const reportTemplateSchema = templateIdSchema.extend({
   reason: z.string().trim().min(10).max(2000),
 });
-export const reviewTemplateSchema = templateIdSchema.extend({
-  decision: z.enum(["approved", "rejected"]),
+export const maxRejectionReason = 2000;
+export const reviewTemplateSchema = z.discriminatedUnion("decision", [
+  templateIdSchema.extend({ decision: z.literal("approved") }),
+  templateIdSchema.extend({
+    decision: z.literal("rejected"),
+    reason: z.string().trim().min(10).max(maxRejectionReason),
+  }),
+]);
+export const setTemplatePublishedSchema = templateIdSchema.extend({
+  published: z.boolean(),
 });
 export const templateSnapshotSchema = z
   .array(

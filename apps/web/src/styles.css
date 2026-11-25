@@ -6,6 +6,8 @@
    a test keeps the list complete. */
 @source "../../../packages/ui/src/button.tsx";
 @source "../../../packages/ui/src/card.tsx";
+@source "../../../packages/ui/src/input.tsx";
+@source "../../../packages/ui/src/native-select.tsx";
 @source "../../../packages/ui/src/table.tsx";
 
 /* The site is light only. Without this, dark: classes follow the visitor's OS. */

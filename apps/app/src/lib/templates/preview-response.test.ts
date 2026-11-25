@@ -28,10 +28,12 @@ function harness({ broken = false } = {}) {
       etag,
       status = "approved",
       visibility = "public",
+      unpublishedAt = null,
     }: {
       etag?: string | null;
       status?: "approved" | "pending" | "rejected";
       visibility?: "public" | "unlisted";
+      unpublishedAt?: Date | null;
     } = {},
   ) =>
     templatePreview({
@@ -43,7 +45,7 @@ function harness({ broken = false } = {}) {
       ),
       bucket: bucket as never,
       images: { input: () => ({ transform }) } as never,
-      found: { previewKey, status, visibility },
+      found: { previewKey, status, visibility, unpublishedAt },
     });
   return { request, bucket, stored, transform };
 }

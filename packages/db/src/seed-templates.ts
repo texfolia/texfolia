@@ -72,6 +72,7 @@ export async function seedTemplates({
         });
       }
       // One explicit row per seed keeps every column paired with its original source.
+      // Columns left out are filled with random values, so list them all.
       await seed(tx, { template }, { count: 1 }).refine((f) => ({
         template: {
           columns: {
@@ -93,6 +94,8 @@ export async function seedTemplates({
             previewStartedAt: f.default({ defaultValue: new Date() }),
             previewNextAttemptAt: f.default({ defaultValue: new Date() }),
             error: f.default({ defaultValue: null }),
+            rejectionReason: f.default({ defaultValue: null }),
+            unpublishedAt: f.default({ defaultValue: null }),
             createdAt: f.default({ defaultValue: new Date() }),
           },
         },

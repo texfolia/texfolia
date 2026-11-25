@@ -9,6 +9,7 @@ import {
 } from "@texfolia/ui/item";
 import { useState } from "react";
 
+import { formatBytes } from "#/lib/format-bytes";
 import {
   getAccountUsage,
   saveAccountAiSettings,
@@ -124,8 +125,11 @@ function UsagePage() {
             including shared projects. Excludes deleted sources and compile
             artifacts.
           </ItemDescription>
-          <p className="mt-3 text-sm tabular-nums">
-            {BigInt(usage.sourceBytes).toLocaleString()} bytes
+          <p
+            className="mt-3 text-sm tabular-nums"
+            title={`${BigInt(usage.sourceBytes).toLocaleString()} bytes`}
+          >
+            {formatBytes(usage.sourceBytes)}
           </p>
         </ItemContent>
       </Item>

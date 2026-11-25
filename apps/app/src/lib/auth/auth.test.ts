@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import assert from "node:assert/strict";
 
 import { betterAuth } from "better-auth";
@@ -9,11 +9,17 @@ import { createBillingPlugin } from "#/lib/billing/server";
 import type { EmailMessage } from "#/lib/email";
 import { loginSearch } from "#/routes/login/route";
 
-import { beforeAuth, createOrganizationPlugin, sessionOptions } from "./auth";
+import {
+  beforeAuth,
+  createAfterAuth,
+  createOrganizationPlugin,
+  sessionOptions,
+} from "./auth";
 import { requestPrincipal } from "./request-principal.server";
 
 function createTestAuth() {
   const emails: EmailMessage[] = [];
+  const stripeClient = new Stripe("sk_test_organization_integration");
   const auth = betterAuth({
     baseURL: "http://localhost:3000",
     secret: "organization-integration-test-secret-at-least-32-characters",
@@ -29,7 +35,17 @@ function createTestAuth() {
     }),
     emailAndPassword: { enabled: true },
     session: sessionOptions,
-    hooks: { before: beforeAuth },
+    hooks: {
+      before: beforeAuth,
+      // Without live channels, the database is not read.
+      after: createAfterAuth({ db: undefined as never, live: undefined }),
+    },
+    user: {
+      deleteUser: {
+        enabled: true,
+        sendDeleteAccountVerification: async () => {},
+      },
+    },
     plugins: [
       createOrganizationPlugin({
         baseURL: "http://localhost:3000",
@@ -38,7 +54,7 @@ function createTestAuth() {
         },
       }),
       createBillingPlugin({
-        stripeClient: new Stripe("sk_test_organization_integration"),
+        stripeClient,
         webhookSecret: "whsec_organization_integration",
         createCustomerOnSignUp: false,
         proPriceId: "price_pro",
@@ -46,7 +62,7 @@ function createTestAuth() {
       }),
     ],
   });
-  return { auth, emails };
+  return { auth, emails, stripeClient };
 }
 
 async function createUser(
@@ -387,4 +403,188 @@ test("reading the session for a WebSocket upgrade sets no cookie", async () => {
   });
   expect(upgrade.response?.user.id).toBe(owner.user.id);
   expect(upgrade.headers.getSetCookie()).toEqual([]);
+});
+
+async function createTeam() {
+  const test = createTestAuth();
+  const { auth } = test;
+  const owner = await createUser(auth, "owner@example.com");
+  const organization = await auth.api.createOrganization({
+    headers: owner.headers,
+    body: { name: "Research group", slug: "research-group" },
+  });
+  assert(organization);
+  const organizationId = organization.id;
+  const join = async (email: string, role: "admin" | "member") => {
+    const joined = await createUser(auth, email);
+    const member = await auth.api.addMember({
+      body: { userId: joined.user.id, organizationId, role },
+    });
+    assert(member);
+    return { ...joined, memberId: member.id };
+  };
+  return { ...test, owner, organization, organizationId, join };
+}
+
+const forbidden = { statusCode: 403 };
+
+test("only owners change roles, and promote other owners", async () => {
+  const { auth, owner, organizationId, join } = await createTeam();
+  const admin = await join("admin@example.com", "admin");
+  const member = await join("member@example.com", "member");
+  const setRole = (headers: Headers, memberId: string, role: string) =>
+    auth.api.updateMemberRole({
+      headers,
+      body: { organizationId, memberId, role },
+    });
+  for (const [headers, memberId, role] of [
+    [admin.headers, member.memberId, "admin"],
+    [admin.headers, admin.memberId, "owner"],
+    [admin.headers, admin.memberId, "member"],
+    [member.headers, member.memberId, "admin"],
+  ] as const)
+    await expect(setRole(headers, memberId, role)).rejects.toMatchObject(
+      forbidden,
+    );
+  expect(await setRole(owner.headers, member.memberId, "owner")).toMatchObject({
+    role: "owner",
+  });
+  expect(await setRole(member.headers, admin.memberId, "member")).toMatchObject(
+    { role: "member" },
+  );
+});
+
+test("admins invite and remove members, and only owners invite and remove admins", async () => {
+  const { auth, owner, organizationId, join } = await createTeam();
+  const admin = await join("admin@example.com", "admin");
+  const other = await join("other@example.com", "admin");
+  const member = await join("member@example.com", "member");
+  const invite = (
+    headers: Headers,
+    role: "member" | "admin" | "owner" | ("member" | "admin")[],
+  ) =>
+    auth.api.createInvitation({
+      headers,
+      body: { organizationId, email: `${crypto.randomUUID()}@e.com`, role },
+    });
+  await invite(admin.headers, "member");
+  for (const role of ["admin", "owner", ["member", "admin"]] as const)
+    await expect(
+      invite(
+        admin.headers,
+        role === "admin" || role === "owner" ? role : [...role],
+      ),
+    ).rejects.toMatchObject(forbidden);
+  expect(await invite(owner.headers, "admin")).toMatchObject({ role: "admin" });
+  await invite(owner.headers, "owner");
+
+  const remove = (headers: Headers, memberIdOrEmail: string) =>
+    auth.api.removeMember({
+      headers,
+      body: { organizationId, memberIdOrEmail },
+    });
+  for (const target of [other.memberId, other.user.email, "OTHER@example.com"])
+    await expect(remove(admin.headers, target)).rejects.toThrow();
+  await expect(remove(admin.headers, owner.user.email)).rejects.toMatchObject(
+    forbidden,
+  );
+  await expect(remove(member.headers, other.memberId)).rejects.toThrow();
+  await remove(admin.headers, member.memberId);
+  await remove(owner.headers, other.memberId);
+  await remove(admin.headers, admin.memberId);
+});
+
+test("owners and admins rename an organization, and only owners delete it", async () => {
+  const { auth, owner, organizationId, join } = await createTeam();
+  const admin = await join("admin@example.com", "admin");
+  const member = await join("member@example.com", "member");
+  const rename = (headers: Headers) =>
+    auth.api.updateOrganization({
+      headers,
+      body: { organizationId, data: { name: "Renamed" } },
+    });
+  await expect(rename(member.headers)).rejects.toMatchObject(forbidden);
+  expect(await rename(admin.headers)).toMatchObject({ name: "Renamed" });
+  for (const { headers } of [admin, member])
+    await expect(
+      auth.api.deleteOrganization({ headers, body: { organizationId } }),
+    ).rejects.toMatchObject(forbidden);
+  await auth.api.deleteOrganization({
+    headers: owner.headers,
+    body: { organizationId },
+  });
+});
+
+test("leaving updates the paid seats, and the last owner cannot leave", async () => {
+  const { auth, stripeClient, owner, organization, organizationId, join } =
+    await createTeam();
+  const member = await join("member@example.com", "member");
+  const ctx = await auth.$context;
+  await ctx.adapter.update({
+    model: "organization",
+    where: [{ field: "id", value: organization.id }],
+    update: { stripeCustomerId: "cus_team" },
+  });
+  await ctx.adapter.create({
+    model: "subscription",
+    data: {
+      referenceId: organizationId,
+      plan: "team",
+      status: "active",
+      stripeSubscriptionId: "sub_team",
+    },
+  });
+  spyOn(stripeClient.subscriptions, "retrieve").mockImplementation(
+    (async () => ({
+      id: "sub_team",
+      status: "active",
+      items: { data: [{ id: "si", price: { id: "price_team" }, quantity: 2 }] },
+    })) as never,
+  );
+  const update = spyOn(stripeClient.subscriptions, "update").mockImplementation(
+    (async () => ({})) as never,
+  );
+  await auth.api.leaveOrganization({
+    headers: member.headers,
+    body: { organizationId },
+  });
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(update.mock.calls[0]?.slice(0, 2)).toMatchObject([
+    "sub_team",
+    { items: [{ id: "si", quantity: 1 }] },
+  ]);
+  await expect(
+    auth.api.leaveOrganization({
+      headers: owner.headers,
+      body: { organizationId },
+    }),
+  ).rejects.toMatchObject({ statusCode: 400 });
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+test("an organization's only owner cannot delete their account", async () => {
+  const { auth, owner, organizationId, join } = await createTeam();
+  const admin = await join("admin@example.com", "admin");
+  const request = (headers: Headers) =>
+    auth.api.deleteUser({ headers, body: {} });
+  await expect(request(owner.headers)).rejects.toThrow(
+    /only owner of Research group/,
+  );
+  // The emailed link is checked too: it may predate the organization.
+  const confirm = await auth.handler(
+    new Request(
+      "http://localhost:3000/api/auth/delete-user/callback?token=any&callbackURL=/",
+      { headers: owner.headers },
+    ),
+  );
+  expect(confirm.status).toBe(302);
+  expect(confirm.headers.get("location")).toBe(
+    "/settings/account?deletion=blocked",
+  );
+  expect(await request(admin.headers)).toMatchObject({ success: true });
+  await auth.api.updateMemberRole({
+    headers: owner.headers,
+    body: { organizationId, memberId: admin.memberId, role: "owner" },
+  });
+  expect(await request(owner.headers)).toMatchObject({ success: true });
 });

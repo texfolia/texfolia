@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@texfolia/ui/dialog";
+import { Input } from "@texfolia/ui/input";
 import { useEffect, useState } from "react";
 
 import {
@@ -56,6 +57,8 @@ function Templates({
   onPendingChange: (pending: boolean) => void;
 }) {
   const [page, setPage] = useState(0);
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [templates, setTemplates] = useState<
     Awaited<ReturnType<typeof listTemplates>>
   >([]);
@@ -74,7 +77,10 @@ function Templates({
     let active = true;
     setLoading(true);
     setError("");
-    void Promise.all([listTemplates({ data: { page } }), getTemplateAccount()])
+    void Promise.all([
+      listTemplates({ data: { page, q: search || undefined } }),
+      getTemplateAccount(),
+    ])
       .then(([rows, account]) => {
         if (active) {
           setTemplates(rows);
@@ -93,7 +99,16 @@ function Templates({
     return () => {
       active = false;
     };
-  }, [page, attempt]);
+  }, [page, search, attempt]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query.trim() === search) return;
+      setSearch(query.trim());
+      setPage(0);
+      setSelected(null);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, search]);
   function markPending(value: boolean) {
     setPending(value);
     onPendingChange(value);
@@ -102,6 +117,14 @@ function Templates({
     <div className="space-y-5">
       <fieldset disabled={pending} className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Choose a template</legend>
+        <Input
+          type="search"
+          aria-label="Search templates"
+          placeholder="Search templates"
+          maxLength={100}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
         <div className="max-h-52 space-y-1 overflow-auto rounded-lg border p-1">
           {[
             {
@@ -140,6 +163,11 @@ function Templates({
       {loading && (
         <p role="status" className="text-muted-foreground text-xs">
           Loading templates…
+        </p>
+      )}
+      {!loading && !error && search && !templates.length && (
+        <p role="status" className="text-muted-foreground text-xs">
+          No templates match “{search}”.
         </p>
       )}
       {error && (
