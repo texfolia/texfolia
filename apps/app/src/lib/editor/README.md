@@ -45,6 +45,9 @@ bun test apps/app/src/lib/editor
 `bun run --cwd apps/app test:editor-runtime` runs the workspace in a browser and
 checks what typing renders, undo across settings and access changes, the
 clipboard, worker counts, and layout writes. It needs `latex:assets`.
+`test:editor-features` uses the same fixture (`test/editor-runtime/harness.ts`) to
+check previews, the main document, go to file, and the assistant's changes. Set
+`SCREENSHOT_DIR` to save its screenshots.
 
 The SyncTeX fixture in `apps/app/test/fixtures/synctex` is also used by the
 `test:synctex` browser suite.

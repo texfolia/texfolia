@@ -38,6 +38,38 @@ function turn(index: number, fileText = big): ModelMessage[] {
   ];
 }
 
+test("what edit_file keeps to undo an edit is never sent to the model", () => {
+  const messages: ModelMessage[] = [
+    { role: "user", content: "Edit it" },
+    {
+      role: "assistant",
+      content: "",
+      toolCalls: [
+        {
+          id: "edit",
+          type: "function",
+          function: { name: "edit_file", arguments: "{}" },
+        },
+      ],
+    },
+    {
+      role: "tool",
+      toolCallId: "edit",
+      content: JSON.stringify({
+        path: "main.tex",
+        version: "v2",
+        saved: true,
+        context: [{ before: "secret before", after: "after" }],
+      }),
+    },
+  ];
+  const [, , result] = compactHistory(messages);
+  expect(result?.content).toBe(
+    JSON.stringify({ path: "main.tex", version: "v2", saved: true }),
+  );
+  expect(messages[2]?.content).toContain("secret before");
+});
+
 describe("stubToolResult", () => {
   test("replaces read_file contents with the version", () => {
     const stub = JSON.parse(

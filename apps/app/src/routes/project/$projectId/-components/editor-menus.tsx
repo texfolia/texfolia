@@ -43,7 +43,7 @@ const contextMenuCommands: readonly [EditorCommand, string][] = [
 
 export function EditorToolbar({
   title,
-  isMarkdown,
+  previewLabel,
   isLatex,
   canFormat,
   canAddReference,
@@ -61,11 +61,13 @@ export function EditorToolbar({
   onToggleSymbols,
   onRevealPdf,
   onAddReference,
+  onAskAi,
   onCommand,
   onDownload,
 }: {
   title: string;
-  isMarkdown: boolean;
+  /** Names the preview of the file, if there is one. */
+  previewLabel?: string;
   isLatex: boolean;
   canFormat: boolean;
   canAddReference: boolean;
@@ -83,15 +85,16 @@ export function EditorToolbar({
   onToggleSymbols: () => void;
   onRevealPdf?: () => void;
   onAddReference?: () => void;
+  onAskAi?: () => void;
   onCommand: (command: EditorCommand) => void;
   onDownload: () => void;
 }) {
   return (
     <PanelHeader title={title}>
       <PanelActions label="Editor actions">
-        {isMarkdown && onOpenPreview && (
+        {previewLabel && onOpenPreview && (
           <PanelAction
-            label="Open Markdown preview (⌘/Ctrl+Shift+V)"
+            label={`${previewLabel} (⌘/Ctrl+Shift+V)`}
             onClick={onOpenPreview}
           >
             <IconEye />
@@ -146,6 +149,11 @@ export function EditorToolbar({
             >
               Redo
             </DropdownMenuItem>
+            {onAskAi && (
+              <DropdownMenuItem onClick={onAskAi}>
+                Ask AI about selection
+              </DropdownMenuItem>
+            )}
             {onAddReference && canAddReference && (
               <DropdownMenuItem disabled={readOnly} onClick={onAddReference}>
                 Add reference…
@@ -183,6 +191,7 @@ export function EditorContextMenu({
   readOnly,
   status,
   onAddComment,
+  onAskAi,
   onCommand,
 }: {
   commenting: boolean;
@@ -191,10 +200,16 @@ export function EditorContextMenu({
   readOnly: boolean;
   status: HistoryStatus;
   onAddComment: () => void;
+  onAskAi?: () => void;
   onCommand: (command: EditorCommand) => void;
 }) {
   return (
     <ContextMenuContent>
+      {onAskAi && (
+        <ContextMenuItem onClick={onAskAi}>
+          Ask AI about selection
+        </ContextMenuItem>
+      )}
       {commenting && (
         <ContextMenuItem onClick={onAddComment}>Add comment</ContextMenuItem>
       )}

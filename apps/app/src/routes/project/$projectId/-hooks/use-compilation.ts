@@ -175,7 +175,11 @@ export function useCompilation({
   }, [projectId]);
 
   // A cheap key for the file tree's shape, recomputed only when nodes change.
-  const structure = useMemo(() => structureKey(nodes), [nodes]);
+  // Another main document makes another PDF.
+  const structure = useMemo(
+    () => `${main ?? ""}\n${structureKey(nodes)}`,
+    [main, nodes],
+  );
   const previousStructure = useRef(structure);
   const structureChanged = useEffectEvent(() => {
     setSourceChanged(true);

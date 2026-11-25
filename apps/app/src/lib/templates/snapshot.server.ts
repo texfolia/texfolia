@@ -295,6 +295,7 @@ export async function openTemplate({
       ownerId: data.organizationId ? null : userId,
       organizationId: data.organizationId,
       name,
+      mainFile: source.mainFile,
     });
     await tx.insert(projectNode).values(copied);
     return { id: projectId };

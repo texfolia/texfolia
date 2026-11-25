@@ -35,6 +35,7 @@ export function DocumentEditor({
   canWrite,
   jump: requestedJump,
   onAddReference,
+  onFixWithAi,
   ...props
 }: Omit<
   EditorProps,
@@ -149,6 +150,7 @@ export function DocumentEditor({
         key={collaboration.doc.clientID}
         readOnly={readOnly}
         onAddReference={readOnly ? undefined : onAddReference}
+        onFixWithAi={readOnly ? undefined : onFixWithAi}
         onCreateEditor={(view) => {
           editor.current = view;
           registerEditor(id, view);

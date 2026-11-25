@@ -2,6 +2,7 @@ import type { DockviewApi, SerializedDockview } from "dockview-react";
 import { z } from "zod";
 
 import { scratchpadId } from "#/lib/collaboration";
+import { hasSourcePreview } from "#/lib/storage/preview";
 
 export const sidebarViewSchema = z.enum([
   "files",
@@ -141,7 +142,7 @@ export function restoreWorkspaceDock(
             (node) =>
               node.id === panel.id.slice(9) &&
               node.kind === "text" &&
-              /\.(md|markdown)$/i.test(node.name),
+              hasSourcePreview(node.name),
           ))
       )
         return false;

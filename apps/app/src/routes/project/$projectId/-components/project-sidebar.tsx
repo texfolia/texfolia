@@ -90,7 +90,7 @@ export function ProjectSidebar({
 }) {
   const files = useProjectFiles();
   const { projectId, drafts } = useWorkspaceActions();
-  const { canWrite } = useWorkspace();
+  const { canWrite, main } = useWorkspace();
   const { build } = useWorkspaceBuild();
   const root = nodes.find((node) => node.kind === "folder" && !node.parentId);
   const tree = useMemo(
@@ -166,6 +166,7 @@ export function ProjectSidebar({
             nodes={tree}
             canManage={canWrite}
             activeId={activeId}
+            mainId={main?.id}
             isPending={(id) => files.nodes.get(id)?.$hasPendingWrites ?? false}
             onOpen={(node, permanent) =>
               node.id.startsWith("out:")

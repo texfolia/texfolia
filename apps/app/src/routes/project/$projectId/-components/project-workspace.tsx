@@ -24,16 +24,29 @@ import {
 } from "#/hooks/use-stable-callback";
 import { useStableValue } from "#/hooks/use-stable-value";
 import { useSyncTex } from "#/hooks/use-synctex";
+import { selectionPrompt } from "#/lib/ai/editor";
 import { scratchpadId } from "#/lib/collaboration";
+import type { EditorCommand } from "#/lib/editor/editor-command";
 import { entryAppendix, newBibFile } from "#/lib/editor/latex/bibtex";
 import { latexCompletion } from "#/lib/editor/latex/completion";
 import { addLatexPackage, packageInsertion } from "#/lib/editor/latex/symbols";
 import { sourceToPdf } from "#/lib/editor/latex/synctex";
-import { projectPaths, invalidProjectPaths } from "#/lib/projects";
+import { selectedLines } from "#/lib/editor/selection";
+import { createStore } from "#/lib/external-store";
+import {
+  invalidProjectPaths,
+  isMainFileCandidate,
+  projectMainFile,
+  projectPaths,
+} from "#/lib/projects";
 import type { ProjectDetails } from "#/lib/projects/project.functions";
 import { encodeSource } from "#/lib/storage";
 import { FileDrafts } from "#/lib/workspace/file-drafts";
-import { workspaceLayoutKey } from "#/lib/workspace/workspace-layout";
+import {
+  type PanelView,
+  type SidebarView,
+  workspaceLayoutKey,
+} from "#/lib/workspace/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
 import {
@@ -69,6 +82,11 @@ import { SidebarResize } from "./sidebar-resize";
 import type { UploadSourceHandle } from "./upload-source";
 import { WorkspaceAgentsSidebar } from "./workspace-agents-sidebar";
 import { WorkspaceMenu } from "./workspace-menu";
+import type {
+  PaletteFile,
+  PaletteMode,
+  WorkspaceCommand,
+} from "./workspace-palette";
 import { WorkspaceStatusBar } from "./workspace-status-bar";
 
 const SettingsDialog = lazyPanel("Settings", async () => {
@@ -78,6 +96,10 @@ const SettingsDialog = lazyPanel("Settings", async () => {
 const AddReferenceDialog = lazyPanel("Add reference", async () => {
   const { AddReferenceDialog } = await import("./add-reference-dialog");
   return AddReferenceDialog;
+});
+const WorkspacePalette = lazyPanel("Go to file", async () => {
+  const { WorkspacePalette } = await import("./workspace-palette");
+  return WorkspacePalette;
 });
 const WorkspacePanel = lazyPanel("This panel", async () => {
   const { WorkspacePanel } = await import("./workspace-panel");
@@ -140,14 +162,10 @@ export function ProjectWorkspace({
     samePaths,
   );
   const filenames = useMemo(() => [...paths.values()], [paths]);
-  const mainFile = useMemo(() => {
-    let first: { id: string; path: string } | undefined;
-    for (const [id, path] of paths) {
-      if (path === "main.tex") return { id, path };
-      if (path.endsWith(".tex")) first ??= { id, path };
-    }
-    return first;
-  }, [paths]);
+  const mainFile = useMemo(
+    () => projectMainFile(paths, fileStatus.mainFile),
+    [paths, fileStatus.mainFile],
+  );
   const main = mainFile?.path;
   const mainId = mainFile?.id;
   const { result, update, revision } = useLatexAnalysis(filenames, main);
@@ -163,6 +181,7 @@ export function ProjectWorkspace({
     paths,
     drafts,
     ready,
+    mainId,
     updateAnalysis: update,
   });
   // The route remounts per project, so this marks when this editor opened.
@@ -258,6 +277,13 @@ export function ProjectWorkspace({
   });
   const [referenceRequest, setReferenceRequest] =
     useState<AddReferenceRequest | null>(null);
+  const [palette, setPalette] = useState<{
+    mode: PaletteMode;
+    sequence: number;
+  } | null>(null);
+  const paletteUsed = useHasBeen(!!palette);
+  const [actionError, setActionError] = useState("");
+  const { activeId } = panels;
   // Dialogs stay mounted once used, so that they can animate closed.
   const settingsUsed = useHasBeen(settingsOpen);
   const referencesUsed = useHasBeen(!!referenceRequest);
@@ -379,6 +405,205 @@ export function ProjectWorkspace({
     }));
   }
 
+  // Kept outside React until a chat takes it.
+  const [assistantPrompt] = useState(() => createStore<string | null>(null));
+  function askAi(prompt: string) {
+    updateChrome({ agentsOpen: true });
+    assistantPrompt.set(prompt);
+  }
+  function askAboutSelection() {
+    const view = panels.activeEditor();
+    const path = activeId ? paths.get(activeId) : undefined;
+    if (view && path) askAi(selectionPrompt(path, selectedLines(view.state)));
+  }
+
+  const activePath = activeId ? paths.get(activeId) : undefined;
+  const canSetMain =
+    writable &&
+    !!activePath &&
+    activePath !== main &&
+    isMainFileCandidate(activePath);
+  async function setMain() {
+    if (!activePath) return;
+    setActionError("");
+    try {
+      await files.setMainFile(activePath);
+    } catch (failure) {
+      setActionError(
+        failure instanceof Error
+          ? failure.message
+          : "The main document could not be changed. Try again.",
+      );
+    }
+  }
+
+  const paletteSequence = useRef(0);
+  function openPalette(mode: PaletteMode) {
+    setPalette({ mode, sequence: ++paletteSequence.current });
+  }
+
+  /** Every file, the last ones used first, except for the one on screen. */
+  function paletteFiles(): PaletteFile[] {
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const entries = [...paths].flatMap(([id, path]) => {
+      const node = byId.get(id);
+      return node ? [{ id, path, node }] : [];
+    });
+    const listed = [
+      ...entries
+        .sort((a, b) => a.path.localeCompare(b.path))
+        .map(({ id, path, node }) => ({
+          id,
+          path,
+          open(line?: number, column?: number) {
+            if (line && node.kind === "text") panels.reveal(path, line, column);
+            else panels.openFile(node, true);
+          },
+        })),
+      ...(compilation.build?.artifacts?.files ?? []).map(({ path }) => ({
+        id: `out:${path}`,
+        path: `out/${path}`,
+        open: () => panels.openGenerated(path, true),
+      })),
+    ];
+    const recent = panels.recentIds();
+    const order = (id: string) => {
+      const index = recent.indexOf(id);
+      // The current file is the least likely to be wanted.
+      return index < 0 ? recent.length : index || recent.length + 1;
+    };
+    return listed.sort((a, b) => order(a.id) - order(b.id));
+  }
+
+  function commands(): WorkspaceCommand[] {
+    const editing =
+      activeId === scratchpadId ||
+      nodes.some((node) => node.id === activeId && node.kind === "text");
+    const idle = writable && ready && !sources.saving;
+    const view = (rightView: SidebarView) => () =>
+      updateChrome({ rightOpen: true, rightView });
+    const panel = (panelView: PanelView) => () =>
+      updateChrome({ panelOpen: true, panelView });
+    const editor = (
+      command: EditorCommand,
+      writes = false,
+    ): Pick<WorkspaceCommand, "disabled" | "run"> => ({
+      disabled: !editing || (writes && !writable),
+      run: () => panels.runCommand(command),
+    });
+    return [
+      {
+        label: "Go to file",
+        shortcut: "quickOpen",
+        run: () => openPalette("files"),
+      },
+      { label: "Save", shortcut: "save", disabled: !idle, run: save },
+      {
+        label: "Save without compiling",
+        shortcut: "saveWithoutCompiling",
+        disabled: !idle,
+        run: saveOnly,
+      },
+      {
+        label: "Save & compile",
+        shortcut: "compile",
+        disabled: !idle || !main,
+        run: () => compile(),
+      },
+      {
+        label: "Clean build",
+        shortcut: "cleanBuild",
+        disabled: !idle || !main || compilation.compiling,
+        run: () => compile(true),
+      },
+      {
+        label: "New file",
+        disabled: !idle,
+        run: () => createRef.current?.start("text"),
+      },
+      {
+        label: "New folder",
+        disabled: !idle,
+        run: () => createRef.current?.start("folder"),
+      },
+      {
+        label: "Upload files",
+        disabled: !idle,
+        run: () => uploadRef.current?.open(),
+      },
+      { label: "Export project", run: () => exportRef.current?.open() },
+      { label: "Undo", ...editor("undo", true) },
+      { label: "Redo", ...editor("redo", true) },
+      { label: "Find in file", ...editor("find") },
+      {
+        label: "Format document",
+        shortcut: "format",
+        ...editor("format", true),
+      },
+      { label: "Toggle line wrapping", ...editor("wrap") },
+      { label: "Symbol palette", ...editor("symbols", true) },
+      {
+        label: "Search in project",
+        shortcut: "projectSearch",
+        run: openSearch,
+      },
+      {
+        label: "Add reference",
+        disabled: !writable,
+        run: () => addReference(),
+      },
+      {
+        label: "Set this file as main document",
+        disabled: !canSetMain,
+        run: () => void setMain(),
+      },
+      {
+        label: "Ask AI about the selection",
+        disabled: !activePath || !editing,
+        run: askAboutSelection,
+      },
+      {
+        label: "Open scratchpad",
+        disabled: !ready,
+        run: panels.openScratchpad,
+      },
+      {
+        label: "Toggle Agents sidebar",
+        run: () => updateChrome({ agentsOpen: !chrome.agentsOpen }),
+      },
+      {
+        label: "Toggle right sidebar",
+        shortcut: "sidebar",
+        run: () => updateChrome({ rightOpen: !chrome.rightOpen }),
+      },
+      { label: "Toggle panel", shortcut: "panel", run: () => togglePanel() },
+      { label: "Show Files", run: view("files") },
+      { label: "Show Outline", run: view("outline") },
+      { label: "Show Search", run: view("search") },
+      { label: "Show Git", run: view("git") },
+      { label: "Show Comments", run: view("comments") },
+      { label: "Show Collaboration", run: view("collaboration") },
+      { label: "Show Problems", run: panel("problems") },
+      { label: "Show Logs", run: panel("logs") },
+      { label: "Show Terminal", run: panel("terminal") },
+      {
+        label: "Next editor tab",
+        shortcut: "nextTab",
+        run: () => panels.cycleTab(1),
+      },
+      {
+        label: "Previous editor tab",
+        shortcut: "previousTab",
+        run: () => panels.cycleTab(-1),
+      },
+      {
+        label: "Settings",
+        shortcut: "settings",
+        run: () => setSettingsOpen(true),
+      },
+    ];
+  }
+
   const compile = (clean = false) => void compilation.compile(clean);
   const saveOnly = () => void sources.saveSources();
   const save = () => (compileSettings.onSave ? compile() : saveOnly());
@@ -393,6 +618,8 @@ export function ProjectWorkspace({
       nextTab: () => panels.cycleTab(1),
       previousTab: () => panels.cycleTab(-1),
       projectSearch: openSearch,
+      quickOpen: () => openPalette("files"),
+      commandPalette: () => openPalette("commands"),
       sidebar: () => updateChrome({ rightOpen: !chrome.rightOpen }),
       panel: () => togglePanel(),
     },
@@ -400,13 +627,14 @@ export function ProjectWorkspace({
 
   const actions = useStableActions({
     holdDocument,
-    editDocument: (id, run) => {
+    editDocument: (id, run, options) => {
       if (!writable)
         return Promise.reject(
           new Error("You do not have permission to edit this project."),
         );
-      return collaboration.edit(id, run);
+      return collaboration.edit(id, run, options);
     },
+    askAi,
     reveal: panels.reveal,
     revealRange: panels.revealRange,
     revealPdf,
@@ -480,7 +708,6 @@ export function ProjectWorkspace({
     setReady(true);
   }
 
-  const { activeId } = panels;
   return (
     <WorkspaceProvider
       actions={workspaceActions}
@@ -504,6 +731,14 @@ export function ProjectWorkspace({
             readBib={readBib}
             appendBib={appendBib}
             createBib={createBib}
+          />
+        )}
+        {paletteUsed && (
+          <WorkspacePalette
+            request={palette}
+            files={paletteFiles}
+            commands={commands}
+            onClose={() => setPalette(null)}
           />
         )}
         <WorkspaceMenu
@@ -534,6 +769,8 @@ export function ProjectWorkspace({
           onSettings={() => setSettingsOpen(true)}
           onEditor={panels.runCommand}
           onSearch={openSearch}
+          onQuickOpen={() => openPalette("files")}
+          onCommandPalette={() => openPalette("commands")}
           onAddReference={() => addReference()}
           chrome={chrome}
           onChrome={updateChrome}
@@ -542,6 +779,7 @@ export function ProjectWorkspace({
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <WorkspaceAgentsSidebar
             projectId={projectId}
+            prompt={assistantPrompt}
             chrome={chrome}
             onChrome={updateChrome}
           />
@@ -581,6 +819,14 @@ export function ProjectWorkspace({
                 }
                 onDiscard={() => sources.resolveRecovery()}
               />
+            )}
+            {actionError && (
+              <p
+                role="alert"
+                className="text-destructive border-b px-3 py-2 text-sm wrap-anywhere"
+              >
+                {actionError}
+              </p>
             )}
             {compilation.compileError && (
               <p

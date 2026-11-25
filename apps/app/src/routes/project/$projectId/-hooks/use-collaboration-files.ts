@@ -87,7 +87,7 @@ export function useCollaborationFiles({
     get: useCallback((id: string) => documents.get(id), [documents]),
     hold: useCallback((id: string) => documents.hold(id), [documents]),
     edit: useCallback<CollaborativeDocuments["edit"]>(
-      (id, run) => documents.edit(id, run),
+      (id, run, options) => documents.edit(id, run, options),
       [documents],
     ),
     synchronize: useCallback(() => documents.synchronize(), [documents]),

@@ -18,6 +18,7 @@ import {
   IconFolderOpen,
   IconMarkdown,
   IconPhoto,
+  IconStarFilled,
   IconTex,
 } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
@@ -40,7 +41,11 @@ import {
 } from "@texfolia/ui/sidebar";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 
-import { renamedProjectNodes } from "#/lib/projects";
+import {
+  isMainFileCandidate,
+  projectPaths,
+  renamedProjectNodes,
+} from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import { droppedEntries } from "#/lib/storage/browser";
 import { useProjectFiles } from "#/providers/project-files-provider";
@@ -138,6 +143,7 @@ function ProjectFileIcon({ name, kind }: Pick<ProjectNode, "name" | "kind">) {
 export function ProjectFileTree({
   nodes,
   activeId,
+  mainId,
   isPending,
   onOpen,
   canManage = false,
@@ -156,6 +162,8 @@ export function ProjectFileTree({
   canManage?: boolean;
   nodes: ProjectNode[];
   activeId: string | undefined;
+  /** The main document, which is marked. */
+  mainId?: string;
   isPending: (id: string) => boolean;
   onOpen: (node: ProjectNode, permanent: boolean) => void;
 }) {
@@ -180,6 +188,7 @@ export function ProjectFileTree({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const paths = useMemo(() => projectPaths(nodes), [nodes]);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const root = children.get(null)?.find((node) => node.kind === "folder");
 
@@ -191,6 +200,17 @@ export function ProjectFileTree({
       !isPending(node.id) &&
       moving === null
     );
+  }
+
+  function mainAction(node: ProjectNode) {
+    const path = paths.get(node.id);
+    return node.kind === "text" &&
+      node.id !== mainId &&
+      node.projectId !== "out" &&
+      path &&
+      isMainFileCandidate(path)
+      ? () => files.setMainFile(path)
+      : undefined;
   }
 
   // Folders accept drops on themselves; files forward drops to their folder.
@@ -304,6 +324,7 @@ export function ProjectFileTree({
               onDownload={() => onDownload(node)}
               onCreate={(kind) => onCreate(kind, node.id)}
               onUpload={() => onUpload(node.id)}
+              onSetMain={mainAction(node)}
             >
               {node.kind === "folder" ? (
                 <Collapsible defaultOpen className="group/folder">
@@ -336,7 +357,11 @@ export function ProjectFileTree({
                   style={{ paddingLeft: 14 + depth * 14 }}
                   isActive={activeId === node.id}
                   aria-current={activeId === node.id ? "true" : undefined}
-                  title={node.name}
+                  title={
+                    node.id === mainId
+                      ? `${node.name} (main document)`
+                      : node.name
+                  }
                   onClick={(event) => onOpen(node, event.detail === 0)}
                   onDoubleClick={() => onOpen(node, true)}
                   onKeyDown={(event) => {
@@ -347,7 +372,13 @@ export function ProjectFileTree({
                   }}
                 >
                   <ProjectFileIcon name={node.name} kind={node.kind} />
-                  <span>{node.name}</span>
+                  <span className="min-w-0 truncate">{node.name}</span>
+                  {node.id === mainId && (
+                    <IconStarFilled
+                      aria-hidden="true"
+                      className="text-muted-foreground mr-2 ml-auto size-3!"
+                    />
+                  )}
                 </SidebarMenuButton>
               )}
             </ProjectNodeActions>

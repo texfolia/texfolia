@@ -25,6 +25,7 @@ import * as Y from "yjs";
 import { z } from "zod";
 
 import { threadHistorySchema, threadListSchema, threadSchema } from "#/lib/ai";
+import { applyChanges, assistantChange, revertEdits } from "#/lib/ai/revert";
 import { encodeClientMessage, scratchpadId } from "#/lib/collaboration";
 import { hashSource } from "#/lib/compile";
 import { GitRepository } from "#/lib/git/server";
@@ -801,6 +802,15 @@ try {
     searched.includes("Revised text.") && searched.includes("total"),
     "case-insensitive search results reach the next model turn",
   );
+  assert(
+    !JSON.stringify(inference.slice(fileCalls)).includes('\\"context\\"'),
+    "what undoes an edit is not sent to the model",
+  );
+  const fileHistory = threadHistorySchema.parse(
+    await (
+      await send(`${path}?threads=1&thread=${fileThread.thread.id}`, userId)
+    ).json(),
+  );
   const fileNodes = await db.query.projectNode.findMany({
     where: { projectId: paidProject },
   });
@@ -815,6 +825,35 @@ try {
     fileNodes.filter((n) => n.name === name && n.deletedAt === null);
   const removed = (name: string) =>
     fileNodes.filter((n) => n.name === name && n.deletedAt !== null);
+  const undoable = fileHistory.messages.flatMap(({ parts }) =>
+    parts.flatMap((part) => {
+      if (part.type !== "tool-call") return [];
+      const change = assistantChange(
+        part,
+        parts.find(
+          (result) =>
+            result.type === "tool-result" && result.toolCallId === part.id,
+        ) as Parameters<typeof assistantChange>[1],
+      );
+      return change ? [change] : [];
+    }),
+  );
+  assert.deepEqual(
+    undoable.map(({ kind }) => kind),
+    ["edit", "create", "rename", "delete"],
+    "saved chats hold the changes to undo",
+  );
+  const undone = undoable[0];
+  assert(undone?.kind === "edit" && undone.nodeId === main.id);
+  const finalText = await (await bucket.get(edited.objectKey))?.text();
+  assert(finalText);
+  const reverted = revertEdits(finalText, undone.edits);
+  assert.deepEqual(reverted.outcomes, ["reverted", "reverted"]);
+  assert.equal(
+    applyChanges(finalText, reverted.changes),
+    "\\documentclass{article}\n\\begin{document}\nRevised text.\n\\end{document}\n",
+    "an edit reverts to what it replaced",
+  );
   assert.equal(live("chapters")[0]?.kind, "folder", "create_file adds folders");
   assert.equal(live("intro.tex").length, 0, "delete_file removes the file");
   assert.equal(removed("sections").length, 1, "delete_file removes folders");

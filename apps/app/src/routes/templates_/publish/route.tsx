@@ -49,6 +49,7 @@ export const Route = createFileRoute("/templates_/publish")({
 function PublishTemplatePage() {
   const { projects, templates } = Route.useLoaderData();
   const navigate = Route.useNavigate();
+  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -120,7 +121,13 @@ function PublishTemplatePage() {
             <fieldset disabled={busy} className="space-y-6">
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Saved project</span>
-                <NativeSelect name="projectId" required className="w-full">
+                <NativeSelect
+                  name="projectId"
+                  required
+                  className="w-full"
+                  value={projectId}
+                  onChange={(event) => setProjectId(event.target.value)}
+                >
                   {projects.map((project) => (
                     <NativeSelectOption key={project.id} value={project.id}>
                       {project.name}
@@ -146,9 +153,14 @@ function PublishTemplatePage() {
                   Main LaTeX file (path from project root)
                 </span>
                 <Input
+                  // A fresh field for each project's own main document.
+                  key={projectId}
                   name="mainFile"
                   required
-                  defaultValue="main.tex"
+                  defaultValue={
+                    projects.find((project) => project.id === projectId)
+                      ?.mainFile ?? "main.tex"
+                  }
                   maxLength={240}
                 />
               </label>

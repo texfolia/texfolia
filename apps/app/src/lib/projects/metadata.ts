@@ -22,6 +22,8 @@ export const projectMetadataSchema = z.object({
     z.object({ objectKey: z.string().nullable(), updatedAt: z.number() }),
   ),
   canWrite: z.boolean(),
+  // The chosen main document's path. See `projectMainFile`.
+  mainFile: z.string().nullable().default(null),
   // Changes whenever the project's review comments change. Absent for
   // share-link guests.
   commentsVersion: z.string().optional(),

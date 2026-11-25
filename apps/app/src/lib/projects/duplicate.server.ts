@@ -11,8 +11,8 @@ import {
 
 import { availableProjectName, type LockProject } from "./access";
 
-// Copies a readable project's saved sources, formatting, and spelling settings
-// into a new personal project. Collaborators, share links, comments, chats,
+// Copies a readable project's saved sources, main document, formatting, and
+// spelling settings into a new personal project. Collaborators, share links, comments, chats,
 // tags, the Git remote, and builds stay with the original.
 export async function duplicateProject({
   db,
@@ -97,6 +97,7 @@ export async function duplicateProject({
       formatWrap: source.formatWrap,
       formatWidth: source.formatWidth,
       spellcheckLanguage: source.spellcheckLanguage,
+      mainFile: source.mainFile,
     });
     if (copies.length) await tx.insert(projectNode).values(copies);
     return { id, name };

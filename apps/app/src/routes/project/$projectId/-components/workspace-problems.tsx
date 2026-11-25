@@ -1,5 +1,7 @@
+import { IconSparkles } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 
+import { problemPrompt } from "#/lib/ai/editor";
 import {
   useWorkspace,
   useWorkspaceActions,
@@ -7,7 +9,7 @@ import {
 } from "#/providers/workspace-provider";
 
 export function WorkspaceProblems() {
-  const { reveal, addReference } = useWorkspaceActions();
+  const { reveal, addReference, askAi } = useWorkspaceActions();
   const { canWrite } = useWorkspace();
   const { allProblems } = useWorkspaceDiagnostics();
   return (
@@ -38,6 +40,18 @@ export function WorkspaceProblems() {
                 </span>
                 {problem.message}
               </Button>
+              {canWrite && problem.severity !== "info" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  aria-label={`Fix with AI: ${problem.message}`}
+                  onClick={() => askAi(problemPrompt(problem))}
+                >
+                  <IconSparkles />
+                  Fix with AI
+                </Button>
+              )}
               {problem.citation && canWrite && (
                 <Button
                   variant="ghost"

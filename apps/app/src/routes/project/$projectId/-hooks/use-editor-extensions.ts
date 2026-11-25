@@ -143,6 +143,7 @@ export function useEditorExtensions({
   problems,
   onSyntaxProblems,
   onAddReference,
+  onFixWithAi,
   onRevealPdf,
   scrollAnchor,
   onError,
@@ -163,6 +164,7 @@ export function useEditorExtensions({
   problems?: LatexProblem[];
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
   onAddReference?: (key?: string) => void;
+  onFixWithAi?: (problem: { line: number; message: string }) => void;
   onRevealPdf?: (line: number) => void;
   scrollAnchor: RefObject<ScrollAnchor | undefined>;
   onError: (message: string) => void;
@@ -175,9 +177,12 @@ export function useEditorExtensions({
   syntaxCallback.current = onSyntaxProblems;
   const addReferenceRef = useRef(onAddReference);
   addReferenceRef.current = onAddReference;
+  const fixWithAiRef = useRef(onFixWithAi);
+  fixWithAiRef.current = onFixWithAi;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const canAddReference = !!onAddReference;
+  const canFixWithAi = !!onFixWithAi;
 
   // Vim and Emacs load on first use; the default keys apply until then.
   const [, setKeymapLoads] = useState(0);
@@ -216,8 +221,11 @@ export function useEditorExtensions({
         addReference: canAddReference
           ? (key) => addReferenceRef.current?.(key)
           : undefined,
+        fixWithAi: canFixWithAi
+          ? (problem) => fixWithAiRef.current?.(problem)
+          : undefined,
       }),
-    [filename, completion, canAddReference],
+    [filename, completion, canAddReference, canFixWithAi],
   );
 
   // Its plugins keep the configuration they were created with, so this must

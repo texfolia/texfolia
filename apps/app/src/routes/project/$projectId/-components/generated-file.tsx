@@ -81,6 +81,10 @@ export function GeneratedFile({
         : null,
     [loaded, params.path, url],
   );
+  // The last PDF shows, in its place, until the next version has loaded.
+  const output = held ?? pdf;
+  const [lastOutput, setLastOutput] = useState(output);
+  if (output && output !== lastOutput) setLastOutput(output);
   if (!file)
     return (
       <p role="status" className="p-4 text-sm">
@@ -89,8 +93,8 @@ export function GeneratedFile({
     );
   const content = loaded?.url === url ? loaded : null;
   if (/\.pdf$/i.test(file.path)) {
-    const output = held ?? pdf;
-    if (!output)
+    const shown = output ?? lastOutput;
+    if (!shown)
       return (
         <p role={error ? "alert" : "status"} className="p-3 text-sm">
           {error || "Loading PDF…"}
@@ -106,15 +110,23 @@ export function GeneratedFile({
             Out of date, recompile
           </p>
         )}
+        {error && !output && (
+          <p
+            role="alert"
+            className="text-destructive border-b px-2 py-1 text-xs"
+          >
+            {error}
+          </p>
+        )}
         <div className="min-h-0 flex-1">
           <Suspense
             fallback={<p className="p-3 text-sm">Loading PDF viewer…</p>}
           >
             <PdfViewer
-              file={output}
+              file={shown}
               filename={file.path}
               sync={
-                output === compiledPdf && synctex
+                shown === compiledPdf && synctex
                   ? {
                       index: synctex,
                       reveal,

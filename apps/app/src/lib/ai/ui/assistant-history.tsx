@@ -17,11 +17,15 @@ import { Input } from "@texfolia/ui/input";
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { z } from "zod";
+
+import type { Store } from "#/lib/external-store";
 
 import {
   threadHistorySchema,
@@ -59,6 +63,7 @@ export async function assistantJson(
 
 export function AssistantHistory({
   endpoint: assistantEndpoint,
+  prompt,
   children,
   historyOpen,
   historyWidth,
@@ -78,6 +83,8 @@ export function AssistantHistory({
   onShowAgents: () => void;
   onCloseAgents: () => void;
   endpoint: string;
+  /** A request from the editor, which starts a chat when there is none. */
+  prompt: Store<string | null>;
   children: (
     thread: AssistantThread,
     messages: StoredMessage[],
@@ -196,6 +203,13 @@ export function AssistantHistory({
       setLoadingMore(false);
     }
   }
+  const requested = useSyncExternalStore(prompt.subscribe, prompt.get) !== null;
+  const startRequested = useEffectEvent(() => {
+    if (!selected && !mutation && !error) void create();
+  });
+  useEffect(() => {
+    if (requested && !loading) startRequested();
+  }, [requested, loading]);
   const refresh = useCallback(() => {
     void loadList().catch(() => {});
   }, [loadList]);

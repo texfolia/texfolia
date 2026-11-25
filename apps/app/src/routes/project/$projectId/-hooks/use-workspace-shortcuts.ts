@@ -12,6 +12,8 @@ type WorkspaceShortcut = Extract<
   | "nextTab"
   | "previousTab"
   | "projectSearch"
+  | "quickOpen"
+  | "commandPalette"
   | "sidebar"
   | "panel"
 >;
@@ -43,6 +45,11 @@ export function useWorkspaceShortcuts(
   useAppShortcut("nextTab", actions.nextTab, options);
   useAppShortcut("previousTab", actions.previousTab, options);
   useAppShortcut("projectSearch", actions.projectSearch, options);
+  // Wherever focus is, or the browser would print the page instead.
+  useAppShortcut("quickOpen", actions.quickOpen, { enabled: !paused });
+  useAppShortcut("commandPalette", actions.commandPalette, {
+    enabled: !paused,
+  });
   useAppShortcut("sidebar", actions.sidebar, options);
   useAppShortcut("panel", actions.panel, options);
 }

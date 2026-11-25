@@ -5,6 +5,7 @@ import { ensureSession } from "#/lib/auth/auth.functions";
 import {
   createProjectSchema,
   updateProjectFormattingSchema,
+  updateProjectMainFileSchema,
   updateProjectSpellingSchema,
   renameProjectSchema,
   projectTagsSchema,
@@ -166,6 +167,18 @@ export const updateProjectSpelling = createServerFn({ method: "POST" })
     const session = await ensureSession();
     const server = await import("./project.server");
     return server.updateProjectSpelling({
+      db: context.db,
+      ownerId: session.user.id,
+      data,
+    });
+  });
+
+export const updateProjectMainFile = createServerFn({ method: "POST" })
+  .validator(updateProjectMainFileSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project.server");
+    return server.updateProjectMainFile({
       db: context.db,
       ownerId: session.user.id,
       data,

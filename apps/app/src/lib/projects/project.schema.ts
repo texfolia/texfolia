@@ -4,6 +4,8 @@ import { z } from "zod";
 import { spellingLanguageSchema } from "#/lib/editor/spelling/languages";
 import { sourceContentSchema } from "#/lib/storage";
 
+import { isMainFileCandidate } from "./main-file";
+
 export const projectNameSchema = z.string().trim().min(1, {
   message: "Please enter a project name.",
 });
@@ -65,6 +67,14 @@ export const projectFormattingSchema = z.object({
 export const updateProjectFormattingSchema = z.object({
   projectId: z.uuid(),
   formatting: projectFormattingSchema,
+});
+
+export const updateProjectMainFileSchema = z.object({
+  projectId: z.uuid(),
+  /** Null returns to the default: main.tex, else the first .tex file. */
+  mainFile: sourcePathSchema
+    .refine(isMainFileCandidate, "Choose a .tex file.")
+    .nullable(),
 });
 
 export const updateProjectSpellingSchema = z.object({

@@ -94,13 +94,20 @@ export class CollaborativeDocuments {
     };
   }
 
-  /** Edits a document, connecting it first when it is not open. */
-  async edit(id: string, run: (file: CollaborativeFile) => void) {
+  /**
+   * Edits a document, connecting it first when it is not open. An edit that
+   * depends on the latest text waits for the server's, not a cached copy.
+   */
+  async edit(
+    id: string,
+    run: (file: CollaborativeFile) => void,
+    { latest = false }: { latest?: boolean } = {},
+  ) {
     const release = this.hold(id);
     try {
       const file = this.files.get(id);
       if (!file) throw new Error("This file is not available for editing.");
-      await file.whenReady();
+      await (latest ? file.whenConnected() : file.whenReady());
       run(file);
     } finally {
       release();

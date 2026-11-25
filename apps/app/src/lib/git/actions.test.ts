@@ -129,6 +129,7 @@ function createHarness({
     formatWrap: true,
     formatWidth: 80,
     spellcheckLanguage: "en-US",
+    mainFile: null,
     createdAt: new Date(1),
     updatedAt: new Date(1),
     deletedAt: null,

@@ -37,6 +37,12 @@ export function updateProjectSpelling(
   return projects.updateProjectSpelling({ ...args, lock: lockProject });
 }
 
+export function updateProjectMainFile(
+  args: Locked<Parameters<typeof projects.updateProjectMainFile>[0]>,
+) {
+  return projects.updateProjectMainFile({ ...args, lock: lockProject });
+}
+
 export function renameProject(
   args: Locked<Parameters<typeof projects.renameProject>[0]>,
 ) {
