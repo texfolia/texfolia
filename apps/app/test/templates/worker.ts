@@ -8,6 +8,7 @@ import {
   projectCollaborator,
   projectNode,
   template,
+  templatePublication,
   user,
 } from "@texfolia/db/schema";
 import { seedTemplates } from "@texfolia/db/seed-templates";
@@ -20,6 +21,7 @@ import { type SourceBucket, sweepProjectSources } from "#/lib/storage/server";
 import { publishTemplateSchema, templateSnapshotSchema } from "#/lib/templates";
 import {
   collectTemplateObjects,
+  deleteTemplate,
   findTemplate,
   getTemplate,
   listTemplates,
@@ -865,10 +867,14 @@ export default {
       );
       assert.equal(submissions.size, 4);
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60_000);
-      await db
-        .update(template)
-        .set({ createdAt: twoHoursAgo })
-        .where(eq(template.ownerId, viewerId));
+      // The limits count publications, not the templates that are left.
+      const backdatePublications = () =>
+        db
+          .update(templatePublication)
+          .set({ createdAt: twoHoursAgo })
+          .where(eq(templatePublication.userId, viewerId));
+      await backdatePublications();
+      let lastPublished = "";
       for (let index = 0; index < 7; index++) {
         const additional = await publishTemplate({
           db,
@@ -876,11 +882,19 @@ export default {
           userId: viewerId,
           data: { ...data, projectId: personal.id },
         });
-        await db
-          .update(template)
-          .set({ createdAt: twoHoursAgo })
-          .where(eq(template.id, additional.id));
+        lastPublished = additional.id;
+        await backdatePublications();
       }
+      await deleteTemplate({ db, userId: viewerId, templateId: lastPublished });
+      assert.equal(
+        await getTemplate({
+          db,
+          templateId: lastPublished,
+          userId: viewerId,
+        }),
+        null,
+      );
+      // Deleting a template does not make room for another.
       await assert.rejects(
         publishTemplate({
           db,
@@ -944,7 +958,9 @@ export default {
           stored &&
             stored.license === "CC0-1.0" &&
             stored.ownerId === null &&
-            stored.status === "approved",
+            stored.status === "approved" &&
+            stored.rejectionReason === null &&
+            stored.unpublishedAt === null,
         );
         const originalStarter = templateStarters.find(
           (starter) => starter.title === seeded.title,

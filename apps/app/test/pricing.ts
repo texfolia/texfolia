@@ -268,15 +268,28 @@ try {
   const teammate = await pageFor(memberId);
   await teammate.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await teammate
-    .getByText(
-      "Only an organization owner or admin can manage billing and members.",
-    )
+    .getByText("Only an organization owner or admin can manage billing.")
     .waitFor();
   assert.equal(
     await teammate
-      .getByRole("button", { name: /checkout|Remove member|Send invitation/ })
+      .getByRole("button", { name: /checkout|Manage subscription|Save cap/ })
       .count(),
     0,
+  );
+  await teammate
+    .getByRole("link", { name: "See members", exact: true })
+    .click();
+  await teammate
+    .getByRole("button", { name: "Leave organization", exact: true })
+    .waitFor();
+  assert.equal(
+    await teammate
+      .getByRole("button", {
+        name: /^Remove|Send invitation|Rename|Delete organization/,
+      })
+      .count(),
+    0,
+    "Members cannot manage the organization",
   );
   await teammate.goto(`${origin}/settings/billing?organizationId=unrelated`);
   await teammate
@@ -299,12 +312,21 @@ try {
   );
   await owner.goto(`${origin}/settings/billing?organizationId=${orgId}`);
   await owner
+    .getByRole("link", { name: "Manage members and roles", exact: true })
+    .click();
+  await owner
+    .getByRole("button", { name: "Remove Billing reader", exact: true })
+    .click();
+  await owner
+    .getByRole("alertdialog")
     .getByRole("button", { name: "Remove member", exact: true })
     .click();
   await owner
     .getByRole("status")
     .filter({ hasText: "Member removed" })
     .waitFor();
+  await owner.goto(`${origin}/settings/billing?organizationId=${orgId}`);
+  await owner.getByRole("heading", { name: "Research group · Team" }).waitFor();
   assert.match(
     await owner.locator("main").first().innerText(),
     /1 member × \$20 USD\/month = \$20 USD\/month/,
