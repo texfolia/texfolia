@@ -53,6 +53,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
 import { useEffect, useRef, useState } from "react";
 
+import { readSession } from "#/lib/session-storage";
 import {
   useProjects,
   useProjectsPagination,
@@ -85,7 +86,7 @@ export function ProjectList({
   });
   useAppShortcut("newProject", () => setCreating(true));
   useEffect(() => {
-    if (sessionStorage.getItem("texfolia.git.import")) setCreating(true);
+    if (readSession("texfolia.git.import")) setCreating(true);
   }, []);
   const table = useTable({
     key: "projects",

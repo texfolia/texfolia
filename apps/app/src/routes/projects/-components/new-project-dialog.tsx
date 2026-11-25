@@ -15,6 +15,7 @@ import {
 import { Input } from "@texfolia/ui/input";
 import { useEffect, useState } from "react";
 
+import { readSession } from "#/lib/session-storage";
 import {
   getTemplateAccount,
   listTemplates,
@@ -227,7 +228,7 @@ export function NewProjectDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [source, setSource] = useState<Source | null>(() =>
-    sessionStorage.getItem("texfolia.git.import") ? "git" : null,
+    readSession("texfolia.git.import") ? "git" : null,
   );
   const [pending, setPending] = useState(false);
   const selection = sources.find((item) => item.id === source);

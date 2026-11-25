@@ -8,6 +8,7 @@ import {
   RangeSet,
   StateEffect,
   StateField,
+  ViewPlugin,
 } from "@uiw/react-codemirror";
 
 export type CommentRange = { id: string; from: number; to: number };
@@ -146,15 +147,40 @@ export function commentRangesOf(state: EditorState) {
   return state.field(commentState, false)?.ranges ?? [];
 }
 
+// CodeMirror hides its gutters from assistive technology. The comment buttons
+// are controls, so only the other gutters stay hidden.
+const exposeMarkers = ViewPlugin.define((view) => {
+  const expose = () => {
+    const gutter = view.dom.querySelector(".cm-comment-gutter");
+    const gutters = gutter?.parentElement;
+    if (!gutters) return;
+    gutters.removeAttribute("aria-hidden");
+    for (const other of gutters.children)
+      if (other !== gutter) other.setAttribute("aria-hidden", "true");
+  };
+  // After the gutters exist: another plugin creates them.
+  const schedule = () =>
+    view.requestMeasure({ read: () => {}, write: expose, key: expose });
+  schedule();
+  return {
+    update({ transactions }) {
+      if (transactions.some((transaction) => transaction.reconfigured))
+        schedule();
+    },
+  };
+});
+
 export function commentRanges(onSelect: (id: string) => void) {
   return [
     commentState,
+    exposeMarkers,
     gutter({
       class: "cm-comment-gutter",
       markers,
       initialSpacer: () => new CommentMarker([], false),
       domEventHandlers: {
-        mousedown(view, line) {
+        // A click also comes from the keyboard and assistive technology.
+        click(view, line) {
           const ids = view.state
             .field(commentState)
             .ranges.filter(
@@ -191,12 +217,19 @@ export function commentRanges(onSelect: (id: string) => void) {
       ".cm-comment-marker-active, .cm-comment-marker:hover": {
         color: "var(--primary)",
       },
+      ".cm-comment-marker:focus-visible": {
+        outline: "2px solid var(--ring)",
+        borderRadius: "2px",
+      },
       ".cm-comment-range": {
-        backgroundColor: "rgb(245 158 11 / 0.2)",
-        borderBottom: "2px solid rgb(245 158 11 / 0.6)",
+        backgroundColor:
+          "color-mix(in srgb, var(--highlight) 20%, transparent)",
+        borderBottom:
+          "2px solid color-mix(in srgb, var(--highlight) 60%, transparent)",
       },
       ".cm-comment-range-active": {
-        backgroundColor: "rgb(245 158 11 / 0.4)",
+        backgroundColor:
+          "color-mix(in srgb, var(--highlight) 40%, transparent)",
       },
     }),
   ];

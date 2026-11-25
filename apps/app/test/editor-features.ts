@@ -334,7 +334,7 @@ try {
     0,
   );
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Compile status" }).click();
+  await page.getByRole("button", { name: /^Compile status:/ }).click();
   await eventually(() => compiled, "thesis.tex", "The choice is compiled");
   await page.keyboard.press("Control+,");
   await page.getByRole("tab", { name: "Project", exact: true }).click();

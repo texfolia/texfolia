@@ -42,8 +42,7 @@ import {
   projectProblemsChanged,
 } from "#/lib/editor/latex/language";
 import { markdownSupport } from "#/lib/editor/markdown";
-
-export type ScrollAnchor = { pos: number; margin: number };
+import type { ScrollAnchor } from "#/lib/editor/position";
 
 const none: Extension = [];
 

@@ -212,3 +212,33 @@ test("theme metadata loads neither CodeMirror nor Zod, which every page would lo
   expect(inputs.some((input) => input.endsWith("themes.ts"))).toBe(true);
   expect(inputs.filter((input) => input.includes("node_modules"))).toEqual([]);
 });
+
+/** WCAG contrast of two hex colors. */
+function contrast(a: string, b: string) {
+  const luminance = (color: string) => {
+    const hex = color.slice(1);
+    const digits = hex.length < 6 ? hex.replace(/./g, "$&$&") : hex;
+    const [red, green, blue] = [0, 2, 4].map((at) => {
+      const value = parseInt(digits.slice(at, at + 2), 16) / 255;
+      return value <= 0.03928
+        ? value / 12.92
+        : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+  };
+  const [low, high] = [luminance(a), luminance(b)].sort((x, y) => x - y);
+  return (high! + 0.05) / (low! + 0.05);
+}
+
+test("status colors stand out from every theme's background", () => {
+  for (const definition of themeCatalog) {
+    const { variables } = resolveTheme(definition);
+    for (const name of ["--success", "--warning", "--info"] as const)
+      // WCAG 1.4.11, for graphics such as a compile's status dot.
+      expect({
+        theme: definition.id,
+        name,
+        visible: contrast(variables[name], definition.settings.background) >= 3,
+      }).toEqual({ theme: definition.id, name, visible: true });
+  }
+});

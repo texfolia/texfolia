@@ -75,6 +75,11 @@ export function resolveTheme(definition: ThemeDefinition) {
     "--accent": accent,
     "--accent-foreground": fg,
     "--destructive": mode === "dark" ? "#f48771" : "#b42318",
+    "--success": mode === "dark" ? "#3fb950" : "#1a7f37",
+    "--warning": mode === "dark" ? "#d29922" : "#9a6700",
+    "--info": mode === "dark" ? "#58a6ff" : "#0969da",
+    // Marks text that has comments, behind the text itself.
+    "--highlight": "#f59e0b",
     "--border": border,
     "--input": surface,
     "--input-foreground": fg,
@@ -105,6 +110,9 @@ export function resolveTheme(definition: ThemeDefinition) {
     "--pdf-surround": mix(9),
     "--pdf-original-surround": "#e4e4e7",
     "--pdf-original-foreground": "#242424",
+    // Search results, over pages that are white whatever the theme.
+    "--pdf-mark": "#ffdf2080",
+    "--pdf-mark-current": "#ff690099",
   };
   return { id, name, mode, variables, settings };
 }

@@ -153,7 +153,7 @@ export function WorkspaceStatusBar({
         size="xs"
         disabled={compileDisabled}
         onClick={onCompile}
-        aria-label="Compile status"
+        aria-label={`Compile status: ${compileStatus}`}
         title={compileStatus}
       >
         {compileStatus === "Compiling…" ? (

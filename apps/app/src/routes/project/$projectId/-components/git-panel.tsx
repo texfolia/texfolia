@@ -1,255 +1,24 @@
 import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-} from "@texfolia/ui/context-menu";
-import { Input } from "@texfolia/ui/input";
-import { Textarea } from "@texfolia/ui/textarea";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { z } from "zod";
+import { Label } from "@texfolia/ui/label";
+import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
+import { useId, useState } from "react";
 
-import { GitRemoteForm, connectGitAccount } from "#/components/git-remote-form";
-import {
-  gitProvider,
-  gitProviders,
-  type GitAction,
-  type GitResult,
-} from "#/lib/git";
-import { gitAction } from "#/lib/git/git.functions";
-import { useProjectFiles } from "#/providers/project-files-provider";
-import {
-  useWorkspace,
-  useWorkspaceActions,
-} from "#/providers/workspace-provider";
+import { GitRemoteForm } from "#/components/git-remote-form";
+import { gitProvider, gitProviders, type GitStatus } from "#/lib/git";
+import { useWorkspace } from "#/providers/workspace-provider";
 
-import {
-  decideGitStatusRefresh,
-  type GitSyncedSnapshot,
-} from "../-hooks/git-status-sync";
+import { type Git, useGit } from "../-hooks/use-git";
+import { GitChanges } from "./git-changes";
+import { GitBranchForm, GitCommitForm } from "./git-commit";
 
 const hostedNotice =
   "Texfolia no longer hosts Git repositories. This project still has history stored here. Link an empty repository to push it, or remove it.";
 
-type GitError = { source: "status" | "action"; message: string };
-
 export function GitPanel({ visible }: { visible: boolean }) {
-  const { projectId, drafts, reveal, reportGitBranch, reportGitFailure } =
-    useWorkspaceActions();
-  const { canWrite, collaboration } = useWorkspace();
-  const files = useProjectFiles();
-  const sourcesVersion = useSyncExternalStore(
-    files.subscribe,
-    () => files.getStatus().sourcesVersion,
-    () => files.getStatus().sourcesVersion,
-  );
-  const gitVersion = useSyncExternalStore(
-    files.subscribe,
-    () => files.getStatus().gitVersion,
-    () => files.getStatus().gitVersion,
-  );
-  const [result, setResult] = useState<GitResult | null>(null);
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState<GitError | null>(null);
-  const [notice, setNotice] = useState("");
-  const [message, setMessage] = useState("");
-  const messageKey = `texfolia.git-message.${projectId}`;
-  useEffect(() => {
-    setMessage(sessionStorage.getItem(messageKey) ?? "");
-  }, [messageKey]);
-  function changeMessage(value: string) {
-    setMessage(value);
-    sessionStorage.setItem(messageKey, value);
-  }
-  const [branch, setBranch] = useState("");
-  const [unlinking, setUnlinking] = useState(false);
-  const [pageVisible, setPageVisible] = useState(
-    () =>
-      typeof document === "undefined" || document.visibilityState !== "hidden",
-  );
-  useEffect(() => {
-    const update = () => setPageVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", update);
-    return () => document.removeEventListener("visibilitychange", update);
-  }, []);
-  const panelVisible = visible && pageVisible;
-  const request = useRef(0);
-  const synced = useRef<GitSyncedSnapshot | null>(null);
-  const wasVisible = useRef(false);
-  const diffOpen = Boolean(result?.diff);
-
-  useEffect(() => {
-    if (result) reportGitBranch(result.status.branch);
-  }, [result, reportGitBranch]);
-
-  const refreshStatus = useCallback(
-    async (kind: "status" | "diff" = "status") => {
-      const sequence = ++request.current;
-      const latest = files.getStatus();
-      synced.current = {
-        projectId,
-        sourcesVersion: latest.sourcesVersion,
-        gitVersion: latest.gitVersion,
-        hasRepo: synced.current?.hasRepo ?? null,
-        failed: false,
-      };
-      try {
-        const next = await gitAction({
-          data: { projectId, action: { kind } },
-        });
-        if (sequence !== request.current) return;
-        synced.current = {
-          ...synced.current,
-          hasRepo: Boolean(next.status.branch),
-          failed: false,
-        };
-        setResult(next);
-        setError((current) => (current?.source === "status" ? null : current));
-      } catch (failure: unknown) {
-        if (sequence !== request.current) return;
-        synced.current = {
-          ...synced.current,
-          failed: true,
-        };
-        reportGitFailure(failure);
-        setError({
-          source: "status",
-          message:
-            failure instanceof Error ? failure.message : "Could not load git.",
-        });
-      }
-    },
-    [files, projectId, reportGitFailure],
-  );
-
-  useEffect(() => {
-    const reopened = panelVisible && !wasVisible.current;
-    wasVisible.current = panelVisible;
-    const hasUnsavedDrafts = [...drafts.values()].some(
-      (draft) => draft.value !== draft.savedValue,
-    );
-    const decision = decideGitStatusRefresh({
-      visible: panelVisible,
-      busy: Boolean(busy),
-      projectId,
-      sourcesVersion,
-      gitVersion,
-      hasUnsavedDrafts,
-      reopened,
-      synced: synced.current,
-    });
-    if (decision.kind === "hydrate") {
-      synced.current = decision.synced;
-      return;
-    }
-    if (decision.kind === "refresh")
-      void refreshStatus(diffOpen ? "diff" : "status");
-  }, [
-    panelVisible,
-    busy,
-    projectId,
-    sourcesVersion,
-    gitVersion,
-    drafts,
-    diffOpen,
-    refreshStatus,
-  ]);
-
-  async function save() {
-    await files.refresh();
-    for (const file of collaboration.values()) {
-      const state = file.getStatus();
-      if (!state.ready || !state.connected)
-        throw new Error(
-          "Reconnect all open files before using git. Your local drafts are kept.",
-        );
-      if (state.canWrite) await file.save();
-    }
-  }
-  async function act(action: Exclude<GitAction, { kind: "import" | "link" }>) {
-    setBusy(action.kind);
-    setError(null);
-    setNotice("");
-    const sequence = ++request.current;
-    try {
-      if (canWrite) await save();
-      const next = await gitAction({ data: { projectId, action } });
-      if (sequence !== request.current) return;
-      setResult(next);
-      await files.refresh();
-      const latest = files.getStatus();
-      synced.current = {
-        projectId,
-        sourcesVersion: latest.sourcesVersion,
-        gitVersion: latest.gitVersion,
-        hasRepo: Boolean(next.status.branch),
-        failed: false,
-      };
-      if (action.kind === "commit") {
-        setMessage("");
-        sessionStorage.removeItem(messageKey);
-      }
-      if (action.kind === "branch") setBranch("");
-      if (action.kind === "unlink") setUnlinking(false);
-      if (action.kind === "push") setNotice("Branch pushed.");
-      if (action.kind === "pull") setNotice("Branch pulled.");
-    } catch (failure) {
-      if (sequence !== request.current) return;
-      if (action.kind === "status") reportGitFailure(failure);
-      setError({
-        source: action.kind === "status" ? "status" : "action",
-        message:
-          failure instanceof Error
-            ? failure.message
-            : "Git action failed. Try again.",
-      });
-    } finally {
-      setBusy("");
-    }
-  }
-  async function generate() {
-    setBusy("generate");
-    setError(null);
-    setNotice("");
-    try {
-      await save();
-      const response = await fetch(`/api/ai/${projectId}?git-message=1`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      const body: unknown = await response.json();
-      if (!response.ok) {
-        const error = z.object({ error: z.string() }).safeParse(body);
-        throw new Error(
-          error.success ? error.data.error : "Could not generate a message.",
-        );
-      }
-      changeMessage(z.object({ message: z.string() }).parse(body).message);
-      setNotice("Review the suggested message before committing.");
-    } catch (failure) {
-      setError({
-        source: "action",
-        message:
-          failure instanceof Error
-            ? failure.message
-            : "Could not generate a message.",
-      });
-    } finally {
-      setBusy("");
-    }
-  }
-  const status = result?.status;
-  // A repository from the removed in-app initialize: history, but no remote.
-  const hosted = !!status && !status.remote && !!status.branch;
+  const { canWrite } = useWorkspace();
+  const git = useGit(visible);
+  const { status, error, notice, busy } = git;
   return (
     <section aria-label="Git" data-testid="git-panel">
       <div className="space-y-3 p-2 text-xs" aria-busy={!!busy}>
@@ -258,381 +27,234 @@ export function GitPanel({ visible }: { visible: boolean }) {
             role="alert"
             className="text-destructive break-words whitespace-pre-wrap"
           >
-            {error.message}
+            {error}
           </p>
         )}
         {notice && <p role="status">{notice}</p>}
         {!status && !error && <p role="status">Loading repository…</p>}
         {!status && error && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setError(null);
-              void refreshStatus();
-            }}
-          >
+          <Button size="sm" variant="ghost" onClick={git.retry}>
             Try again
           </Button>
         )}
-        {status &&
-          !status.remote &&
-          (canWrite ? (
-            <div className="space-y-3">
-              <p className="font-medium">Link a repository</p>
-              <p className="text-muted-foreground">
-                {hosted
-                  ? hostedNotice
-                  : `Git is optional and works through ${gitProviders.map((p) => p.label).join(" or ")}. Link an empty repository to commit, push and pull this project.`}
-              </p>
-              <GitRemoteForm
-                mode="link"
-                disabled={!!busy}
-                onConnect={async (url) => {
-                  setBusy("link");
-                  setError(null);
-                  const sequence = ++request.current;
-                  try {
-                    await save();
-                    const next = await gitAction({
-                      data: {
-                        projectId,
-                        action: { kind: "link", remote: url },
-                      },
-                    });
-                    if (sequence !== request.current) return;
-                    setResult(next);
-                    await files.refresh();
-                    const latest = files.getStatus();
-                    synced.current = {
-                      projectId,
-                      sourcesVersion: latest.sourcesVersion,
-                      gitVersion: latest.gitVersion,
-                      hasRepo: Boolean(next.status.branch),
-                      failed: false,
-                    };
-                  } finally {
-                    setBusy("");
-                  }
-                }}
-              />
-            </div>
-          ) : (
-            <p className="text-muted-foreground">
-              {hosted ? hostedNotice : "No repository is linked."}
-            </p>
-          ))}
-        {hosted && canWrite && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={!!busy}
-            onClick={() => void act({ kind: "unlink" })}
-          >
-            {busy === "unlink" ? "Removing…" : "Remove stored history"}
-          </Button>
-        )}
+        {status && !status.remote && <GitUnlinked git={git} status={status} />}
         {status?.branch && status.remote && (
           <>
-            <div className="flex min-w-0 items-center gap-2">
-              {status.remote && (
-                <a
-                  className="min-w-0 flex-1 truncate underline underline-offset-4"
-                  href={status.remote.url.replace(/\.git$/, "")}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {status.remote.url
-                    .replace(/^https:\/\//, "")
-                    .replace(/\.git$/, "")}
-                </a>
-              )}
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label="Refresh git"
-                disabled={!!busy}
-                onClick={() => void act({ kind: "status" })}
-              >
-                <IconRefresh />
-              </Button>
-            </div>
-            {canWrite && status.remote && (
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={!!busy}
-                onClick={async () => {
-                  setBusy("authorize");
-                  setError(null);
-                  try {
-                    if (status.remote)
-                      await connectGitAccount(status.remote.provider);
-                  } catch (failure) {
-                    setError({
-                      source: "action",
-                      message:
-                        failure instanceof Error
-                          ? failure.message
-                          : "Could not connect account.",
-                    });
-                  } finally {
-                    setBusy("");
-                  }
-                }}
-              >
-                Connect {gitProvider(status.remote.provider).label} access
-              </Button>
-            )}
-            <label className="block space-y-1">
-              <span>Current branch</span>
-              <select
-                className="border-input bg-background w-full rounded-md border px-2 py-1.5"
-                value={status.branch ?? ""}
-                disabled={!canWrite || !!busy}
-                onChange={(e) =>
-                  void act({ kind: "checkout", name: e.target.value })
-                }
-              >
-                {[
-                  ...new Set([
-                    ...(status.branch ? [status.branch] : []),
-                    ...status.branches,
-                  ]),
-                ].map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </label>
-            {canWrite && status.remote && (
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={!!busy}
-                onClick={() => void act({ kind: "fetch" })}
-              >
-                Refresh branches
-              </Button>
-            )}
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={!canWrite || !status.remote || !!busy}
-                onClick={() => void act({ kind: "pull" })}
-              >
-                {busy === "pull" ? "Pulling…" : "Pull"}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={
-                  !canWrite ||
-                  !status.remote ||
-                  !!busy ||
-                  !status.commits.length
-                }
-                onClick={() => void act({ kind: "push" })}
-              >
-                {busy === "push" ? "Pushing…" : "Push"}
-              </Button>
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium">
-                  Changes ({status.changes.length})
-                </h3>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={!!busy}
-                  onClick={() => void act({ kind: "diff" })}
-                >
-                  Review diff
-                </Button>
-              </div>
-              {status.changes.length ? (
-                <ul className="max-h-36 overflow-auto">
-                  {status.changes.map((change) => (
-                    <li key={change.path}>
-                      <ContextMenu>
-                        <ContextMenuTrigger
-                          render={<div />}
-                          className="flex gap-2 py-0.5"
-                        >
-                          <span className="text-muted-foreground w-14 shrink-0">
-                            {change.status}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            className="h-auto min-w-0 justify-start text-left whitespace-normal"
-                            onClick={() => reveal(change.path)}
-                          >
-                            {change.path}
-                          </Button>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuItem
-                            disabled={change.status === "deleted"}
-                            onClick={() => reveal(change.path)}
-                          >
-                            Open file
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => void act({ kind: "diff" })}
-                          >
-                            Review diff
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground">Working tree is clean.</p>
-              )}
-            </div>
-            {result?.diff && (
-              <pre
-                tabIndex={0}
-                aria-label="Working tree diff"
-                className="bg-muted max-h-64 overflow-auto rounded p-2 text-xs"
-              >
-                {result.diff}
-              </pre>
-            )}
+            <GitRemote git={git} status={status} remote={status.remote} />
+            <GitChanges git={git} changes={status.changes} />
             {canWrite && (
               <>
-                <form
-                  className="space-y-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void act({ kind: "commit", message });
-                  }}
-                >
-                  <label className="block space-y-1">
-                    <span>Commit message</span>
-                    <Textarea
-                      required
-                      maxLength={5000}
-                      value={message}
-                      onChange={(e) => changeMessage(e.target.value)}
-                      disabled={!!busy}
-                      className="min-h-16 text-xs"
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-1">
-                    <Button
-                      size="sm"
-                      type="submit"
-                      disabled={!!busy || !message.trim()}
-                    >
-                      {busy === "commit" ? "Committing…" : "Commit changes"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                      disabled={!!busy}
-                      onClick={() => void generate()}
-                    >
-                      {busy === "generate"
-                        ? "Generating…"
-                        : "Generate message · Pro"}
-                    </Button>
-                  </div>
-                  <p className="text-muted-foreground">
-                    AI usage is metered. Ignored files and out/ are excluded.
-                  </p>
-                </form>
-                <form
-                  className="flex gap-1"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void act({ kind: "branch", name: branch });
-                  }}
-                >
-                  <Input
-                    aria-label="New branch name"
-                    placeholder="New branch name"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    disabled={!!busy}
-                    required
-                    className="min-w-0 text-xs"
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    type="submit"
-                    disabled={!!busy || !branch.trim()}
-                  >
-                    Create
-                  </Button>
-                </form>
+                <GitCommitForm git={git} />
+                <GitBranchForm git={git} />
               </>
             )}
-            <details>
-              <summary className="cursor-pointer py-1 font-medium">
-                Recent commits ({status.commits.length})
-              </summary>
-              <ol className="max-h-52 space-y-2 overflow-auto py-2">
-                {status.commits.map((commit) => (
-                  <li key={commit.oid}>
-                    <p className="break-words whitespace-pre-wrap">
-                      {commit.message}
-                    </p>
-                    <p className="text-muted-foreground">
-                      {commit.oid.slice(0, 7)} · {commit.author}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-              {!status.commits.length && (
-                <p className="text-muted-foreground">
-                  Make your first commit to start history.
-                </p>
-              )}
-            </details>
-            {canWrite &&
-              status.remote &&
-              (unlinking ? (
-                <div className="space-y-2">
-                  <p>
-                    Unlink this remote? Project files stay here. Local commits
-                    and branches will be removed; push them first to keep them.
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={!!busy}
-                    onClick={() => void act({ kind: "unlink" })}
-                  >
-                    Unlink remote
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={!!busy}
-                    onClick={() => setUnlinking(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={!!busy}
-                  onClick={() => setUnlinking(true)}
-                >
-                  Unlink repository
-                </Button>
-              ))}
+            <GitCommits commits={status.commits} />
+            {canWrite && <GitUnlink git={git} />}
           </>
         )}
       </div>
     </section>
+  );
+}
+
+function GitUnlinked({ git, status }: { git: Git; status: GitStatus }) {
+  const { canWrite } = useWorkspace();
+  // A repository from the removed in-app initialize: history, but no remote.
+  const hosted = !!status.branch;
+  if (!canWrite)
+    return (
+      <p className="text-muted-foreground">
+        {hosted ? hostedNotice : "No repository is linked."}
+      </p>
+    );
+  return (
+    <>
+      <div className="space-y-3">
+        <p className="font-medium">Link a repository</p>
+        <p className="text-muted-foreground">
+          {hosted
+            ? hostedNotice
+            : `Git is optional and works through ${gitProviders.map((p) => p.label).join(" or ")}. Link an empty repository to commit, push and pull this project.`}
+        </p>
+        <GitRemoteForm mode="link" disabled={!!git.busy} onConnect={git.link} />
+      </div>
+      {hosted && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!!git.busy}
+          onClick={() => void git.act({ kind: "unlink" })}
+        >
+          {git.busy === "unlink" ? "Removing…" : "Remove stored history"}
+        </Button>
+      )}
+    </>
+  );
+}
+
+function GitRemote({
+  git,
+  status,
+  remote,
+}: {
+  git: Git;
+  status: GitStatus;
+  remote: NonNullable<GitStatus["remote"]>;
+}) {
+  const { canWrite } = useWorkspace();
+  const { act } = git;
+  const busy = !!git.busy;
+  const branchId = useId();
+  const url = remote.url.replace(/\.git$/, "");
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-2">
+        <a
+          className="min-w-0 flex-1 truncate underline underline-offset-4"
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {url.replace(/^https:\/\//, "")}
+        </a>
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          aria-label="Refresh git"
+          disabled={busy}
+          onClick={() => void act({ kind: "status" })}
+        >
+          <IconRefresh />
+        </Button>
+      </div>
+      {canWrite && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => void git.authorize(remote.provider)}
+        >
+          Connect {gitProvider(remote.provider).label} access
+        </Button>
+      )}
+      <div className="space-y-1">
+        <Label htmlFor={branchId} className="text-xs font-normal">
+          Current branch
+        </Label>
+        <NativeSelect
+          id={branchId}
+          className="w-full [&_select]:text-xs"
+          value={status.branch ?? ""}
+          disabled={!canWrite || busy}
+          onChange={(event) =>
+            void act({ kind: "checkout", name: event.target.value })
+          }
+        >
+          {[
+            ...new Set([
+              ...(status.branch ? [status.branch] : []),
+              ...status.branches,
+            ]),
+          ].map((name) => (
+            <NativeSelectOption key={name} value={name}>
+              {name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </div>
+      {canWrite && (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => void act({ kind: "fetch" })}
+        >
+          Refresh branches
+        </Button>
+      )}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canWrite || busy}
+          onClick={() => void act({ kind: "pull" })}
+        >
+          {git.busy === "pull" ? "Pulling…" : "Pull"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canWrite || busy || !status.commits.length}
+          onClick={() => void act({ kind: "push" })}
+        >
+          {git.busy === "push" ? "Pushing…" : "Push"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function GitCommits({ commits }: { commits: GitStatus["commits"] }) {
+  return (
+    <details>
+      <summary className="focus-visible:ring-ring cursor-pointer rounded-sm py-1 font-medium outline-none focus-visible:ring-2">
+        Recent commits ({commits.length})
+      </summary>
+      <ol className="max-h-52 space-y-2 overflow-auto py-2">
+        {commits.map((commit) => (
+          <li key={commit.oid}>
+            <p className="break-words whitespace-pre-wrap">{commit.message}</p>
+            <p className="text-muted-foreground">
+              {commit.oid.slice(0, 7)} · {commit.author}
+            </p>
+          </li>
+        ))}
+      </ol>
+      {!commits.length && (
+        <p className="text-muted-foreground">
+          Make your first commit to start history.
+        </p>
+      )}
+    </details>
+  );
+}
+
+function GitUnlink({ git }: { git: Git }) {
+  const [confirming, setConfirming] = useState(false);
+  const busy = !!git.busy;
+  if (!confirming)
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={busy}
+        onClick={() => setConfirming(true)}
+      >
+        Unlink repository
+      </Button>
+    );
+  return (
+    <div className="space-y-2">
+      <p>
+        Unlink this remote? Project files stay here. Local commits and branches
+        will be removed; push them first to keep them.
+      </p>
+      <Button
+        size="sm"
+        variant="destructive"
+        disabled={busy}
+        onClick={() => void git.act({ kind: "unlink" })}
+      >
+        Unlink remote
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={busy}
+        onClick={() => setConfirming(false)}
+      >
+        Cancel
+      </Button>
+    </div>
   );
 }

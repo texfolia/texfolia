@@ -1,4 +1,4 @@
-import { IconRefresh, IconUsers } from "@tabler/icons-react";
+import { IconRefresh } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -71,12 +71,9 @@ export function ProjectAccessPanel({ projectId }: { projectId: string }) {
     }, `Access updated for ${person.name}.`);
   }
   return (
-    <section aria-label="Collaboration" className="border-t text-xs">
+    <section aria-label="Project access" className="text-xs">
       <div className="flex h-8 items-center justify-between border-b px-2">
-        <h2 className="flex items-center gap-1.5 font-medium">
-          <IconUsers className="size-3.5" />
-          Collaboration
-        </h2>
+        <h3 className="font-medium">Project access</h3>
         <Button
           variant="ghost"
           size="icon-xs"

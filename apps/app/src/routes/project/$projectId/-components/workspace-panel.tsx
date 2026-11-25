@@ -1,8 +1,8 @@
 import { IconX } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
-import { useRef } from "react";
 
+import { ResizeHandle } from "#/components/resize-handle";
 import {
   panelHeightBounds,
   type PanelView,
@@ -33,7 +33,15 @@ export function WorkspacePanel({
 }) {
   return (
     <>
-      <PanelResize height={height} onResize={onResize} />
+      <ResizeHandle
+        label="Resize panel"
+        grows="up"
+        size={height}
+        bounds={panelHeightBounds}
+        controls="workspace-panel"
+        onResize={onResize}
+        className="z-10"
+      />
       <Tabs
         value={view}
         onValueChange={(value) => onView(value as PanelView)}
@@ -75,50 +83,5 @@ export function WorkspacePanel({
         </TabsContent>
       </Tabs>
     </>
-  );
-}
-
-function PanelResize({
-  height,
-  onResize,
-}: {
-  height: number;
-  onResize: (height: number) => void;
-}) {
-  const start = useRef({ y: 0, height });
-  const clamp = (value: number) =>
-    Math.max(panelHeightBounds.min, Math.min(panelHeightBounds.max, value));
-  return (
-    <div
-      role="separator"
-      aria-label="Resize panel"
-      aria-orientation="horizontal"
-      aria-controls="workspace-panel"
-      tabIndex={0}
-      aria-valuemin={panelHeightBounds.min}
-      aria-valuemax={panelHeightBounds.max}
-      aria-valuenow={height}
-      className="bg-border hover:bg-ring focus-visible:bg-ring z-10 h-1 shrink-0 cursor-row-resize touch-none outline-none"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-          event.preventDefault();
-          onResize(clamp(height + (event.key === "ArrowUp" ? 16 : -16)));
-        }
-      }}
-      onPointerDown={(event) => {
-        start.current = { y: event.clientY, height };
-        event.currentTarget.setPointerCapture(event.pointerId);
-      }}
-      onPointerMove={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId))
-          onResize(
-            clamp(start.current.height - (event.clientY - start.current.y)),
-          );
-      }}
-      onPointerUp={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId))
-          event.currentTarget.releasePointerCapture(event.pointerId);
-      }}
-    />
   );
 }

@@ -16,13 +16,18 @@ export type SidebarView = z.infer<typeof sidebarViewSchema>;
 export const panelViewSchema = z.enum(["problems", "logs", "terminal"]);
 export type PanelView = z.infer<typeof panelViewSchema>;
 export const panelHeightBounds = { min: 120, max: 640 };
+export const sidebarWidthBounds = { min: 240, max: 600 };
+const sidebarWidth = z
+  .number()
+  .min(sidebarWidthBounds.min)
+  .max(sidebarWidthBounds.max);
 const chromeSchema = z.object({
   historyOpen: z.boolean().default(false),
-  historyWidth: z.number().min(240).max(600).default(240),
+  historyWidth: sidebarWidth.default(240),
   agentsOpen: z.boolean(),
-  agentsWidth: z.number().min(240).max(600),
+  agentsWidth: sidebarWidth,
   rightOpen: z.boolean(),
-  rightWidth: z.number().min(240).max(600),
+  rightWidth: sidebarWidth,
   rightView: sidebarViewSchema,
   // The bottom panel stays closed until the user opens it.
   panelOpen: z.boolean().default(false),

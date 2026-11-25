@@ -8,8 +8,8 @@ import { useEffect, useRef } from "react";
 import {
   SettingsCloseGuard,
   SettingsFooter,
-  UserSettingsSections,
-} from "#/components/settings-dialog";
+} from "#/components/settings/settings-footer";
+import { UserSettings } from "#/components/settings/user-settings";
 import { useSettingsEditing } from "#/providers/settings-provider";
 export const Route = createFileRoute("/settings/preferences")({
   validateSearch: (
@@ -57,7 +57,7 @@ function PreferencesPage() {
         </p>
       </div>
       <fieldset disabled={!settings.ready || settings.saving}>
-        <UserSettingsSections />
+        <UserSettings />
       </fieldset>
       <SettingsFooter onSave={exit} onCancel={exit} />
       <SettingsCloseGuard
