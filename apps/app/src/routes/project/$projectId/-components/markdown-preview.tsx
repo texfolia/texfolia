@@ -2,7 +2,7 @@ import { Markdown } from "@tanstack/markdown/react";
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect } from "react";
 
-import { useWorkspace } from "#/providers/workspace-provider";
+import { useWorkspaceActions } from "#/providers/workspace-provider";
 
 export type MarkdownPreviewParams = { source: string };
 
@@ -11,7 +11,7 @@ export function MarkdownPreview({
   params,
 }: IDockviewPanelProps<MarkdownPreviewParams>) {
   // Follow live edits, even after the file's own tab closes.
-  const { holdDocument } = useWorkspace();
+  const { holdDocument } = useWorkspaceActions();
   const nodeId = api.id.slice("markdown:".length);
   useEffect(() => holdDocument(nodeId), [holdDocument, nodeId]);
   return (

@@ -1,9 +1,15 @@
 import { Button } from "@texfolia/ui/button";
 
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+  useWorkspaceDiagnostics,
+} from "#/providers/workspace-provider";
 
 export function WorkspaceProblems() {
-  const { allProblems, reveal, canWrite, addReference } = useWorkspace();
+  const { reveal, addReference } = useWorkspaceActions();
+  const { canWrite } = useWorkspace();
+  const { allProblems } = useWorkspaceDiagnostics();
   return (
     <section
       aria-label="LaTeX problems"

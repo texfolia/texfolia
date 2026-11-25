@@ -3,12 +3,15 @@ import { redoDepth, undoDepth } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { ContextMenu, ContextMenuTrigger } from "@texfolia/ui/context-menu";
 import CodeMirror, {
+  type EditorState,
   EditorView,
   type ReactCodeMirrorRef,
+  type ViewUpdate,
 } from "@uiw/react-codemirror";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
+import { useStableCallback } from "#/hooks/use-stable-callback";
 import { documentCachingStopped } from "#/lib/collaboration/browser";
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import type { EditorCommand } from "#/lib/editor/editor-command";
@@ -34,9 +37,13 @@ import {
 import { useEditorShortcuts } from "../-hooks/use-editor-shortcuts";
 import { useEditorSpellcheck } from "../-hooks/use-editor-spellcheck";
 import { EditorContextMenu, EditorToolbar } from "./editor-menus";
-import { SymbolPalette, type SymbolPreamble } from "./symbol-palette";
+import { SymbolPalette, type SymbolPreambleSource } from "./symbol-palette";
 
 export type { EditorComments };
+
+// Constants, because a new object makes CodeMirror rebuild its extensions.
+const standaloneSetup = { history: true };
+const collaborativeSetup = { history: false };
 
 type EditorProps = {
   onCursorPosition?: (position: { line: number; column: number }) => void;
@@ -73,7 +80,7 @@ type EditorProps = {
     range?: { from: number; to: number };
   };
   formatSettings?: FormatSettings;
-  preamble?: SymbolPreamble;
+  preamble?: SymbolPreambleSource;
   comments?: EditorComments;
   // Restored once when the view is created.
   initialSnapshot?: EditorSnapshot;
@@ -120,7 +127,12 @@ export function Editor({
   const container = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const openRequest = useRef(0);
-  const [value, setValue] = useState(defaultValue);
+  // The text the editor starts with. CodeMirror owns it from then on.
+  const [initialValue, setInitialValue] = useState(
+    () => collaboration?.text.toString() ?? defaultValue,
+  );
+  const [view, setView] = useState<EditorView | null>(null);
+  const docListeners = useRef(new Set<() => void>());
   const [name, setName] = useState(filename);
   const [downloadedValue, setDownloadedValue] = useState(defaultValue);
   const {
@@ -135,6 +147,7 @@ export function Editor({
   const [status, setStatus] = useState({ undo: false, redo: false });
   const undoManager = collaboration?.undoManager;
   const createdView = useRef<EditorView | null>(null);
+  const text = () => createdView.current?.state.doc.toString() ?? initialValue;
   const scrollAnchor = useRef(initialSnapshot?.scroll);
   const snapshotCallback = useRef(onSnapshot);
   snapshotCallback.current = onSnapshot;
@@ -152,7 +165,8 @@ export function Editor({
     [],
   );
 
-  const modified = value !== (savedValue ?? downloadedValue);
+  // Compared when it matters, not with every keystroke.
+  const isModified = () => text() !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
   const isMarkdown = /\.(?:md|markdown)$/i.test(name);
   const canFormat = isLatex || /\.bib$/i.test(name);
@@ -195,17 +209,18 @@ export function Editor({
   });
   useEffect(() => jumpArrived(), [jump]);
 
+  const warnBeforeUnload = useEffectEvent((event: BeforeUnloadEvent) => {
+    if (!documentCachingStopped() && isModified()) event.preventDefault();
+  });
   useEffect(() => {
-    if (!modified || autosaved) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      if (!documentCachingStopped()) event.preventDefault();
-    };
+    if (autosaved) return;
+    const warn = (event: BeforeUnloadEvent) => warnBeforeUnload(event);
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [modified, autosaved]);
+  }, [autosaved]);
 
   const { commenting, commentExtension, addComment } = useEditorComments({
-    editor,
+    view,
     collaboration,
     comments,
     onError: setError,
@@ -235,7 +250,7 @@ export function Editor({
   });
 
   const extensions = useEditorExtensions({
-    editor,
+    view,
     filename: name,
     isMarkdown,
     collaboration,
@@ -256,13 +271,88 @@ export function Editor({
     onError: setError,
   });
 
+  // Without a main file, packages load in this one.
+  const ownPreamble = useMemo<SymbolPreambleSource>(
+    () => ({
+      filename: name,
+      subscribe(listener) {
+        docListeners.current.add(listener);
+        return () => {
+          docListeners.current.delete(listener);
+        };
+      },
+      getSource: () => createdView.current?.state.doc.toString() ?? "",
+      addPackage(packageName) {
+        const view = createdView.current;
+        if (view) addLatexPackage(packageName)(view);
+      },
+    }),
+    [name],
+  );
+
+  const viewCreated = useStableCallback((view: EditorView) => {
+    createdView.current = view;
+    setView(view);
+    if (initialSnapshot) {
+      const clamp = (position: number) =>
+        Math.min(Math.max(position, 0), view.state.doc.length);
+      const { scroll } = initialSnapshot;
+      view.dispatch({
+        selection: {
+          anchor: clamp(initialSnapshot.anchor),
+          head: clamp(initialSnapshot.head),
+        },
+        effects: scroll
+          ? EditorView.scrollIntoView(clamp(scroll.pos), {
+              y: "start",
+              yMargin: scroll.margin,
+            })
+          : undefined,
+        scrollIntoView: !scroll,
+      });
+    }
+    // Files connect when opened, so a jump can precede the editor.
+    applyJump(view);
+    onCreateEditor?.(view);
+    reportPosition(view.state);
+  });
+  function reportPosition(state: EditorState) {
+    const { head } = state.selection.main;
+    const line = state.doc.lineAt(head);
+    onCursorPosition?.({ line: line.number, column: head - line.from + 1 });
+  }
+  const viewUpdated = useStableCallback((update: ViewUpdate) => {
+    const { state, selectionSet, docChanged, changes } = update;
+    if (docChanged && scrollAnchor.current)
+      scrollAnchor.current = {
+        ...scrollAnchor.current,
+        pos: changes.mapPos(scrollAnchor.current.pos, -1),
+      };
+    if (selectionSet || docChanged) reportPosition(state);
+    if (docChanged) for (const listener of docListeners.current) listener();
+    const next = {
+      undo: undoManager
+        ? undoManager.undoStack.length > 0
+        : undoDepth(state) > 0,
+      redo: undoManager
+        ? undoManager.redoStack.length > 0
+        : redoDepth(state) > 0,
+    };
+    setStatus((previous) =>
+      previous.undo === next.undo && previous.redo === next.redo
+        ? previous
+        : next,
+    );
+  });
+  const changed = useStableCallback((text: string) => onChange?.(text));
+
   async function openFile(file: File) {
     const request = ++openRequest.current;
     try {
       const text = await file.text();
       if (request !== openRequest.current) return;
       if (
-        modified &&
+        isModified() &&
         !window.confirm(
           "Replace your current source? Download it first to keep your changes.",
         )
@@ -278,7 +368,7 @@ export function Editor({
           selection: { anchor: 0 },
         });
       else {
-        setValue(text);
+        setInitialValue(text);
         onChange?.(text);
       }
       view?.focus();
@@ -333,25 +423,17 @@ export function Editor({
           onAddReference={onAddReference ? () => onAddReference() : undefined}
           onCommand={runCommand}
           onDownload={() => {
+            const source = text();
             downloadFile(
-              new Blob([value], { type: "text/plain;charset=utf-8" }),
+              new Blob([source], { type: "text/plain;charset=utf-8" }),
               name,
             );
-            setDownloadedValue(value);
+            setDownloadedValue(source);
           }}
         />
         {isLatex && !readOnly && showSymbols && (
           <SymbolPalette
-            preamble={
-              preamble ?? {
-                source: value,
-                filename: name,
-                addPackage: (packageName) => {
-                  const view = editor.current?.view;
-                  if (view) addLatexPackage(packageName)(view);
-                },
-              }
-            }
+            preamble={preamble ?? ownPreamble}
             onInsert={(symbol) => {
               const view = editor.current?.view;
               if (view) {
@@ -386,71 +468,15 @@ export function Editor({
           </p>
         )}
         <CodeMirror
-          basicSetup={{ history: !collaboration }}
+          basicSetup={collaboration ? collaborativeSetup : standaloneSetup}
           readOnly={readOnly}
           editable={!readOnly}
           ref={editor}
-          onCreateEditor={(view) => {
-            createdView.current = view;
-            if (initialSnapshot) {
-              const clamp = (position: number) =>
-                Math.min(Math.max(position, 0), view.state.doc.length);
-              const { scroll } = initialSnapshot;
-              view.dispatch({
-                selection: {
-                  anchor: clamp(initialSnapshot.anchor),
-                  head: clamp(initialSnapshot.head),
-                },
-                effects: scroll
-                  ? EditorView.scrollIntoView(clamp(scroll.pos), {
-                      y: "start",
-                      yMargin: scroll.margin,
-                    })
-                  : undefined,
-                scrollIntoView: !scroll,
-              });
-            }
-            // Files connect when opened, so a jump can precede the editor.
-            applyJump(view);
-            onCreateEditor?.(view);
-            const line = view.state.doc.lineAt(view.state.selection.main.head);
-            onCursorPosition?.({
-              line: line.number,
-              column: view.state.selection.main.head - line.from + 1,
-            });
-          }}
-          value={value}
-          onChange={(text) => {
-            setValue(text);
-            onChange?.(text);
-          }}
-          onUpdate={({ state, selectionSet, docChanged, changes }) => {
-            if (docChanged && scrollAnchor.current)
-              scrollAnchor.current = {
-                ...scrollAnchor.current,
-                pos: changes.mapPos(scrollAnchor.current.pos, -1),
-              };
-            if (selectionSet || docChanged) {
-              const line = state.doc.lineAt(state.selection.main.head);
-              onCursorPosition?.({
-                line: line.number,
-                column: state.selection.main.head - line.from + 1,
-              });
-            }
-            const next = {
-              undo: undoManager
-                ? undoManager.undoStack.length > 0
-                : undoDepth(state) > 0,
-              redo: undoManager
-                ? undoManager.redoStack.length > 0
-                : redoDepth(state) > 0,
-            };
-            setStatus((previous) =>
-              previous.undo === next.undo && previous.redo === next.redo
-                ? previous
-                : next,
-            );
-          }}
+          onCreateEditor={viewCreated}
+          value={initialValue}
+          // Reading the text costs its whole length, so only when it is used.
+          onChange={onChange ? changed : undefined}
+          onUpdate={viewUpdated}
           extensions={extensions}
           height="100%"
           theme={theme.extension}

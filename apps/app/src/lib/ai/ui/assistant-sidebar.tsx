@@ -21,6 +21,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentProps,
   type ReactNode,
@@ -112,6 +113,10 @@ export function AssistantSidebar({
     },
     [endpoint],
   );
+  const updateConfiguration = useCallback(
+    (config: AiConfiguration) => setAvailability({ kind: "ready", config }),
+    [],
+  );
   const refreshConfiguration = useCallback(() => {
     void load();
   }, [load]);
@@ -198,9 +203,7 @@ export function AssistantSidebar({
               onRefresh={onRefresh}
               endpoint={endpoint}
               config={availability.config}
-              onConfiguration={(config) =>
-                setAvailability({ kind: "ready", config })
-              }
+              onConfiguration={updateConfiguration}
               refresh={refreshConfiguration}
             />
           )}
@@ -262,12 +265,15 @@ function AssistantChat({
       if (parsed.success) throw new Error(parsed.data.error);
     },
   });
+  const wasLoading = useRef(false);
   useEffect(() => {
     onBusy(isLoading);
-    if (!isLoading) {
+    // The sidebar loaded both before showing this chat; a reply changes them.
+    if (wasLoading.current && !isLoading) {
       refresh();
       onRefresh();
     }
+    wasLoading.current = isLoading;
   }, [isLoading, onBusy, refresh, onRefresh]);
   useEffect(() => {
     if (!config.pendingRequests || isLoading) return;

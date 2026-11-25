@@ -7,26 +7,33 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { buildFileUrl } from "#/lib/compile/build";
 import { downloadFile } from "#/lib/storage/browser";
 import { useTheme } from "#/providers/theme-provider";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspaceActions,
+  useWorkspaceBuild,
+} from "#/providers/workspace-provider";
 
 const PdfViewer = lazy(() => import("./pdf"));
 export function GeneratedFile({
   params,
 }: IDockviewPanelProps<{ path: string }>) {
+  const { projectId, reveal } = useWorkspaceActions();
   const {
     build,
-    projectId,
     stale,
     pdf: compiledPdf,
     synctex,
     pdfJump,
-    reveal,
-  } = useWorkspace();
+  } = useWorkspaceBuild();
   const { theme } = useTheme();
   const file = build?.artifacts?.files.find(
     (file) => file.path === params.path,
   );
-  const url = file ? buildFileUrl(projectId, file) : null;
+  // The workspace already holds the project's PDF, so it needs no second copy.
+  const held =
+    !!compiledPdf && !!file && build?.artifacts?.pdf === file.path
+      ? compiledPdf
+      : null;
+  const url = file && !held ? buildFileUrl(projectId, file) : null;
   const [loaded, setLoaded] = useState<{
     url: string;
     blob: Blob;
@@ -82,8 +89,7 @@ export function GeneratedFile({
     );
   const content = loaded?.url === url ? loaded : null;
   if (/\.pdf$/i.test(file.path)) {
-    const output =
-      build?.artifacts?.pdf === file.path ? (compiledPdf ?? pdf) : pdf;
+    const output = held ?? pdf;
     if (!output)
       return (
         <p role={error ? "alert" : "status"} className="p-3 text-sm">

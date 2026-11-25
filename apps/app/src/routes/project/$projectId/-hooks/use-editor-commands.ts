@@ -1,6 +1,10 @@
 import { redo, undo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
-import type { EditorView, ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import type {
+  EditorState,
+  EditorView,
+  ReactCodeMirrorRef,
+} from "@uiw/react-codemirror";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
@@ -26,6 +30,28 @@ export function isEditorCommandDisabled(
   if (command === "undo" && status && !status.undo) return true;
   if (command === "redo" && status && !status.redo) return true;
   return false;
+}
+
+const selectedText = (state: EditorState) =>
+  state.selection.ranges.map(({ from, to }) => state.sliceDoc(from, to));
+
+/**
+ * Whether a clipboard command that started in `before` may still change the
+ * view. The clipboard can wait on a permission prompt, so by now the editor may
+ * be closed or read-only, or other text may be selected. CodeMirror moves the
+ * selection through edits elsewhere, so those don't matter.
+ */
+export function clipboardTargetUnchanged(
+  before: EditorState,
+  view: Pick<EditorView, "state" | "dom">,
+) {
+  if (!view.dom.isConnected || view.state.readOnly) return false;
+  const previous = selectedText(before);
+  const current = selectedText(view.state);
+  return (
+    previous.length === current.length &&
+    previous.every((text, index) => text === current[index])
+  );
 }
 
 /**
@@ -60,8 +86,18 @@ export function useEditorCommands({
   const history = useMemo(
     () =>
       keymapHistory.of({
-        undo: (view) => (undoManager ? undoManager.undo() : undo(view)),
-        redo: (view) => (undoManager ? undoManager.redo() : redo(view)),
+        undo: (view) =>
+          view.state.readOnly
+            ? null
+            : undoManager
+              ? undoManager.undo()
+              : undo(view),
+        redo: (view) =>
+          view.state.readOnly
+            ? null
+            : undoManager
+              ? undoManager.redo()
+              : redo(view),
       }),
     [undoManager],
   );
@@ -71,11 +107,16 @@ export function useEditorCommands({
     const view = editor.current?.view;
     if (!view) return;
     if (isEditorCommandDisabled(command, { readOnly })) return;
-    const selection = view.state.selection.main;
+    const before = view.state;
+    const selection = before.selection.main;
     const copy = async () =>
       navigator.clipboard.writeText(
-        view.state.sliceDoc(selection.from, selection.to),
+        before.sliceDoc(selection.from, selection.to),
       );
+    // A closed editor has nowhere to show the message.
+    const report = (message: string) => {
+      if (view.dom.isConnected) onError(message);
+    };
     switch (command) {
       case "undo":
         if (undoManager) undoManager.undo();
@@ -109,11 +150,14 @@ export function useEditorCommands({
         break;
       case "cut":
         void copy()
-          .then(() =>
-            view.dispatch({
-              changes: { from: selection.from, to: selection.to, insert: "" },
-            }),
-          )
+          .then(() => {
+            if (!clipboardTargetUnchanged(before, view))
+              return report(
+                "The selection changed before it was cut. It was copied instead.",
+              );
+            const { from, to } = view.state.selection.main;
+            view.dispatch({ changes: { from, to }, userEvent: "delete.cut" });
+          })
           .catch(() =>
             onError("Clipboard access failed. Use the cut keyboard shortcut."),
           );
@@ -121,7 +165,16 @@ export function useEditorCommands({
       case "paste":
         void navigator.clipboard
           .readText()
-          .then((text) => view.dispatch(view.state.replaceSelection(text)))
+          .then((text) => {
+            if (!clipboardTargetUnchanged(before, view))
+              return report(
+                "The selection changed before the text was pasted. Paste again.",
+              );
+            view.dispatch(view.state.replaceSelection(text), {
+              userEvent: "input.paste",
+              scrollIntoView: true,
+            });
+          })
           .catch(() =>
             onError(
               "Clipboard access failed. Use the paste keyboard shortcut.",

@@ -29,6 +29,7 @@ import {
   PanelHeader,
 } from "#/components/panel-header";
 import { reportCompilePreview } from "#/lib/compile";
+import { debounce } from "#/lib/debounce";
 import {
   pdfToSource,
   rotatePdfPoint,
@@ -45,6 +46,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url,
 ).toString();
+
+// Each width draws the page again, so a drag draws it once at the end.
+const resizeDelayMs = 150;
 
 type PdfFile = string | File;
 type PdfSync = {
@@ -113,11 +117,24 @@ function PdfPanel({
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
+    const resized = debounce(setWidth, resizeDelayMs);
+    let measured = false;
     const observer = new ResizeObserver(([entry]) => {
-      if (entry) setWidth(entry.contentRect.width);
+      // A hidden tab has no width, and keeps its page for when it is shown.
+      const width = entry?.contentRect.width;
+      if (!width) {
+        resized.cancel();
+        return;
+      }
+      if (measured) resized.schedule(width);
+      else setWidth(width);
+      measured = true;
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      resized.cancel();
+    };
   }, []);
 
   function goToPage(next: number) {

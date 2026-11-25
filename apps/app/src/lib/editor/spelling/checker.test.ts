@@ -18,6 +18,10 @@ function fakeWorker(requests: SpellRequest[], fail = false) {
   const worker = {
     onmessage: null as ((event: { data: SpellResponse }) => void) | null,
     onerror: null as (() => void) | null,
+    terminated: false,
+    terminate() {
+      worker.terminated = true;
+    },
     postMessage(data: SpellRequest) {
       requests.push(data);
       queueMicrotask(() => {
@@ -34,7 +38,7 @@ function fakeWorker(requests: SpellRequest[], fail = false) {
       });
     },
   };
-  return worker as unknown as Worker;
+  return worker as unknown as Worker & { terminated: boolean };
 }
 
 test("reports misspelled words and only sends unseen words", async () => {
@@ -63,15 +67,32 @@ test("suggests corrections once per word", async () => {
 
 test("a worker failure rejects pending checks and restarts on retry", async () => {
   let fail = true;
-  let started = 0;
+  const started: ReturnType<typeof fakeWorker>[] = [];
   const checker = createSpellChecker(() => {
-    started++;
-    return fakeWorker([], fail);
+    const worker = fakeWorker([], fail);
+    started.push(worker);
+    return worker;
   });
   await expect(checker.check("en-US", ["word"])).rejects.toThrow(
     "The spell checker failed to start.",
   );
   fail = false;
   expect(await checker.check("en-US", ["word"])).toEqual(new Set());
-  expect(started).toBe(2);
+  expect(started.map(({ terminated }) => terminated)).toEqual([true, false]);
+});
+
+test("a full cache still reports every misspelled word", async () => {
+  const requests: SpellRequest[] = [];
+  const checker = createSpellChecker(() => fakeWorker(requests), {
+    verdicts: 2,
+    suggestions: 1,
+  });
+  const words = ["recieve", "teh", "color", "wrnog"];
+  const wrong = new Set(["recieve", "teh", "wrnog"]);
+  expect(await checker.check("en-US", words)).toEqual(wrong);
+  // Only the two most recent words are remembered.
+  expect(await checker.check("en-US", words)).toEqual(wrong);
+  expect(
+    requests.map((request) => request.type === "check" && request.words),
+  ).toEqual([words, ["recieve", "teh"]]);
 });

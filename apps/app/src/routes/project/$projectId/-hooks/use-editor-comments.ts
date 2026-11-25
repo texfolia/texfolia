@@ -1,5 +1,5 @@
-import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { type RefObject, useEffect, useMemo, useRef } from "react";
+import type { EditorView } from "@uiw/react-codemirror";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import {
@@ -26,12 +26,12 @@ export type EditorComments = {
  * CodeMirror highlight ranges synced, and builds new anchors from the selection.
  */
 export function useEditorComments({
-  editor,
+  view,
   collaboration,
   comments,
   onError,
 }: {
-  editor: RefObject<ReactCodeMirrorRef | null>;
+  view: EditorView | null;
   collaboration?: CollaborativeFile;
   comments?: EditorComments;
   onError: (message: string) => void;
@@ -53,11 +53,9 @@ export function useEditorComments({
   // until its author's edits arrive, so retry on document updates until all
   // resolve.
   useEffect(() => {
-    if (!collaboration || !commentThreads) return;
+    if (!view || !collaboration || !commentThreads) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const apply = () => {
-      const view = editor.current?.view;
-      if (!view) return true;
       const ranges: CommentRange[] = [];
       let unresolved = false;
       for (const thread of commentThreads) {
@@ -82,16 +80,9 @@ export function useEditorComments({
       clearTimeout(timer);
       collaboration.doc.off("update", retry);
     };
-  }, [
-    collaboration,
-    commentThreads,
-    activeCommentId,
-    commentExtension,
-    editor,
-  ]);
+  }, [collaboration, commentThreads, activeCommentId, commentExtension, view]);
 
   function addComment() {
-    const view = editor.current?.view;
     if (!view || !collaboration || !comments) return;
     let { from, to } = view.state.selection.main;
     // Without a selection, comment on the cursor's line.

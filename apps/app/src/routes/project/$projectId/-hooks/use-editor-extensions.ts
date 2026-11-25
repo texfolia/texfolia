@@ -7,14 +7,21 @@ import { markdown } from "@codemirror/lang-markdown";
 import { indentUnit } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
 import {
+  Compartment,
   EditorState,
   EditorView,
   type Extension,
   keymap,
   Prec,
-  type ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   yCollab,
   ySyncAnnotation,
@@ -38,13 +45,89 @@ import {
 
 export type ScrollAnchor = { pos: number; margin: number };
 
+const none: Extension = [];
+
+// Blocks edits from this editor; collaborators' edits still arrive.
+const blockEdits = [
+  EditorState.transactionFilter.of((transaction) =>
+    transaction.docChanged && !transaction.annotation(ySyncAnnotation)
+      ? []
+      : transaction,
+  ),
+  // The collaboration binding undoes from this event without a transaction.
+  Prec.highest(
+    EditorView.domEventHandlers({
+      beforeinput: (event) => event.inputType.startsWith("history"),
+    }),
+  ),
+];
+const undoKeymap = Prec.highest(keymap.of(yUndoManagerKeymap));
+
+/** Extensions that change while an editor is open, in order of precedence. */
+type Dynamic = {
+  keymap: Extension;
+  history: Extension;
+  collaboration: Extension;
+  editing: Extension;
+  comments: Extension;
+  language: Extension;
+  spelling: Extension;
+  markdown: Extension;
+  font: Extension;
+  indent: Extension;
+  wrapping: Extension;
+};
+type Compartments = Record<keyof Dynamic, Compartment>;
+
 /**
- * Loads the active keymap lazily and assembles the CodeMirror extension list
- * for collaboration, language support, SyncTeX click-to-reveal, scroll anchor
+ * Keeps each extension in a compartment, so a change reconfigures only its own.
+ * The returned list never changes, because CodeMirror rebuilds every extension
+ * of a list that does.
+ */
+function useCompartments(
+  view: EditorView | null,
+  dynamic: Dynamic,
+  fixed: () => Extension[],
+) {
+  const [{ compartments, extensions }] = useState(() => {
+    const entries = Object.entries(dynamic).map(
+      ([name, extension]) => [name, extension, new Compartment()] as const,
+    );
+    return {
+      compartments: Object.fromEntries(
+        entries.map(([name, , compartment]) => [name, compartment]),
+      ) as Compartments,
+      extensions: [
+        ...entries.map(([, extension, compartment]) =>
+          compartment.of(extension),
+        ),
+        ...fixed(),
+      ],
+    };
+  });
+  // Before passive effects, which dispatch to the extensions, such as comments.
+  useLayoutEffect(() => {
+    if (!view) return;
+    const effects = Object.entries(compartments).flatMap(
+      ([name, compartment]) => {
+        const extension = dynamic[name as keyof Dynamic];
+        return compartment.get(view.state) === extension
+          ? []
+          : [compartment.reconfigure(extension)];
+      },
+    );
+    if (effects.length) view.dispatch({ effects });
+  });
+  return extensions;
+}
+
+/**
+ * Loads the active keymap lazily and assembles the CodeMirror extensions for
+ * collaboration, language support, SyncTeX click-to-reveal, scroll anchor
  * tracking, and formatting/read-only rules.
  */
 export function useEditorExtensions({
-  editor,
+  view,
   filename,
   isMarkdown,
   collaboration,
@@ -64,7 +147,7 @@ export function useEditorExtensions({
   scrollAnchor,
   onError,
 }: {
-  editor: RefObject<ReactCodeMirrorRef | null>;
+  view: EditorView | null;
   filename: string;
   isMarkdown: boolean;
   collaboration?: CollaborativeFile;
@@ -95,7 +178,6 @@ export function useEditorExtensions({
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const canAddReference = !!onAddReference;
-  const undoManager = collaboration?.undoManager;
 
   // Vim and Emacs load on first use; the default keys apply until then.
   const [, setKeymapLoads] = useState(0);
@@ -121,8 +203,8 @@ export function useEditorExtensions({
   }, [keymapPreference, keymapExtension]);
 
   useEffect(() => {
-    editor.current?.view?.dispatch({ effects: projectProblemsChanged.of() });
-  }, [editor, problems]);
+    view?.dispatch({ effects: projectProblemsChanged.of() });
+  }, [view, problems]);
 
   const language = useMemo(
     () =>
@@ -138,18 +220,53 @@ export function useEditorExtensions({
     [filename, completion, canAddReference],
   );
 
-  return useMemo(
-    () => [
-      keymapExtension ?? [],
+  // Its plugins keep the configuration they were created with, so this must
+  // stay the same for the document, whatever else changes. Otherwise undo would
+  // follow edits of a configuration that the text binding does not use.
+  const binding = useMemo(
+    () =>
+      collaboration
+        ? yCollab(collaboration.text, collaboration.awareness, {
+            undoManager: collaboration.undoManager,
+          })
+        : none,
+    [collaboration],
+  );
+  const font = useMemo(
+    () =>
+      EditorView.theme({
+        ".cm-content, .cm-gutters": {
+          fontFamily: "var(--font-mono)",
+          fontSize: `${fontSize}px`,
+        },
+      }),
+    [fontSize],
+  );
+  const indentation = useMemo(
+    () => [EditorState.tabSize.of(indent), indentUnit.of(" ".repeat(indent))],
+    [indent],
+  );
+  const markdownSupport = useMemo(
+    () => (isMarkdown ? markdown() : none),
+    [isMarkdown],
+  );
+
+  return useCompartments(
+    view,
+    {
+      keymap: keymapExtension ?? none,
       history,
-      ...(collaboration
-        ? [
-            yCollab(collaboration.text, collaboration.awareness, {
-              undoManager: readOnly ? false : (undoManager ?? false),
-            }),
-            ...(readOnly ? [] : [Prec.highest(keymap.of(yUndoManagerKeymap))]),
-          ]
-        : []),
+      collaboration: binding,
+      editing: readOnly ? blockEdits : collaboration ? undoKeymap : none,
+      comments: commentExtension,
+      language,
+      spelling: spellingExtension,
+      markdown: markdownSupport,
+      font,
+      indent: indentation,
+      wrapping: wrapLines ? EditorView.lineWrapping : none,
+    },
+    () => [
       EditorView.domEventHandlers({
         // Read while attached: a detached scroller reports a scrollTop of 0.
         scroll(_event, view) {
@@ -176,48 +293,13 @@ export function useEditorExtensions({
           return true;
         },
       }),
-      commentExtension,
-      language,
-      spellingExtension,
-      ...(isMarkdown ? [markdown()] : []),
-      EditorView.theme({
-        ".cm-content, .cm-gutters": {
-          fontFamily: "var(--font-mono)",
-          fontSize: `${fontSize}px`,
-        },
-        ".cm-scroller": { overflow: "auto" },
-      }),
-      EditorState.tabSize.of(indent),
-      EditorState.transactionFilter.of((transaction) =>
-        readOnly &&
-        transaction.docChanged &&
-        !transaction.annotation(ySyncAnnotation)
-          ? []
-          : transaction,
-      ),
-      indentUnit.of(" ".repeat(indent)),
-      ...(wrapLines ? [EditorView.lineWrapping] : []),
+      EditorView.theme({ ".cm-scroller": { overflow: "auto" } }),
       Prec.high(keymap.of([{ key: "Tab", run: acceptCompletion }])),
       keymap.of([
         { key: "Mod-h", mac: "Mod-Shift-h", run: openSearchPanel },
         { key: "Mod-]", run: indentMore },
         { key: "Mod-[", run: indentLess },
       ]),
-    ],
-    [
-      collaboration,
-      undoManager,
-      fontSize,
-      wrapLines,
-      keymapExtension,
-      history,
-      readOnly,
-      indent,
-      isMarkdown,
-      language,
-      spellingExtension,
-      commentExtension,
-      scrollAnchor,
     ],
   );
 }

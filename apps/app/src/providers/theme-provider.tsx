@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 
+import { useStableActions } from "#/hooks/use-stable-callback";
 import { editorTheme } from "#/lib/editor/themes/theme-editor";
 import {
   type Appearance,
@@ -177,12 +178,7 @@ function useAppearance(userId: string) {
     return true;
   }
 
-  return {
-    theme: { ...theme, extension },
-    appearance: displayed,
-    error,
-    dirty:
-      draft !== null && JSON.stringify(draft) !== JSON.stringify(appearance),
+  const actions = useStableActions({
     beginDraft: () => {
       setDraft(appearance);
       setPreview(null);
@@ -192,7 +188,6 @@ function useAppearance(userId: string) {
       setPreview(null);
     },
     commitDraft,
-    preview: setPreview,
     choose: (selection: Appearance["selection"]) => {
       setDraft({ ...displayed, selection });
     },
@@ -205,7 +200,27 @@ function useAppearance(userId: string) {
         setDraft((current) => (current ? { ...current, pdfMode } : null));
       }
     },
-  };
+  });
+  const dirty = useMemo(
+    () =>
+      draft !== null && JSON.stringify(draft) !== JSON.stringify(appearance),
+    [draft, appearance],
+  );
+  const shownTheme = useMemo(
+    () => ({ ...theme, extension }),
+    [theme, extension],
+  );
+  return useMemo(
+    () => ({
+      theme: shownTheme,
+      appearance: displayed,
+      error,
+      dirty,
+      preview: setPreview,
+      ...actions,
+    }),
+    [shownTheme, displayed, error, dirty, actions],
+  );
 }
 
 const ThemeContext = createContext<ReturnType<typeof useAppearance> | null>(

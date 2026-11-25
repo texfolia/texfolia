@@ -1,7 +1,7 @@
 import { IconX } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 import { Input } from "@texfolia/ui/input";
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   latexPreamble,
@@ -9,9 +9,11 @@ import {
   searchLatexSymbols,
 } from "#/lib/editor/latex/symbols";
 
-export type SymbolPreamble = {
-  source: string;
+/** The file whose preamble loads packages. Its text is followed while open. */
+export type SymbolPreambleSource = {
   filename: string;
+  subscribe: (listener: () => void) => () => void;
+  getSource: () => string;
   addPackage: (packageName: string) => void;
 };
 
@@ -20,7 +22,7 @@ export function SymbolPalette({
   onInsert,
   onClose,
 }: {
-  preamble: SymbolPreamble;
+  preamble: SymbolPreambleSource;
   onInsert: (symbol: LatexSymbol) => void;
   onClose: () => void;
 }) {
@@ -29,10 +31,8 @@ export function SymbolPalette({
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   const symbols = searchLatexSymbols(query);
-  const { packages } = useMemo(
-    () => latexPreamble(preamble.source),
-    [preamble.source],
-  );
+  const source = useSyncExternalStore(preamble.subscribe, preamble.getSource);
+  const { packages } = useMemo(() => latexPreamble(source), [source]);
 
   return (
     <section

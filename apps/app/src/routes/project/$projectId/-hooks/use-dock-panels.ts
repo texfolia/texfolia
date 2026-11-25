@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { scratchpadId } from "#/lib/collaboration";
 import type { EditorCommand } from "#/lib/editor/editor-command";
+import { createStore } from "#/lib/external-store";
 import { projectPaths } from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import {
@@ -16,6 +17,7 @@ import type { FileState, Workspace } from "#/providers/workspace-provider";
 import type { MarkdownPreviewParams } from "../-components/markdown-preview";
 
 export type FilePanelParams = { node: ProjectNode; preview: boolean };
+export type Cursor = { id: string; line: number; column: number };
 
 export const scratchpadTitle = "Scratchpad";
 
@@ -51,11 +53,9 @@ export function useDockPanels({
   // Kept apart from the drafts, which search, analysis and saving cover.
   const scratchpadSource = useRef("");
   const [activeId, setActiveId] = useState<string>();
-  const [cursor, setCursor] = useState<{
-    id: string;
-    line: number;
-    column: number;
-  }>();
+  // The active tab's cursor. Not state: only the status bar shows it, and it
+  // moves with every keystroke.
+  const [cursor] = useState(() => createStore<Cursor | undefined>(undefined));
   const [jump, setJump] = useState<Workspace["jump"]>();
   const nodesById = useMemo(
     () => new Map(nodes.map((node) => [node.id, node])),
@@ -80,16 +80,16 @@ export function useDockPanels({
   const reportCursor = useCallback(
     (id: string, position: { line: number; column: number }) => {
       positions.current.set(id, position);
-      if (api.current?.activePanel?.id === id)
-        setCursor((previous) =>
-          previous?.id === id &&
-          previous.line === position.line &&
-          previous.column === position.column
-            ? previous
-            : { id, ...position },
-        );
+      if (api.current?.activePanel?.id !== id) return;
+      const previous = cursor.get();
+      if (
+        previous?.id !== id ||
+        previous.line !== position.line ||
+        previous.column !== position.column
+      )
+        cursor.set({ id, ...position });
     },
-    [],
+    [cursor],
   );
 
   const fileTitle = (node: ProjectNode) => {
@@ -355,7 +355,7 @@ export function useDockPanels({
           setActiveId(panel.id);
         if (panel) {
           const position = positions.current.get(panel.id);
-          setCursor(position ? { id: panel.id, ...position } : undefined);
+          cursor.set(position ? { id: panel.id, ...position } : undefined);
         }
       }),
       dock.onDidLayoutChange(onLayoutChange),

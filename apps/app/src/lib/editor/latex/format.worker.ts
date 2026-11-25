@@ -2,20 +2,21 @@ import { TexFmt } from "wasm-latex-tools";
 
 import {
   formatChanges,
+  type FormatRequest,
   type FormatResponse,
-  type FormatSettings,
 } from "./format";
 
 const formatter = new TexFmt(
   false,
   new URL(`${import.meta.env.BASE_URL}core/texfmt`, self.location.origin).href,
 );
-self.onmessage = async ({
-  data,
-}: MessageEvent<{ source: string; settings: FormatSettings }>) => {
-  let response: FormatResponse;
+
+async function respond({
+  id,
+  source,
+  settings,
+}: FormatRequest): Promise<FormatResponse> {
   try {
-    const { source, settings } = data;
     const result = await formatter.format({
       input: source,
       tabsize: settings.indent,
@@ -25,11 +26,17 @@ self.onmessage = async ({
     });
     if (!result.success)
       throw new Error(result.error ?? "Could not format LaTeX.");
-    response = { changes: formatChanges(source, result.output) };
+    return { id, changes: formatChanges(source, result.output) };
   } catch (error) {
-    response = {
+    return {
+      id,
       error: error instanceof Error ? error.message : "Could not format LaTeX.",
     };
   }
-  self.postMessage(response);
+}
+
+// Every editor tab shares this worker; its documents are formatted in turn.
+let queue = Promise.resolve();
+self.onmessage = ({ data }: MessageEvent<FormatRequest>) => {
+  queue = queue.then(async () => self.postMessage(await respond(data)));
 };

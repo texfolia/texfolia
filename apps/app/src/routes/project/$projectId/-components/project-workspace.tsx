@@ -8,7 +8,6 @@ import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
 import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -18,22 +17,29 @@ import {
 import { SettingsDialog } from "#/components/settings-dialog";
 import { useComments } from "#/hooks/use-comments";
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
+import {
+  useStableActions,
+  useStableCallback,
+} from "#/hooks/use-stable-callback";
+import { useStableValue } from "#/hooks/use-stable-value";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { scratchpadId } from "#/lib/collaboration";
 import { entryAppendix } from "#/lib/editor/latex/bibtex";
 import { latexCompletion } from "#/lib/editor/latex/completion";
-import { projectOutline } from "#/lib/editor/latex/outline";
 import { addLatexPackage, packageInsertion } from "#/lib/editor/latex/symbols";
 import { sourceToPdf } from "#/lib/editor/latex/synctex";
 import { projectPaths, invalidProjectPaths } from "#/lib/projects";
 import type { ProjectDetails } from "#/lib/projects/project.functions";
 import { encodeSource } from "#/lib/storage";
+import { FileDrafts } from "#/lib/workspace/file-drafts";
 import { workspaceLayoutKey } from "#/lib/workspace/workspace-layout";
 import { useProjectFiles } from "#/providers/project-files-provider";
 import { useSettings } from "#/providers/settings-provider";
 import {
-  type FileState,
   type Workspace,
+  type WorkspaceActions,
+  type WorkspaceBuild,
+  type WorkspaceDiagnostics,
   WorkspaceProvider,
 } from "#/providers/workspace-provider";
 
@@ -70,6 +76,20 @@ import { WorkspacePanel } from "./workspace-panel";
 import { WorkspaceStatusBar } from "./workspace-status-bar";
 
 const defaultFormatSettings = { indent: 2, wrap: true, width: 80 };
+const dockTheme = { name: "texfolia", className: "dockview-theme-texfolia" };
+
+function samePaths(
+  a: ReadonlyMap<string, string>,
+  b: ReadonlyMap<string, string>,
+) {
+  if (a.size !== b.size) return false;
+  const other = b.entries();
+  for (const [id, path] of a) {
+    const entry = other.next().value;
+    if (entry?.[0] !== id || entry[1] !== path) return false;
+  }
+  return true;
+}
 
 export function ProjectWorkspace({
   project,
@@ -93,7 +113,7 @@ export function ProjectWorkspace({
   const exportRef = useRef<ProjectExportHandle | null>(null);
   const repairRef = useRef<RepairSourcePathsHandle | null>(null);
   // Each file's live and saved text, shared with the editors by reference.
-  const [drafts] = useState(() => new Map<string, FileState>());
+  const [drafts] = useState(() => new FileDrafts());
   const [ready, setReady] = useState(false);
   const layoutKey = workspaceLayoutKey(userId, projectId);
   useExitWhenStorageCleared([sourceDraftsKey(projectId), layoutKey]);
@@ -105,22 +125,27 @@ export function ProjectWorkspace({
     setOpen: setSettingsOpen,
   } = useSettings();
 
-  const paths = useMemo(() => projectPaths(nodes), [nodes]);
+  // Nodes are new objects after each refresh; their paths rarely change.
+  const paths = useStableValue(
+    useMemo(() => projectPaths(nodes), [nodes]),
+    samePaths,
+  );
   const filenames = useMemo(() => [...paths.values()], [paths]);
-  const { main, mainId } = useMemo(() => {
-    let main: string | undefined;
-    let mainId: string | undefined;
+  const mainFile = useMemo(() => {
+    let first: { id: string; path: string } | undefined;
     for (const [id, path] of paths) {
-      if (path === "main.tex") return { main: path, mainId: id };
-      if (!main && path.endsWith(".tex")) [main, mainId] = [path, id];
+      if (path === "main.tex") return { id, path };
+      if (path.endsWith(".tex")) first ??= { id, path };
     }
-    return { main, mainId };
+    return first;
   }, [paths]);
+  const main = mainFile?.path;
+  const mainId = mainFile?.id;
   const { result, update, revision } = useLatexAnalysis(filenames, main);
-  const readAnalysis = useEffectEvent(() => result.analysis);
+  const readAnalysis = useStableCallback(() => result.analysis);
   const completion = useMemo(
     () => latexCompletion(readAnalysis, filenames),
-    [filenames],
+    [readAnalysis, filenames],
   );
 
   const panels = useDockPanels({
@@ -218,7 +243,7 @@ export function ProjectWorkspace({
     paths,
     stale: compilation.stale,
   });
-  const [pdfJump, setPdfJump] = useState<Workspace["pdfJump"]>(null);
+  const [pdfJump, setPdfJump] = useState<WorkspaceBuild["pdfJump"]>(null);
   const [searchRequest, setSearchRequest] = useState<SearchRequest>({
     sequence: 0,
   });
@@ -361,6 +386,69 @@ export function ProjectWorkspace({
     },
   });
 
+  const actions = useStableActions({
+    holdDocument,
+    editDocument: (id, run) => {
+      if (!writable)
+        return Promise.reject(
+          new Error("You do not have permission to edit this project."),
+        );
+      return collaboration.edit(id, run);
+    },
+    reveal: panels.reveal,
+    revealRange: panels.revealRange,
+    revealPdf,
+    closeTabs: panels.closeTabs,
+    keepOpen: panels.keepOpen,
+    openMarkdownPreview: panels.openMarkdownPreview,
+    addSymbolPackage,
+    addReference,
+    registerEditor: panels.registerEditor,
+    registerCommands: panels.registerCommands,
+    reportCursor: panels.reportCursor,
+    reportSyntax,
+    reportGitBranch: git.reportBranch,
+    reportGitFailure: git.reportFailure,
+  } satisfies Omit<WorkspaceActions, "projectId" | "drafts">);
+  const workspaceActions = useMemo<WorkspaceActions>(
+    () => ({ projectId, drafts, ...actions }),
+    [projectId, drafts, actions],
+  );
+  const formatSettings = formatting ?? defaultFormatSettings;
+  const workspace = useMemo<Workspace>(
+    () => ({
+      collaboration: collaboration.snapshot,
+      scratchpad: scratchpad.file,
+      canWrite: writable,
+      paths,
+      main: mainFile,
+      completion,
+      jump: panels.jump,
+      comments,
+      formatSettings,
+    }),
+    [
+      collaboration.snapshot,
+      scratchpad.file,
+      writable,
+      paths,
+      mainFile,
+      completion,
+      panels.jump,
+      comments,
+      formatSettings,
+    ],
+  );
+  const { build, stale, pdf, pdfSaveState } = compilation;
+  const buildState = useMemo<WorkspaceBuild>(
+    () => ({ build, stale, pdf, pdfSaveState, synctex, pdfJump }),
+    [build, stale, pdf, pdfSaveState, synctex, pdfJump],
+  );
+  const diagnostics = useMemo<WorkspaceDiagnostics>(
+    () => ({ problems, allProblems }),
+    [problems, allProblems],
+  );
+
   async function onReady({ api: dock }: DockviewReadyEvent) {
     panels.connect(dock);
     for (const [id, value] of Object.entries(project.sourceContents)) {
@@ -380,56 +468,13 @@ export function ProjectWorkspace({
     setReady(true);
   }
 
-  const mainDraft = mainId ? drafts.get(mainId) : undefined;
   const { activeId } = panels;
   return (
     <WorkspaceProvider
-      value={{
-        collaboration: collaboration.snapshot,
-        scratchpad: scratchpad.file,
-        holdDocument,
-        editDocument: (id, run) => {
-          if (!writable)
-            return Promise.reject(
-              new Error("You do not have permission to edit this project."),
-            );
-          return collaboration.edit(id, run);
-        },
-        projectId,
-        canWrite: writable,
-        build: compilation.build,
-        stale: compilation.stale,
-        drafts,
-        keepOpen: panels.keepOpen,
-        openMarkdownPreview: panels.openMarkdownPreview,
-        registerEditor: panels.registerEditor,
-        symbolPreamble:
-          main && mainDraft
-            ? { source: mainDraft.value, filename: main }
-            : undefined,
-        addSymbolPackage,
-        addReference,
-        paths,
-        completion,
-        problems,
-        allProblems,
-        reveal: panels.reveal,
-        revealRange: panels.revealRange,
-        comments,
-        closeTabs: panels.closeTabs,
-        reportGitBranch: git.reportBranch,
-        reportGitFailure: git.reportFailure,
-        registerCommands: panels.registerCommands,
-        reportCursor: panels.reportCursor,
-        reportSyntax,
-        jump: panels.jump,
-        pdf: compilation.pdf,
-        synctex,
-        pdfJump,
-        revealPdf,
-        pdfSaveState: compilation.pdfSaveState,
-        formatSettings: formatting ?? defaultFormatSettings,
-      }}
+      actions={workspaceActions}
+      workspace={workspace}
+      build={buildState}
+      diagnostics={diagnostics}
     >
       <SidebarProvider
         ref={container}
@@ -535,10 +580,7 @@ export function ProjectWorkspace({
               <ClientOnly>
                 <DockviewReact
                   className="isolate size-full"
-                  theme={{
-                    name: "texfolia",
-                    className: "dockview-theme-texfolia",
-                  }}
+                  theme={dockTheme}
                   components={dockComponents}
                   tabComponents={dockTabComponents}
                   defaultTabComponent={FileTab}
@@ -586,15 +628,6 @@ export function ProjectWorkspace({
               exportRef={exportRef}
               repairRef={repairRef}
               searchRequest={searchRequest}
-              outline={projectOutline(
-                new Map(
-                  [...paths].flatMap(([id, path]) => {
-                    const draft = drafts.get(id);
-                    return draft ? [[path, draft.value]] : [];
-                  }),
-                ),
-                main,
-              )}
             />
           </div>
         </div>

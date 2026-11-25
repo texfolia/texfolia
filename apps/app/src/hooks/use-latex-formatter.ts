@@ -2,58 +2,57 @@ import { isolateHistory } from "@codemirror/commands";
 import type { EditorView } from "@uiw/react-codemirror";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { FormatResponse, FormatSettings } from "#/lib/editor/latex/format";
-import { createFormatWorker } from "#/lib/editor/latex/workers";
+import type { FormatChange, FormatSettings } from "#/lib/editor/latex/format";
+import { browserLatexFormatter } from "#/lib/editor/latex/formatter";
 
 export function useLatexFormatter(settings: FormatSettings) {
-  const worker = useRef<Worker | null>(null);
   const pending = useRef(false);
+  const mounted = useRef(false);
   const [formatting, setFormatting] = useState(false);
   const [formatError, setFormatError] = useState("");
 
-  useEffect(
-    () => () => {
-      worker.current?.terminate();
-      worker.current = null;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       pending.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const format = useCallback(
     (view: EditorView) => {
       if (pending.current) return true;
-      const instance = worker.current ?? createFormatWorker();
-      worker.current = instance;
       const document = view.state.doc;
       pending.current = true;
       setFormatting(true);
       setFormatError("");
       function finish(error = "") {
+        if (!mounted.current) return;
         pending.current = false;
         setFormatting(false);
         setFormatError(error);
       }
-      instance.onerror = () => {
-        instance.terminate();
-        worker.current = null;
-        finish("The LaTeX formatter could not load.");
-      };
-      instance.onmessage = ({ data }: MessageEvent<FormatResponse>) => {
-        if ("error" in data) return finish(data.error);
+      function apply(changes: FormatChange[]) {
+        if (!mounted.current || !view.dom.isConnected) return finish();
         if (document !== view.state.doc)
           return finish(
             "The document changed while formatting. Run the command again.",
           );
-        if (data.changes.length)
+        if (changes.length)
           view.dispatch({
-            changes: data.changes,
+            changes,
             annotations: isolateHistory.of("full"),
             userEvent: "input.format",
           });
         finish();
-      };
-      instance.postMessage({ source: document.toString(), settings });
+      }
+      browserLatexFormatter()(document.toString(), settings)
+        .then(apply)
+        .catch((error: unknown) =>
+          finish(
+            error instanceof Error ? error.message : "Could not format LaTeX.",
+          ),
+        );
       return true;
     },
     [settings],

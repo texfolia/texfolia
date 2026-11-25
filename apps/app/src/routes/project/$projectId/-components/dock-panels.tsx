@@ -11,11 +11,16 @@ import {
   type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
 } from "dockview-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
 import { type LatexProblem } from "#/lib/editor/latex/analysis";
 import { downloadFile } from "#/lib/storage/browser";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+  useWorkspaceBuild,
+  useWorkspaceDiagnostics,
+} from "#/providers/workspace-provider";
 
 import type { FilePanelParams } from "../-hooks/use-dock-panels";
 import { DocumentEditor } from "./document-editor";
@@ -24,6 +29,7 @@ import { GeneratedFile } from "./generated-file";
 import { MarkdownPreview } from "./markdown-preview";
 import { ScratchpadEditor } from "./scratchpad-editor";
 import { SourcePdf } from "./source-pdf";
+import type { SymbolPreambleSource } from "./symbol-palette";
 
 const noProblems: LatexProblem[] = [];
 
@@ -31,12 +37,41 @@ export function FileEditor({
   params,
   api: panelApi,
 }: IDockviewPanelProps<FilePanelParams>) {
+  const actions = useWorkspaceActions();
   const workspace = useWorkspace();
+  const { synctex } = useWorkspaceBuild();
+  const { problems } = useWorkspaceDiagnostics();
   const [downloadError, setDownloadError] = useState("");
   const [downloading, setDownloading] = useState(false);
-  const draft = workspace.drafts.get(params.node.id);
-  const path = workspace.paths.get(params.node.id) ?? params.node.name;
-  const { comments } = workspace;
+  const { projectId, drafts } = actions;
+  const nodeId = params.node.id;
+  const savedValue = useSyncExternalStore(
+    drafts.subscribe,
+    () => drafts.get(nodeId)?.savedValue ?? "",
+  );
+  const path = workspace.paths.get(nodeId) ?? params.node.name;
+  const { comments, main } = workspace;
+  const mainLoaded = useSyncExternalStore(
+    drafts.subscribe,
+    () => !!main && drafts.has(main.id),
+  );
+  // The palette reads the main file's preamble, also while it is being edited.
+  const preamble = useMemo<SymbolPreambleSource | undefined>(
+    () =>
+      main && mainLoaded
+        ? {
+            filename: main.path,
+            subscribe: drafts.subscribe,
+            getSource: () => drafts.get(main.id)?.value ?? "",
+            addPackage: actions.addSymbolPackage,
+          }
+        : undefined,
+    [main, mainLoaded, drafts, actions],
+  );
+  const openPreview = useCallback(
+    () => actions.openMarkdownPreview(nodeId),
+    [actions, nodeId],
+  );
   const threads = comments.data?.threads;
   const openThreads = useMemo(
     () =>
@@ -74,7 +109,7 @@ export function FileEditor({
             setDownloading(true);
             try {
               const response = await fetch(
-                `/api/sources/${workspace.projectId}/${params.node.id}`,
+                `/api/sources/${projectId}/${nodeId}`,
               );
               if (!response.ok) throw new Error("Could not download source");
               downloadFile(await response.blob(), params.node.name);
@@ -104,26 +139,19 @@ export function FileEditor({
       collaboration={collaboration}
       canWrite={workspace.canWrite}
       filename={params.node.name}
-      savedValue={draft?.savedValue ?? ""}
+      savedValue={savedValue}
       allowOpenFile={false}
       completion={workspace.completion}
-      problems={workspace.problems.get(path) ?? noProblems}
-      onSyntaxProblems={(problems) => workspace.reportSyntax(path, problems)}
-      onAddReference={workspace.addReference}
+      problems={problems.get(path) ?? noProblems}
+      onSyntaxProblems={(problems) => actions.reportSyntax(path, problems)}
+      onAddReference={actions.addReference}
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
-      preamble={
-        workspace.symbolPreamble && {
-          ...workspace.symbolPreamble,
-          addPackage: workspace.addSymbolPackage,
-        }
-      }
+      preamble={preamble}
       onRevealPdf={
-        workspace.synctex
-          ? (line) => workspace.revealPdf(path, line)
-          : undefined
+        synctex ? (line) => actions.revealPdf(path, line) : undefined
       }
-      onOpenPreview={() => workspace.openMarkdownPreview(params.node.id)}
+      onOpenPreview={openPreview}
       comments={editorComments}
     />
   );
@@ -132,7 +160,7 @@ export function FileEditor({
 export function FileTab(
   props: IDockviewPanelHeaderProps<{ preview?: boolean }>,
 ) {
-  const workspace = useWorkspace();
+  const { keepOpen, closeTabs } = useWorkspaceActions();
   return (
     <ContextMenu>
       <ContextMenuTrigger
@@ -141,33 +169,25 @@ export function FileTab(
       >
         <DockviewDefaultTab
           {...props}
-          onDoubleClick={() => workspace.keepOpen(props.api.id)}
+          onDoubleClick={() => keepOpen(props.api.id)}
         />
       </ContextMenuTrigger>
       <ContextMenuContent>
         {props.params.preview && (
-          <ContextMenuItem onClick={() => workspace.keepOpen(props.api.id)}>
+          <ContextMenuItem onClick={() => keepOpen(props.api.id)}>
             Keep open
           </ContextMenuItem>
         )}
-        <ContextMenuItem
-          onClick={() => workspace.closeTabs(props.api.id, "one")}
-        >
+        <ContextMenuItem onClick={() => closeTabs(props.api.id, "one")}>
           Close
         </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() => workspace.closeTabs(props.api.id, "others")}
-        >
+        <ContextMenuItem onClick={() => closeTabs(props.api.id, "others")}>
           Close others
         </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() => workspace.closeTabs(props.api.id, "all")}
-        >
+        <ContextMenuItem onClick={() => closeTabs(props.api.id, "all")}>
           Close all
         </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() => workspace.closeTabs(props.api.id, "right")}
-        >
+        <ContextMenuItem onClick={() => closeTabs(props.api.id, "right")}>
           Close to the right
         </ContextMenuItem>
       </ContextMenuContent>

@@ -7,7 +7,15 @@ export const defaultFormatSettings: FormatSettings = {
   width: 80,
 };
 export type FormatChange = { from: number; to: number; insert: string };
-export type FormatResponse = { changes: FormatChange[] } | { error: string };
+export type FormatRequest = {
+  id: number;
+  source: string;
+  settings: FormatSettings;
+};
+export type FormatResponse = { id: number } & (
+  | { changes: FormatChange[] }
+  | { error: string }
+);
 
 export function formatChanges(
   source: string,

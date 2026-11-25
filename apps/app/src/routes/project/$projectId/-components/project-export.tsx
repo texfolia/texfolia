@@ -15,7 +15,10 @@ import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import { decodeSource, type SourceFiles } from "#/lib/storage";
 import { downloadFile } from "#/lib/storage/browser";
 import { createZip } from "#/lib/storage/zip";
-import { useWorkspace } from "#/providers/workspace-provider";
+import {
+  useWorkspaceActions,
+  useWorkspaceBuild,
+} from "#/providers/workspace-provider";
 
 export type ProjectExportHandle = { open: () => void };
 
@@ -28,7 +31,8 @@ export function ProjectExport({
   name: string;
   sources: () => Promise<SourceFiles>;
 }) {
-  const { build, projectId } = useWorkspace();
+  const { projectId } = useWorkspaceActions();
+  const { build } = useWorkspaceBuild();
   const [open, setOpen] = useState(false);
   useImperativeHandle(ref, () => ({ open: () => setOpen(true) }));
   const [includeBuild, setIncludeBuild] = useState(false);

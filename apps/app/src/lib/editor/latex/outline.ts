@@ -66,6 +66,9 @@ export function projectOutline(
     if (text === undefined) return;
     visiting.add(path);
     const source = maskLatexSource(text);
+    // Headings come in order, so each line count continues from the last.
+    let counted = 0;
+    let line = 1;
     const commands =
       /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph|input|include)\b(\*)?\s*/g;
     for (
@@ -95,9 +98,11 @@ export function projectOutline(
         continue;
       }
       const level = levels.indexOf(command);
+      for (; counted < match.index; counted++)
+        if (source.charCodeAt(counted) === 10) line++;
       const entry: OutlineEntry = {
         path,
-        line: source.slice(0, match.index).split("\n").length,
+        line,
         title:
           (short?.text ?? content)
             .replace(/\\(?:[a-zA-Z]+)\*?\s*/g, "")
