@@ -54,3 +54,32 @@ export async function fetchBuilds(
     signal: init?.signal ?? AbortSignal.timeout(15_000),
   });
 }
+
+/**
+ * Marks a project's build stale after its sources changed. The change is already
+ * committed, so a failure is only logged.
+ */
+export async function invalidateSourceBuild(
+  projectId: string,
+  builds?: Pick<Fetcher, "fetch">,
+) {
+  try {
+    const response = await fetchBuilds(
+      `/projects/${projectId}/changed`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Not an editor's change, so it has no editor version.
+        body: "{}",
+      },
+      builds,
+    );
+    if (!response.ok)
+      throw new Error(`Build invalidation returned ${response.status}`);
+  } catch (error) {
+    console.error("Source committed but build invalidation failed", {
+      projectId,
+      error,
+    });
+  }
+}

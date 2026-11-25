@@ -6,6 +6,7 @@ import { requestPrincipal } from "#/lib/auth/request-principal.server";
 import {
   collaborationProtocol,
   documentIdSchema,
+  maxNameLength,
   peopleSearchParam,
   protocolSearchParam,
   scratchpadId,
@@ -75,7 +76,7 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
           JSON.stringify({
             ...parsed.data,
             userId: principal.userId,
-            name: principal.name.slice(0, 200),
+            name: principal.name.slice(0, maxNameLength),
             awareness: null,
             // Older tabs still speak base64 JSON; the room asks them to reload.
             binary:

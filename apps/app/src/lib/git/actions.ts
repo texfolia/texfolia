@@ -11,12 +11,17 @@ import { and, eq, isNull, inArray } from "drizzle-orm";
 import * as git from "isomorphic-git";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
+import { requestCollaborationCleanup } from "#/lib/collaboration/server";
+import { mapLimit } from "#/lib/map-limit";
 import { projectPaths } from "#/lib/projects";
 import type { LockProject, ProjectTransaction } from "#/lib/projects/server";
 import {
-  putSourceBytes,
+  commitSources,
+  deletePrefix,
+  prepareSourceBytes,
   retireSources,
   type SourceBucket,
+  type SourceUpload,
 } from "#/lib/storage/server";
 
 import { gitProvider, gitProviders, hasRepositoryAccess } from "./providers";
@@ -106,25 +111,30 @@ const readConcurrency = 8;
 
 class MissingObjectError extends Error {}
 
-async function readFiles(bucket: SourceBucket, nodes: GitNode[]) {
+// Reads every file. `cache` holds sources read earlier, by key, so reading the
+// project again only loads what changed.
+async function readFiles(
+  bucket: SourceBucket,
+  nodes: GitNode[],
+  cache: Map<string, Uint8Array>,
+) {
   const paths = projectPaths(nodes);
-  const files: GitFiles = {};
   const queue = nodes.flatMap((node) => {
     const path = paths.get(node.id);
-    return path ? [{ node, path }] : [];
+    return path ? [{ objectKey: node.objectKey, path }] : [];
   });
-  async function worker() {
-    for (let next = queue.shift(); next; next = queue.shift()) {
-      const { node, path } = next;
-      const object = node.objectKey ? await bucket.get(node.objectKey) : null;
-      if (node.objectKey && !object)
+  const files: GitFiles = {};
+  await mapLimit(queue, readConcurrency, async ({ objectKey, path }) => {
+    let bytes = objectKey ? cache.get(objectKey) : new Uint8Array();
+    if (objectKey && !bytes) {
+      const object = await bucket.get(objectKey);
+      if (!object)
         throw new MissingObjectError("Saved project source is missing.");
-      files[path] = object
-        ? new Uint8Array(await object.arrayBuffer())
-        : new Uint8Array();
+      bytes = new Uint8Array(await object.arrayBuffer());
+      cache.set(objectKey, bytes);
     }
-  }
-  await Promise.all(Array.from({ length: readConcurrency }, worker));
+    files[path] = bytes ?? new Uint8Array();
+  });
   return files;
 }
 
@@ -153,9 +163,8 @@ async function requireRemoteManager(
 
 async function replaceFiles(
   tx: ProjectTransaction,
-  bucket: SourceBucket,
   projectId: string,
-  files: GitFiles,
+  files: Map<string, SourceUpload>,
   nodes: GitNode[],
 ) {
   const root = nodes.find(
@@ -173,15 +182,15 @@ async function replaceFiles(
   const removed = nodes.filter(
     (node) =>
       node.id !== root.id &&
-      (node.kind === "folder" ||
-        !Object.hasOwn(files, paths.get(node.id) ?? "")),
+      (node.kind === "folder" || !files.has(paths.get(node.id) ?? "")),
   );
   await retireSources(
     tx,
     projectId,
     removed.map((node) => node.objectKey),
   );
-  if (removed.length)
+  if (removed.length) {
+    await requestCollaborationCleanup(tx, projectId);
     await tx
       .update(projectNode)
       .set({ deletedAt: new Date(), updatedAt: new Date() })
@@ -191,19 +200,9 @@ async function replaceFiles(
           removed.map((n) => n.id),
         ),
       );
+  }
   const parents = new Map([["", root.id]]);
-  // Clear sizes before replacement: quota checks see the final tree's growing total.
-  await tx
-    .update(projectNode)
-    .set({ sizeBytes: 0n })
-    .where(
-      and(
-        eq(projectNode.projectId, projectId),
-        isNull(projectNode.deletedAt),
-        inArray(projectNode.kind, ["text", "binary"]),
-      ),
-    );
-  for (const [path, bytes] of Object.entries(files)) {
+  for (const [path, { bytes, objectKey, sizeBytes }] of files) {
     const parts = path.split("/");
     const name = parts.pop();
     if (!name) throw new Error("Invalid git file name");
@@ -235,17 +234,17 @@ async function replaceFiles(
     } catch {
       kind = "binary";
     }
-    const stored = await putSourceBytes({
-      tx,
-      bucket,
-      projectId,
-      bytes: new Uint8Array(bytes),
-      previousSize: 0n,
-    });
     const existing = byPath.get(path);
-    if (existing && existing.objectKey !== stored.objectKey)
+    if (existing && existing.objectKey !== objectKey)
       await retireSources(tx, projectId, [existing.objectKey]);
-    const values = { parentId, name, kind, ...stored, updatedAt: new Date() };
+    const values = {
+      parentId,
+      name,
+      kind,
+      objectKey,
+      sizeBytes,
+      updatedAt: new Date(),
+    };
     if (existing)
       await tx
         .update(projectNode)
@@ -309,12 +308,18 @@ export async function runGit({
   projectId,
   user,
   action,
+  exclusively = (apply) => apply(),
 }: {
   db: Db;
   bucket: SourceBucket;
   /** Locks the project row and checks the user's access. */
   lock: LockProject;
   accessToken: GitAccessToken;
+  /**
+   * Runs the part of an action that rewrites files, holding off other edits and
+   * saving accepted ones first. Never runs during a request to the Git host.
+   */
+  exclusively?: <T>(apply: () => Promise<T>) => Promise<T>;
   projectId: string;
   user: { id: string; name: string; email: string };
   action: GitAction;
@@ -330,6 +335,9 @@ export async function runGit({
   };
   let host = "the host";
   try {
+    const changedMessage =
+      "The project changed while Git was syncing. Nothing was applied; try again.";
+    const cache = new Map<string, Uint8Array>();
     const readSnapshot = () =>
       db.transaction(async (tx) => {
         const found = await lock({
@@ -370,7 +378,7 @@ export async function runGit({
           : Promise.resolve(null),
         action.kind === "import"
           ? Promise.resolve<GitFiles>({})
-          : readFiles(bucket, nodes),
+          : readFiles(bucket, nodes, cache),
       ]);
       return { saved, files };
     };
@@ -408,10 +416,7 @@ export async function runGit({
         latest?.linked?.objectKey !== linked?.objectKey ||
         nodeVersions(latest?.nodes ?? []) !== nodeVersions(nodes);
       if (!changed) throw error;
-      if (!readOnly)
-        throw new Error(
-          "The project changed while Git was syncing. Nothing was applied; try again.",
-        );
+      if (!readOnly) throw new Error(changedMessage);
       if (!latest) return { status: empty };
       ({ linked, nodes } = latest);
       remote = linked?.url ? gitRemoteSchema.parse(linked.url) : null;
@@ -434,39 +439,28 @@ export async function runGit({
         await accessToken({ db, userId: user.id, provider: remote.provider }),
         gitProvider(remote.provider).tokenUsername,
       );
-    if (connecting && http && remote) {
-      if (action.kind === "import") await repo.clone(remote.url, http);
-      else await repo.requireEmptyRemote(remote.url, http);
-    }
-    if (action.kind !== "import") repo.overlay(files);
     const author = { name: user.name || "Texfolia user", email: user.email };
-    switch (action.kind) {
-      case "fetch":
-        if (http && remote) await repo.remoteBranches(http, remote.url);
-        break;
-      case "commit":
-        await repo.commit(action.message, author);
-        break;
-      case "push":
-        if (http) await repo.push(http);
-        break;
-      case "pull":
-        if (http) await repo.pull(http, author);
-        break;
-      case "branch":
-        await repo.branch(action.name);
-        break;
-      case "checkout":
-        await repo.checkout(action.name, http);
-        break;
-    }
-    const replacing =
-      action.kind === "import" ||
-      action.kind === "pull" ||
-      action.kind === "checkout";
-    if (!readOnly)
-      // Short commit transaction: apply only if nothing changed since the snapshot.
-      await db.transaction(async (tx) => {
+    // Saves the repository and, when pulling or switching branches, its files.
+    // Applies only if nothing changed since the snapshot.
+    const save = async (replaced?: GitNode[]) => {
+      const files = new Map<string, SourceUpload>();
+      if (replaced)
+        for (const [path, bytes] of Object.entries(repo.sources()))
+          files.set(
+            path,
+            await prepareSourceBytes(projectId, new Uint8Array(bytes)),
+          );
+      const stored = new Set(replaced?.map((node) => node.objectKey));
+      // Collection leaves recent clones alone until a row refers to them.
+      const objectKey = `git/${projectId}/${crypto.randomUUID()}.json`;
+      await bucket.put(objectKey, repo.serialize());
+      const values = {
+        provider: remote?.provider ?? null,
+        url: remote?.url ?? null,
+        objectKey,
+        branch: await repo.currentBranch(),
+      };
+      const run = async (tx: ProjectTransaction) => {
         const found = await lock({
           tx,
           projectId,
@@ -479,25 +473,14 @@ export async function runGit({
           .select()
           .from(projectGit)
           .where(eq(projectGit.projectId, projectId));
-        const latest = replacing ? await readNodes(tx, projectId) : [];
-        if (
-          current?.objectKey !== linked?.objectKey ||
-          (replacing && nodeVersions(latest) !== nodeVersions(nodes))
-        )
-          throw new Error(
-            "The project changed while Git was syncing. Nothing was applied; try again.",
-          );
-        if (replacing)
-          await replaceFiles(tx, bucket, projectId, repo.sources(), latest);
-        // Written under the lock so garbage collection can't remove it first.
-        const objectKey = `git/${projectId}/${crypto.randomUUID()}.json`;
-        await bucket.put(objectKey, repo.serialize());
-        const values = {
-          provider: remote?.provider ?? null,
-          url: remote?.url ?? null,
-          objectKey,
-          branch: await repo.currentBranch(),
-        };
+        if (current?.objectKey !== linked?.objectKey)
+          throw new Error(changedMessage);
+        if (replaced) {
+          const latest = await readNodes(tx, projectId);
+          if (nodeVersions(latest) !== nodeVersions(replaced))
+            throw new Error(changedMessage);
+          await replaceFiles(tx, projectId, files, latest);
+        }
         await tx
           .insert(projectGit)
           .values({ projectId, ...values })
@@ -506,7 +489,75 @@ export async function runGit({
           .insert(projectCollaboration)
           .values({ projectId })
           .onConflictDoNothing();
+      };
+      await commitSources({
+        db,
+        bucket,
+        projectId,
+        // Files that live nodes already store stay stored until this commits.
+        uploads: [...files.values()].filter(
+          (file) => !stored.has(file.objectKey),
+        ),
+        run,
       });
+    };
+    // Rewrites the project's files from the repository, as they are by now.
+    const replace = (change: () => Promise<unknown>) =>
+      exclusively(async () => {
+        const latest = await readSnapshot();
+        if (!latest || latest.linked?.objectKey !== linked?.objectKey)
+          throw new Error(changedMessage);
+        if (action.kind !== "import")
+          repo.overlay(await readFiles(bucket, latest.nodes, cache));
+        await change();
+        await save(latest.nodes);
+      });
+    if (action.kind === "link" && http && remote)
+      await repo.requireEmptyRemote(remote.url, http);
+    if (action.kind !== "import") repo.overlay(files);
+    switch (action.kind) {
+      case "import":
+        if (http && remote) await repo.clone(remote.url, http);
+        await replace(async () => {});
+        break;
+      case "pull":
+        if (http) {
+          await repo.requireClean();
+          const fetched = await repo.fetchCurrent(http);
+          await replace(() => repo.merge(fetched, author));
+        }
+        break;
+      case "checkout": {
+        const { name } = action;
+        await repo.requireClean();
+        if (http) await repo.fetchBranch(name, http);
+        await replace(() => repo.switchBranch(name));
+        break;
+      }
+      case "fetch":
+        if (http && remote) await repo.remoteBranches(http, remote.url);
+        await save();
+        break;
+      case "commit":
+        await repo.commit(action.message, author);
+        await save();
+        break;
+      case "push":
+        if (http) await repo.push(http);
+        await save();
+        break;
+      case "branch":
+        await repo.branch(action.name);
+        await save();
+        break;
+      case "link":
+        await save();
+        break;
+      case "status":
+      case "diff":
+      case "unlink":
+        break;
+    }
     const status = await repo.status();
     if (readOnly && linked && linked.branch !== status.branch)
       // Backfill rows saved before the branch was cached.
@@ -536,44 +587,49 @@ export async function runGit({
   }
 }
 
+// Snapshots of the version history that Git replaced. Nothing writes them now.
+export function collectLegacyHistory(bucket: SourceBucket) {
+  return deletePrefix(bucket, "history/");
+}
+
+// Long enough for any saved clone whose transaction has yet to commit.
+const unreferencedMs = 60 * 60_000;
+
 export async function collectGitObjects({
   db,
   bucket,
+  uploadedBefore = new Date(Date.now() - unreferencedMs),
 }: {
   db: Db;
   bucket: SourceBucket;
+  uploadedBefore?: Date;
 }) {
   let cursor: string | undefined;
   do {
-    const page = await bucket.list({ prefix: "git/", cursor, limit: 100 });
-    const ids = new Set(
-      page.objects.flatMap((object) => {
-        const id = /^git\/([0-9a-f-]{36})\//.exec(object.key)?.[1];
-        return id ? [id] : [];
-      }),
-    );
-    for (const projectId of ids)
-      await db.transaction(async (tx) => {
-        const [found] = await tx
-          .select()
-          .from(project)
-          .where(eq(project.id, projectId))
-          .for("update");
-        // A project in the trash keeps its clone, so it can be restored.
-        const [linked] = found
-          ? await tx
-              .select()
+    const page = await bucket.list({ prefix: "git/", cursor, limit: 1000 });
+    const objects = page.objects.flatMap(({ key, uploaded }) => {
+      const id = /^git\/([0-9a-f-]{36})\//.exec(key)?.[1];
+      return id && uploaded <= uploadedBefore ? [{ id, key }] : [];
+    });
+    // Every save has a new key, so one that nothing refers to by now never will
+    // be, and no lock is needed. A project in the trash keeps its clone, so it can
+    // be restored.
+    const kept = new Set(
+      objects.length
+        ? (
+            await db
+              .select({ objectKey: projectGit.objectKey })
               .from(projectGit)
-              .where(eq(projectGit.projectId, projectId))
-          : [];
-        const garbage = page.objects.filter(
-          (object) =>
-            object.key.startsWith(`git/${projectId}/`) &&
-            object.key !== linked?.objectKey,
-        );
-        if (garbage.length)
-          await bucket.delete(garbage.map((object) => object.key));
-      });
+              .where(
+                inArray(projectGit.projectId, [
+                  ...new Set(objects.map(({ id }) => id)),
+                ]),
+              )
+          ).map((linked) => linked.objectKey)
+        : [],
+    );
+    const garbage = objects.filter(({ key }) => !kept.has(key));
+    if (garbage.length) await bucket.delete(garbage.map(({ key }) => key));
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
 }

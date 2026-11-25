@@ -215,6 +215,11 @@ export async function createCommentThread({
         ),
       );
     if (!node) throw new Error("File not found");
+    // Viewers hold the project lock in shared mode, so it does not serialize
+    // the count.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`comment-threads:${data.projectId}`}, 0))`,
+    );
     const [existing] = await tx
       .select({ count: count() })
       .from(projectCommentThread)

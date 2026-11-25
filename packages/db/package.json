@@ -16,6 +16,7 @@
     "db:seed": "bun run templates:seed --local",
     "db:start": "docker compose -f ../../compose.yaml up --wait db",
     "templates:seed": "bun run scripts/seed-templates.ts",
+    "test": "bun test src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

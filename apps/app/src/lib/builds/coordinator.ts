@@ -82,6 +82,8 @@ export const cacheKey = (projectId: string) =>
   `projects/${projectId}/cache.tar.zst`;
 const retentionMs = 30 * 24 * 60 * 60_000;
 export const previewRetentionMs = 24 * 60 * 60_000;
+// Tabs whose last sequence is remembered. Older ones have long stopped sending.
+const maxEditors = 64;
 type RunContext = {
   attempt: number;
   delivery: "direct" | "overflow";
@@ -141,6 +143,23 @@ export class ProjectCoordinatorCore {
           maintenanceSent: false,
           preview: false,
         };
+    this.trimEditors();
+  }
+
+  // The least recently seen editors come first.
+  private trimEditors() {
+    const editors = Object.entries(this.state.editors);
+    if (editors.length > maxEditors)
+      this.state.editors = Object.fromEntries(editors.slice(-maxEditors));
+  }
+
+  private recordEditor({
+    editorId,
+    sequence,
+  }: z.infer<typeof editorVersionSchema>) {
+    delete this.state.editors[editorId];
+    this.state.editors[editorId] = sequence;
+    this.trimEditors();
   }
 
   snapshot(): CoordinatorSnapshot {
@@ -218,7 +237,7 @@ export class ProjectCoordinatorCore {
         ),
       );
       const synced = "baseRevision" in submission;
-      if (version) this.state.editors[version.editorId] = version.sequence;
+      if (version) this.recordEditor(version);
       const previous = this.state.current;
       const supersededId =
         previous &&
@@ -281,12 +300,16 @@ export class ProjectCoordinatorCore {
         version.sequence <= (this.state.editors[version.editorId] ?? -1)
       )
         return;
-      if (version) this.state.editors[version.editorId] = version.sequence;
+      if (version) this.recordEditor(version);
       this.state.revision++;
       this.state.stale = true;
       this.state.lastActivity = Date.now();
       this.persist();
-      if (!this.state.pending) await this.requestMaintenance();
+      // A change leaves nothing to clean up now. Builds request their own cleanup.
+      if (!this.state.pending && this.state.maintenanceAt === null)
+        await this.requestMaintenance(
+          this.state.lastActivity + this.retention(),
+        );
     });
   }
 
@@ -338,6 +361,7 @@ export class ProjectCoordinatorCore {
     );
   }
 
+  // Runs inside `exclusive`, like everything else that changes state or alarms.
   private async requestMaintenance(at = Date.now() + 1000, redeliver = false) {
     if (
       this.state.maintenanceAt === null ||
@@ -374,32 +398,36 @@ export class ProjectCoordinatorCore {
     }
   }
 
+  // Storage is cleaned up outside `exclusive`, so a submission never waits for
+  // it. Each removal first checks that nothing newer started.
   async maintain(at: number) {
-    if (this.state.maintenanceAt !== at) return;
-    if (at > Date.now()) {
-      await this.requestMaintenance(at, true);
-      return;
-    }
-    if (this.state.pending || this.active) {
-      this.state.maintenanceAt = null;
-      await this.requestMaintenance();
-      return;
-    }
-    const before = Date.now();
-    const revision = this.state.revision;
-    if (before - this.state.lastActivity >= this.retention()) {
-      await this.exclusive(async () => {
-        if (
-          this.state.pending ||
-          Date.now() - this.state.lastActivity < this.retention()
-        )
-          return;
+    const due = await this.exclusive(async () => {
+      if (this.state.maintenanceAt !== at) return null;
+      if (at > Date.now()) {
+        await this.requestMaintenance(at, true);
+        return null;
+      }
+      if (this.state.pending || this.active) {
+        // The build requests maintenance again when it finishes.
+        this.state.maintenanceAt = null;
+        this.state.maintenanceSent = false;
+        this.persist();
+        return null;
+      }
+      const before = Date.now();
+      const expired = before - this.state.lastActivity >= this.retention();
+      if (expired) {
         this.state.artifacts = null;
         this.state.latestBuild = null;
         this.state.current = null;
         this.state.sources = null;
         this.persist();
-      });
+      }
+      return { before, expired, revision: this.state.revision };
+    });
+    if (!due) return;
+    const { before, revision } = due;
+    if (due.expired) {
       for await (const key of this.options.store.keys(
         `projects/${this.options.projectId}/`,
         before,
@@ -416,11 +444,15 @@ export class ProjectCoordinatorCore {
     } else {
       await this.pruneArtifacts(before, revision);
     }
-    if (this.state.maintenanceAt !== at) return;
-    this.state.maintenanceAt = null;
-    this.persist();
-    if (this.state.current || this.state.sources || this.state.artifacts)
-      await this.requestMaintenance(this.state.lastActivity + this.retention());
+    await this.exclusive(async () => {
+      if (this.state.maintenanceAt !== at) return;
+      this.state.maintenanceAt = null;
+      this.persist();
+      if (this.state.current || this.state.sources || this.state.artifacts)
+        await this.requestMaintenance(
+          this.state.lastActivity + this.retention(),
+        );
+    });
   }
 
   async fail(revision: number) {
@@ -679,12 +711,14 @@ export class ProjectCoordinatorCore {
     try {
       return await this.runEngine(build, project, run, signal);
     } finally {
-      this.active = null;
-      if (this.state.pending?.delivery === "direct")
-        await this.options.schedule(
-          Math.max(Date.now() + 1, this.state.pending.due),
-        );
-      else if (!this.state.pending) await this.requestMaintenance();
+      await this.exclusive(async () => {
+        this.active = null;
+        if (this.state.pending?.delivery === "direct")
+          await this.options.schedule(
+            Math.max(Date.now() + 1, this.state.pending.due),
+          );
+        else if (!this.state.pending) await this.requestMaintenance();
+      });
     }
   }
 
@@ -782,8 +816,9 @@ export class ProjectCoordinatorCore {
       // Deltas can no longer build on this manifest; the next one resyncs.
       if (error instanceof MissingSourceError)
         await this.exclusive(async () => {
-          if (this.state.sources?.revision === project.revision)
-            this.state.sources = null;
+          if (this.state.sources?.revision !== project.revision) return;
+          this.state.sources = null;
+          this.persist();
         });
       if (error instanceof HttpError || error instanceof EngineError)
         engineTiming = error.timing;

@@ -10,7 +10,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
-import type { SourceBucket } from "#/lib/storage/server";
+import { mapLimit } from "#/lib/map-limit";
+import { sourceConcurrency, type SourceBucket } from "#/lib/storage/server";
 
 import type { LockProject } from "./access";
 import type {
@@ -310,7 +311,7 @@ export async function getProject({
   projectId,
   bucket,
 }: ProjectOwner & { projectId: string; bucket?: SourceBucket }) {
-  return db.transaction(async (tx) => {
+  const { result, canWrite } = await db.transaction(async (tx) => {
     const { canWrite } = await lock({
       tx,
       projectId,
@@ -329,38 +330,42 @@ export async function getProject({
       },
     });
     if (!result) throw new Error("Project not found");
-    const sourceVersions: Record<
-      string,
-      { objectKey: string | null; updatedAt: number }
-    > = {};
-    const sourceContents: Record<string, string> = {};
-    for (const node of result.nodes) {
-      if (node.kind === "folder") continue;
+    return { result, canWrite };
+  });
+  const sourceVersions: Record<
+    string,
+    { objectKey: string | null; updatedAt: number }
+  > = {};
+  for (const node of result.nodes)
+    if (node.kind !== "folder")
       sourceVersions[node.id] = {
         objectKey: node.objectKey,
         updatedAt: node.updatedAt.getTime(),
       };
-      if (node.kind === "text") {
-        if (node.objectKey) {
-          if (!bucket) throw new Error("Source storage unavailable");
-          const object = await bucket.get(node.objectKey);
-          if (!object) throw new Error("Saved source is missing from storage");
-          sourceContents[node.id] = await object.text();
-        } else sourceContents[node.id] = "";
-      }
-    }
-    return {
-      ...result,
-      nodes: result.nodes.map(({ id, projectId, parentId, name, kind }) => ({
-        id,
-        projectId,
-        parentId,
-        name,
-        kind,
-      })),
-      canWrite,
-      sourceVersions,
-      sourceContents,
-    };
-  });
+  const sourceContents = Object.fromEntries(
+    await mapLimit(
+      result.nodes.filter((node) => node.kind === "text"),
+      sourceConcurrency,
+      async ({ id, objectKey }) => {
+        if (!objectKey) return [id, ""] as const;
+        if (!bucket) throw new Error("Source storage unavailable");
+        const object = await bucket.get(objectKey);
+        if (!object) throw new Error("Saved source is missing from storage");
+        return [id, await object.text()] as const;
+      },
+    ),
+  );
+  return {
+    ...result,
+    nodes: result.nodes.map(({ id, projectId, parentId, name, kind }) => ({
+      id,
+      projectId,
+      parentId,
+      name,
+      kind,
+    })),
+    canWrite,
+    sourceVersions,
+    sourceContents,
+  };
 }

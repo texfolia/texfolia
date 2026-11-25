@@ -1,8 +1,22 @@
 import type { Db } from "@texfolia/db";
 import { project, projectCollaboration } from "@texfolia/db/schema";
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, or, sql } from "drizzle-orm";
 
 import type { CollaborationRoom } from "./room";
+
+const projectGone = sql`NOT EXISTS (SELECT 1 FROM ${project} WHERE ${project.id} = ${projectCollaboration.projectId})`;
+
+// Records that a room holds documents of deleted files, in the transaction that
+// deletes them. The room clears it once they are gone.
+export async function requestCollaborationCleanup(
+  tx: Pick<Db, "update">,
+  projectId: string,
+) {
+  await tx
+    .update(projectCollaboration)
+    .set({ cleanupRequestedAt: new Date() })
+    .where(eq(projectCollaboration.projectId, projectId));
+}
 
 export type CollaborationCleanup = {
   getByName(projectId: string): Pick<CollaborationRoom, "purgeDeletedSources">;
@@ -16,7 +30,8 @@ export async function cleanupDeletedCollaboration(
   try {
     await collaboration.getByName(projectId).purgeDeletedSources(projectId);
   } catch (error) {
-    // The room registration remains until a scheduled sweep acknowledges cleanup.
+    // The request, or the registration of a deleted project, remains until a
+    // scheduled sweep reaches the room.
     console.error("Deleted source collaboration cleanup failed", {
       projectId,
       error,
@@ -24,6 +39,7 @@ export async function cleanupDeletedCollaboration(
   }
 }
 
+// Reaches the rooms that a deletion could not. Every other room is left asleep.
 export async function collectCollaborationSources({
   db,
   collaboration,
@@ -35,9 +51,14 @@ export async function collectCollaborationSources({
   const failures: unknown[] = [];
   for (;;) {
     const rooms = await db
-      .select()
+      .select({ projectId: projectCollaboration.projectId })
       .from(projectCollaboration)
-      .where(cursor ? gt(projectCollaboration.projectId, cursor) : undefined)
+      .where(
+        and(
+          cursor ? gt(projectCollaboration.projectId, cursor) : undefined,
+          or(isNotNull(projectCollaboration.cleanupRequestedAt), projectGone),
+        ),
+      )
       .orderBy(asc(projectCollaboration.projectId))
       .limit(100);
     if (!rooms.length) break;
@@ -55,10 +76,7 @@ export async function collectCollaborationSources({
           await db
             .delete(projectCollaboration)
             .where(
-              and(
-                eq(projectCollaboration.projectId, projectId),
-                sql`NOT EXISTS (SELECT 1 FROM ${project} WHERE ${project.id} = ${projectId})`,
-              ),
+              and(eq(projectCollaboration.projectId, projectId), projectGone),
             );
       } catch (error) {
         console.error("Collaborative source collection failed", {

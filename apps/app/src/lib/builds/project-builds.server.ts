@@ -174,26 +174,27 @@ export class ProjectBuilds extends LiveProject {
   }
 
   protected override async work() {
-    await this.project().wake();
+    await this.project()?.wake();
   }
 
+  // Null until the project's state is first saved, so there is nothing to do.
   private project() {
-    const { projectId } = this.ctx.storage.sql
+    const [identity] = this.ctx.storage.sql
       .exec<{ projectId: string }>("SELECT projectId FROM identity LIMIT 1")
-      .one();
-    return this.coordinator(projectId);
+      .toArray();
+    return identity ? this.coordinator(identity.projectId) : null;
   }
 
   async consume(revision: number) {
-    return this.project().consume(revision);
+    return (await this.project()?.consume(revision)) ?? true;
   }
 
   async fail(revision: number) {
-    await this.project().fail(revision);
+    await this.project()?.fail(revision);
   }
 
   async maintain(at: number) {
-    await this.project().maintain(at);
+    await this.project()?.maintain(at);
   }
 }
 

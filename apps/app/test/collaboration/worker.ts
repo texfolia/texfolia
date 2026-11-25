@@ -4,14 +4,12 @@ import { eq } from "drizzle-orm";
 
 import { liveUserHeader } from "#/lib/builds/client";
 import { LiveProject } from "#/lib/builds/live-object.server";
+import { requestCollaborationCleanup } from "#/lib/collaboration/server";
 import { invalidateOrganizationAccess } from "#/lib/projects/server";
 
 import { createAuth } from "../../src/lib/auth/auth";
 import { ProjectCollaboration as Room } from "../../src/lib/collaboration/project-collaboration.server";
-import {
-  collectProjectSources,
-  deleteProjectNode,
-} from "../../src/lib/projects/project-source.server";
+import { deleteProjectNode } from "../../src/lib/projects/project-source.server";
 import {
   deleteTrashedProject,
   restoreProject,
@@ -28,11 +26,12 @@ import {
 } from "../../src/lib/sharing/project-sharing.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
 import { Route as compileRoute } from "../../src/routes/api/compile/$projectId";
+import { collectProjectSources } from "../collection";
 
 // Count Postgres use and alarms so tests can assert edits stay off the database.
 export class ProjectCollaboration extends Room {
   private databaseUses = 0;
-  private alarms = 0;
+  private alarmRuns = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -47,12 +46,25 @@ export class ProjectCollaboration extends Room {
   }
 
   override async alarm() {
-    this.alarms++;
+    this.alarmRuns++;
     return super.alarm();
   }
 
+  // Runs the periodic check now rather than after a minute.
+  async backstop() {
+    const room = this as unknown as {
+      alarms: { plan: (duty: "access", at: number) => Promise<void> };
+    };
+    await room.alarms.plan("access", Date.now());
+  }
+
   async usage() {
-    return { databaseUses: this.databaseUses, alarms: this.alarms };
+    const room = this as unknown as { documents: Map<string, unknown> };
+    return {
+      databaseUses: this.databaseUses,
+      alarms: this.alarmRuns,
+      documents: [...room.documents.keys()],
+    };
   }
 }
 
@@ -72,7 +84,8 @@ export default {
             bucket: env.SOURCES,
             collaboration: env.COLLABORATION,
           });
-        else if (action === "delete-after-purge")
+        else if (action === "delete-after-purge") {
+          await requestCollaborationCleanup(db, projectId);
           await collectProjectSources({
             db,
             bucket: env.SOURCES,
@@ -90,6 +103,7 @@ export default {
               }),
             },
           });
+        }
         // Deletes without purging the room, as when the purge call fails.
         else if (action === "project-only") {
           await trashProject({ db, userId, projectId });
@@ -206,14 +220,15 @@ export default {
         return new Response("Not found", { status: 404 });
       }
     }
+    const room = (
+      env.COLLABORATION as unknown as DurableObjectNamespace<ProjectCollaboration>
+    ).getByName(url.pathname.split("/")[2] ?? "");
     if (url.pathname.startsWith("/usage/"))
-      return Response.json(
-        await (
-          env.COLLABORATION as unknown as DurableObjectNamespace<ProjectCollaboration>
-        )
-          .getByName(url.pathname.split("/")[2] ?? "")
-          .usage(),
-      );
+      return Response.json(await room.usage());
+    if (url.pathname.startsWith("/backstop/")) {
+      await room.backstop();
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname === "/client.js") return env.CLIENT.fetch(request);
     if (url.pathname.startsWith("/fixture/"))
       return env.BUILDS.getByName(url.pathname.split("/")[3] ?? "").fetch(

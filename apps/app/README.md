@@ -67,27 +67,30 @@ Limits are 10 MiB per file and 50 MiB per active project, using actual UTF-8 or
 binary byte counts. Compilation has its separate 10 MiB JSON payload limit,
 including base64 overhead for binary assets.
 
-Postgres and R2 cannot share a distributed transaction. Each write locks the
-project row, checks access, version, and aggregate quota, uploads the immutable
-object, then commits `object_key`, `size_bytes`, and `updated_at` together in a
-Postgres transaction. A failed R2 write leaves metadata unchanged. A failed SQL
-commit can leave an unreferenced object, never a committed pointer to an object
-that was not uploaded. The same lock serializes node/project deletion and GC.
+Postgres and R2 cannot share a distributed transaction, and no transaction stays
+open during an R2 or Durable Object call. Each write checks access, uploads the
+immutable object, then locks the project row, checks access, version, and
+aggregate quota again, and commits `object_key`, `size_bytes`, and `updated_at`
+together. A failed R2 write leaves metadata unchanged. A failed SQL commit can
+leave an unreferenced object, never a committed pointer to an object that was not
+uploaded. [`#/lib/storage`](src/lib/storage/README.md#collection) describes how
+writes and collection stay apart without sharing a lock across R2 calls.
 
 Each write that replaces or deletes a source also records the old key in the
 `source_garbage` table, in the same transaction. This covers saves, collaboration
 saves, Git checkouts and pulls, node deletion, and permanent project deletion. The web
-Worker's hourly scheduled handler reads only that table. For each queued key, it
-locks the project and deletes the object if no live node references it, so the
-run's cost depends on recent changes, not bucket size. Shared hashes are retained
-while any live node references them.
+Worker's hourly scheduled handler reads only that table. It claims keys queued for
+over an hour that no live node references, under the project lock, and then
+deletes their objects. The run's cost depends on recent changes, not bucket size.
+Shared hashes are retained while any live node references them.
 
 A daily sweep (`41 3 * * *`) lists the whole `projects/` prefix as a safety net.
 It removes objects the queue cannot see: uploads whose SQL transaction rolled
-back, and projects removed by account or organization cascades. Both passes use
+back, and projects removed by account or organization cascades. It skips objects
+uploaded in the last day, whose transactions may still commit. Both passes use
 SQL references, not an age-based bucket lifecycle that could erase old but
-still-current files. Source reads also hold the project lock in shared
-mode so GC cannot remove a version while it is being read.
+still-current files. Reads look up keys in a short transaction and read the
+objects afterward; the hour before collection keeps replaced versions readable.
 
 On open, sources come from the server. Legacy local-storage drafts are uploaded
 automatically only for text nodes without a server object. Other differing drafts
@@ -180,9 +183,14 @@ Compaction does not reset the document or discard offline merge history.
 
 An alarm writes merged text to R2 after two seconds, through the same project
 lock, quotas, and content-addressed keys as other sources. Failed writes remain
-dirty in SQLite and retry. Save waits for this write, and compile uses the
-acknowledged merged text. The project's build coordinator receives source-change
-notifications.
+dirty in SQLite and retry, at first after five seconds and at most every five
+minutes. Save waits for this write, and compile uses the acknowledged merged text.
+Edits do not wait for it: each file has its own queue, and saving happens outside
+it. The project's build coordinator receives source-change notifications.
+
+A file leaves memory when nobody has it open and it is saved, or when it is open
+but unused for five minutes. An object with no sockets and no unsaved edits plans
+no alarm, so it stays asleep.
 
 Moving a project to the trash closes its sockets and keeps its documents, so a
 restored project has the CRDT identities that comments and offline edits use.
@@ -191,12 +199,14 @@ Permanent project deletion and recursive file deletion notify the collaboration 
 transaction commits. Cleanup removes snapshots, journals, and their chunks,
 destroys cached documents, and closes affected sockets. Accepted dirty edits are
 discarded when their source is deleted; they cannot recreate the source.
-Clean disconnected rooms retain an hourly alarm that checks deletion too.
 
-The hourly source sweep also reconciles rooms in `project_collaboration`, even
-when a room has never saved an R2 source. Registrations survive account and
-organization cascades. Failed cleanup or SQL acknowledgement leaves the
-registration for the next sweep. The registry is part of the Drizzle schema.
+Deleting files sets `cleanup_requested_at` on the room's `project_collaboration`
+row in the same transaction, and the room clears it when their documents are gone.
+The hourly source sweep reaches rooms that still have it set, and rooms whose
+project no longer exists, even when a room has never saved an R2 source. It leaves
+every other room asleep. Registrations survive account and organization cascades.
+Failed cleanup or SQL acknowledgement leaves the row for the next sweep. The
+registry is part of the Drizzle schema.
 
 WebSockets use the hibernation API. Attachments retain file identity and presence
 across eviction. Automatic ping/pong responses do not wake the object. On wake,
@@ -222,19 +232,21 @@ Sharing changes notify it inside the revoking
 transaction. The next delivery to that user then waits on the revocation's locks
 and sees the committed change. Organization member removal and leaving notify
 every registered room and every build coordinator of the organization after
-Better Auth commits. Moving a project to the trash and transferring it notify
-them too. Permanent project
+Better Auth commits. Deleting an account or an organization notifies every project
+it could reach. Moving a project to the trash and transferring it notify
+them too. Failed notifications are retried twice. Permanent project
 and file deletion close sockets through source cleanup. Eviction clears the cache.
 
 Build events are hibernatable WebSockets from the project's build coordinator. A
 PDF that loses its reader's access ends early. Failure to verify access also
 closes a socket or stream.
 
-A periodic check is the backstop when a notification fails or a path sends none,
-such as account deletion. Collaboration rooms recheck connected users every five
-seconds and build coordinators every 60. A revoked user can receive updates for
-up to that long, plus database time and runtime scheduling.
-Collaboration uses a durable alarm so checks continue after hibernation. The alarm
+A periodic check is the backstop when a notification fails. Cached access expires
+after 60 seconds in collaboration rooms and build coordinators, so a revoked user
+can receive updates for up to that long, plus database time and runtime
+scheduling. A room checks everyone connected in one transaction, ten seconds
+before that. Collaboration uses a durable alarm so checks continue after
+hibernation. The alarm
 also reconciles open documents with sources saved outside collaboration. Revoked
 WebSockets close with code `1008`. Compile streams close and cancel their upstream
 reader. Reconnects use the normal authenticated routes and reject removed users.

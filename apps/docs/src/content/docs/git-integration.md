@@ -87,17 +87,19 @@ links, submodules, and case-colliding paths cannot be imported. Source limits re
 transfers and stored repository data are capped at 20 MiB. Imports shallow-clone
 50 commits to bound resource usage; earlier history stays on the host.
 
-Pull requires a clean working tree and can merge nonconflicting commits. A conflict
+Pull requires a clean working tree and can merge nonconflicting commits. Editing
+continues while Texfolia talks to the host, so an edit made meanwhile stops the pull
+with the same message. Files then change in one short step that holds off edits. A conflict
 returns the affected paths and preserves the working tree and repository pointer.
 Resolve conflicts on the host or in a local checkout, then pull again. Push never
 forces history. Visual merge editing and pull/merge request creation are outside
 this implementation.
 
 Unlink keeps files and discards local git history and branches. Push first to keep
-commits on the host. The hourly source sweep deletes superseded and abandoned git
-objects. Permanently deleting a project removes local git data; the trash keeps it. Neither deletes the remote.
+commits on the host. The hourly sweep deletes superseded and abandoned git objects
+after an hour. Permanently deleting a project removes local git data; the trash keeps it. Neither deletes the remote.
 Prelaunch document snapshots are removed without migration: the room drops its
-history tables and the registered-room sweep deletes legacy `history/` R2 objects.
+history tables and the hourly sweep deletes legacy `history/` R2 objects.
 Live Yjs persistence remains.
 
 ## Assistant

@@ -1,6 +1,4 @@
-// How long a verified viewer may be served without asking Postgres again.
-// Revocation paths push, so this only bounds a missed notice.
-export const liveAccessMs = 60_000;
+import { liveAccessMs } from "#/lib/projects/live-access-interval";
 
 /** Who may receive a project's live build data, as far as this object knows. */
 export class LiveAccess {

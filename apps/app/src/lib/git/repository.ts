@@ -344,28 +344,64 @@ export class GitRepository {
       remoteRef: ref,
     });
   }
-  private async requireClean() {
+  async requireClean() {
     if ((await this.status()).changes.length)
       throw new Error(
         "Commit your changes before pulling or switching branches.",
       );
   }
-  async pull(http: git.HttpClient, author: { name: string; email: string }) {
-    await this.requireClean();
-    await git.pull({
+  // Pulling and switching branches fetch first, which needs only the remote, and
+  // then change files, which needs no network.
+  async fetchCurrent(http: git.HttpClient) {
+    const ref = await git.currentBranch(this.args());
+    if (!ref) throw new Error("Choose a branch before pulling.");
+    const { fetchHead, fetchHeadDescription } = await git.fetch({
       ...this.args(),
       http,
       remote: "origin",
+      ref,
       singleBranch: true,
-      author,
     });
+    if (!fetchHead) throw new Error("The remote repository has no branches.");
+    return { ref, theirs: fetchHead, message: `Merge ${fetchHeadDescription}` };
+  }
+  async merge(
+    {
+      ref,
+      theirs,
+      message,
+    }: Awaited<ReturnType<GitRepository["fetchCurrent"]>>,
+    author: { name: string; email: string },
+  ) {
+    await this.requireClean();
+    await git.merge({ ...this.args(), ours: ref, theirs, message, author });
+    await git.checkout({ ...this.args(), ref, remote: "origin" });
     this.sources();
+  }
+  async pull(http: git.HttpClient, author: { name: string; email: string }) {
+    await this.requireClean();
+    await this.merge(await this.fetchCurrent(http), author);
   }
   async branch(name: string) {
     await git.branch({ ...this.args(), ref: name });
   }
   async hasLocalBranch(name: string) {
     return (await git.listBranches(this.args())).includes(name);
+  }
+  async fetchBranch(name: string, http: git.HttpClient) {
+    await git.fetch({
+      ...this.args(),
+      http,
+      remote: "origin",
+      ref: name,
+      singleBranch: true,
+      depth: 50,
+    });
+  }
+  async switchBranch(name: string) {
+    await this.requireClean();
+    await git.checkout({ ...this.args(), ref: name });
+    this.sources();
   }
   async checkout(name: string, http?: git.HttpClient) {
     await this.requireClean();
@@ -374,16 +410,8 @@ export class GitRepository {
         throw new Error(
           "Connect repository access before switching to a remote branch.",
         );
-      await git.fetch({
-        ...this.args(),
-        http,
-        remote: "origin",
-        ref: name,
-        singleBranch: true,
-        depth: 50,
-      });
+      await this.fetchBranch(name, http);
     }
-    await git.checkout({ ...this.args(), ref: name });
-    this.sources();
+    await this.switchBranch(name);
   }
 }

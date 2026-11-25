@@ -1,10 +1,10 @@
 import handler from "@tanstack/react-start/server-entry";
-import { createDb } from "@texfolia/db";
+import { createDb, type Db } from "@texfolia/db";
 
 import { gatewayRequestCost } from "#/lib/ai/gateway";
 import { reconcileAiUsage } from "#/lib/billing/server";
 import { handleBuildQueue } from "#/lib/builds/server";
-import { collectGitObjects } from "#/lib/git/server";
+import { collectGitObjects, collectLegacyHistory } from "#/lib/git/server";
 import { sweepProjectSources } from "#/lib/storage/server";
 import {
   collectTemplateObjects,
@@ -18,6 +18,26 @@ import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 
 export { CompileUsage, ProjectBuilds } from "./lib/builds/server";
 export { ProjectCollaboration } from "./lib/collaboration/project-collaboration.server";
+
+// Runs each job on its own connection: jobs sharing a pool of one would wait for
+// each other's queries and transactions. One failing does not stop the rest.
+async function runScheduled(env: Env, jobs: ((db: Db) => Promise<unknown>)[]) {
+  const results = await Promise.allSettled(
+    jobs.map(async (job) => {
+      const db = createDb(env.HYPERDRIVE.connectionString);
+      try {
+        await job(db);
+      } finally {
+        await db.$client.end();
+      }
+    }),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (failures.length)
+    throw new AggregateError(failures, "Scheduled maintenance failed");
+}
 
 export default {
   async fetch(request) {
@@ -37,40 +57,29 @@ export default {
   },
   queue: handleBuildQueue,
   async scheduled(controller, env) {
-    const db = createDb(env.HYPERDRIVE.connectionString);
-    try {
-      if (controller.cron === "17 * * * *") {
-        await deleteExpiredProjects({ db, collaboration: env.COLLABORATION });
-        await collectProjectSources({
-          db,
-          bucket: env.SOURCES,
-          collaboration: env.COLLABORATION,
-        });
-        await collectGitObjects({ db, bucket: env.SOURCES });
-        await collectTemplateObjects({ db, bucket: env.SOURCES });
-      } else if (controller.cron === "41 3 * * *") {
-        await sweepProjectSources({ db, bucket: env.SOURCES });
-      } else {
-        const results = await Promise.allSettled([
-          refreshTemplatePreviews({ db, bucket: env.SOURCES }),
-          Promise.resolve().then(() => {
-            if (!process.env.CLOUDFLARE_AI_API_TOKEN) return;
-            const config = aiConfig();
-            return reconcileAiUsage({
-              db,
-              config,
-              requestCost: gatewayRequestCost(config),
-            });
-          }),
-        ]);
-        const failures = results.flatMap((result) =>
-          result.status === "rejected" ? [result.reason] : [],
-        );
-        if (failures.length)
-          throw new AggregateError(failures, "Scheduled maintenance failed");
-      }
-    } finally {
-      await db.$client.end();
-    }
+    const { SOURCES: bucket, COLLABORATION: collaboration } = env;
+    if (controller.cron === "17 * * * *")
+      await runScheduled(env, [
+        (db) => deleteExpiredProjects({ db, collaboration }),
+        (db) => collectProjectSources({ db, bucket, collaboration }),
+        (db) => collectGitObjects({ db, bucket }),
+        () => collectLegacyHistory(bucket),
+        (db) => collectTemplateObjects({ db, bucket }),
+      ]);
+    else if (controller.cron === "41 3 * * *")
+      await runScheduled(env, [(db) => sweepProjectSources({ db, bucket })]);
+    else
+      await runScheduled(env, [
+        (db) => refreshTemplatePreviews({ db, bucket }),
+        async (db) => {
+          if (!process.env.CLOUDFLARE_AI_API_TOKEN) return;
+          const config = aiConfig();
+          await reconcileAiUsage({
+            db,
+            config,
+            requestCost: gatewayRequestCost(config),
+          });
+        },
+      ]);
   },
 } satisfies ExportedHandler<Env>;

@@ -34,10 +34,7 @@ import {
 } from "#/lib/templates/server";
 
 import { createProjectNode } from "../../src/lib/projects/project-node.server";
-import {
-  collectProjectSources,
-  saveProjectSource,
-} from "../../src/lib/projects/project-source.server";
+import { saveProjectSource } from "../../src/lib/projects/project-source.server";
 import {
   createProject,
   deleteTrashedProject,
@@ -52,6 +49,7 @@ const publishTemplate = (
 ) => publishTemplateSnapshot({ ...options, lock: lockProject });
 
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
+import { collectProjectSources } from "../collection";
 
 export default {
   async fetch(_request: Request, env: Env) {
@@ -521,35 +519,11 @@ export default {
         data: { templateId: published.id, organizationId: null },
       });
       await uploaded.promise;
-      // The copy holds this request's only connection. The sweep runs in the
-      // cron handler with its own db, and the lock check needs a third.
-      const collectorDb = createDb(env.HYPERDRIVE.connectionString);
-      const observerDb = createDb(env.HYPERDRIVE.connectionString);
-      const collecting = sweepProjectSources({
-        db: collectorDb,
-        bucket,
-      }).finally(() => collectorDb.$client.end());
-      try {
-        const deadline = Date.now() + 5000;
-        while (true) {
-          const { rows } = await observerDb.$client.query<{
-            waiting: boolean;
-          }>(
-            "select exists(select 1 from pg_locks where locktype = 'advisory' and not granted) as waiting",
-          );
-          if (rows[0]?.waiting) break;
-          assert(
-            Date.now() < deadline,
-            "Source collection must wait for an uncommitted template copy",
-          );
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-      } finally {
-        releaseCopy.resolve();
-        await observerDb.$client.end();
-      }
+      // The copy waits for storage without a transaction, so this runs meanwhile.
+      // It leaves recent uploads alone until the project refers to them.
+      await sweepProjectSources({ db, bucket });
+      releaseCopy.resolve();
       const racedCopy = await copying;
-      await collecting;
       const preserved = await getProject({
         db,
         bucket,

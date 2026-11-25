@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { LiveAccess, liveAccessMs } from "./live-access";
+import { liveAccessMs } from "#/lib/projects/live-access-interval";
+
+import { LiveAccess } from "./live-access";
 
 function harness() {
   const allowed = new Set(["ada", "bob"]);

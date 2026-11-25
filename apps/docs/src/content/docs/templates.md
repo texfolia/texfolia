@@ -14,8 +14,8 @@ create-from-template UI stay in `apps/app`.
 ## Storage and ownership
 
 Postgres owns metadata and an immutable source manifest. R2 stores source objects
-at `templates/{id}/sources/{sha256}`. Publication copies saved project files under
-the existing project lock. Browser drafts are excluded. Opening a template copies
+at `templates/{id}/sources/{sha256}`. Publication checks access and limits, copies
+saved project files with no lock held, and checks again before it commits. Browser drafts are excluded. Opening a template copies
 its tree and files into independent project objects with new IDs.
 
 Curated starters have a null owner and no organization. User publications have an

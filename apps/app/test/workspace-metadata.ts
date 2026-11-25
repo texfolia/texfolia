@@ -459,18 +459,11 @@ try {
     () => submissions.length > before,
     "Compile did not reach authenticated route",
   );
-  const creatingDuringAcceptance = createFile(owner, "acceptance.tex");
-  // The real mutation must be waiting on the project's row lock while the
-  // compiler request is unacknowledged; metadata cannot slip through this gap.
-  await eventually(async () => {
-    const result = await db.$client.query(
-      "SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%for update%' LIMIT 1",
-    );
-    return result.rows.length > 0;
-  }, "Metadata write did not wait for compile acceptance");
+  // Nothing locks the project while the compiler request is unacknowledged, so
+  // the write completes. The route then finds that the sources changed.
+  await createFile(owner, "acceptance.tex");
   accepted.resolve();
   submissionGate = undefined;
-  await creatingDuringAcceptance;
   assert(!("acceptance.tex" in (submissions.at(-1)?.files ?? {})));
   assert("chapter.tex" in (submissions.at(-1)?.files ?? {}));
   assert("asset.bin" in (submissions.at(-1)?.files ?? {}));

@@ -366,21 +366,43 @@ try {
     await peer.push(gitHttp(local, "private-token"));
     await action(projectId, { kind: "checkout", name: "main" });
     const beforePull = doc.getText("source").toString();
-    duringRemote = async () => {
-      await db
-        .update(projectNode)
-        .set({ updatedAt: new Date() })
-        .where(eq(projectNode.id, node.id));
+    // Sends an edit and waits until the room has accepted it.
+    const edit = async (change: () => void) => {
+      const vector = Y.encodeStateVector(doc);
+      change();
+      const accepted = new Promise<void>((resolve) => {
+        const listener = (event: { data: unknown }) => {
+          if (decodeServerMessage(event.data).type !== "update") return;
+          socket.removeEventListener("message", listener);
+          resolve();
+        };
+        socket.addEventListener("message", listener);
+      });
+      socket.send(
+        encodeClientMessage({
+          type: "update",
+          update: Y.encodeStateAsUpdate(doc, vector),
+        }),
+      );
+      await accepted;
     };
+    const text = doc.getText("source");
+    duringRemote = () =>
+      edit(() => {
+        text.insert(0, "typed during pull\n");
+      });
     await assert.rejects(
       action(projectId, { kind: "pull" }),
-      /changed while Git was syncing/,
+      /Commit your changes/,
     );
     assert.equal(
-      doc.getText("source").toString(),
-      beforePull,
-      "A concurrent edit during pull is never overwritten",
+      text.toString(),
+      `typed during pull\n${beforePull}`,
+      "The room accepts edits during a request to the Git host, and a pull never overwrites them",
     );
+    await edit(() => {
+      text.delete(0, "typed during pull\n".length);
+    });
     await action(projectId, { kind: "pull" });
     assert.equal(
       doc.getText("source").toString(),

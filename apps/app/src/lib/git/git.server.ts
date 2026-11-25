@@ -27,6 +27,7 @@ export function runGit(options: {
   projectId: string;
   user: { id: string; name: string; email: string };
   action: GitAction;
+  exclusively?: <T>(apply: () => Promise<T>) => Promise<T>;
 }) {
   return runGitAction({ ...options, lock: lockProject, accessToken });
 }

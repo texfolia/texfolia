@@ -3,44 +3,24 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
-import { fetchBuilds } from "#/lib/builds/client";
+import { invalidateSourceBuild } from "#/lib/builds/client";
 import {
   cleanupDeletedCollaboration,
   collectCollaborationSources,
+  requestCollaborationCleanup,
   type CollaborationCleanup,
 } from "#/lib/collaboration/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
 import type { saveSourceSchema } from "#/lib/storage";
 import {
+  checkProjectQuota,
   collectSourceGarbage,
-  putSource,
+  commitSources,
+  prepareSource,
   retireSources,
   type SourceBucket,
+  type SourceTransaction,
 } from "#/lib/storage/server";
-
-export async function invalidateSourceBuild(
-  projectId: string,
-  builds?: Pick<Fetcher, "fetch">,
-) {
-  try {
-    const response = await fetchBuilds(
-      `/projects/${projectId}/changed`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ editorId: crypto.randomUUID(), sequence: 0 }),
-      },
-      builds,
-    );
-    if (!response.ok)
-      throw new Error(`Build invalidation returned ${response.status}`);
-  } catch (error) {
-    console.error("Source committed but build invalidation failed", {
-      projectId,
-      error,
-    });
-  }
-}
 
 export async function saveProjectSource({
   db,
@@ -53,12 +33,13 @@ export async function saveProjectSource({
   userId: string;
   data: z.infer<typeof saveSourceSchema>;
 }) {
-  const version = await db.transaction(async (tx) => {
-    await lockProject({ tx, projectId: data.projectId, userId });
+  const { projectId } = data;
+  const readNode = async (tx: SourceTransaction) => {
+    await lockProject({ tx, projectId, userId });
     const node = await tx.query.projectNode.findFirst({
       where: {
         id: data.nodeId,
-        projectId: data.projectId,
+        projectId,
         deletedAt: { isNull: true },
       },
     });
@@ -67,28 +48,41 @@ export async function saveProjectSource({
       throw new Error(
         "File changed on the server. Reopen the project before recovering your local draft.",
       );
-    const stored = await putSource({
-      tx,
-      bucket,
-      projectId: data.projectId,
-      content: data.content,
-      previousSize: node.sizeBytes,
-      kind: node.kind,
-    });
-    if (node.objectKey !== stored.objectKey)
-      await retireSources(tx, data.projectId, [node.objectKey]);
-    const updatedAt = new Date();
-    await tx
-      .update(projectNode)
-      .set({ ...stored, updatedAt })
-      .where(eq(projectNode.id, node.id));
-    await tx
-      .update(project)
-      .set({ updatedAt })
-      .where(eq(project.id, data.projectId));
-    return { objectKey: stored.objectKey, updatedAt: updatedAt.getTime() };
+    return { ...node, kind: node.kind };
+  };
+  // Nothing is stored for a caller without access or an unknown file.
+  const { kind } = await db.transaction(readNode);
+  const upload = await prepareSource(projectId, {
+    content: data.content,
+    kind,
   });
-  await invalidateSourceBuild(data.projectId);
+  const { objectKey, sizeBytes } = upload;
+  const version = await commitSources({
+    db,
+    bucket,
+    projectId,
+    uploads: [upload],
+    run: async (tx) => {
+      const node = await readNode(tx);
+      await checkProjectQuota(tx, projectId, {
+        previousSize: node.sizeBytes,
+        sizeBytes,
+      });
+      if (node.objectKey !== objectKey)
+        await retireSources(tx, projectId, [node.objectKey]);
+      const updatedAt = new Date();
+      await tx
+        .update(projectNode)
+        .set({ objectKey, sizeBytes, updatedAt })
+        .where(eq(projectNode.id, node.id));
+      await tx
+        .update(project)
+        .set({ updatedAt })
+        .where(eq(project.id, projectId));
+      return { objectKey, updatedAt: updatedAt.getTime() };
+    },
+  });
+  await invalidateSourceBuild(projectId);
   return version;
 }
 
@@ -135,6 +129,7 @@ export async function deleteProjectNode({
           inArray(projectNode.id, [...deleted]),
         ),
       );
+    await requestCollaborationCleanup(tx, projectId);
     await tx
       .update(project)
       .set({ updatedAt: new Date() })
@@ -157,17 +152,18 @@ export async function readProjectSource({
   projectId: string;
   nodeId: string;
 }) {
-  return db.transaction(async (tx) => {
+  const objectKey = await db.transaction(async (tx) => {
     await lockProject({ tx, projectId, userId, access: "read" });
     const node = await tx.query.projectNode.findFirst({
       where: { id: nodeId, projectId, deletedAt: { isNull: true } },
     });
     if (!node || node.kind === "folder") throw new Error("File not found");
-    if (!node.objectKey) return new Uint8Array();
-    const object = await bucket.get(node.objectKey);
-    if (!object) throw new Error("Saved source is missing from storage");
-    return new Uint8Array(await object.arrayBuffer());
+    return node.objectKey;
   });
+  if (!objectKey) return new Uint8Array();
+  const object = await bucket.get(objectKey);
+  if (!object) throw new Error("Saved source is missing from storage");
+  return new Uint8Array(await object.arrayBuffer());
 }
 
 // Deletes queued source objects, then orphaned collaboration sources.
@@ -175,11 +171,21 @@ export async function collectProjectSources({
   db,
   bucket,
   collaboration,
+  retiredBefore,
 }: {
   db: Db;
   bucket: SourceBucket;
   collaboration?: CollaborationCleanup;
+  retiredBefore?: Date;
 }) {
-  await collectSourceGarbage({ db, bucket });
-  await collectCollaborationSources({ db, collaboration });
+  // One failing must not hold up the other. They share a connection, so they
+  // also take turns.
+  const failures: unknown[] = [];
+  for (const collect of [
+    () => collectSourceGarbage({ db, bucket, retiredBefore }),
+    () => collectCollaborationSources({ db, collaboration }),
+  ])
+    await collect().catch((error: unknown) => failures.push(error));
+  if (failures.length)
+    throw new AggregateError(failures, "Project source collection failed");
 }

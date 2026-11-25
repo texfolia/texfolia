@@ -2,6 +2,7 @@
 // app injects the project lock and the OAuth access token.
 export {
   collectGitObjects,
+  collectLegacyHistory,
   gitAccount,
   gitAccounts,
   gitBranch,

@@ -10,5 +10,6 @@ export {
 export {
   cleanupDeletedCollaboration,
   collectCollaborationSources,
+  requestCollaborationCleanup,
   type CollaborationCleanup,
 } from "./cleanup";

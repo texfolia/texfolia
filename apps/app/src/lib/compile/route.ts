@@ -25,6 +25,7 @@ import { z } from "zod";
 import {
   connectBuilds,
   fetchBuilds,
+  invalidateSourceBuild,
   liveUserHeader,
 } from "#/lib/builds/client";
 
@@ -337,7 +338,9 @@ async function isLatestPdf(projectId: string, path: string) {
 export function createCompileHandlers<Context extends { db: Db }>(
   options: CompileRouteOptions<Context>,
 ) {
-  const { withCompileSources } = createCompileSources(options.project);
+  const { compileSources, sourcesCurrent } = createCompileSources(
+    options.project,
+  );
   type CompileArgs = CompileHandlerArgs<Context>;
   return {
     POST: async ({ request, params, context }: CompileArgs) => {
@@ -429,20 +432,21 @@ export function createCompileHandlers<Context extends { db: Db }>(
             body: JSON.stringify(sources),
           });
         };
-        // Keep metadata writes behind the project lock until the coordinator
-        // accepts this snapshot. Later changes then invalidate that build.
-        let response = await withCompileSources({
+        const project = {
           db,
           projectId: params.projectId,
           userId: denied.userId,
+        };
+        let { sources, version } = await compileSources({
+          ...project,
           mainFile: body.mainFile,
           sourceRevision: body.baseRevision,
           client: {
             version: request.headers.get("X-Source-Metadata") ?? "",
             delta: body,
           },
-          submit: send,
         });
+        let response = await send(sources);
         if (response.status === 409) {
           const resync = z
             .object({
@@ -457,14 +461,12 @@ export function createCompileHandlers<Context extends { db: Db }>(
             );
           if (resync.success) {
             submitted = false;
-            response = await withCompileSources({
-              db,
-              projectId: params.projectId,
-              userId: denied.userId,
+            ({ sources, version } = await compileSources({
+              ...project,
               mainFile: body.mainFile,
               sourceRevision: resync.data.sourceRevision,
-              submit: send,
-            });
+            }));
+            response = await send(sources);
           }
         }
         if (response.status === 202) {
@@ -472,6 +474,12 @@ export function createCompileHandlers<Context extends { db: Db }>(
           if (accepted.id !== id) throw new Error("Invalid compiler job ID");
           revision = accepted.revision;
           sourceRevision = accepted.sourceRevision;
+          // The project was not locked during submission. A change since the
+          // snapshot may have invalidated the build before this one existed.
+          if (
+            !(await sourcesCurrent({ ...project, version }).catch(() => false))
+          )
+            await invalidateSourceBuild(params.projectId);
           if (accepted.supersededId)
             await db
               .update(projectJob)

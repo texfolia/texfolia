@@ -20,11 +20,10 @@ import {
   trashRetentionDays,
 } from "#/lib/projects";
 import { encodeSource, maxSourceFileBytes } from "#/lib/storage";
-import { sweepProjectSources, type SourceBucket } from "#/lib/storage/server";
+import { type SourceBucket } from "#/lib/storage/server";
 
 import { importProjectFiles } from "../../src/lib/projects/project-import.server";
 import {
-  collectProjectSources,
   saveProjectSource,
   readProjectSource,
 } from "../../src/lib/projects/project-source.server";
@@ -49,6 +48,7 @@ import {
 import { transferProject } from "../../src/lib/sharing/project-transfer.server";
 
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
+import { collectProjectSources, sweepProjectSources } from "../collection";
 
 async function checkLifecycle({
   db,

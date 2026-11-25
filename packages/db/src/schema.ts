@@ -72,6 +72,11 @@ export const project = pgTable(
       .on(t.ownerId, t.name)
       .where(sql`${t.deletedAt} IS NULL`),
     index("project_organization_id_idx").on(t.organizationId),
+    // The unique index above skips the trash.
+    index("project_owner_id_idx").on(t.ownerId),
+    index("project_deleted_at_idx")
+      .on(t.deletedAt)
+      .where(sql`${t.deletedAt} IS NOT NULL`),
     check(
       "project_owner_check",
       sql`(${t.ownerId} IS NOT NULL AND ${t.organizationId} IS NULL) OR (${t.ownerId} IS NULL AND ${t.organizationId} IS NOT NULL)`,
@@ -168,17 +173,36 @@ export const projectShareLink = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("project_share_link_project_id_idx").on(table.projectId)],
+  (table) => [
+    index("project_share_link_project_id_idx").on(table.projectId),
+    index("project_share_link_created_by_idx").on(table.createdBy),
+  ],
 );
 
 // Deliberately independent of project: cleanup must survive owner cascades.
-export const projectCollaboration = pgTable("project_collaboration", {
-  projectId: uuid("project_id").primaryKey(),
-});
+export const projectCollaboration = pgTable(
+  "project_collaboration",
+  {
+    projectId: uuid("project_id").primaryKey(),
+    // Set in the transaction that deletes files, until the room confirms it
+    // dropped their documents. Other rooms of live projects are left asleep.
+    cleanupRequestedAt: timestamp("cleanup_requested_at", {
+      withTimezone: true,
+    }),
+  },
+  (t) => [
+    index("project_collaboration_cleanup_idx")
+      .on(t.cleanupRequestedAt)
+      .where(sql`${t.cleanupRequestedAt} IS NOT NULL`),
+  ],
+);
 
 // Source object keys that a node stopped referencing. Like the registry above,
 // it has no foreign key, so pending cleanup survives owner cascades. Rows are
-// candidates: collection deletes an object only when no live node uses it.
+// candidates: collection deletes an object only when no live node uses it. It
+// claims the row first and deletes the object outside any transaction, so writers
+// storing the same content check for claims before they commit (see
+// `commitSources`). A deleted row stays a while for writers that started earlier.
 export const sourceGarbage = pgTable(
   "source_garbage",
   {
@@ -190,8 +214,13 @@ export const sourceGarbage = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("source_garbage_project_id_idx").on(t.projectId)],
+  (t) => [
+    index("source_garbage_project_id_idx").on(t.projectId, t.objectKey),
+    index("source_garbage_created_at_idx").on(t.createdAt),
+  ],
 );
 
 export const projectJob = pgTable(
@@ -262,6 +291,11 @@ export const projectNode = pgTable(
         sql`lower(${t.name})`,
       )
       .where(sql`${t.deletedAt} IS NULL`),
+    // Also serves project cascades, which include deleted nodes.
+    index("project_node_project_id_object_key_idx").on(
+      t.projectId,
+      t.objectKey,
+    ),
     check(
       "nodes_kind_payload_check",
       sql`(${t.kind} = 'folder' AND ${t.objectKey} IS NULL AND ${t.sizeBytes} = 0)
@@ -307,6 +341,8 @@ export const projectCommentThread = pgTable(
   (t) => [
     index("project_comment_thread_project_id_idx").on(t.projectId),
     index("project_comment_thread_node_id_idx").on(t.nodeId),
+    index("project_comment_thread_created_by_idx").on(t.createdBy),
+    index("project_comment_thread_resolved_by_idx").on(t.resolvedBy),
   ],
 );
 
@@ -500,6 +536,7 @@ export const template = pgTable(
       table.createdAt,
     ),
     index("template_publisher_idx").on(table.ownerId, table.createdAt),
+    index("template_organization_id_idx").on(table.organizationId),
     index("template_preview_queue_idx").on(
       table.previewStatus,
       table.previewNextAttemptAt,
@@ -534,6 +571,7 @@ export const templateReport = pgTable(
   (table) => [
     unique("template_report_per_user").on(table.templateId, table.reporterId),
     index("template_report_queue_idx").on(table.resolvedAt, table.createdAt),
+    index("template_report_reporter_id_idx").on(table.reporterId),
   ],
 );
 
@@ -613,6 +651,7 @@ export const aiThread = pgTable(
   },
   (t) => [
     index("ai_thread_user_project_idx").on(t.userId, t.projectId, t.updatedAt),
+    index("ai_thread_project_id_idx").on(t.projectId),
   ],
 );
 
@@ -659,6 +698,8 @@ export const aiRun = pgTable(
     // Payer-keyed spend: an organization's cap sums every run billed to it.
     index("ai_run_customer_created_idx").on(t.stripeCustomerId, t.createdAt),
     uniqueIndex("ai_run_user_client_idx").on(t.userId, t.clientRunId),
+    // Reconciliation looks for abandoned runs every minute.
+    index("ai_run_status_created_idx").on(t.status, t.createdAt),
   ],
 );
 
@@ -686,6 +727,7 @@ export const aiRequest = pgTable(
   },
   (t) => [
     index("ai_request_retry_idx").on(t.status, t.nextAttemptAt),
+    index("ai_request_run_id_idx").on(t.runId),
     check(
       "ai_request_nonnegative",
       sql`${t.reservedNanos} >= 0 AND (${t.chargedNanos} IS NULL OR ${t.chargedNanos} >= 0)`,
