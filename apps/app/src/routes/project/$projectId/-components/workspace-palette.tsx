@@ -272,6 +272,7 @@ function Palette({
         className="max-h-80 overflow-y-auto p-1"
       >
         {shown.map((result, index) => (
+          // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- The input handles the keyboard.
           <li
             key={result.key}
             id={option(index)}

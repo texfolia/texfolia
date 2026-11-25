@@ -313,7 +313,7 @@ export function ProjectFilesProvider({
       if (!controller.signal.aborted && document.visibilityState !== "hidden")
         timer = setTimeout(refresh, 2000);
     };
-    const refresh = async () => {
+    const poll = async () => {
       if (
         refreshing ||
         controller.signal.aborted ||
@@ -331,9 +331,10 @@ export function ProjectFilesProvider({
         schedule();
       }
     };
+    const refresh = () => void poll();
     const onVisibility = () => {
       if (document.visibilityState === "hidden") clearTimeout(timer);
-      else void refresh();
+      else refresh();
     };
     // The route has just loaded this store.
     schedule();

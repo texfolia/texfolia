@@ -3,6 +3,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useState,
@@ -63,9 +64,10 @@ function useAppearance(userId: string, editorThemes?: EditorThemes) {
   const [dark, setDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
   );
+  const { selection } = effective;
   const requested = useMemo(
-    () => selectedTheme(effective, dark),
-    [effective.selection, dark],
+    () => selectedTheme(selection, dark),
+    [selection, dark],
   );
   const loaded = !editorThemes || editorThemes.loaded(requested.id);
   // On a page with editors, a newly requested theme is shown only once its
@@ -99,7 +101,7 @@ function useAppearance(userId: string, editorThemes?: EditorThemes) {
 
   function persist(
     next: Appearance,
-    resolved = resolveTheme(selectedTheme(next, dark)),
+    resolved = resolveTheme(selectedTheme(next.selection, dark)),
   ) {
     try {
       localStorage.setItem(
@@ -116,9 +118,10 @@ function useAppearance(userId: string, editorThemes?: EditorThemes) {
     }
   }
 
-  useEffect(() => {
+  const persistInitial = useEffectEvent(() => {
     if (!initial.error) persist(initial.appearance);
-  }, []);
+  });
+  useEffect(() => persistInitial(), []);
 
   useLayoutEffect(() => {
     // Authenticated pages are client rendered. Apply before their first paint,

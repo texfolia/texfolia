@@ -78,7 +78,7 @@ const portReservation = Bun.serve({
   fetch: () => new Response(),
 });
 const port = portReservation.port;
-portReservation.stop(true);
+await portReservation.stop(true);
 assert(port);
 const origin = `http://127.0.0.1:${port}`;
 const mf = new Miniflare({

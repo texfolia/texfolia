@@ -7,11 +7,92 @@
     "apps/app/src/lib/editor/themes/theme-loaders.gen.ts",
     "apps/app/worker-configuration.d.ts"
   ],
-  "plugins": ["typescript", "unicorn", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  // "react" includes the rules of eslint-plugin-react-hooks.
+  "plugins": ["typescript", "unicorn", "oxc", "react", "jsx-a11y"],
   "categories": {
     "correctness": "error"
   },
-  "rules": {},
+  "rules": {
+    "typescript/no-floating-promises": [
+      "error",
+      {
+        // The runner awaits these.
+        "allowForKnownSafeCalls": [
+          { "from": "package", "name": ["test", "it"], "package": "node:test" }
+        ]
+      }
+    ],
+    "typescript/no-misused-promises": [
+      "error",
+      // Async JSX event handlers report their own failures.
+      { "checksVoidReturn": { "attributes": false } }
+    ],
+    // These report idioms that are safe here: awaiting Bun matchers, Y.Text's
+    // toString, destructured functions that do not use `this`, and sorting
+    // strings.
+    "typescript/await-thenable": "off",
+    "typescript/no-base-to-string": "off",
+    "typescript/unbound-method": "off",
+    "typescript/require-array-sort-compare": "off",
+    "typescript/no-misused-spread": ["error", { "allow": ["string"] }],
+
+    "react/rules-of-hooks": "error",
+    // These prepare components for the React Compiler, which is not used.
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react/purity": "off",
+    "react/preserve-manual-memoization": "off",
+
+    "jsx-a11y/label-has-associated-control": [
+      "error",
+      {
+        "controlComponents": ["Checkbox", "Input", "NativeSelect", "Textarea"],
+        "depth": 3
+      }
+    ],
+    // Focus moves only into forms and dialogs the reader has just opened.
+    "jsx-a11y/no-autofocus": "off",
+    // Scrollable regions need a tab stop to scroll by keyboard.
+    "jsx-a11y/no-noninteractive-tabindex": [
+      "error",
+      { "roles": ["tabpanel", "group"], "tags": ["pre", "section"] }
+    ],
+    // Containers may handle shortcuts that bubble from their controls.
+    "jsx-a11y/no-noninteractive-element-interactions": [
+      "error",
+      { "handlers": ["onClick", "onMouseDown", "onMouseUp"] }
+    ],
+    "jsx-a11y/no-static-element-interactions": [
+      "error",
+      { "handlers": ["onClick", "onMouseDown", "onMouseUp"] }
+    ],
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": [
+      "error",
+      { "ul": ["listbox"], "li": ["option"] }
+    ],
+    // Rejects the standard ARIA patterns for live regions and groups.
+    "jsx-a11y/prefer-tag-over-role": "off"
+  },
+  "overrides": [
+    {
+      // Not React; Effect services have a method named `use`.
+      "files": ["apps/compiler/**"],
+      "rules": {
+        "react/rules-of-hooks": "off"
+      }
+    },
+    {
+      // Browser fixtures expose their state to the test on `window`.
+      "files": ["apps/app/test/**"],
+      "rules": {
+        "react/globals": "off",
+        "react/immutability": "off"
+      }
+    }
+  ],
   "env": {
     "builtin": true
   }

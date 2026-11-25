@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 
+import { useStableCallback } from "#/hooks/use-stable-callback";
 import {
   isCurrentBuild,
   parseCompileLog,
@@ -265,7 +266,7 @@ export function useCompilation({
     }
   }
 
-  const runAutoCompile = useEffectEvent(() => {
+  const runAutoCompile = useStableCallback(() => {
     if (
       !afterIdle ||
       !canWrite ||

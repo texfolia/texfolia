@@ -5,6 +5,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useEffectEvent,
   useRef,
   useMemo,
   useState,
@@ -56,9 +57,10 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     query: (q) =>
       userReady ? q.from({ preferences: store.preferences }) : undefined,
   });
+  const saved = data?.[0];
   const preferences = useMemo(
-    () => settingsSchema.parse(data?.[0] ?? defaultSettings),
-    [data?.[0]],
+    () => settingsSchema.parse(saved ?? defaultSettings),
+    [saved],
   );
   const previousUser = useRef(preferences);
   const [draft, setDraft] = useState<Settings | null>(null);
@@ -215,7 +217,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       current ? rebaseUserDraft(current, previous, preferences) : null,
     );
   }, [preferences]);
-  useEffect(() => {
+  const rebaseFormatting = useEffectEvent(() => {
     const next = project?.formatting;
     if (!next) return;
     setDraftFormatting((current) =>
@@ -224,20 +226,25 @@ function useSettingsState(userId: string, project?: SettingsProject) {
         : next,
     );
     setCommittedFormatting(next);
-  }, [
-    project?.id,
-    project?.formatting.indent,
-    project?.formatting.wrap,
-    project?.formatting.width,
-  ]);
-  useEffect(() => {
+  });
+  useEffect(
+    () => rebaseFormatting(),
+    [
+      project?.id,
+      project?.formatting.indent,
+      project?.formatting.wrap,
+      project?.formatting.width,
+    ],
+  );
+  const rebaseSpelling = useEffectEvent(() => {
     const next = project?.spelling;
     if (!next) return;
     setDraftSpelling((current) =>
       current && current !== committedSpelling ? current : next,
     );
     setCommittedSpelling(next);
-  }, [project?.id, project?.spelling]);
+  });
+  useEffect(() => rebaseSpelling(), [project?.id, project?.spelling]);
 
   useEffect(() => {
     let active = true;

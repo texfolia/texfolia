@@ -171,7 +171,7 @@ export async function gitServer() {
       return `${server.url.origin}/${name}`;
     },
     async close() {
-      server.stop(true);
+      await server.stop(true);
       await rm(directory, { recursive: true, force: true });
     },
   };

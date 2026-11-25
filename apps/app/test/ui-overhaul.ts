@@ -58,7 +58,7 @@ const portReservation = Bun.serve({
   fetch: () => new Response(),
 });
 const port = portReservation.port;
-portReservation.stop(true);
+await portReservation.stop(true);
 assert(port);
 const mf = new Miniflare({
   ...withBuildsFixture(

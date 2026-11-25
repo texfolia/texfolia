@@ -43,16 +43,6 @@ export function UploadSource({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const targetFolder = useRef<string | undefined>(undefined);
-  useImperativeHandle(ref, () => ({
-    open: (parentId) => {
-      targetFolder.current = parentId;
-      input.current?.click();
-    },
-    drop: (parentId, entries) => {
-      targetFolder.current = parentId;
-      void upload(readDroppedFiles(entries));
-    },
-  }));
   const active = nodes.find((node) => node.id === activeId);
   const parentId =
     (active?.kind === "folder" ? active.id : active?.parentId) ??
@@ -144,6 +134,17 @@ export function UploadSource({
       setPending(false);
     }
   }
+
+  useImperativeHandle(ref, () => ({
+    open: (parentId) => {
+      targetFolder.current = parentId;
+      input.current?.click();
+    },
+    drop: (parentId, entries) => {
+      targetFolder.current = parentId;
+      void upload(readDroppedFiles(entries));
+    },
+  }));
 
   return (
     <div className="min-w-0">

@@ -7,7 +7,7 @@ import {
 import type { ToolCallPart, ToolResultPart } from "@tanstack/ai";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { Markdown } from "@tanstack/markdown/react";
-import { Button } from "@texfolia/ui/button";
+import { Button, buttonVariants } from "@texfolia/ui/button";
 import { CodeBlock, CodeBlockContent } from "@texfolia/ui/code-block";
 import {
   Message,
@@ -219,7 +219,9 @@ export function AssistantSidebar({
               <div className="space-y-4 p-4 text-sm">
                 <p role="status">{availability.message}</p>
                 {availability.upgrade ? (
-                  <Button render={<a href={plansUrl} />}>View Pro plans</Button>
+                  <a href={plansUrl} className={buttonVariants()}>
+                    View Pro plans
+                  </a>
                 ) : (
                   <Button variant="ghost" onClick={() => void load()}>
                     Try again
@@ -359,7 +361,7 @@ function AssistantChat({
   useEffect(() => {
     if (!config.pendingRequests || isLoading) return;
     const abort = new AbortController();
-    const timer = setTimeout(async () => {
+    const reconcile = async () => {
       try {
         const response = await fetch(`${endpoint}?reconcile=1`, {
           method: "POST",
@@ -370,7 +372,8 @@ function AssistantChat({
       } catch {
         // The scheduled reconciler also owns retries when the browser is offline.
       }
-    }, 10_000);
+    };
+    const timer = setTimeout(() => void reconcile(), 10_000);
     return () => {
       clearTimeout(timer);
       abort.abort();

@@ -460,7 +460,7 @@ export default {
           db: collectorDb,
           bucket: slowDelete,
           collaboration: env.COLLABORATION,
-        }).finally(() => collectorDb.$client.end());
+        }).finally(() => void collectorDb.$client.end());
         await deleting.promise;
         releaseSave.resolve();
         // The save finds the claim, and waits for the delete it cannot stop.

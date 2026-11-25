@@ -100,7 +100,7 @@ const reservation = Bun.serve({
   fetch: () => new Response(),
 });
 const port = reservation.port;
-reservation.stop(true);
+await reservation.stop(true);
 assert(port);
 const runtime = new Miniflare({
   ...convertV4MiniflareOptions({

@@ -76,7 +76,7 @@ test("makes keys unique without regard to case", () => {
   assert.equal(uniqueEntryKey("knuth1984", []), "knuth1984");
   assert.equal(uniqueEntryKey("knuth1984", ["Knuth1984"]), "knuth1984a");
   assert.equal(uniqueEntryKey("k", ["k", "ka", "kb"]), "kc");
-  const many = ["k", ..."abcdefghijklmnopqrstuvwxyz"].map((s, i) =>
+  const many = ["k", ..."abcdefghijklmnopqrstuvwxyz".split("")].map((s, i) =>
     i ? `k${s}` : s,
   );
   assert.equal(uniqueEntryKey("k", many), "kaa");

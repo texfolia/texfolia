@@ -83,6 +83,7 @@ export function PromptInput({
           className="bg-popover text-popover-foreground ring-foreground/10 absolute inset-x-0 bottom-full z-50 mb-1 max-h-56 overflow-y-auto rounded-lg p-1 text-xs shadow-md ring-1"
         >
           {matches.map(({ item }, index) => (
+            // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- The textarea handles the keyboard.
             <li
               key={item}
               id={`${id}-file-${index}`}

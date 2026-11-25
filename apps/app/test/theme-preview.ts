@@ -550,6 +550,6 @@ try {
 } finally {
   await browser.close();
   await vite.close();
-  backend.stop(true);
+  await backend.stop(true);
   doc.destroy();
 }
