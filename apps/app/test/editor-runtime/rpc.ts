@@ -2,7 +2,22 @@
 export * from "../workspace-upload/rpc";
 
 export async function listComments() {
-  return { threads: [], canModerate: false, userId: "runtime-test" };
+  const response = await fetch("/fixture/comments");
+  if (!response.ok)
+    return { threads: [], canModerate: false, userId: "runtime-test" };
+  return JSON.parse(await response.text(), (key, value: unknown) =>
+    key === "createdAt" ? new Date(String(value)) : value,
+  ) as unknown;
+}
+export async function deleteCommentThread({
+  data,
+}: {
+  data: { threadId: string };
+}) {
+  await fetch("/fixture/comments/delete-thread", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 export async function updateProjectMainFile({
   data,
@@ -22,7 +37,6 @@ export {
   unavailable as createCommentThread,
   unavailable as createShareLink,
   unavailable as createProject,
-  unavailable as deleteCommentThread,
   unavailable as deleteComment,
   unavailable as deleteProject,
   unavailable as updateComment,

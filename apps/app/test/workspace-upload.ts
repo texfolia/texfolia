@@ -442,9 +442,7 @@ try {
     0,
     "Rejected optimistic deletion must leave the collaborative editor connected",
   );
-  await page
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Compile status:/ }).click();
   console.info("Checking compile submission");
   await page
     .getByRole("alert")
@@ -462,9 +460,7 @@ try {
       .innerText(),
     "Compiler unavailable",
   );
-  await page
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Compile status:/ }).click();
   await page.getByRole("button", { name: "output.pdf", exact: true }).click();
   await page
     .locator(".react-pdf__Page__canvas")
@@ -541,9 +537,7 @@ try {
     .getByRole("button", { name: "chapter:1.tex", exact: true })
     .click();
   await page.getByRole("tab", { name: /^chapter:1\.tex/ }).waitFor();
-  await page
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Compile status:/ }).click();
   await page
     .getByRole("alert")
     .filter({ hasText: /chapter:1.tex.*Repair source paths/ })
@@ -588,18 +582,16 @@ try {
     "legacy source preserved",
   );
   await page.getByRole("tab", { name: "recovered.tex", exact: true }).waitFor();
+  // The rename is also reported, with ?changed=1, before a slow click.
   const repairedCompile = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
-      new URL(response.url()).pathname === `/api/compile/${projectId}`,
+      new URL(response.url()).pathname === `/api/compile/${projectId}` &&
+      !new URL(response.url()).searchParams.has("changed"),
   );
-  await page
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Compile status:/ }).click();
   assert.equal((await repairedCompile).status(), 200);
-  await page
-    .getByRole("button", { name: "Compile status", exact: true })
-    .waitFor();
+  await page.getByRole("button", { name: /^Compile status:/ }).waitFor();
   assert.equal(submissions.length, 3);
   assert(Object.hasOwn(submissions[2]?.files ?? {}, "figures/recovered.tex"));
   assert.equal(

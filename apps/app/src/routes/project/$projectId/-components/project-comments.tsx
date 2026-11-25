@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 
+import { type Confirmation, ConfirmDialog } from "#/components/confirm-dialog";
 import type { CommentThread } from "#/hooks/use-comments";
 import { resolveCommentAnchor } from "#/lib/comments/anchor";
 import {
@@ -258,7 +259,7 @@ function DraftComposer() {
 
 function Quote({ text }: { text: string }) {
   return (
-    <blockquote className="text-muted-foreground line-clamp-3 border-l-2 border-amber-500/60 pl-2 font-mono whitespace-pre-wrap">
+    <blockquote className="text-muted-foreground border-highlight/60 line-clamp-3 border-l-2 pl-2 font-mono whitespace-pre-wrap">
       {text}
     </blockquote>
   );
@@ -268,6 +269,7 @@ function ThreadCard({ thread }: { thread: Located }) {
   const { projectId, revealRange } = useWorkspaceActions();
   const { comments } = useWorkspace();
   const [reply, setReply] = useState("");
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   if (!comments.data) return null;
@@ -322,7 +324,7 @@ function ThreadCard({ thread }: { thread: Located }) {
       <div className="flex items-start gap-1">
         <button
           type="button"
-          className="hover:bg-muted min-w-0 flex-1 space-y-1 rounded-md p-1 text-left"
+          className="hover:bg-muted focus-visible:ring-ring min-w-0 flex-1 space-y-1 rounded-md p-1 text-left outline-none focus-visible:ring-2"
           onClick={show}
         >
           <span className="text-muted-foreground block truncate">
@@ -366,18 +368,20 @@ function ThreadCard({ thread }: { thread: Located }) {
             <DropdownMenuContent>
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Delete this thread and all of its replies for everyone?",
-                    )
-                  )
-                    void act(() =>
-                      deleteCommentThread({
-                        data: { projectId, threadId: thread.id },
-                      }),
-                    );
-                }}
+                onClick={() =>
+                  setConfirmation({
+                    title: "Delete thread?",
+                    description:
+                      "This deletes the thread and all of its replies for everyone.",
+                    action: "Delete thread",
+                    onConfirm: () =>
+                      void act(() =>
+                        deleteCommentThread({
+                          data: { projectId, threadId: thread.id },
+                        }),
+                      ),
+                  })
+                }
               >
                 Delete thread
               </DropdownMenuItem>
@@ -405,9 +409,17 @@ function ThreadCard({ thread }: { thread: Located }) {
                 )
               }
               onDelete={() =>
-                void act(() =>
-                  deleteComment({ data: { projectId, commentId: comment.id } }),
-                )
+                setConfirmation({
+                  title: "Delete comment?",
+                  description: "This deletes the comment for everyone.",
+                  action: "Delete comment",
+                  onConfirm: () =>
+                    void act(() =>
+                      deleteComment({
+                        data: { projectId, commentId: comment.id },
+                      }),
+                    ),
+                })
               }
               busy={busy}
             />
@@ -455,6 +467,10 @@ function ThreadCard({ thread }: { thread: Located }) {
           {error}
         </p>
       )}
+      <ConfirmDialog
+        confirmation={confirmation}
+        onClose={() => setConfirmation(null)}
+      />
     </article>
   );
 }
@@ -504,12 +520,7 @@ function CommentItem({
               <DropdownMenuItem onClick={() => setEditing(comment.body)}>
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => {
-                  if (window.confirm("Delete this comment?")) onDelete();
-                }}
-              >
+              <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

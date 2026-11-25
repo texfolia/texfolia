@@ -392,9 +392,7 @@ try {
     response.url().includes("/fixture/preview.pdf"),
   );
   const savesBefore = saveRequests.length;
-  await page
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Compile status:/ }).click();
   await previewResponse;
   assert.deepEqual(
     saveRequests.slice(savesBefore),

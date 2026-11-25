@@ -87,6 +87,34 @@ test("bootstrap accepts every catalog snapshot including rgba and transparent", 
   expect(result.values.get("--selection")).toBe("transparent");
 });
 
+test("bootstrap shows a preview saved before newer variables existed", () => {
+  for (const id of ["dracula", "solarizedLight"] as const) {
+    const theme = resolveTheme(catalogTheme(id));
+    const saved: Record<string, string> = { ...theme.variables };
+    for (const key of ["--success", "--highlight", "--pdf-mark"])
+      delete saved[key];
+    const result = boot({
+      raw: {
+        selection: { kind: "theme", id },
+        preview: { mode: theme.mode, variables: saved },
+      },
+      dark: theme.mode !== "dark",
+    });
+    expect(Object.fromEntries(result.values)).toEqual(theme.variables);
+    expect(result.classes.has("dark")).toBe(theme.mode === "dark");
+  }
+  // Without its main colors, there is no theme to show.
+  const result = boot({
+    raw: {
+      selection: { kind: "theme", id: "dracula" },
+      preview: { mode: "dark", variables: { "--border": "#fff" } },
+    },
+  });
+  expect(result.values.get("--background")).toBe(
+    uiw.defaultSettingsGithubLight.background,
+  );
+});
+
 test("bootstrap rejects unsafe CSS, unknown selections, and invalid snapshots", () => {
   const theme = resolveTheme(catalogTheme("dracula"));
   for (const color of [

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
+@import "@texfolia/ui/motion.css";
 
 /* @texfolia/ui renders Tailwind classes from outside this app. Only the
    components the site uses, because the others' classes would triple this file;

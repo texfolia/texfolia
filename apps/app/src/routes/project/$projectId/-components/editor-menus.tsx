@@ -7,15 +7,15 @@ import {
   IconSearch,
 } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
-import { ContextMenuContent, ContextMenuItem } from "@texfolia/ui/context-menu";
+import { ContextMenuItem } from "@texfolia/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@texfolia/ui/dropdown-menu";
+import { createContext, type ReactNode, useContext } from "react";
 
 import {
   PanelAction,
@@ -29,205 +29,162 @@ import {
   isEditorCommandDisabled,
 } from "../-hooks/use-editor-commands";
 
-const contextMenuCommands: readonly [EditorCommand, string][] = [
-  ["cut", "Cut"],
-  ["copy", "Copy"],
-  ["paste", "Paste"],
-  ["selectAll", "Select all"],
-  ["undo", "Undo"],
-  ["redo", "Redo"],
-  ["find", "Find"],
-  ["format", "Format document"],
-  ["symbols", "Symbol palette"],
-];
+// The toolbar and the context menu are composed by the editor, which renders
+// only the actions its file has. They share what every command needs.
+type EditorMenu = {
+  readOnly: boolean;
+  formatting: boolean;
+  status: HistoryStatus;
+  run: (command: EditorCommand) => void;
+};
+const EditorMenuContext = createContext<EditorMenu | null>(null);
+
+export function EditorMenuProvider({
+  children,
+  ...menu
+}: EditorMenu & { children: ReactNode }) {
+  return <EditorMenuContext value={menu}>{children}</EditorMenuContext>;
+}
+
+function useEditorMenu() {
+  const menu = useContext(EditorMenuContext);
+  if (!menu) throw new Error("Missing editor menu provider");
+  return menu;
+}
+
+function useCommand(command: EditorCommand) {
+  const { readOnly, formatting, status, run } = useEditorMenu();
+  return {
+    disabled:
+      isEditorCommandDisabled(command, { readOnly, status }) ||
+      (command === "format" && formatting),
+    onClick: () => run(command),
+  };
+}
+
+type ActionProps = { onClick: () => void };
 
 export function EditorToolbar({
   title,
-  previewLabel,
-  isLatex,
-  canFormat,
-  canAddReference,
-  allowOpenFile,
-  commenting,
-  readOnly,
-  showSymbols,
-  formatting,
-  wrapLines,
-  status,
-  onOpenPreview,
-  onOpenFile,
-  onAddComment,
-  onFind,
-  onToggleSymbols,
-  onRevealPdf,
-  onAddReference,
-  onAskAi,
-  onCommand,
-  onDownload,
+  children,
 }: {
   title: string;
-  /** Names the preview of the file, if there is one. */
-  previewLabel?: string;
-  isLatex: boolean;
-  canFormat: boolean;
-  canAddReference: boolean;
-  allowOpenFile: boolean;
-  commenting: boolean;
-  readOnly: boolean;
-  showSymbols: boolean;
-  formatting: boolean;
-  wrapLines: boolean;
-  status: HistoryStatus;
-  onOpenPreview?: () => void;
-  onOpenFile: () => void;
-  onAddComment: () => void;
-  onFind: () => void;
-  onToggleSymbols: () => void;
-  onRevealPdf?: () => void;
-  onAddReference?: () => void;
-  onAskAi?: () => void;
-  onCommand: (command: EditorCommand) => void;
-  onDownload: () => void;
+  children: ReactNode;
 }) {
   return (
     <PanelHeader title={title}>
-      <PanelActions label="Editor actions">
-        {previewLabel && onOpenPreview && (
-          <PanelAction
-            label={`${previewLabel} (⌘/Ctrl+Shift+V)`}
-            onClick={onOpenPreview}
-          >
-            <IconEye />
-          </PanelAction>
-        )}
-        {allowOpenFile && (
-          <PanelAction label="Open source file" onClick={onOpenFile}>
-            <IconFolderOpen />
-          </PanelAction>
-        )}
-        {commenting && (
-          <PanelAction label="Add comment" onClick={onAddComment}>
-            <IconMessagePlus />
-          </PanelAction>
-        )}
-        <PanelAction label="Find and replace" onClick={onFind}>
-          <IconSearch />
-        </PanelAction>
-        {isLatex && (
-          <PanelAction
-            label="LaTeX symbols"
-            disabled={readOnly}
-            aria-expanded={showSymbols}
-            onClick={onToggleSymbols}
-          >
-            <IconMathSymbols />
-          </PanelAction>
-        )}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon-xs" />}
-            aria-label="More editor actions"
-            title="More editor actions"
-          >
-            <IconDots />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {onRevealPdf && (
-              <DropdownMenuItem onClick={onRevealPdf}>
-                Reveal in PDF
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              disabled={readOnly || !status.undo}
-              onClick={() => onCommand("undo")}
-            >
-              Undo
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={readOnly || !status.redo}
-              onClick={() => onCommand("redo")}
-            >
-              Redo
-            </DropdownMenuItem>
-            {onAskAi && (
-              <DropdownMenuItem onClick={onAskAi}>
-                Ask AI about selection
-              </DropdownMenuItem>
-            )}
-            {onAddReference && canAddReference && (
-              <DropdownMenuItem disabled={readOnly} onClick={onAddReference}>
-                Add reference…
-              </DropdownMenuItem>
-            )}
-            {canFormat && (
-              <DropdownMenuItem
-                disabled={readOnly || formatting}
-                onClick={() => onCommand("format")}
-              >
-                Format document
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuCheckboxItem
-              checked={wrapLines}
-              onCheckedChange={() => onCommand("wrap")}
-            >
-              Wrap lines
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onDownload}>
-              Download source
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </PanelActions>
+      <PanelActions label="Editor actions">{children}</PanelActions>
     </PanelHeader>
   );
 }
 
-export function EditorContextMenu({
-  commenting,
-  canFormat,
-  isLatex,
-  readOnly,
-  status,
-  onAddComment,
-  onAskAi,
-  onCommand,
+/** Opens the preview of the file, which `label` names. */
+export function PreviewAction({
+  label,
+  onClick,
+}: ActionProps & { label: string }) {
+  return (
+    <PanelAction label={`${label} (⌘/Ctrl+Shift+V)`} onClick={onClick}>
+      <IconEye />
+    </PanelAction>
+  );
+}
+
+export function OpenFileAction({ onClick }: ActionProps) {
+  return (
+    <PanelAction label="Open source file" onClick={onClick}>
+      <IconFolderOpen />
+    </PanelAction>
+  );
+}
+
+export function AddCommentAction({ onClick }: ActionProps) {
+  return (
+    <PanelAction label="Add comment" onClick={onClick}>
+      <IconMessagePlus />
+    </PanelAction>
+  );
+}
+
+export function FindAction({ onClick }: ActionProps) {
+  return (
+    <PanelAction label="Find and replace" onClick={onClick}>
+      <IconSearch />
+    </PanelAction>
+  );
+}
+
+export function SymbolsAction({
+  expanded,
+  onClick,
+}: ActionProps & { expanded: boolean }) {
+  const { readOnly } = useEditorMenu();
+  return (
+    <PanelAction
+      label="LaTeX symbols"
+      disabled={readOnly}
+      aria-expanded={expanded}
+      onClick={onClick}
+    >
+      <IconMathSymbols />
+    </PanelAction>
+  );
+}
+
+export function MoreActions({ children }: { children: ReactNode }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon-xs" />}
+        aria-label="More editor actions"
+        title="More editor actions"
+      >
+        <IconDots />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>{children}</DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function MoreCommand({
+  command,
+  children,
 }: {
-  commenting: boolean;
-  canFormat: boolean;
-  isLatex: boolean;
-  readOnly: boolean;
-  status: HistoryStatus;
-  onAddComment: () => void;
-  onAskAi?: () => void;
-  onCommand: (command: EditorCommand) => void;
+  command: EditorCommand;
+  children: ReactNode;
 }) {
   return (
-    <ContextMenuContent>
-      {onAskAi && (
-        <ContextMenuItem onClick={onAskAi}>
-          Ask AI about selection
-        </ContextMenuItem>
-      )}
-      {commenting && (
-        <ContextMenuItem onClick={onAddComment}>Add comment</ContextMenuItem>
-      )}
-      {contextMenuCommands
-        .filter(
-          ([command]) =>
-            (command !== "format" || canFormat) &&
-            (command !== "symbols" || isLatex),
-        )
-        .map(([command, title]) => (
-          <ContextMenuItem
-            key={command}
-            disabled={isEditorCommandDisabled(command, { readOnly, status })}
-            onClick={() => onCommand(command)}
-          >
-            {title}
-          </ContextMenuItem>
-        ))}
-    </ContextMenuContent>
+    <DropdownMenuItem {...useCommand(command)}>{children}</DropdownMenuItem>
   );
+}
+
+export function AddReferenceItem({ onClick }: ActionProps) {
+  const { readOnly } = useEditorMenu();
+  return (
+    <DropdownMenuItem disabled={readOnly} onClick={onClick}>
+      Add reference…
+    </DropdownMenuItem>
+  );
+}
+
+export function WrapLinesItem({ checked }: { checked: boolean }) {
+  const { run } = useEditorMenu();
+  return (
+    <DropdownMenuCheckboxItem
+      checked={checked}
+      onCheckedChange={() => run("wrap")}
+    >
+      Wrap lines
+    </DropdownMenuCheckboxItem>
+  );
+}
+
+export function ContextCommand({
+  command,
+  children,
+}: {
+  command: EditorCommand;
+  children: ReactNode;
+}) {
+  return <ContextMenuItem {...useCommand(command)}>{children}</ContextMenuItem>;
 }

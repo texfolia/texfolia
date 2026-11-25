@@ -165,7 +165,7 @@ export function WorkspaceLogs({ openedAt }: { openedAt: number }) {
                 <button
                   type="button"
                   aria-current={job.id === entry?.id || undefined}
-                  className="hover:bg-muted aria-[current]:bg-muted flex w-full items-center gap-2 px-2 py-1 text-left text-xs"
+                  className="hover:bg-muted aria-[current]:bg-muted focus-visible:ring-ring flex w-full items-center gap-2 px-2 py-1 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-inset"
                   onClick={() => setSelected(job.id)}
                 >
                   <span
@@ -173,12 +173,12 @@ export function WorkspaceLogs({ openedAt }: { openedAt: number }) {
                     className={cn(
                       "size-2 shrink-0 rounded-full",
                       job.status === "succeeded"
-                        ? "bg-emerald-500"
+                        ? "bg-success"
                         : job.status === "failed"
                           ? statusLabel(job) === "Superseded"
                             ? "bg-muted-foreground"
                             : "bg-destructive"
-                          : "bg-amber-500",
+                          : "bg-warning",
                     )}
                   />
                   <span className="tabular-nums">
@@ -354,7 +354,7 @@ function TimelineRow({
                 event.durationMs === null
                   ? "bg-foreground w-0.5"
                   : event.clock === "browser"
-                    ? "bg-sky-500"
+                    ? "bg-info"
                     : "bg-primary",
                 event.approximate && "opacity-60",
               )}
@@ -399,7 +399,7 @@ function RawLog({ jobId, done }: { jobId: string; done: boolean }) {
       className="rounded-md border"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary className="cursor-pointer px-2 py-1 text-xs font-medium">
+      <summary className="focus-visible:ring-ring cursor-pointer rounded-md px-2 py-1 text-xs font-medium outline-none focus-visible:ring-2">
         Raw TeX log
       </summary>
       <div className="border-t">

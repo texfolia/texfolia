@@ -3,7 +3,7 @@ export function Sources({ urls }: { urls: string[] }) {
   if (!sources.length) return null;
   return (
     <details className="text-xs">
-      <summary className="text-muted-foreground cursor-pointer">
+      <summary className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm outline-none focus-visible:ring-2">
         Sources ({sources.length})
       </summary>
       <ul className="space-y-1 py-2">

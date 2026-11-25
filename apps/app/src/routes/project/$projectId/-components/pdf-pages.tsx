@@ -117,7 +117,10 @@ const PdfPage = memo(function PdfPage({
           onRenderSuccess={() => onRendered(number)}
           onRenderError={onFailed}
           loading={
-            <p role="status" className="p-8 text-sm text-neutral-500">
+            <p
+              role="status"
+              className="p-8 text-sm text-(--pdf-original-foreground)"
+            >
               Loading page…
             </p>
           }

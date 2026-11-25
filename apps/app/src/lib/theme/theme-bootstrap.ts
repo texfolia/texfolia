@@ -43,9 +43,12 @@ export function themeBootstrap(userId: string | null) {
       if(preference&&preference.selection&&preference.selection.kind==='theme'&&ids.indexOf(preference.selection.id)!==-1&&preference.preview){
         var cached=preference.preview;
         var color=new RegExp(${json(cachedColorPattern)},'i');
-        if((cached.mode==='light'||cached.mode==='dark')&&cached.variables&&Object.keys(light.variables).every(function(key){
-          return typeof cached.variables[key]==='string'&&color.test(cached.variables[key]);
-        })) theme=cached;
+        // A preview saved by an earlier release lacks newer variables. Its own
+        // colors still show, with the defaults of its mode for the rest.
+        if((cached.mode==='light'||cached.mode==='dark')&&cached.variables&&cached.variables['--background']&&cached.variables['--foreground']&&Object.keys(light.variables).every(function(key){
+          var value=cached.variables[key];
+          return value===undefined||typeof value==='string'&&color.test(value);
+        })) theme={mode:cached.mode,variables:Object.assign({},(cached.mode==='dark'?dark:light).variables,cached.variables)};
       }
     } catch(error) {}
     var root=document.documentElement;

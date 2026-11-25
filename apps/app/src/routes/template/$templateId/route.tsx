@@ -314,7 +314,7 @@ function TemplatePage() {
             )}
             {template.status === "approved" && template.published && (
               <details className="mt-10 border-t pt-5">
-                <summary className="text-muted-foreground cursor-pointer text-sm">
+                <summary className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm text-sm outline-none focus-visible:ring-2">
                   Report this template
                 </summary>
                 {reported ? (

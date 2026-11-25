@@ -55,7 +55,7 @@ function Diff({ diff, label }: { diff: DiffLine[]; label: string }) {
           className={cn(
             "flex gap-2 px-2 whitespace-pre-wrap wrap-anywhere",
             kind === "removed" && "bg-destructive/10",
-            kind === "added" && "bg-emerald-500/10",
+            kind === "added" && "bg-success/10",
           )}
         >
           <span
@@ -76,9 +76,7 @@ function Diff({ diff, label }: { diff: DiffLine[]; label: string }) {
                   key={part}
                   className={cn(
                     "rounded-xs",
-                    kind === "removed"
-                      ? "bg-destructive/25"
-                      : "bg-emerald-500/25",
+                    kind === "removed" ? "bg-destructive/25" : "bg-success/25",
                   )}
                 >
                   {text}

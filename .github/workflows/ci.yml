@@ -145,6 +145,9 @@ jobs:
       - name: Exercise previews, quick open, and AI change review
         if: steps.select.outputs.editor-features == 'true'
         run: bun run --cwd apps/app test:editor-features
+      - name: Exercise keyboard access, focus, and reduced motion
+        if: steps.select.outputs.workspace-accessibility == 'true'
+        run: bun run --cwd apps/app test:workspace-accessibility
   engine:
     name: LaTeX engine
     runs-on: ubuntu-latest

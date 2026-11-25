@@ -56,6 +56,16 @@ export const suites = {
     ],
     browser: true,
   },
+  "workspace-accessibility": {
+    job: "browser",
+    inputs: [
+      "workspace-accessibility.ts",
+      "editor-runtime/",
+      "workspace-upload/",
+      "pdf-fixture.ts",
+    ],
+    browser: true,
+  },
   "compile-engine": { job: "engine", inputs: ["compile-engine.ts"] },
   "workspace-upload": {
     job: "engine",

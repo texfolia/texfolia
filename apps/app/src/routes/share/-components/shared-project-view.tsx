@@ -102,7 +102,7 @@ export function SharedProjectView({
                           }
                           onClick={() => setSelected(node.id)}
                           className={cn(
-                            "hover:bg-accent flex w-full items-center gap-1.5 px-2 py-1 text-left",
+                            "hover:bg-accent focus-visible:ring-ring flex w-full items-center gap-1.5 px-2 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset",
                             node.id === selected &&
                               "bg-accent text-accent-foreground",
                           )}

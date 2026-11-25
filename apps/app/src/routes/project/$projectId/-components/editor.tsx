@@ -1,7 +1,16 @@
 import type { CompletionSource } from "@codemirror/autocomplete";
 import { redoDepth, undoDepth } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
-import { ContextMenu, ContextMenuTrigger } from "@texfolia/ui/context-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@texfolia/ui/context-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@texfolia/ui/dropdown-menu";
 import CodeMirror, {
   type EditorState,
   EditorView,
@@ -10,6 +19,7 @@ import CodeMirror, {
 } from "@uiw/react-codemirror";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
+import { type Confirmation, ConfirmDialog } from "#/components/confirm-dialog";
 import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { useStableCallback } from "#/hooks/use-stable-callback";
@@ -22,6 +32,12 @@ import {
   type FormatSettings,
 } from "#/lib/editor/latex/format";
 import { addLatexPackage, insertLatexSymbol } from "#/lib/editor/latex/symbols";
+import {
+  type EditorJump,
+  type EditorSnapshot,
+  jumpTo,
+  restoreSnapshot,
+} from "#/lib/editor/position";
 import { selectedLines } from "#/lib/editor/selection";
 import { downloadFile } from "#/lib/storage/browser";
 import { hasSourcePreview, imageType } from "#/lib/storage/preview";
@@ -32,16 +48,26 @@ import {
   type EditorComments,
   useEditorComments,
 } from "../-hooks/use-editor-comments";
-import {
-  type ScrollAnchor,
-  useEditorExtensions,
-} from "../-hooks/use-editor-extensions";
+import { useEditorExtensions } from "../-hooks/use-editor-extensions";
 import { useEditorShortcuts } from "../-hooks/use-editor-shortcuts";
 import { useEditorSpellcheck } from "../-hooks/use-editor-spellcheck";
-import { EditorContextMenu, EditorToolbar } from "./editor-menus";
+import {
+  AddCommentAction,
+  AddReferenceItem,
+  ContextCommand,
+  EditorMenuProvider,
+  EditorToolbar,
+  FindAction,
+  MoreActions,
+  MoreCommand,
+  OpenFileAction,
+  PreviewAction,
+  SymbolsAction,
+  WrapLinesItem,
+} from "./editor-menus";
 import { SymbolPalette, type SymbolPreambleSource } from "./symbol-palette";
 
-export type { EditorComments };
+export type { EditorComments, EditorSnapshot };
 
 // Constants, because a new object makes CodeMirror rebuild its extensions.
 const standaloneSetup = { history: true };
@@ -77,13 +103,7 @@ type EditorProps = {
   /** Asks the assistant about the selection, or the cursor's line. */
   onAskAi?: (selection: ReturnType<typeof selectedLines>) => void;
   onFixWithAi?: (problem: { line: number; message: string }) => void;
-  jump?: {
-    line: number;
-    column?: number;
-    length?: number;
-    // Scrolls to this range without moving the selection or focus.
-    range?: { from: number; to: number };
-  };
+  jump?: EditorJump;
   formatSettings?: FormatSettings;
   preamble?: SymbolPreambleSource;
   comments?: EditorComments;
@@ -91,14 +111,6 @@ type EditorProps = {
   initialSnapshot?: EditorSnapshot;
   // Called when the view is destroyed.
   onSnapshot?: (snapshot: EditorSnapshot) => void;
-};
-
-// Selection and scroll position, as document offsets. The scroll anchor is the
-// first visible line and how far its top sits above the viewport.
-export type EditorSnapshot = {
-  anchor: number;
-  head: number;
-  scroll?: ScrollAnchor;
 };
 
 export function Editor({
@@ -150,6 +162,7 @@ export function Editor({
     spellingLanguage,
   } = useSettings();
   const [error, setError] = useState("");
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [showSymbols, setShowSymbols] = useState(false);
   const [status, setStatus] = useState({ undo: false, redo: false });
   const undoManager = collaboration?.undoManager;
@@ -176,6 +189,11 @@ export function Editor({
   const isModified = () => text() !== (savedValue ?? downloadedValue);
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(name);
   const isMarkdown = /\.(?:md|markdown)$/i.test(name);
+  const previewLabel = isMarkdown
+    ? "Open Markdown preview"
+    : imageType(name)
+      ? "Open image preview"
+      : undefined;
   const canFormat = isLatex || /\.bib$/i.test(name);
   const { format, formatting, formatError } = useLatexFormatter(formatSettings);
 
@@ -189,29 +207,9 @@ export function Editor({
     onOpenPreview: hasSourcePreview(name) ? onOpenPreview : undefined,
   });
 
-  function applyJump(view: EditorView) {
-    if (!jump) return;
-    if (jump.range) {
-      const from = Math.min(jump.range.from, view.state.doc.length);
-      view.dispatch({
-        effects: EditorView.scrollIntoView(from, { y: "center" }),
-      });
-      return;
-    }
-    const line = view.state.doc.line(Math.min(jump.line, view.state.doc.lines));
-    const anchor = line.from + Math.min((jump.column ?? 1) - 1, line.length);
-    view.dispatch({
-      selection: {
-        anchor,
-        head: Math.min(anchor + (jump.length ?? 0), line.to),
-      },
-      scrollIntoView: true,
-    });
-    view.focus();
-  }
   const jumpArrived = useEffectEvent(() => {
     const view = editor.current?.view;
-    if (view) applyJump(view);
+    if (view && jump) jumpTo(view, jump);
   });
   useEffect(() => jumpArrived(), [jump]);
 
@@ -300,26 +298,9 @@ export function Editor({
   const viewCreated = useStableCallback((view: EditorView) => {
     createdView.current = view;
     setView(view);
-    if (initialSnapshot) {
-      const clamp = (position: number) =>
-        Math.min(Math.max(position, 0), view.state.doc.length);
-      const { scroll } = initialSnapshot;
-      view.dispatch({
-        selection: {
-          anchor: clamp(initialSnapshot.anchor),
-          head: clamp(initialSnapshot.head),
-        },
-        effects: scroll
-          ? EditorView.scrollIntoView(clamp(scroll.pos), {
-              y: "start",
-              yMargin: scroll.margin,
-            })
-          : undefined,
-        scrollIntoView: !scroll,
-      });
-    }
+    if (initialSnapshot) restoreSnapshot(view, initialSnapshot);
     // Files connect when opened, so a jump can precede the editor.
-    applyJump(view);
+    if (jump) jumpTo(view, jump);
     onCreateEditor?.(view);
     reportPosition(view.state);
   });
@@ -358,32 +339,60 @@ export function Editor({
     if (view) onAskAi?.(selectedLines(view.state));
   }
 
+  function find() {
+    const view = editor.current?.view;
+    if (view) openSearchPanel(view);
+  }
+
+  function revealLine() {
+    const view = editor.current?.view;
+    if (view)
+      onRevealPdf?.(
+        view.state.doc.lineAt(view.state.selection.main.head).number,
+      );
+  }
+
+  function download() {
+    const source = text();
+    downloadFile(
+      new Blob([source], { type: "text/plain;charset=utf-8" }),
+      name,
+    );
+    setDownloadedValue(source);
+  }
+
+  function replaceSource(filename: string, source: string) {
+    setName(filename);
+    setDownloadedValue(source);
+    setError("");
+    const view = editor.current?.view;
+    if (view)
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: source },
+        selection: { anchor: 0 },
+      });
+    else {
+      setInitialValue(source);
+      onChange?.(source);
+    }
+    view?.focus();
+  }
+
   async function openFile(file: File) {
     const request = ++openRequest.current;
     try {
-      const text = await file.text();
+      const source = await file.text();
       if (request !== openRequest.current) return;
-      if (
-        isModified() &&
-        !window.confirm(
-          "Replace your current source? Download it first to keep your changes.",
-        )
-      )
+      if (!isModified()) {
+        replaceSource(file.name, source);
         return;
-      setName(file.name);
-      setDownloadedValue(text);
-      setError("");
-      const view = editor.current?.view;
-      if (view)
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: text },
-          selection: { anchor: 0 },
-        });
-      else {
-        setInitialValue(text);
-        onChange?.(text);
       }
-      view?.focus();
+      setConfirmation({
+        title: "Replace your current source?",
+        description: "Download it first to keep your changes.",
+        action: "Replace source",
+        onConfirm: () => replaceSource(file.name, source),
+      });
     } catch {
       if (request === openRequest.current)
         setError("Could not read this source file. Try opening it again.");
@@ -391,136 +400,152 @@ export function Editor({
   }
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger
-        render={<div />}
-        role="region"
-        ref={container}
-        aria-label={labels?.region ?? "Source editor"}
-        className="bg-background flex h-full min-h-0 min-w-0 flex-col"
-      >
-        <EditorToolbar
-          title={labels?.title ?? name}
-          previewLabel={
-            isMarkdown
-              ? "Open Markdown preview"
-              : imageType(name)
-                ? "Open image preview"
-                : undefined
-          }
-          isLatex={isLatex}
-          canFormat={canFormat}
-          canAddReference={canFormat}
-          allowOpenFile={allowOpenFile}
-          commenting={commenting}
-          readOnly={readOnly}
-          showSymbols={showSymbols}
-          formatting={formatting}
-          wrapLines={preferences.wrapLines}
-          status={status}
-          onOpenPreview={onOpenPreview}
-          onOpenFile={() => fileInput.current?.click()}
-          onAddComment={addComment}
-          onFind={() => {
-            const view = editor.current?.view;
-            if (view) openSearchPanel(view);
-          }}
-          onToggleSymbols={() => setShowSymbols((open) => !open)}
-          onRevealPdf={
-            onRevealPdf
-              ? () => {
-                  const view = editor.current?.view;
-                  if (view)
-                    onRevealPdf(
-                      view.state.doc.lineAt(view.state.selection.main.head)
-                        .number,
-                    );
+    <EditorMenuProvider
+      readOnly={readOnly}
+      formatting={formatting}
+      status={status}
+      run={runCommand}
+    >
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={<div />}
+          role="region"
+          ref={container}
+          aria-label={labels?.region ?? "Source editor"}
+          className="bg-background flex h-full min-h-0 min-w-0 flex-col"
+        >
+          <EditorToolbar title={labels?.title ?? name}>
+            {onOpenPreview && previewLabel && (
+              <PreviewAction label={previewLabel} onClick={onOpenPreview} />
+            )}
+            {allowOpenFile && (
+              <OpenFileAction onClick={() => fileInput.current?.click()} />
+            )}
+            {commenting && <AddCommentAction onClick={addComment} />}
+            <FindAction onClick={find} />
+            {isLatex && (
+              <SymbolsAction
+                expanded={showSymbols}
+                onClick={() => setShowSymbols((open) => !open)}
+              />
+            )}
+            <MoreActions>
+              {onRevealPdf && (
+                <DropdownMenuItem onClick={revealLine}>
+                  Reveal in PDF
+                </DropdownMenuItem>
+              )}
+              <MoreCommand command="undo">Undo</MoreCommand>
+              <MoreCommand command="redo">Redo</MoreCommand>
+              {onAskAi && (
+                <DropdownMenuItem onClick={askAi}>
+                  Ask AI about selection
+                </DropdownMenuItem>
+              )}
+              {onAddReference && canFormat && (
+                <AddReferenceItem onClick={() => onAddReference()} />
+              )}
+              {canFormat && (
+                <MoreCommand command="format">Format document</MoreCommand>
+              )}
+              <WrapLinesItem checked={preferences.wrapLines} />
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={download}>
+                Download source
+              </DropdownMenuItem>
+            </MoreActions>
+          </EditorToolbar>
+          {isLatex && !readOnly && showSymbols && (
+            <SymbolPalette
+              preamble={preamble ?? ownPreamble}
+              onInsert={(symbol) => {
+                const view = editor.current?.view;
+                if (view) {
+                  insertLatexSymbol(symbol)(view);
+                  view.focus();
                 }
-              : undefined
-          }
-          onAddReference={onAddReference ? () => onAddReference() : undefined}
-          onAskAi={onAskAi ? askAi : undefined}
-          onCommand={runCommand}
-          onDownload={() => {
-            const source = text();
-            downloadFile(
-              new Blob([source], { type: "text/plain;charset=utf-8" }),
-              name,
-            );
-            setDownloadedValue(source);
-          }}
-        />
-        {isLatex && !readOnly && showSymbols && (
-          <SymbolPalette
-            preamble={preamble ?? ownPreamble}
-            onInsert={(symbol) => {
-              const view = editor.current?.view;
-              if (view) {
-                insertLatexSymbol(symbol)(view);
-                view.focus();
-              }
-            }}
-            onClose={() => {
-              setShowSymbols(false);
-              editor.current?.view?.focus();
+              }}
+              onClose={() => {
+                setShowSymbols(false);
+                editor.current?.view?.focus();
+              }}
+            />
+          )}
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".tex,.ltx,.bib,.sty,.cls,.md,.markdown,.txt,text/plain,text/markdown"
+            className="hidden"
+            aria-label="Choose source file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void openFile(file);
             }}
           />
-        )}
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".tex,.ltx,.bib,.sty,.cls,.md,.markdown,.txt,text/plain,text/markdown"
-          className="hidden"
-          aria-label="Choose source file"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void openFile(file);
-          }}
-        />
-        {(error || formatError || spellingError) && (
-          <p
-            role="alert"
-            className="text-destructive border-b px-3 py-2 text-xs"
-          >
-            {error || formatError || spellingError}
-          </p>
-        )}
-        <CodeMirror
-          basicSetup={collaboration ? collaborativeSetup : standaloneSetup}
-          readOnly={readOnly}
-          editable={!readOnly}
-          ref={editor}
-          onCreateEditor={viewCreated}
-          value={initialValue}
-          // Reading the text costs its whole length, so only when it is used.
-          onChange={onChange ? changed : undefined}
-          onUpdate={viewUpdated}
-          extensions={extensions}
-          height="100%"
-          theme={theme}
-          placeholder={
-            labels?.placeholder ??
-            (isMarkdown
-              ? "Write your Markdown here…"
-              : "Write your LaTeX here…")
-          }
-          aria-label={
-            labels?.source ?? (isMarkdown ? "Markdown source" : "LaTeX source")
-          }
-          className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
-        />
-      </ContextMenuTrigger>
-      <EditorContextMenu
-        commenting={commenting}
-        canFormat={canFormat}
-        isLatex={isLatex}
-        readOnly={readOnly}
-        status={status}
-        onAddComment={addComment}
-        onAskAi={onAskAi ? askAi : undefined}
-        onCommand={runCommand}
+          {(error || formatError || spellingError) && (
+            <p
+              role="alert"
+              className="text-destructive border-b px-3 py-2 text-xs"
+            >
+              {error || formatError || spellingError}
+            </p>
+          )}
+          <CodeMirror
+            basicSetup={collaboration ? collaborativeSetup : standaloneSetup}
+            readOnly={readOnly}
+            editable={!readOnly}
+            ref={editor}
+            onCreateEditor={viewCreated}
+            value={initialValue}
+            // Reading the text costs its whole length, so only when it is used.
+            onChange={onChange ? changed : undefined}
+            onUpdate={viewUpdated}
+            extensions={extensions}
+            height="100%"
+            theme={theme}
+            placeholder={
+              labels?.placeholder ??
+              (isMarkdown
+                ? "Write your Markdown here…"
+                : "Write your LaTeX here…")
+            }
+            aria-label={
+              labels?.source ??
+              (isMarkdown ? "Markdown source" : "LaTeX source")
+            }
+            className="min-h-0 flex-1 overflow-hidden [&>.cm-editor]:h-full"
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {onAskAi && (
+            <ContextMenuItem onClick={askAi}>
+              Ask AI about selection
+            </ContextMenuItem>
+          )}
+          {commenting && (
+            <ContextMenuItem onClick={addComment}>Add comment</ContextMenuItem>
+          )}
+          <ContextCommand command="cut">Cut</ContextCommand>
+          <ContextCommand command="copy">Copy</ContextCommand>
+          <ContextCommand command="paste">Paste</ContextCommand>
+          <ContextCommand command="selectAll">Select all</ContextCommand>
+          <ContextCommand command="undo">Undo</ContextCommand>
+          <ContextCommand command="redo">Redo</ContextCommand>
+          <ContextCommand command="find">Find</ContextCommand>
+          {canFormat && (
+            <ContextCommand command="format">Format document</ContextCommand>
+          )}
+          {isLatex && (
+            <ContextCommand command="symbols">Symbol palette</ContextCommand>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+      <ConfirmDialog
+        confirmation={confirmation}
+        onClose={() => setConfirmation(null)}
+        finalFocus={() => editor.current?.view?.contentDOM}
       />
-    </ContextMenu>
+    </EditorMenuProvider>
   );
 }

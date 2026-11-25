@@ -18,6 +18,13 @@ tokens its components use and add the package to its Tailwind sources, as
 @source "../../../packages/ui/src";
 ```
 
+`motion.css` holds the easing curves the components use (`ease-out`, `ease-in-out`,
+`ease-drawer`) and the rules for reduced motion. Import it after Tailwind:
+
+```css
+@import "@texfolia/ui/motion.css";
+```
+
 The package has no app imports. App-specific behavior stays in the app: for
 example, the sidebar keyboard shortcut is registered by the projects page, not
 by `SidebarProvider`.

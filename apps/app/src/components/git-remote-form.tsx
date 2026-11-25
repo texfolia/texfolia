@@ -13,6 +13,11 @@ import {
   type GitProvider,
 } from "#/lib/git";
 import { getGitAccounts } from "#/lib/git/git.functions";
+import {
+  readSession,
+  removeSession,
+  writeSession,
+} from "#/lib/session-storage";
 
 export async function connectGitAccount(
   provider: GitProvider,
@@ -51,7 +56,7 @@ export function GitRemoteForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    const saved = sessionStorage.getItem(key);
+    const saved = readSession(key);
     if (saved) {
       const parts = saved.split("\n");
       setUrl(parts[0] ?? "");
@@ -69,7 +74,7 @@ export function GitRemoteForm({
     setError("");
     setBusy(true);
     try {
-      sessionStorage.setItem(key, `${url}\n${name}`);
+      writeSession(key, `${url}\n${name}`);
       await connectGitAccount(provider);
     } catch (error) {
       setError(
@@ -95,7 +100,7 @@ export function GitRemoteForm({
         setBusy(true);
         try {
           await onConnect(url, name);
-          sessionStorage.removeItem(key);
+          removeSession(key);
         } catch (error) {
           setError(
             error instanceof Error

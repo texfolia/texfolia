@@ -455,9 +455,7 @@ try {
   const accepted = Promise.withResolvers<void>();
   submissionGate = accepted.promise;
   const before = submissions.length;
-  await editor
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await editor.getByRole("button", { name: /^Compile status:/ }).click();
   await eventually(
     () => submissions.length > before,
     "Compile did not reach authenticated route",
@@ -664,9 +662,7 @@ try {
     "Checking personal access revocation and organization membership",
   );
   const activeCompile = submissions.length;
-  await editor
-    .getByRole("button", { name: "Compile status", exact: true })
-    .click();
+  await editor.getByRole("button", { name: /^Compile status:/ }).click();
   await eventually(
     () => submissions.length > activeCompile,
     "Compile before revocation did not start",

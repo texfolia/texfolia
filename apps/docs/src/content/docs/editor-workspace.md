@@ -107,7 +107,8 @@ previews, and the assistant's changes in Chromium.
 Problems, Logs, and Terminal share a bottom panel below the dock. It is closed by default
 and opens only when you choose it: View > Panel, Problems, Logs, or Terminal, the
 status-bar Problems and logs buttons, or Mod+J. A failed compile does not open it. Drag the
-divider or use its arrow keys to resize it.
+divider or use its arrow keys to resize it; Home and End choose its smallest and largest size.
+The sidebars' dividers work the same way.
 
 Problems lists browser diagnostics and parsed compile-log diagnostics. Selecting
 a problem pins its file and jumps to the reported line. **Fix with AI** writes the

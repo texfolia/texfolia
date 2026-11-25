@@ -44,6 +44,7 @@
     "test:template-lifecycle:prebuilt": "bun run test/template-lifecycle.ts",
     "test:themes": "bun run test/theme-preview.ts",
     "test:ui": "bun run build && bun run test/ui-overhaul.ts",
+    "test:workspace-accessibility": "bun run test/workspace-accessibility.ts",
     "test:workspace-metadata": "bun run build && bun run test/workspace-metadata.ts",
     "test:workspace-metadata:prebuilt": "bun run test/workspace-metadata.ts",
     "test:workspace-upload": "bun run test/workspace-upload.ts",

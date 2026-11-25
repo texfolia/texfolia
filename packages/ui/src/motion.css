@@ -1,0 +1,33 @@
+/* Built-in easings are too weak for UI. Use ease-out for anything that enters,
+   leaves or responds to a press, ease-in-out for movement on screen, and
+   ease-drawer for sheets. */
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Reduced motion keeps fades and color changes, which help explain what
+   changed, and drops everything that moves or resizes. Loops, such as spinners,
+   use motion-safe: where they are declared. */
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after,
+    ::backdrop {
+      scroll-behavior: auto !important;
+      transition-property:
+        color, background-color, border-color, outline-color,
+        text-decoration-color, fill, stroke, box-shadow, opacity, visibility !important;
+      --tw-enter-scale: initial !important;
+      --tw-enter-rotate: initial !important;
+      --tw-enter-translate-x: initial !important;
+      --tw-enter-translate-y: initial !important;
+      --tw-exit-scale: initial !important;
+      --tw-exit-rotate: initial !important;
+      --tw-exit-translate-x: initial !important;
+      --tw-exit-translate-y: initial !important;
+    }
+  }
+}

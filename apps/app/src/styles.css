@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@texfolia/ui/motion.css";
 
 /* @texfolia/ui renders Tailwind classes from outside this app. */
 @source "../../../packages/ui/src";
@@ -28,6 +29,11 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-highlight: var(--highlight);
+  --color-overlay: var(--overlay);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -67,6 +73,10 @@
   --accent: oklch(0.967 0.001 286.375);
   --accent-foreground: oklch(0.21 0.006 285.885);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --info: #0969da;
+  --highlight: #f59e0b;
   --border: oklch(0.92 0.004 286.32);
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.705 0.015 286.067);
@@ -100,8 +110,10 @@
   --tab-header: var(--muted);
   --selection: var(--accent);
   --selection-foreground: var(--accent-foreground);
-  --overlay: #0000004d;
+  --overlay: rgba(0, 0, 0, 0.1);
   --pdf-original-surround: #e4e4e7;
+  --pdf-mark: #ffdf2080;
+  --pdf-mark-current: #ff690099;
   --pdf-surround: var(--muted);
 }
 
@@ -121,6 +133,9 @@
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: #3fb950;
+  --warning: #d29922;
+  --info: #58a6ff;
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
@@ -166,6 +181,17 @@
   --dv-drag-over-border-color: var(--ring);
   --dv-active-sash-color: var(--ring);
   --dv-sash-color: var(--border);
+  /* Sashes stay 4px to grab, and show as a hairline over the separator. */
+  & .dv-sash-container > .dv-sash {
+    border: 0 solid transparent;
+    background-clip: padding-box;
+  }
+  & .dv-horizontal > .dv-sash-container > .dv-sash {
+    border-width: 0 1px 0 2px;
+  }
+  & .dv-vertical > .dv-sash-container > .dv-sash {
+    border-width: 2px 0 1px;
+  }
   --dv-scrollbar-background-color: var(--border);
   --dv-tabs-container-scrollbar-color: var(--border);
   --dv-icon-hover-background-color: var(--accent);
