@@ -159,7 +159,7 @@ test("runtime web changes keep every integration suite", () => {
 test("shared, lockfile, CI, environment, schema, and unknown root changes select everything", () => {
   for (const path of [
     "packages/db/src/index.ts",
-    "tsconfig.base.json",
+    "packages/tsconfig/base.json",
     "bun.lock",
     "package.json",
     "turbo.json",
@@ -280,7 +280,8 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       "apps/compiler/package.json",
       "packages/contracts/package.json",
       "packages/db/package.json",
-      "tsconfig.base.json",
+      "packages/tsconfig/package.json",
+      "packages/tsconfig/base.json",
     ]) {
       mkdirSync(dirname(join(cwd, path)), { recursive: true });
       copyFileSync(join(root, path), join(cwd, path));
@@ -328,6 +329,16 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
         "packages/db/src/index.ts",
         ["@texfolia/contracts", "@texfolia/db", "app", "compiler"],
         ["app#test", "compiler#test", "app#typecheck"],
+      ],
+      [
+        "packages/tsconfig/base.json",
+        ["@texfolia/contracts", "@texfolia/db", "app", "compiler"],
+        [
+          "@texfolia/contracts#typecheck",
+          "@texfolia/db#typecheck",
+          "app#typecheck",
+          "compiler#typecheck",
+        ],
       ],
       [
         ".github/workflows/ci.yml",

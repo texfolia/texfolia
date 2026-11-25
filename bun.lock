@@ -119,6 +119,7 @@
         "@tanstack/react-devtools": "0.10.14",
         "@tanstack/react-router-devtools": "1.167.2",
         "@tanstack/router-cli": "^1.132.0",
+        "@texfolia/tsconfig": "workspace:*",
         "@types/bun": "^1.4.4",
         "@types/node": "^22.10.2",
         "@types/nspell": "2.1.6",
@@ -146,6 +147,7 @@
       "devDependencies": {
         "@cloudflare/workers-types": "5.20261031.1",
         "@texfolia/db": "workspace:*",
+        "@texfolia/tsconfig": "workspace:*",
         "@types/bun": "^1.4.4",
         "typescript": "^6.0.2",
         "wrangler": "^4.156.1",
@@ -161,6 +163,7 @@
       },
       "devDependencies": {
         "@astrojs/check": "^0.9.12",
+        "@texfolia/tsconfig": "workspace:*",
         "typescript": "^6.0.2",
         "wrangler": "^4.156.1",
       },
@@ -184,6 +187,7 @@
         "@tanstack/devtools-vite": "0.8.6",
         "@tanstack/react-devtools": "0.10.14",
         "@tanstack/react-router-devtools": "1.167.2",
+        "@texfolia/tsconfig": "workspace:*",
         "@types/bun": "^1.4.4",
         "@types/node": "^22.10.2",
         "@types/react": "^19.2.0",
@@ -198,6 +202,7 @@
       "name": "@texfolia/contracts",
       "version": "0.0.0",
       "devDependencies": {
+        "@texfolia/tsconfig": "workspace:*",
         "@types/bun": "^1.4.4",
         "effect": "^4.1.5",
         "typescript": "^6.0.2",
@@ -219,6 +224,7 @@
         "pg": "^8.23.1",
       },
       "devDependencies": {
+        "@texfolia/tsconfig": "workspace:*",
         "@types/bun": "^1.4.4",
         "@types/pg": "^8.23.1",
         "drizzle-kit": "^1.0.0-rc.5",
@@ -226,6 +232,10 @@
         "typescript": "^6.0.2",
         "wrangler": "^4.156.1",
       },
+    },
+    "packages/tsconfig": {
+      "name": "@texfolia/tsconfig",
+      "version": "0.0.0",
     },
     "packages/ui": {
       "name": "@texfolia/ui",
@@ -239,6 +249,7 @@
         "input-otp": "^1.5.0",
       },
       "devDependencies": {
+        "@texfolia/tsconfig": "workspace:*",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "react": "^19.2.0",
@@ -1063,6 +1074,8 @@
     "@texfolia/contracts": ["@texfolia/contracts@workspace:packages/contracts"],
 
     "@texfolia/db": ["@texfolia/db@workspace:packages/db"],
+
+    "@texfolia/tsconfig": ["@texfolia/tsconfig@workspace:packages/tsconfig"],
 
     "@texfolia/ui": ["@texfolia/ui@workspace:packages/ui"],
 

@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@texfolia/tsconfig": "workspace:*",
     "typescript": "^6.0.2",
     "wrangler": "^4.156.1"
   }

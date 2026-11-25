@@ -36,6 +36,7 @@
     "@tanstack/devtools-vite": "0.8.6",
     "@tanstack/react-devtools": "0.10.14",
     "@tanstack/react-router-devtools": "1.167.2",
+    "@texfolia/tsconfig": "workspace:*",
     "@types/bun": "^1.4.4",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
