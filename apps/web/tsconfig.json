@@ -1,17 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@texfolia/tsconfig/tanstack-start.json",
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["dist"],
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "module": "ESNext",
     "paths": {
       "#/*": ["./src/*"]
     },
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client", "bun"],
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noUncheckedSideEffectImports": true
+    "types": ["vite/client", "bun"]
   }
 }

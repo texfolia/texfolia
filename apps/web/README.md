@@ -46,7 +46,7 @@ The site does not use auth. Sign-in, OAuth callbacks, and session cookies stay o
 The project follows the TanStack CLI scaffold (React, file router, Cloudflare
 deployment): `.cta.json` records the choices, `tsr.config.json` configures route
 generation, `components.json` points the shadcn CLI at `@texfolia/ui`, and
-`tsconfig.json` extends the root `tsconfig.base.json`. TanStack devtools load in
+`tsconfig.json` extends `@texfolia/tsconfig/tanstack-start.json`. TanStack devtools load in
 development only. Commit `src/routeTree.gen.ts` exactly as the generator writes it.
 
 ## Commands

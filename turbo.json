@@ -3,7 +3,7 @@
   "ui": "tui",
   "cacheMaxSize": "200MB",
   "globalDependencies": [
-    "tsconfig.base.json",
+    "packages/tsconfig/**",
     "tsconfig.json",
     "scripts/local-environment.mts",
     ".oxlintrc.json",

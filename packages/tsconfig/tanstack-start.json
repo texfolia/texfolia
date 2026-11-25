@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "TanStack Start",
+  "extends": "./react-library.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "types": ["vite/client"],
+    "noUncheckedSideEffectImports": true
+  }
+}

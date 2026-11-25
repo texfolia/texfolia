@@ -155,6 +155,7 @@
     "@tanstack/react-devtools": "0.10.14",
     "@tanstack/react-router-devtools": "1.167.2",
     "@tanstack/router-cli": "^1.132.0",
+    "@texfolia/tsconfig": "workspace:*",
     "@types/bun": "^1.4.4",
     "@types/node": "^22.10.2",
     "@types/nspell": "2.1.6",

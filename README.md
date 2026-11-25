@@ -118,7 +118,7 @@ packages/
   contracts/           Schemas, hosts, and plan prices shared by the apps
   db/                  Drizzle schema, PostgreSQL client, and migrations
   ui/                  shadcn/Base UI React primitives for the app and the site
-tsconfig.base.json     TypeScript settings every workspace extends
+  tsconfig/            TypeScript settings every workspace extends
 ```
 
 ## Contributing
