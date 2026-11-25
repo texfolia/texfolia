@@ -40,6 +40,7 @@ const route = createRootRoute({
             width: project.formatWidth,
           },
           spelling: "off",
+          setMainFile: files.setMainFile,
         }}
       >
         <ProjectFilesProvider store={files}>

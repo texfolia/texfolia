@@ -14,6 +14,7 @@ export function editorLanguage({
   getProblems,
   publishSyntax,
   addReference,
+  fixWithAi,
 }: {
   filename: string;
   completion?: CompletionSource;
@@ -21,6 +22,8 @@ export function editorLanguage({
   publishSyntax: (problems: LatexProblem[]) => void;
   /** Offered as a quick fix for undefined citation keys. */
   addReference?: (key: string) => void;
+  /** Offered as a quick fix for errors and warnings. */
+  fixWithAi?: FixWithAi;
 }) {
   const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(filename);
   const support = isLatex ? themedLatex(filename) : null;
@@ -54,9 +57,23 @@ export function editorLanguage({
             severity: severity === "hint" ? "info" : severity,
           })),
         );
+        const editable = !view.state.readOnly;
         return [
-          ...syntax,
-          ...projectDiagnostics(view.state, getProblems(), addReference),
+          ...syntax.map((diagnostic) => ({
+            ...diagnostic,
+            actions: [
+              ...(diagnostic.actions ?? []),
+              ...(editable && diagnostic.severity !== "hint"
+                ? fixActions(diagnostic, fixWithAi)
+                : []),
+            ],
+          })),
+          ...projectDiagnostics(
+            view.state,
+            getProblems(),
+            addReference,
+            fixWithAi,
+          ),
         ];
       },
       {
@@ -68,6 +85,22 @@ export function editorLanguage({
           ),
       },
     ),
+  ];
+}
+
+type FixWithAi = (problem: { line: number; message: string }) => void;
+
+function fixActions(
+  { severity, message }: Pick<Diagnostic, "severity" | "message">,
+  fixWithAi: FixWithAi | undefined,
+): Action[] {
+  if (!fixWithAi || severity === "info") return [];
+  return [
+    {
+      name: "Fix with AI",
+      apply: (view, from) =>
+        fixWithAi({ line: view.state.doc.lineAt(from).number, message }),
+    },
   ];
 }
 
@@ -91,9 +124,22 @@ export function projectDiagnostics(
   state: EditorState,
   problems: readonly LatexProblem[],
   addReference?: (key: string) => void,
+  fixWithAi?: FixWithAi,
 ): Diagnostic[] {
   const doc = state.doc;
   const editable = !state.readOnly;
+  const actionsOf = ({
+    citation,
+    ...problem
+  }: Pick<LatexProblem, "severity" | "message" | "citation">) => {
+    const actions = editable
+      ? [
+          ...(citation ? citationActions(citation, addReference) : []),
+          ...fixActions(problem, fixWithAi),
+        ]
+      : [];
+    return actions.length ? { actions } : {};
+  };
   return problems.flatMap(({ line, range, severity, message, citation }) => {
     if (
       range &&
@@ -106,13 +152,19 @@ export function projectDiagnostics(
           ...range,
           severity,
           message,
-          ...(citation && editable
-            ? { actions: citationActions(citation, addReference) }
-            : {}),
+          ...actionsOf({ severity, message, citation }),
         },
       ];
     if (range || line < 1 || line > doc.lines) return [];
     const { from, to } = doc.line(line);
-    return [{ from, to, severity, message }];
+    return [
+      {
+        from,
+        to,
+        severity,
+        message,
+        ...actionsOf({ severity, message }),
+      },
+    ];
   });
 }

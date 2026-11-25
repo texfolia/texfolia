@@ -32,6 +32,7 @@ const project: ProjectDetails = {
   formatWrap: true,
   formatWidth: 80,
   spellcheckLanguage: "en-US",
+  mainFile: null,
   canWrite: true,
   nodes: [
     { id: rootId, projectId, parentId: null, name: "root", kind: "folder" },

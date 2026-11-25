@@ -91,6 +91,25 @@ export function stubToolResult(
   return stubbed.length < content.length ? stubbed : content;
 }
 
+/** Drops what edit_file keeps in its result only to undo the edit. */
+function withoutUndoContext(
+  message: ModelMessage,
+  names: ReadonlyMap<string, string>,
+): ModelMessage {
+  if (
+    message.role !== "tool" ||
+    typeof message.content !== "string" ||
+    !message.toolCallId ||
+    names.get(message.toolCallId) !== "edit_file"
+  )
+    return message;
+  const parsed = parseJson(message.content);
+  if (!parsed || typeof parsed !== "object" || !("context" in parsed))
+    return message;
+  const { context: _context, ...content } = parsed;
+  return { ...message, content: JSON.stringify(content) };
+}
+
 function stubToolArguments(args: string, limit = staleStringLimit) {
   const parsed = parseJson(args);
   if (parsed === undefined) return args.length > limit ? "{}" : args;
@@ -184,12 +203,15 @@ function startsOfTurns(messages: readonly ModelMessage[]) {
  *   stubbed too, and the newest one is truncated last.
  */
 export function compactHistory(
-  messages: readonly ModelMessage[],
+  transcript: readonly ModelMessage[],
   budget = historyTokenBudget,
 ): ModelMessage[] {
+  const names = toolNames(transcript);
+  const messages = transcript.map((message) =>
+    withoutUndoContext(message, names),
+  );
   const starts = startsOfTurns(messages);
   const current = starts.at(-1) ?? 0;
-  const names = toolNames(messages);
   const stale = messages
     .slice(0, current)
     .map((message) => compactStale(message, names));

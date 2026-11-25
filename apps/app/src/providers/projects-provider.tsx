@@ -97,6 +97,7 @@ export function createProjectsStore({
           formatWrap: true,
           formatWidth: 80,
           spellcheckLanguage: "en-US",
+          mainFile: null,
           collaborators: [],
           owner: null,
           people: [],

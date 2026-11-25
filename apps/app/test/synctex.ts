@@ -33,6 +33,7 @@ const project: ProjectDetails = {
   formatWrap: true,
   formatWidth: 80,
   spellcheckLanguage: "en-US",
+  mainFile: null,
   canWrite: true,
   nodes: [
     { id: rootId, projectId, parentId: null, name: "root", kind: "folder" },
@@ -288,9 +289,7 @@ const backend = Bun.serve({
   },
 });
 const webRoot = fileURLToPath(new URL("../", import.meta.url));
-const rpc = fileURLToPath(
-  new URL("./workspace-upload/rpc.ts", import.meta.url),
-);
+const rpc = fileURLToPath(new URL("./editor-runtime/rpc.ts", import.meta.url));
 // Reuse the real workspace boot and unrelated RPC stubs from the upload harness.
 const vite = await createServer({
   configFile: false,
@@ -315,14 +314,14 @@ const vite = await createServer({
     },
   ],
   resolve: {
-    alias: {
-      "#/lib/projects/project.functions": rpc,
-      "#/lib/projects/project-node.functions": rpc,
-      "#/lib/projects/project-source.functions": rpc,
-      "#/lib/git/git.functions": rpc,
-      "#/lib/sharing/project-sharing.functions": rpc,
-      "#": `${webRoot}src`,
-    },
+    alias: [
+      {
+        // Every server function the workspace calls; settings are browser code.
+        find: /^#\/lib\/(?!settings\/).*\.functions$/,
+        replacement: rpc,
+      },
+      { find: "#", replacement: `${webRoot}src` },
+    ],
   },
   server: {
     host: "127.0.0.1",
@@ -389,8 +388,9 @@ try {
       await page.getByRole("menuitem", { name: "Rotate clockwise" }).click();
     }
     if (turn === 1) {
-      await page.getByRole("button", { name: "More PDF actions" }).click();
+      await page.getByRole("button", { name: /^Zoom/ }).click();
       await page.getByRole("menuitem", { name: "Zoom in" }).click();
+      await page.keyboard.press("Escape");
     }
     await text.click({ modifiers: [modifier] });
     await editor.filter({ hasText: "Chapter two belongs" }).waitFor();
@@ -441,7 +441,7 @@ try {
   await previewResponse;
   assert.deepEqual(
     saveRequests.slice(savesBefore),
-    [{ nodeId: chapterId }],
+    [{ nodeId: appendixId }],
     "Saving sends one payload-free request for the one edited file",
   );
   assert(previewRequested);
@@ -485,12 +485,13 @@ try {
   ] satisfies SidecarMode[]) {
     const previousCanvas = await page
       .locator(".react-pdf__Page__canvas")
+      .first()
       .elementHandle();
     assert(previousCanvas);
     nextBuild(mode);
     await hint.waitFor({ state: "hidden" });
     await page.waitForFunction((canvas) => !canvas.isConnected, previousCanvas);
-    await page.locator(".react-pdf__Page__canvas").waitFor();
+    await page.locator(".react-pdf__Page__canvas").first().waitFor();
     const input = page.getByRole("spinbutton", { name: "Page number" });
     await input.fill("1");
     await input.press("Enter");

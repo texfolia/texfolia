@@ -13,9 +13,13 @@ import {
 } from "dockview-react";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
+import { BinaryPreview } from "#/components/binary-preview";
 import { lazyPanel } from "#/components/lazy-panel";
+import { problemPrompt, selectionPrompt } from "#/lib/ai/editor";
 import { type LatexProblem } from "#/lib/editor/latex/analysis";
+import type { ProjectNode } from "#/lib/projects/project.functions";
 import { downloadFile } from "#/lib/storage/browser";
+import { useProjectFiles } from "#/providers/project-files-provider";
 import {
   useWorkspace,
   useWorkspaceActions,
@@ -29,7 +33,6 @@ import type { EditorComments } from "./editor";
 import { GeneratedFile } from "./generated-file";
 import type { MarkdownPreviewParams } from "./markdown-preview";
 import { ScratchpadEditor } from "./scratchpad-editor";
-import { SourcePdf } from "./source-pdf";
 import type { SymbolPreambleSource } from "./symbol-palette";
 
 const MarkdownPreview = lazyPanel<IDockviewPanelProps<MarkdownPreviewParams>>(
@@ -50,9 +53,7 @@ export function FileEditor({
   const workspace = useWorkspace();
   const { synctex } = useWorkspaceBuild();
   const { problems } = useWorkspaceDiagnostics();
-  const [downloadError, setDownloadError] = useState("");
-  const [downloading, setDownloading] = useState(false);
-  const { projectId, drafts } = actions;
+  const { drafts } = actions;
   const nodeId = params.node.id;
   const savedValue = useSyncExternalStore(
     drafts.subscribe,
@@ -102,44 +103,7 @@ export function FileEditor({
         : undefined,
     [comments, openThreads, params.node.id],
   );
-  if (params.node.kind === "binary" && /\.pdf$/i.test(params.node.name))
-    return <SourcePdf node={params.node} />;
-  if (params.node.kind === "binary")
-    return (
-      <div className="space-y-3 p-4 text-sm">
-        <p className="text-muted-foreground">
-          Preview is not available for this file type.
-        </p>
-        <Button
-          variant="ghost"
-          disabled={downloading}
-          onClick={async () => {
-            setDownloadError("");
-            setDownloading(true);
-            try {
-              const response = await fetch(
-                `/api/sources/${projectId}/${nodeId}`,
-              );
-              if (!response.ok) throw new Error("Could not download source");
-              downloadFile(await response.blob(), params.node.name);
-            } catch {
-              setDownloadError(
-                "The file could not be downloaded. Try again when online.",
-              );
-            } finally {
-              setDownloading(false);
-            }
-          }}
-        >
-          {downloading ? "Downloading…" : "Download file"}
-        </Button>
-        {downloadError && (
-          <p role="alert" className="text-destructive">
-            {downloadError}
-          </p>
-        )}
-      </div>
-    );
+  if (params.node.kind === "binary") return <BinaryFile node={params.node} />;
   const collaboration = workspace.collaboration.get(params.node.id);
   return (
     <DocumentEditor
@@ -154,6 +118,10 @@ export function FileEditor({
       problems={problems.get(path) ?? noProblems}
       onSyntaxProblems={(problems) => actions.reportSyntax(path, problems)}
       onAddReference={actions.addReference}
+      onAskAi={(selection) => actions.askAi(selectionPrompt(path, selection))}
+      onFixWithAi={(problem) =>
+        actions.askAi(problemPrompt({ path, ...problem }))
+      }
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
       preamble={preamble}
@@ -162,6 +130,57 @@ export function FileEditor({
       }
       onOpenPreview={openPreview}
       comments={editorComments}
+    />
+  );
+}
+
+function BinaryFile({ node }: { node: ProjectNode }) {
+  const { projectId } = useWorkspaceActions();
+  const files = useProjectFiles();
+  const version = useSyncExternalStore(
+    files.subscribe,
+    () => files.sourceVersions[node.id]?.objectKey,
+  );
+  const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const url = `/api/sources/${projectId}/${node.id}`;
+  async function download() {
+    setError("");
+    setDownloading(true);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Could not download source");
+      downloadFile(await response.blob(), node.name);
+    } catch {
+      setError("The file could not be downloaded. Try again when online.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+  return (
+    <BinaryPreview
+      url={url}
+      name={node.name}
+      version={version ?? undefined}
+      fallback={
+        <div className="space-y-3 p-4 text-sm">
+          <p className="text-muted-foreground">
+            Preview is not available for this file type.
+          </p>
+          <Button
+            variant="ghost"
+            disabled={downloading}
+            onClick={() => void download()}
+          >
+            {downloading ? "Downloading…" : "Download file"}
+          </Button>
+          {error && (
+            <p role="alert" className="text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+      }
     />
   );
 }

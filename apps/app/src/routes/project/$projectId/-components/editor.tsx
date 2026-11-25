@@ -22,7 +22,9 @@ import {
   type FormatSettings,
 } from "#/lib/editor/latex/format";
 import { addLatexPackage, insertLatexSymbol } from "#/lib/editor/latex/symbols";
+import { selectedLines } from "#/lib/editor/selection";
 import { downloadFile } from "#/lib/storage/browser";
+import { hasSourcePreview, imageType } from "#/lib/storage/preview";
 import { useSettings } from "#/providers/settings-provider";
 
 import { useEditorCommands } from "../-hooks/use-editor-commands";
@@ -72,6 +74,9 @@ type EditorProps = {
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
   /** Opens Add reference, for an undefined citation key when one is given. */
   onAddReference?: (key?: string) => void;
+  /** Asks the assistant about the selection, or the cursor's line. */
+  onAskAi?: (selection: ReturnType<typeof selectedLines>) => void;
+  onFixWithAi?: (problem: { line: number; message: string }) => void;
   jump?: {
     line: number;
     column?: number;
@@ -115,6 +120,8 @@ export function Editor({
   problems,
   onSyntaxProblems,
   onAddReference,
+  onAskAi,
+  onFixWithAi,
   jump,
   formatSettings = defaultFormatSettings,
   preamble,
@@ -176,11 +183,10 @@ export function Editor({
     container,
     editor,
     isLatex,
-    isMarkdown,
     canFormat,
     readOnly,
     format,
-    onOpenPreview,
+    onOpenPreview: hasSourcePreview(name) ? onOpenPreview : undefined,
   });
 
   function applyJump(view: EditorView) {
@@ -266,6 +272,7 @@ export function Editor({
     problems,
     onSyntaxProblems,
     onAddReference,
+    onFixWithAi,
     onRevealPdf,
     scrollAnchor,
     onError: setError,
@@ -346,6 +353,11 @@ export function Editor({
   });
   const changed = useStableCallback((text: string) => onChange?.(text));
 
+  function askAi() {
+    const view = editor.current?.view;
+    if (view) onAskAi?.(selectedLines(view.state));
+  }
+
   async function openFile(file: File) {
     const request = ++openRequest.current;
     try {
@@ -389,7 +401,13 @@ export function Editor({
       >
         <EditorToolbar
           title={labels?.title ?? name}
-          isMarkdown={isMarkdown}
+          previewLabel={
+            isMarkdown
+              ? "Open Markdown preview"
+              : imageType(name)
+                ? "Open image preview"
+                : undefined
+          }
           isLatex={isLatex}
           canFormat={canFormat}
           canAddReference={canFormat}
@@ -421,6 +439,7 @@ export function Editor({
               : undefined
           }
           onAddReference={onAddReference ? () => onAddReference() : undefined}
+          onAskAi={onAskAi ? askAi : undefined}
           onCommand={runCommand}
           onDownload={() => {
             const source = text();
@@ -499,6 +518,7 @@ export function Editor({
         readOnly={readOnly}
         status={status}
         onAddComment={addComment}
+        onAskAi={onAskAi ? askAi : undefined}
         onCommand={runCommand}
       />
     </ContextMenu>

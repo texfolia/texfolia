@@ -39,6 +39,7 @@ export const Route = createFileRoute("/project/$projectId")({
       initial: project.nodes,
       projectId: project.id,
       initialSourceVersions: project.sourceVersions,
+      mainFile: project.mainFile,
       commentsVersion: project.commentsVersion,
       gitVersion: project.gitVersion,
     });
@@ -61,7 +62,7 @@ function WorkspacePage() {
 
 function ThemedWorkspace() {
   const { user } = Route.useRouteContext();
-  const { project } = Route.useLoaderData();
+  const { project, files } = Route.useLoaderData();
   const settings = useMemo(
     () => ({
       id: project.id,
@@ -74,8 +75,9 @@ function ThemedWorkspace() {
       spelling: spellingLanguageSchema
         .catch(defaultSpellingLanguage)
         .parse(project.spellcheckLanguage),
+      setMainFile: files.setMainFile,
     }),
-    [project],
+    [project, files],
   );
   return (
     <ThemeProvider userId={user.id} editorThemes={editorThemes}>

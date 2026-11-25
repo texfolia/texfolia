@@ -14,11 +14,13 @@ import { mapLimit } from "#/lib/map-limit";
 import { sourceConcurrency, type SourceBucket } from "#/lib/storage/server";
 
 import type { LockProject } from "./access";
+import { projectPaths } from "./paths";
 import type {
   createProjectSchema,
   renameProjectSchema,
   projectTagsSchema,
   updateProjectFormattingSchema,
+  updateProjectMainFileSchema,
   updateProjectSpellingSchema,
 } from "./project.schema";
 
@@ -68,6 +70,27 @@ export async function updateProjectSpelling({
       .set({ spellcheckLanguage: data.language })
       .where(eq(project.id, data.projectId));
     return data.language;
+  });
+}
+
+export async function updateProjectMainFile({
+  db,
+  ownerId,
+  lock,
+  data,
+}: ProjectOwner & { data: z.infer<typeof updateProjectMainFileSchema> }) {
+  const { projectId, mainFile } = data;
+  return db.transaction(async (tx) => {
+    await lock({ tx, projectId, userId: ownerId, access: "write" });
+    if (mainFile !== null) {
+      const nodes = await tx.query.projectNode.findMany({
+        where: { projectId, deletedAt: { isNull: true } },
+      });
+      if (![...projectPaths(nodes).values()].includes(mainFile))
+        throw new Error("File not found");
+    }
+    await tx.update(project).set({ mainFile }).where(eq(project.id, projectId));
+    return mainFile;
   });
 }
 

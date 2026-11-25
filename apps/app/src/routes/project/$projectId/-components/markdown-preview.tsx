@@ -1,10 +1,24 @@
 import { Markdown } from "@tanstack/markdown/react";
 import type { IDockviewPanelProps } from "dockview-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
-import { useWorkspaceActions } from "#/providers/workspace-provider";
+import { ImagePreview } from "#/components/image-preview";
+import { imageType } from "#/lib/storage/preview";
+import {
+  useWorkspace,
+  useWorkspaceActions,
+} from "#/providers/workspace-provider";
 
 export type MarkdownPreviewParams = { source: string };
+
+/** An image kept as text, which is SVG. Shown as an image, it runs no scripts. */
+function SourceImage({ name, source }: { name: string; source: string }) {
+  const file = useMemo(
+    () => new File([source], name, { type: imageType(name) }),
+    [name, source],
+  );
+  return <ImagePreview file={file} />;
+}
 
 export function MarkdownPreview({
   api,
@@ -14,6 +28,9 @@ export function MarkdownPreview({
   const { holdDocument } = useWorkspaceActions();
   const nodeId = api.id.slice("markdown:".length);
   useEffect(() => holdDocument(nodeId), [holdDocument, nodeId]);
+  const name = useWorkspace().paths.get(nodeId)?.split("/").at(-1);
+  if (name && imageType(name))
+    return <SourceImage name={name} source={params.source} />;
   return (
     <section
       aria-label="Markdown preview"

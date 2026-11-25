@@ -7,6 +7,7 @@ import type { EditorCommand } from "#/lib/editor/editor-command";
 import { createStore } from "#/lib/external-store";
 import { projectPaths } from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
+import { hasSourcePreview } from "#/lib/storage/preview";
 import {
   isEditorComponent,
   restoreWorkspaceDock,
@@ -33,6 +34,7 @@ export function useDockPanels({
   paths,
   drafts,
   ready,
+  mainId,
   updateAnalysis,
 }: {
   files: ReturnType<typeof useProjectFiles>;
@@ -40,6 +42,8 @@ export function useDockPanels({
   paths: ReadonlyMap<string, string>;
   drafts: Map<string, FileState>;
   ready: boolean;
+  /** The main document, which a project opens with the first time. */
+  mainId: string | undefined;
   /** Reports a file's text to the LaTeX analysis. */
   updateAnalysis: (path: string, value: string) => void;
 }) {
@@ -48,6 +52,8 @@ export function useDockPanels({
   const subscriptions = useRef<Array<{ dispose: () => void }>>([]);
   const editors = useRef(new Map<string, EditorView>());
   const commands = useRef(new Map<string, (command: EditorCommand) => void>());
+  // Files and build files by when they were last shown, latest first.
+  const recent = useRef<string[]>([]);
   const positions = useRef(new Map<string, { line: number; column: number }>());
   const previousPaths = useRef(paths);
   // Kept apart from the drafts, which search, analysis and saving cover.
@@ -152,11 +158,7 @@ export function useDockPanels({
     const dock = api.current;
     const name =
       id === scratchpadId ? scratchpadTitle : nodesById.get(id)?.name;
-    if (
-      !dock ||
-      !name ||
-      (id !== scratchpadId && !/\.(?:md|markdown)$/i.test(name))
-    )
+    if (!dock || !name || (id !== scratchpadId && !hasSourcePreview(name)))
       return;
     keepOpen(id);
     const existing = dock.getPanel(markdownId(id));
@@ -353,6 +355,11 @@ export function useDockPanels({
             panel.api.component === "generated")
         )
           setActiveId(panel.id);
+        if (panel)
+          recent.current = [
+            panel.id,
+            ...recent.current.filter((id) => id !== panel.id),
+          ];
         if (panel) {
           const position = positions.current.get(panel.id);
           cursor.set(position ? { id: panel.id, ...position } : undefined);
@@ -367,7 +374,7 @@ export function useDockPanels({
       }),
     ];
     const first =
-      nodes.find((node) => node.kind === "text" && node.name === "main.tex") ??
+      (mainId === undefined ? undefined : nodesById.get(mainId)) ??
       nodes.find((node) => node.kind === "text");
     if (!restoreWorkspaceDock(dock, saved, nodes) && first) {
       openFile(first, true);
@@ -394,6 +401,7 @@ export function useDockPanels({
       api.current = dock;
     },
     activeId,
+    recentIds: () => recent.current,
     cursor,
     jump,
     activeEditor: () => (activeId ? editors.current.get(activeId) : undefined),

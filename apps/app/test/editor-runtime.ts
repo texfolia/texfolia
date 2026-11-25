@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 
-import tailwindcss from "@tailwindcss/vite";
 import { chromium, type Page } from "playwright";
-import { createServer } from "vite";
-import * as Y from "yjs";
 
-import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
-import { createNodeSchema } from "#/lib/projects";
-
-import type { ProjectDetails } from "../src/lib/projects/project.functions";
 import type { RuntimeTest } from "./editor-runtime/browser";
+import {
+  eventually,
+  fixtureProject,
+  startWorkspace,
+} from "./editor-runtime/harness";
 import { pdfFixture } from "./pdf-fixture";
 
 declare global {
@@ -21,8 +18,6 @@ declare global {
 }
 
 // Runs the real workspace in a browser, against a fixture of its network.
-const projectId = crypto.randomUUID();
-const rootId = crypto.randomUUID();
 const main = String.raw`\documentclass{article}
 \begin{document}
 \section{First}
@@ -36,184 +31,22 @@ const chapter = String.raw`\begin{itemize}
 \item Chapter
 \end{itemize}
 `;
-const node = (name: string, kind: "text" | "folder", parentId: string | null) =>
-  ({ id: crypto.randomUUID(), projectId, parentId, name, kind }) as const;
-const mainNode = node("main.tex", "text", rootId);
-const chapterNode = node("chapter.tex", "text", rootId);
-const project: ProjectDetails = {
-  id: projectId,
-  ownerId: "runtime-test",
-  organizationId: null,
-  name: "Editor runtime",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  deletedAt: null,
-  formatIndent: 2,
-  formatWrap: true,
-  formatWidth: 80,
-  spellcheckLanguage: "en-US",
-  canWrite: true,
-  nodes: [
-    { id: rootId, projectId, parentId: null, name: "root", kind: "folder" },
-    mainNode,
-    chapterNode,
-  ],
-  sourceContents: { [mainNode.id]: main, [chapterNode.id]: chapter },
-  commentsVersion: "0:0",
-  gitVersion: "",
-  sourceVersions: {
-    [mainNode.id]: { objectKey: null, updatedAt: 0 },
-    [chapterNode.id]: { objectKey: null, updatedAt: 0 },
-  },
-};
-const documents = new Map<string, Y.Doc>();
-for (const [id, text] of Object.entries(project.sourceContents)) {
-  const doc = new Y.Doc();
-  doc.getText("source").insert(0, text);
-  documents.set(id, doc);
-}
-const build = { id: crypto.randomUUID(), revision: 1, status: "succeeded" };
-const snapshot = {
-  revision: 1,
-  current: build,
-  latestBuild: build,
-  stale: false,
-  artifacts: {
-    id: build.id,
-    revision: 1,
-    digest: "fixture",
-    builtAt: new Date().toISOString(),
-    builtBy: "runtime-test",
-    engine: "tectonic",
-    pdf: "output.pdf",
-    files: [{ path: "output.pdf", key: "pdf", sizeBytes: 500 }],
-  },
-};
+const { project, rootId, node } = fixtureProject("Editor runtime", [
+  { name: "main.tex", text: main },
+  { name: "chapter.tex", text: chapter },
+]);
+const projectId = project.id;
+const mainNode = node("main.tex");
 let pdfRequests = 0;
-const backend = Bun.serve({
-  hostname: "127.0.0.1",
-  port: 0,
-  websocket: {
-    data: { nodeId: "", events: false },
-    open(socket) {
-      if (socket.data.events) socket.send(JSON.stringify(snapshot));
-    },
-    message(socket, raw) {
-      if (raw === "ping") return void socket.send("pong");
-      const message = decodeClientMessage(raw);
-      const doc = documents.get(socket.data.nodeId);
-      assert(doc);
-      if (message.type === "sync")
-        socket.send(
-          encodeServerMessage({
-            type: "sync",
-            update: Y.encodeStateAsUpdate(doc, message.vector),
-            vector: Y.encodeStateVector(doc),
-            dirty: true,
-            objectKey: null,
-            canWrite: project.canWrite,
-            user: { name: "Runtime test", color: "#123456" },
-          }),
-        );
-      if (message.type === "update") Y.applyUpdate(doc, message.update);
-    },
-  },
-  async fetch(request, server) {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/collaboration/"))
-      return server.upgrade(request, {
-        data: { nodeId: url.pathname.split("/").at(-1) ?? "", events: false },
-      })
-        ? undefined
-        : new Response(null, { status: 400 });
-    if (url.pathname === "/fixture/project") return Response.json(project);
-    if (url.pathname === `/api/projects/${projectId}/metadata`)
-      return Response.json(project);
-    if (url.pathname === "/fixture/nodes") {
-      const input = createNodeSchema.parse(await request.json());
-      documents.set(input.id, new Y.Doc());
-      const sourceVersion = { objectKey: null, updatedAt: Date.now() };
-      project.nodes.push(input);
-      project.sourceVersions[input.id] = sourceVersion;
-      return Response.json({ ...input, sourceVersion });
-    }
-    if (url.searchParams.has("events"))
-      return server.upgrade(request, { data: { nodeId: "", events: true } })
-        ? undefined
-        : new Response(null, { status: 426 });
-    if (url.searchParams.has("file")) {
-      pdfRequests++;
-      return new Response(pdfFixture(), {
-        headers: { "Content-Type": "application/pdf" },
-      });
-    }
-    return new Response(null, {
-      status: request.method === "POST" ? 204 : 404,
-    });
+const workspace = await startWorkspace({
+  project,
+  pdf: () => {
+    pdfRequests++;
+    return pdfFixture();
   },
 });
+const { documents } = workspace;
 
-const webRoot = fileURLToPath(new URL("../", import.meta.url));
-const rpc = fileURLToPath(new URL("./editor-runtime/rpc.ts", import.meta.url));
-const vite = await createServer({
-  configFile: false,
-  root: webRoot,
-  optimizeDeps: {
-    entries: ["test/editor-runtime/browser.tsx"],
-    include: ["react-pdf", "wasm-latex-tools"],
-  },
-  plugins: [
-    tailwindcss(),
-    {
-      name: "editor-runtime-fixture",
-      configureServer(server) {
-        server.middlewares.use((request, response, next) => {
-          if (request.url !== "/") return next();
-          response.setHeader("Content-Type", "text/html");
-          response.end(
-            '<!doctype html><html><body><div id="root"></div><script type="module" src="/test/editor-runtime/browser.tsx"></script></body></html>',
-          );
-        });
-      },
-    },
-  ],
-  resolve: {
-    alias: [
-      {
-        // Every server function the workspace calls; settings are browser code.
-        find: /^#\/lib\/(?!settings\/).*\.functions$/,
-        replacement: rpc,
-      },
-      { find: "#", replacement: `${webRoot}src` },
-    ],
-  },
-  server: {
-    host: "127.0.0.1",
-    port: 0,
-    forwardConsole: false,
-    proxy: {
-      "/fixture": backend.url.href,
-      "/api": { target: backend.url.href, ws: true },
-    },
-  },
-});
-
-async function eventually<T>(
-  check: () => Promise<T> | T,
-  expected: T,
-  label: string,
-) {
-  const deadline = Date.now() + 10_000;
-  for (;;) {
-    const actual = await check();
-    try {
-      return assert.deepEqual(actual, expected, label);
-    } catch (error) {
-      if (Date.now() > deadline) throw error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
 const text = (page: Page) => page.evaluate(() => window.runtimeTest.text());
 const workers = (page: Page, name: string) =>
   page.evaluate(
@@ -229,7 +62,6 @@ const layout = (page: Page) =>
 
 const browser = await chromium.launch({ headless: true });
 try {
-  await vite.listen();
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     permissions: ["clipboard-read", "clipboard-write"],
@@ -257,7 +89,7 @@ try {
       }
     };
   });
-  await page.goto(vite.resolvedUrls?.local[0] ?? "");
+  await page.goto(workspace.url);
   const content = page.locator('.cm-content[contenteditable="true"]');
   await content.waitFor();
   const status = page.getByLabel("Workspace status");
@@ -446,7 +278,5 @@ try {
   console.info("Editor runtime passed");
 } finally {
   await browser.close();
-  await vite.close();
-  await backend.stop(true);
-  for (const doc of documents.values()) doc.destroy();
+  await workspace.stop();
 }

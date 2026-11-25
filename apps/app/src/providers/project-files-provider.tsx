@@ -13,9 +13,10 @@ import {
   renameProjectNode,
 } from "#/lib/projects/project-node.functions";
 import { deleteProjectNode } from "#/lib/projects/project-source.functions";
-import type {
-  ProjectDetails,
-  ProjectNode,
+import {
+  updateProjectMainFile,
+  type ProjectDetails,
+  type ProjectNode,
 } from "#/lib/projects/project.functions";
 import { createRpcCollection } from "#/lib/rpc-collection";
 import { decodeSource } from "#/lib/storage";
@@ -26,12 +27,14 @@ export function createProjectFilesStore({
   initial,
   projectId,
   initialSourceVersions,
+  mainFile = null,
   commentsVersion,
   gitVersion,
 }: {
   initial: ProjectNode[];
   projectId: string;
   initialSourceVersions: ProjectDetails["sourceVersions"];
+  mainFile?: string | null;
   commentsVersion?: string;
   gitVersion?: string;
 }) {
@@ -48,6 +51,8 @@ export function createProjectFilesStore({
   let knownNodeIds = new Set(initial.map((node) => node.id));
   let status: {
     canWrite: boolean | undefined;
+    /** The chosen main document's path. See `projectMainFile`. */
+    mainFile: string | null;
     error: string;
     deleted: ReadonlySet<string>;
     commentsVersion: string | undefined;
@@ -55,6 +60,7 @@ export function createProjectFilesStore({
     sourcesVersion: string;
   } = {
     canWrite: undefined,
+    mainFile,
     error: "",
     deleted: new Set(),
     commentsVersion,
@@ -69,6 +75,7 @@ export function createProjectFilesStore({
   function setStatus(next: typeof status) {
     if (
       next.canWrite === status.canWrite &&
+      next.mainFile === status.mainFile &&
       next.error === status.error &&
       next.deleted === status.deleted &&
       next.commentsVersion === status.commentsVersion &&
@@ -235,6 +242,7 @@ export function createProjectFilesStore({
           setStatus({
             ...status,
             canWrite: metadata.canWrite,
+            mainFile: metadata.mainFile,
             error: "",
             commentsVersion: metadata.commentsVersion,
             gitVersion: metadata.gitVersion,
@@ -255,6 +263,13 @@ export function createProjectFilesStore({
         () => {},
       );
       return next;
+    },
+    /** Chooses the main document, or the default when null. */
+    async setMainFile(mainFile: string | null) {
+      await write(() =>
+        updateProjectMainFile({ data: { projectId, mainFile } }),
+      );
+      setStatus({ ...status, mainFile });
     },
     async rename(nodeId: string, name: string, parentId: string) {
       await write(() =>

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
 import {
+  bindingKeyShortcuts,
+  bindingLabel,
   createSequenceMatcher,
   defaultShortcuts,
   eventChord,
@@ -17,6 +19,42 @@ test("defaults are complete, valid, and resolve the old sidebar/Bold conflict", 
   expect(
     shortcutConflicts({ ...defaultShortcuts, sidebar: "Mod+B" }),
   ).toContainEqual({ first: "bold", second: "sidebar" });
+});
+test("the same binding can serve different pages", () => {
+  expect(defaultShortcuts.quickOpen).toBe(defaultShortcuts.search);
+  expect(
+    shortcutConflicts({ ...defaultShortcuts, compile: "Mod+P" }),
+  ).toContainEqual({ first: "compile", second: "quickOpen" });
+  // Settings opens from every page.
+  expect(
+    shortcutConflicts({ ...defaultShortcuts, search: "Mod+," }),
+  ).toContainEqual({ first: "settings", second: "search" });
+});
+test("stored shortcuts gain new actions without taking over a binding in use", () => {
+  const {
+    quickOpen: _open,
+    commandPalette: _palette,
+    ...stored
+  } = defaultShortcuts;
+  expect(shortcutMapSchema.parse(stored)).toEqual(defaultShortcuts);
+  const customized = shortcutMapSchema.parse({
+    ...stored,
+    compile: "Mod+Shift+P",
+  });
+  expect(customized.compile).toBe("Mod+Shift+P");
+  expect(customized.commandPalette).toBe("");
+  expect(customized.quickOpen).toBe("Mod+P");
+  expect(shortcutConflicts(customized)).toEqual([]);
+});
+test("bindings are shown as each platform writes them", () => {
+  expect(bindingLabel("Mod+Shift+P", true)).toBe("⇧⌘P");
+  expect(bindingLabel("Mod+Shift+P", false)).toBe("Ctrl+Shift+P");
+  expect(bindingLabel("Mod+K S", false)).toBe("Ctrl+K S");
+  expect(bindingLabel("Ctrl+PageDown", true)).toBe("⌃PgDn");
+  expect(bindingLabel("", true)).toBe("");
+  expect(bindingKeyShortcuts("Mod+Alt+B", true)).toBe("Meta+Alt+B");
+  expect(bindingKeyShortcuts("Mod+S", false)).toBe("Control+S");
+  expect(bindingKeyShortcuts("Mod+K S", false)).toBeUndefined();
 });
 test("conflicts include prefix sequences and explicit platform modifiers", () => {
   expect(

@@ -3,14 +3,15 @@ import { type BuildSnapshot } from "@texfolia/contracts";
 import { cn } from "cn";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
+import { BinaryPreview } from "#/components/binary-preview";
 import { lazyPanel } from "#/components/lazy-panel";
 import { PanelHeader } from "#/components/panel-header";
 import { ProjectBuildEvents } from "#/lib/compile";
 import { buildFileUrl } from "#/lib/compile/build";
-import { projectPaths } from "#/lib/projects";
+import { projectMainFile, projectPaths } from "#/lib/projects";
 import type { getSharedProject } from "#/lib/sharing/project-share-links.functions";
 import { withShareToken } from "#/lib/sharing/share-token";
-import { extensionOf } from "#/lib/storage/extension";
+import { imageType } from "#/lib/storage/preview";
 
 const PdfViewer = lazy(
   () => import("#/routes/project/$projectId/-components/pdf"),
@@ -24,15 +25,6 @@ const SharedText = lazyPanel("The source", async () => {
 
 type SharedProject = NonNullable<Awaited<ReturnType<typeof getSharedProject>>>;
 export type SharedNode = SharedProject["nodes"][number];
-
-const imageTypes: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  svg: "image/svg+xml",
-  webp: "image/webp",
-};
 
 function sourceUrl(projectId: string, nodeId: string, token: string) {
   return withShareToken(`/api/sources/${projectId}/${nodeId}`, token);
@@ -53,11 +45,11 @@ export function SharedProjectView({
       .sort((a, b) => a.path.localeCompare(b.path));
   }, [project.nodes]);
   const [selected, setSelected] = useState<string | null>(() => {
-    const main =
-      files.find(({ path }) => path === "main.tex") ??
-      files.find(({ path }) => path.endsWith(".tex")) ??
-      files[0];
-    return main?.node.id ?? null;
+    const main = projectMainFile(
+      new Map(files.map(({ node, path }) => [node.id, path])),
+      project.mainFile,
+    );
+    return main?.id ?? files[0]?.node.id ?? null;
   });
   const current = files.find(({ node }) => node.id === selected);
   const pdfOnly = project.scope === "pdf";
@@ -165,98 +157,27 @@ function SharedSource({
   path: string;
   token: string;
 }) {
+  const url = sourceUrl(projectId, node.id, token);
   return (
     <>
       <PanelHeader title={path}>{null}</PanelHeader>
-      {node.kind === "text" ? (
+      {node.kind === "text" && !imageType(node.name) ? (
         <SharedText projectId={projectId} node={node} token={token} />
       ) : (
-        <SharedBinary projectId={projectId} node={node} token={token} />
+        <BinaryPreview
+          url={url}
+          name={node.name}
+          fallback={
+            <p className="p-3 text-sm">
+              This file can’t be previewed.{" "}
+              <a href={url} download={node.name} className="underline">
+                Download {node.name}
+              </a>
+            </p>
+          }
+        />
       )}
     </>
-  );
-}
-
-function SharedBinary({
-  projectId,
-  node,
-  token,
-}: {
-  projectId: string;
-  node: SharedNode;
-  token: string;
-}) {
-  const extension = extensionOf(node.name);
-  const url = sourceUrl(projectId, node.id, token);
-  const [file, setFile] = useState<File>();
-  const [error, setError] = useState("");
-  const previewType =
-    imageTypes[extension] ?? (extension === "pdf" ? "application/pdf" : null);
-  useEffect(() => {
-    if (!previewType) return;
-    const abort = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch(url, { signal: abort.signal });
-        if (!response.ok) throw new Error("Could not open this file.");
-        const blob = await response.blob();
-        if (!abort.signal.aborted)
-          setFile(new File([blob], node.name, { type: previewType }));
-      } catch (failure) {
-        if (!abort.signal.aborted)
-          setError(
-            failure instanceof Error
-              ? failure.message
-              : "Could not open this file.",
-          );
-      }
-    })();
-    return () => abort.abort();
-  }, [url, node.name, previewType]);
-  const objectUrl = useMemo(
-    () =>
-      file && previewType?.startsWith("image/")
-        ? URL.createObjectURL(file)
-        : null,
-    [file, previewType],
-  );
-  useEffect(
-    () => () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    },
-    [objectUrl],
-  );
-  if (!previewType)
-    return (
-      <p className="p-3 text-sm">
-        This file can’t be previewed.{" "}
-        <a href={url} download={node.name} className="underline">
-          Download {node.name}
-        </a>
-      </p>
-    );
-  if (error)
-    return (
-      <p role="alert" className="text-destructive p-3 text-sm">
-        {error}
-      </p>
-    );
-  if (!file)
-    return (
-      <p role="status" className="p-3 text-sm">
-        Loading file…
-      </p>
-    );
-  if (objectUrl)
-    return (
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        <img src={objectUrl} alt={node.name} className="max-w-full" />
-      </div>
-    );
-  return (
-    <Suspense fallback={<p className="p-3 text-sm">Loading PDF viewer…</p>}>
-      <PdfViewer file={file} filename={node.name} />
-    </Suspense>
   );
 }
 

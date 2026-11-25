@@ -30,6 +30,7 @@ export function ProjectNodeActions({
   onCreate,
   onUpload,
   onDownload,
+  onSetMain,
 }: {
   children: ReactNode;
   canManage: boolean;
@@ -37,6 +38,8 @@ export function ProjectNodeActions({
   onCreate: (kind: "text" | "folder") => void;
   onUpload: () => void;
   onDownload: () => void;
+  /** Absent when the file is, or cannot be, the main document. */
+  onSetMain?: () => Promise<void>;
   node: ProjectNode;
   nodes: ProjectNode[];
 }) {
@@ -45,6 +48,7 @@ export function ProjectNodeActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [mainError, setMainError] = useState("");
   const paths = projectNodePaths(nodes);
   const descendants = new Set([node.id]);
   for (let count = -1; count !== descendants.size;) {
@@ -105,6 +109,22 @@ export function ProjectNodeActions({
         >
           Copy path
         </ContextMenuItem>
+        {canManage && onSetMain && (
+          <ContextMenuItem
+            onClick={() => {
+              setMainError("");
+              onSetMain().catch((failure: unknown) =>
+                setMainError(
+                  failure instanceof Error
+                    ? failure.message
+                    : "The main document could not be changed. Try again.",
+                ),
+              );
+            }}
+          >
+            Set as main document
+          </ContextMenuItem>
+        )}
         {canManage && node.parentId && (
           <>
             <ContextMenuSeparator />
@@ -136,6 +156,19 @@ export function ProjectNodeActions({
           </>
         )}
       </ContextMenuContent>
+      <Dialog
+        open={!!mainError}
+        onOpenChange={(next) => {
+          if (!next) setMainError("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Main document not changed</DialogTitle>
+            <DialogDescription role="alert">{mainError}</DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={open}
         onOpenChange={(next) => {

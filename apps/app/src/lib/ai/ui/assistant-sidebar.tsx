@@ -1,4 +1,10 @@
-import { IconCopy, IconRefresh, IconX } from "@tabler/icons-react";
+import {
+  IconArrowBackUp,
+  IconCopy,
+  IconRefresh,
+  IconX,
+} from "@tabler/icons-react";
+import type { ToolCallPart, ToolResultPart } from "@tanstack/ai";
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
 import { Markdown } from "@tanstack/markdown/react";
 import { Button } from "@texfolia/ui/button";
@@ -23,11 +29,14 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ComponentProps,
   type ReactNode,
 } from "react";
 import { z } from "zod";
 
+import type { AssistantEditor, RevertOutcome } from "../editor";
+import { type AssistantChange, assistantChange } from "../revert";
 import { aiConfigurationSchema, type AiConfiguration } from "../schema";
 import {
   sendLatestMessage,
@@ -35,6 +44,7 @@ import {
   type StoredMessage,
 } from "../threads";
 import { AssistantHistory, assistantJson } from "./assistant-history";
+import { ChangeCard, describeChange, isFileChange } from "./change-card";
 import { ModelSelector } from "./model-selector";
 import { PromptInput } from "./prompt-input";
 import { Reasoning } from "./reasoning";
@@ -52,8 +62,44 @@ type Availability =
   | { kind: "ready"; config: AiConfiguration }
   | { kind: "unavailable"; message: string; upgrade: boolean };
 
+const maxMessageLength = 32 * 1024;
+
+type Part = { type: string };
+const isToolCall = (part: Part): part is ToolCallPart =>
+  part.type === "tool-call";
+const isToolResult = (part: Part): part is ToolResultPart =>
+  part.type === "tool-result";
+
+function toolResult(parts: readonly Part[], call: ToolCallPart) {
+  return parts
+    .filter(isToolResult)
+    .find((result) => result.toolCallId === call.id);
+}
+
+// A finished message keeps its parts while later ones stream.
+const changeCache = new WeakMap<
+  readonly Part[],
+  ReadonlyMap<string, AssistantChange>
+>();
+
+/** The changes a message made to the project's files, by tool call. */
+function messageChanges(parts: readonly Part[]) {
+  let changes = changeCache.get(parts);
+  if (!changes) {
+    changes = new Map(
+      parts.filter(isToolCall).flatMap((call) => {
+        const change = assistantChange(call, toolResult(parts, call));
+        return change ? [[call.id, change] as const] : [];
+      }),
+    );
+    changeCache.set(parts, changes);
+  }
+  return changes;
+}
+
 export function AssistantSidebar({
   endpoint,
+  editor,
   plansUrl,
   open,
   onClose,
@@ -75,6 +121,8 @@ export function AssistantSidebar({
   endpoint: string;
   /** Where to send users whose plan has no assistant. */
   plansUrl: string;
+  /** The workspace around the panel. */
+  editor: AssistantEditor;
   open: boolean;
   onClose: () => void;
 }) {
@@ -185,6 +233,7 @@ export function AssistantSidebar({
       {availability.kind === "ready" && (
         <AssistantHistory
           endpoint={endpoint}
+          prompt={editor.prompt}
           historyOpen={historyOpen}
           historyWidth={historyWidth}
           agentsOpen={open}
@@ -202,6 +251,7 @@ export function AssistantSidebar({
               onBusy={onBusy}
               onRefresh={onRefresh}
               endpoint={endpoint}
+              editor={editor}
               config={availability.config}
               onConfiguration={updateConfiguration}
               refresh={refreshConfiguration}
@@ -219,6 +269,7 @@ function AssistantChat({
   onBusy,
   onRefresh,
   endpoint,
+  editor,
   config,
   onConfiguration,
   refresh,
@@ -228,11 +279,41 @@ function AssistantChat({
   onBusy: (busy: boolean) => void;
   onRefresh: () => void;
   endpoint: string;
+  editor: AssistantEditor;
   config: AiConfiguration;
   onConfiguration: (config: AiConfiguration) => void;
   refresh: () => void;
 }) {
   const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const focusEnd = useCallback(() => {
+    // After the new text is in the field.
+    requestAnimationFrame(() => {
+      const element = inputRef.current;
+      if (!element) return;
+      element.focus();
+      element.setSelectionRange(element.value.length, element.value.length);
+      element.scrollTop = element.scrollHeight;
+    });
+  }, []);
+  // The editor's own requests, such as Fix with AI, wait here to be sent.
+  const { prompt } = editor;
+  const requested = useSyncExternalStore(prompt.subscribe, prompt.get);
+  useEffect(() => {
+    if (requested === null) return;
+    prompt.set(null);
+    setInput((current) =>
+      (current.trim()
+        ? `${current.trimEnd()}\n\n${requested}`
+        : requested
+      ).slice(0, maxMessageLength),
+    );
+    focusEnd();
+  }, [requested, prompt, focusEnd]);
+  const [rollback, setRollback] = useState<{
+    messageId: string;
+    outcomes?: RevertOutcome[];
+  }>();
   const threadId = thread.id;
   const defaultModel =
     config.models.find((m) => m.id === config.defaultModel)?.id ??
@@ -295,6 +376,19 @@ function AssistantChat({
       abort.abort();
     };
   }, [config, isLoading, endpoint, onConfiguration]);
+  /** The changes made after a message, latest first. */
+  function changesAfter(messageIndex: number): AssistantChange[] {
+    return messages
+      .slice(messageIndex + 1)
+      .flatMap(({ parts }) => [...messageChanges(parts).values()])
+      .reverse();
+  }
+  async function undoFrom(messageId: string, messageIndex: number) {
+    setRollback({ messageId });
+    const outcomes = await editor.revert(changesAfter(messageIndex));
+    setRollback({ messageId, outcomes });
+  }
+  const undoing = !!rollback && !rollback.outcomes;
   const selected = config.models.find((m) => m.id === (model || defaultModel));
   const remaining =
     config.monthlyCapDollars - config.spentDollars - config.reservedDollars;
@@ -449,7 +543,10 @@ function AssistantChat({
                     ].map((suggestion) => (
                       <Suggestion
                         key={suggestion}
-                        onClick={() => setInput(suggestion)}
+                        onClick={() => {
+                          setInput(suggestion);
+                          focusEnd();
+                        }}
                       >
                         {suggestion}
                       </Suggestion>
@@ -490,23 +587,31 @@ function AssistantChat({
                               }
                             />
                           );
-                        if (part.type === "tool-call")
+                        if (part.type === "tool-call") {
+                          const change = messageChanges(message.parts).get(
+                            part.id,
+                          );
+                          if (change && isFileChange(change))
+                            return (
+                              <ChangeCard
+                                key={part.id}
+                                change={change}
+                                editor={editor}
+                                disabled={isLoading || undoing}
+                                defaultOpen={
+                                  messageIndex === messages.length - 1
+                                }
+                              />
+                            );
                           return (
                             <Tool
                               key={part.id}
                               part={part}
-                              result={message.parts
-                                .filter(
-                                  (candidate) =>
-                                    candidate.type === "tool-result",
-                                )
-                                .find(
-                                  (candidate) =>
-                                    candidate.toolCallId === part.id,
-                                )}
+                              result={toolResult(message.parts, part)}
                               running={isLoading}
                             />
                           );
+                        }
                         return null;
                       })}
                       {message.role === "assistant" && (
@@ -542,6 +647,22 @@ function AssistantChat({
                         >
                           <IconCopy />
                         </Button>
+                        {message.role === "user" &&
+                          editor.canWrite &&
+                          changesAfter(messageIndex).some(isFileChange) && (
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              aria-label="Undo changes from here"
+                              title="Undo the file changes made from this message on"
+                              disabled={isLoading || undoing}
+                              onClick={() =>
+                                void undoFrom(message.id, messageIndex)
+                              }
+                            >
+                              <IconArrowBackUp />
+                            </Button>
+                          )}
                         {message.role === "assistant" &&
                           messageIndex === messages.length - 1 && (
                             <Button
@@ -555,6 +676,9 @@ function AssistantChat({
                             </Button>
                           )}
                       </MessageFooter>
+                      {rollback?.messageId === message.id && (
+                        <Rollback outcomes={rollback.outcomes} />
+                      )}
                     </MessageContent>
                   </Message>
                 </MessageScrollerItem>
@@ -608,11 +732,13 @@ function AssistantChat({
         </label>
         <PromptInput
           id="assistant-message"
-          placeholder="Ask about this project…"
+          placeholder="Ask about this project… Type @ to name a file"
           value={input}
-          maxLength={32 * 1024}
+          files={editor.files}
+          inputRef={inputRef}
+          maxLength={maxMessageLength}
           disabled={!selected || remaining <= 0}
-          onChange={(event) => setInput(event.target.value)}
+          onValueChange={setInput}
         />
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground text-xs">
@@ -633,6 +759,42 @@ function AssistantChat({
           )}
         </div>
       </form>
+    </div>
+  );
+}
+
+function Rollback({ outcomes }: { outcomes: RevertOutcome[] | undefined }) {
+  if (!outcomes)
+    return (
+      <p role="status" className="text-muted-foreground text-xs">
+        Undoing changes…
+      </p>
+    );
+  const undone = outcomes.filter(({ outcome }) =>
+    ["reverted", "partial"].includes(outcome),
+  ).length;
+  const skipped = outcomes.filter(({ outcome }) =>
+    ["skipped", "partial"].includes(outcome),
+  );
+  return (
+    <div role="status" className="text-muted-foreground space-y-1 text-xs">
+      <p>
+        {undone
+          ? `Undid ${undone} ${undone === 1 ? "change" : "changes"}.`
+          : skipped.length
+            ? "No changes were undone."
+            : "These changes were already undone."}
+      </p>
+      {skipped.length > 0 && (
+        <ul aria-label="Changes that were kept" className="list-disc pl-4">
+          {skipped.map(({ change, outcome, reason }, index) => (
+            <li key={index}>
+              {describeChange(change)}
+              {outcome === "partial" ? ", in part" : ""}: {reason}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

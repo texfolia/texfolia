@@ -23,7 +23,13 @@ import { encodeSource, maxSourceFileBytes } from "#/lib/storage";
 import { type SourceBucket } from "#/lib/storage/server";
 
 import { importProjectFiles } from "../../src/lib/projects/project-import.server";
+import { getProjectMetadata } from "../../src/lib/projects/project-metadata.server";
 import {
+  createProjectNode,
+  renameProjectNode,
+} from "../../src/lib/projects/project-node.server";
+import {
+  deleteProjectNode,
   saveProjectSource,
   readProjectSource,
 } from "../../src/lib/projects/project-source.server";
@@ -39,6 +45,7 @@ import {
   restoreProject,
   setProjectTags,
   trashProject,
+  updateProjectMainFile,
 } from "../../src/lib/projects/project.server";
 import { sharePrincipal } from "../../src/lib/sharing/project-access.server";
 import {
@@ -49,6 +56,109 @@ import { transferProject } from "../../src/lib/sharing/project-transfer.server";
 
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
 import { collectProjectSources, sweepProjectSources } from "../collection";
+
+/** The main document is shared, and follows the file that was chosen. */
+async function checkMainFile({
+  db,
+  bucket,
+  ownerId,
+  viewerId,
+  strangerId,
+}: {
+  db: Db;
+  bucket: SourceBucket;
+  ownerId: string;
+  viewerId: string;
+  strangerId: string;
+}) {
+  const projectId = crypto.randomUUID();
+  await createProject({
+    db,
+    ownerId,
+    data: { id: projectId, name: `Main ${projectId}` },
+  });
+  await db
+    .insert(projectCollaborator)
+    .values({ projectId, userId: viewerId, role: "viewer" });
+  const nodes = await db.query.projectNode.findMany({ where: { projectId } });
+  const root = nodes.find((node) => node.parentId === null);
+  assert(root);
+  const create = (name: string, kind: "folder" | "text", parentId: string) =>
+    createProjectNode({
+      db,
+      ownerId,
+      bucket,
+      data: { id: crypto.randomUUID(), projectId, parentId, name, kind },
+    });
+  const folder = await create("thesis", "folder", root.id);
+  const book = await create("book.tex", "text", folder.id);
+  await create("notes.md", "text", root.id);
+  const saved = async () =>
+    (await getProjectMetadata({ db, projectId, userId: viewerId })).mainFile;
+  const choose = (userId: string, mainFile: string | null) =>
+    updateProjectMainFile({
+      db,
+      ownerId: userId,
+      data: { projectId, mainFile },
+    });
+  assert.equal(await saved(), null);
+  for (const userId of [viewerId, strangerId])
+    await assert.rejects(choose(userId, "thesis/book.tex"));
+  await assert.rejects(choose(ownerId, "thesis/missing.tex"), /File not found/);
+  await assert.rejects(choose(ownerId, "thesis"), /File not found/);
+  assert.equal(await saved(), null);
+  await choose(ownerId, "thesis/book.tex");
+  assert.equal(await saved(), "thesis/book.tex");
+
+  const rename = (nodeId: string, name: string, parentId: string) =>
+    renameProjectNode({
+      db,
+      userId: ownerId,
+      data: { projectId, nodeId, name, parentId },
+    });
+  await rename(folder.id, "draft", root.id);
+  assert.equal(
+    await saved(),
+    "draft/book.tex",
+    "A folder's rename is followed",
+  );
+  await rename(book.id, "volume.tex", root.id);
+  assert.equal(await saved(), "volume.tex", "A move is followed");
+  await rename(folder.id, "other", root.id);
+  assert.equal(await saved(), "volume.tex", "Other renames change nothing");
+
+  const copy = await duplicateProject({
+    db,
+    bucket,
+    userId: ownerId,
+    projectId,
+  });
+  assert.equal(
+    (await getProject({ db, bucket, ownerId, projectId: copy.id })).mainFile,
+    "volume.tex",
+  );
+  const link = await createShareLink({
+    db,
+    userId: ownerId,
+    data: { projectId, scope: "project" },
+  });
+  assert.equal(
+    (await getSharedProject({ db, token: link.token })).mainFile,
+    "volume.tex",
+  );
+  // A file that comes back at the path, as after a branch switch, is it again.
+  await deleteProjectNode({
+    db,
+    userId: ownerId,
+    projectId,
+    nodeId: book.id,
+  });
+  assert.equal(await saved(), "volume.tex");
+  await choose(ownerId, null);
+  assert.equal(await saved(), null);
+  for (const id of [projectId, copy.id])
+    await db.delete(project).where(eq(project.id, id));
+}
 
 async function checkLifecycle({
   db,
@@ -797,6 +907,7 @@ export default {
           content: source("Updated nested chapter."),
         },
       });
+      await checkMainFile({ db, bucket, ownerId, viewerId, strangerId });
       await checkLifecycle({
         db,
         bucket,

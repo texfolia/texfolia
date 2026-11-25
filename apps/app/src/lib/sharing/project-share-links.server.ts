@@ -243,6 +243,7 @@ export async function getSharedProject({
       projectId: found.id,
       name: found.name,
       scope: link.scope,
+      mainFile: link.scope === "project" ? found.mainFile : null,
       nodes,
     };
   });

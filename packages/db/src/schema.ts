@@ -56,6 +56,10 @@ export const project = pgTable(
     formatWidth: integer("format_width").notNull().default(80),
     // A BCP 47 tag from the web app's bundled dictionaries, or "off".
     spellcheckLanguage: text("spellcheck_language").notNull().default("en-US"),
+    // The path of the document to compile. It follows renames, and is kept when
+    // the file is deleted. Null, or a missing file, means main.tex or the first
+    // .tex file.
+    mainFile: text("main_file"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -93,6 +93,31 @@ functions and path rules as the Files sidebar. `search_project` matches literal
 text, returns at most 200 lines, skips files over 1 MiB, and scans at most 16 MiB
 per search. It reads six files at a time and keeps only their matches.
 
+### Reviewing and undoing changes
+
+A finished `edit_file` call shows each replacement as a diff, with **Revert this
+edit** or **Revert all edits**. Created files can be removed, and renames undone.
+**Undo changes from here** on one of your messages undoes every change the assistant
+made after it, latest first. It is a rollback of files; the chat keeps its messages.
+
+No file versions are stored for this. An edit is undone from its tool call: the
+`newText` is replaced by the `oldText` in the live document, where up to 80
+characters of context on each side, kept in the tool's result, say it is.
+`compactHistory` removes that context from what the model is sent. A change whose
+text has been edited since is left alone and listed with the reason, and the rest
+are undone. A created file is removed only while its text is unchanged. Deleted files
+and Git actions cannot be undone from a chat. Undoing is an edit of the
+collaborative document by the person who asked for it: collaborators see it, and
+the editor's Undo takes it back. It needs edit access, waits until the document is
+connected, and is disabled while a reply runs. Edits from before this feature have no
+context and cannot be reverted.
+
+### Requests from the editor
+
+**Fix with AI** and **Ask AI about selection** write into the message field, and
+start a chat when there is none. They never send it. Typing `@` completes a project
+file's path; the assistant reads the file with `read_file`.
+
 Git tools can inspect status and diffs, commit, push, pull, create branches, and
 switch branches. The assistant instructions require an explicit user request before
 git mutations. The **Generate message** button in the Git panel uses the same

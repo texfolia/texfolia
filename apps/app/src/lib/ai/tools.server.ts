@@ -7,9 +7,14 @@ import { aiEntitlement } from "#/lib/billing/server";
 import { parseCompileLog } from "#/lib/compile";
 import { gitBranchSchema, type GitAction } from "#/lib/git";
 import { mapLimit } from "#/lib/map-limit";
-import { projectNodePaths, projectPaths } from "#/lib/projects";
+import {
+  projectMainFile,
+  projectNodePaths,
+  projectPaths,
+} from "#/lib/projects";
 import { encodeSource } from "#/lib/storage";
 
+import { editContext } from "./revert";
 import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
 import { readConcurrency, searchSources } from "./source-search";
 import type { AssistantContext, AssistantWorkspace } from "./workspace";
@@ -57,16 +62,28 @@ export function projectTools({
     signal.throwIfAborted();
     await aiEntitlement(db, userId, organizationId);
     return db.transaction(async (tx) => {
-      await workspace.lock({ tx, projectId, userId, access: "read" });
+      const { mainFile } = await workspace.lock({
+        tx,
+        projectId,
+        userId,
+        access: "read",
+      });
       const nodes = await tx.query.projectNode.findMany({
         where: { projectId, deletedAt: { isNull: true } },
       });
       const paths = projectPaths(nodes);
-      return nodes.flatMap((node) => {
-        const path = paths.get(node.id);
-        return path ? [{ ...node, path }] : [];
-      });
+      return {
+        main: projectMainFile(paths, mainFile)?.path,
+        nodes: nodes.flatMap((node) => {
+          const path = paths.get(node.id);
+          return path ? [{ ...node, path }] : [];
+        }),
+      };
     });
+  }
+  function requireMain(main: string | undefined) {
+    if (!main) throw new Error("This project has no .tex file to compile.");
+    return main;
   }
   /** Every live node, folders included, with paths keyed by node ID. */
   async function tree() {
@@ -208,15 +225,18 @@ export function projectTools({
     }).server(({ name }) => gitAction({ kind: "checkout", name })),
     toolDefinition({
       name: "list_files",
-      description: "List the project's saved source files.",
+      description:
+        "List the project's saved source files. The main document is marked.",
       inputSchema: z.object({}),
-    }).server(async () =>
-      (await files()).map((n) => ({
+    }).server(async () => {
+      const { nodes, main } = await files();
+      return nodes.map((n) => ({
         path: n.path,
         kind: n.kind,
         bytes: Number(n.sizeBytes),
-      })),
-    ),
+        ...(n.path === main ? { main: true } : {}),
+      }));
+    }),
     toolDefinition({
       name: "read_file",
       description:
@@ -232,7 +252,7 @@ export function projectTools({
         "List the project's agent skills (.agents/skills/<name>/SKILL.md) by name and description, and the paths of any AGENTS.md files. Returns no file bodies; read a skill or AGENTS.md with read_file when it is relevant to the user's request.",
       inputSchema: z.object({}),
     }).server(async () => {
-      const nodes = await files();
+      const { nodes } = await files();
       const entries = nodes
         .filter((n) => n.kind === "text" && skillFolderName(n.path))
         .sort((a, b) => a.path.localeCompare(b.path));
@@ -295,7 +315,7 @@ export function projectTools({
         matchCase: z.boolean().optional(),
       }),
     }).server(async ({ query, matchCase }) => {
-      const nodes = await files();
+      const { nodes } = await files();
       return searchSources({
         files: nodes.filter((node) => node.kind === "text"),
         async read({ objectKey }) {
@@ -326,9 +346,9 @@ export function projectTools({
           .min(1)
           .max(50),
       }),
-    }).server(async ({ path, version, edits }) => {
+    }).server(async ({ path, version: expected, edits }) => {
       const { node, content } = await readFile(path);
-      if (node.objectKey !== version)
+      if (node.objectKey !== expected)
         throw new Error("File changed. Read it again before editing.");
       const ranges = edits
         .map(({ oldText, newText }, index) => {
@@ -342,29 +362,42 @@ export function projectTools({
         .sort((a, b) => a.from - b.from);
       let updated = "";
       let cursor = 0;
+      const saved: { from: number; to: number }[] = [];
       for (const range of ranges) {
         if (range.from < cursor)
           throw new Error(
             `Edit ${range.index + 1} overlaps another edit. Combine them into one.`,
           );
-        updated += content.slice(cursor, range.from) + range.newText;
+        updated += content.slice(cursor, range.from);
+        saved[range.index] = {
+          from: updated.length,
+          to: updated.length + range.newText.length,
+        };
+        updated += range.newText;
         cursor = range.to;
       }
       updated += content.slice(cursor);
       if (new TextEncoder().encode(updated).byteLength > maxEditBytes)
         throw new Error("Edited file exceeds 64 KiB");
       signal.throwIfAborted();
-      const saved = await workspace.saveSource({
+      const version = await workspace.saveSource({
         userId,
         name: "Texfolia assistant",
         data: {
           projectId,
           nodeId: node.id,
-          expectedObjectKey: version,
+          expectedObjectKey: expected,
           content: encodeSource(new TextEncoder().encode(updated)),
         },
       });
-      return { path, version: saved.objectKey, saved: true };
+      return {
+        path,
+        nodeId: node.id,
+        version: version.objectKey,
+        saved: true,
+        // Finds the edits again to undo them. The model is not sent this.
+        context: editContext(updated, saved),
+      };
     }),
     toolDefinition({
       name: "create_file",
@@ -399,7 +432,12 @@ export function projectTools({
           content: encodeSource(bytes),
         },
       });
-      return { path, version: created.sourceVersion.objectKey, created: true };
+      return {
+        path,
+        nodeId: created.id,
+        version: created.sourceVersion.objectKey,
+        created: true,
+      };
     }),
     toolDefinition({
       name: "rename_file",
@@ -416,7 +454,7 @@ export function projectTools({
         userId,
         data: { projectId, nodeId: node.id, parentId, name },
       });
-      return { path, newPath, renamed: true };
+      return { path, newPath, nodeId: node.id, renamed: true };
     }),
     toolDefinition({
       name: "delete_file",
@@ -437,10 +475,12 @@ export function projectTools({
     toolDefinition({
       name: "compile",
       description:
-        "Compile saved project sources. Returns a job ID; use read_compile_logs to read its status and diagnostics.",
-      inputSchema: z.object({ mainFile: z.string().min(1).max(1024) }),
+        "Compile saved project sources. Returns a job ID; use read_compile_logs to read its status and diagnostics. Leave out mainFile to compile the project's main document.",
+      inputSchema: z.object({
+        mainFile: z.string().min(1).max(1024).optional(),
+      }),
     }).server(async ({ mainFile }) => {
-      await files();
+      const { main } = await files();
       const requestHeaders = new Headers(headers);
       requestHeaders.set("Content-Type", "application/json");
       // Without editor metadata, the route snapshots every saved source under lock.
@@ -451,7 +491,7 @@ export function projectTools({
           headers: requestHeaders,
           signal,
           body: JSON.stringify({
-            mainFile,
+            mainFile: mainFile ?? requireMain(main),
             baseRevision: 0,
             revision: 1,
             files: {},
@@ -472,10 +512,10 @@ export function projectTools({
         "Read a project's compilation status, log, and parsed LaTeX diagnostics.",
       inputSchema: z.object({
         jobId: z.uuid(),
-        mainFile: z.string().min(1).max(1024),
+        mainFile: z.string().min(1).max(1024).optional(),
       }),
     }).server(async ({ jobId, mainFile }) => {
-      const nodes = await files();
+      const { nodes, main } = await files();
       const response = await workspace.compile.GET({
         request: new Request(
           `https://internal/api/compile/${projectId}?job=${jobId}`,
@@ -501,7 +541,7 @@ export function projectTools({
         diagnostics: parseCompileLog(
           log,
           nodes.map((n) => n.path),
-          mainFile,
+          mainFile ?? main ?? "main.tex",
         ).slice(0, 100),
       };
     }),

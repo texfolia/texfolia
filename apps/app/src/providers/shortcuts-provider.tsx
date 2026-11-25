@@ -11,6 +11,7 @@ import type { EditorKeymap } from "#/lib/editor/keymaps/keymaps";
 import {
   createSequenceMatcher,
   eventChord,
+  isMac,
   isTypingTarget,
   shortcutActions,
   startsWithModifier,
@@ -43,7 +44,7 @@ export function ShortcutsProvider({
   keymap.current = editorKeymap;
   useEffect(() => {
     const matcher = createSequenceMatcher();
-    const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+    const mac = isMac();
     const handle = (event: KeyboardEvent) => {
       if (event.isComposing || event.repeat || event.defaultPrevented) return;
       if (

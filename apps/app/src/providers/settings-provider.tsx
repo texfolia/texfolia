@@ -43,6 +43,8 @@ type SettingsProject = {
   canWrite: boolean;
   formatting: FormatSettings;
   spelling: SpellingLanguage;
+  /** Saves the main document; null is the default. */
+  setMainFile: (mainFile: string | null) => Promise<void>;
 };
 
 function useSettingsState(userId: string, project?: SettingsProject) {
@@ -66,6 +68,9 @@ function useSettingsState(userId: string, project?: SettingsProject) {
   const [draftFormatting, setDraftFormatting] = useState(project?.formatting);
   const [committedSpelling, setCommittedSpelling] = useState(project?.spelling);
   const [draftSpelling, setDraftSpelling] = useState(project?.spelling);
+  // Undefined until it is changed. The file tree also sets the main document, so
+  // the file store holds the saved one.
+  const [draftMainFile, setDraftMainFile] = useState<string | null>();
   const [error, setError] = useState<string | null>(null);
   const [open, setOpenState] = useState(false);
   const [closeGuard, setCloseGuard] = useState(false);
@@ -78,12 +83,15 @@ function useSettingsState(userId: string, project?: SettingsProject) {
   const projectDirty =
     JSON.stringify(draftFormatting) !== JSON.stringify(committedFormatting);
   const spellingDirty = draftSpelling !== committedSpelling;
-  const dirty = userDirty || projectDirty || spellingDirty || theme.dirty;
+  const mainFileDirty = draftMainFile !== undefined;
+  const dirty =
+    userDirty || projectDirty || spellingDirty || mainFileDirty || theme.dirty;
   function begin() {
     if (open) return;
     setDraft(preferences);
     setDraftFormatting(committedFormatting);
     setDraftSpelling(committedSpelling);
+    setDraftMainFile(undefined);
     theme.beginDraft();
     setError(null);
     setOpenState(true);
@@ -94,6 +102,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     setDraft(null);
     setDraftFormatting(committedFormatting);
     setDraftSpelling(committedSpelling);
+    setDraftMainFile(undefined);
     setCloseGuard(false);
     setOpenState(false);
   }
@@ -146,6 +155,22 @@ function useSettingsState(userId: string, project?: SettingsProject) {
           } catch (cause) {
             failures.push(
               `Project spelling: ${cause instanceof Error ? cause.message : "could not be saved. Try Apply again."}`,
+            );
+          }
+        }
+      }
+      if (mainFileDirty && project) {
+        if (!project.canWrite)
+          failures.push(
+            "Main document: you have view access. Ask a project editor to save these changes.",
+          );
+        else {
+          try {
+            await project.setMainFile(draftMainFile);
+            setDraftMainFile(undefined);
+          } catch (cause) {
+            failures.push(
+              `Main document: ${cause instanceof Error ? cause.message : "could not be saved. Try Apply again."}`,
             );
           }
         }
@@ -278,6 +303,9 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     setDraftSpelling: (next: SpellingLanguage) => {
       if (project?.canWrite) setDraftSpelling(next);
     },
+    setDraftMainFile: (next: string | null | undefined) => {
+      if (project?.canWrite) setDraftMainFile(next);
+    },
   });
   const applied = useMemo(
     () => ({
@@ -302,6 +330,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       project,
       draftFormatting,
       draftSpelling,
+      draftMainFile,
       dirty,
       error: shownError,
       ready,
@@ -318,6 +347,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       apply: actions.apply,
       setDraftFormatting: actions.setDraftFormatting,
       setDraftSpelling: actions.setDraftSpelling,
+      setDraftMainFile: actions.setDraftMainFile,
     }),
     [
       draft,
@@ -325,6 +355,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       project,
       draftFormatting,
       draftSpelling,
+      draftMainFile,
       dirty,
       shownError,
       ready,

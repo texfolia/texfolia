@@ -30,6 +30,7 @@ export type WorkspaceActions = {
   editDocument: (
     id: string,
     run: (file: CollaborativeFile) => void,
+    options?: { latest?: boolean },
   ) => Promise<void>;
   reveal: (
     path: string,
@@ -46,6 +47,8 @@ export type WorkspaceActions = {
   addSymbolPackage: (packageName: string) => void;
   /** Opens Add reference; `key` names an undefined citation to define. */
   addReference: (key?: string) => void;
+  /** Opens the assistant with text to send, which the user still sends. */
+  askAi: (prompt: string) => void;
   registerEditor: (id: string, view: EditorView | null) => void;
   registerCommands: (
     id: string,

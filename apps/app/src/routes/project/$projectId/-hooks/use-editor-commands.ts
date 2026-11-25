@@ -127,8 +127,9 @@ export function useEditorCommands({
         else redo(view);
         break;
       case "find":
+        // Which focuses the search field.
         openSearchPanel(view);
-        break;
+        return;
       case "format":
         if (canFormat && !formatting) format(view);
         break;

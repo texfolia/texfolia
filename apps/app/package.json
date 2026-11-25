@@ -28,6 +28,7 @@
     "test:collaboration-cache": "bun run test/collaboration-cache.ts",
     "test:compile-engine": "bun run test/compile-engine.ts",
     "test:compile-route": "bun run test/compile-route.ts",
+    "test:editor-features": "bun run test/editor-features.ts",
     "test:editor-keymaps": "bun run test/editor-keymaps.ts",
     "test:editor-runtime": "bun run test/editor-runtime.ts",
     "test:git": "bun run test/git-integration.ts",

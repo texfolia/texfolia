@@ -17,6 +17,47 @@ Only visible editor tabs keep a live editor. A hidden tab unmounts its editor
 and keeps its selection, scroll position and undo history, so switching back
 restores them. Edits made by collaborators while the tab is hidden still merge.
 
+## Main document
+
+A project compiles its main document. Choose it with **Set as main document** in a
+`.tex` file's context menu in Files, the command palette, or Settings → Project.
+A star marks it in Files. The choice is the `project.main_file` path, shared with
+collaborators on their next metadata sync. Renaming or moving the file or its folder
+updates the path in the same transaction. Deleting the file keeps the path, so the
+choice returns when a file comes back there, as after a Git branch switch.
+
+Without a choice, or while its file is missing, the main document is `main.tex`,
+else the first `.tex` file, outermost folders first (`projectMainFile` in
+`#/lib/projects`). Share links open it first, duplicates and templates keep it, and
+the assistant's `compile` tool uses it by default.
+
+## Go to file and the command palette
+
+**Go to file** (Mod+P) finds project and build files by fuzzy match. Files used last
+come first, and the current file last. End the query with `:12` or `:12:3` to open
+a line and column. A query that starts with `>` searches the workspace's commands
+instead, as does the **Command palette** (Mod+Shift+P). Firefox keeps
+Ctrl+Shift+P for private windows, so use Mod+P and `>`, the View menu, or another
+binding there. File, Edit, and View show each item's current shortcut.
+
+## Previews
+
+Images (PNG, JPG, GIF, WebP, AVIF, BMP, ICO, and SVG) show their dimensions over a
+grid that reveals transparency, with zoom presets, Ctrl/Cmd + scroll, and fit. SVG
+uploads are text, so they open as source and **Open image preview** shows the live
+image beside it. Share links use the same previews.
+
+PDFs scroll through all of their pages; only those near the viewport are drawn.
+Zoom has fit to width, fit to page, presets, and Ctrl/Cmd + scroll around the pointer.
+**Find in PDF** (Mod+F while the PDF has focus) ignores case, line breaks, and
+hyphenation. **Print** draws each page as an image into a hidden frame, because the
+security policy allows no PDF plugin. Protected PDFs ask for their password in a
+dialog.
+
+A new build loads behind the PDF on screen and replaces it once its visible pages
+are drawn. The page, scroll position, zoom, and rotation stay. Hiding the tab keeps
+them too.
+
 ## Spelling
 
 LaTeX documents (`.tex` and `.ltx`) are spell checked as you type. Misspelled
@@ -48,6 +89,15 @@ forms. **Add to dictionary** saves immediately, including for viewers.
 `bun run --cwd apps/app test:spelling` checks the worker, dictionary loading,
 suggestions and the personal dictionary in Chromium.
 
+## Asking the assistant
+
+**Ask AI about selection**, in the editor's context and overflow menus, quotes the
+selection, or the cursor's line, in the assistant's message. Nothing is sent until
+you send it. See [the assistant guide](/ai-assistant/).
+
+`bun run --cwd apps/app test:editor-features` checks the main document, go to file,
+previews, and the assistant's changes in Chromium.
+
 ## Bottom panel
 
 Problems and Logs share a bottom panel below the dock. It is closed by default
@@ -56,7 +106,9 @@ Problems and logs buttons, or Mod+J. A failed compile does not open it. Drag the
 divider or use its arrow keys to resize it.
 
 Problems lists browser diagnostics and parsed compile-log diagnostics. Selecting
-a problem pins its file and jumps to the reported line.
+a problem pins its file and jumps to the reported line. **Fix with AI** writes the
+problem into the assistant's message for you to send; it is also a quick fix in the
+editor.
 
 Logs lists the `compileHistoryLimit` (10) most recent compiles of the project and
 shows the selected compile’s timeline and raw TeX log. Times are shown in your

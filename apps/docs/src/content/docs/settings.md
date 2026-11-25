@@ -58,6 +58,14 @@ untouched draft fields follow the new values. Fields edited in the draft keep
 their values. An immediate toolbar Wrap change cannot erase an unapplied font
 size edit.
 
+## Main document
+
+The Project tab's Main document field sets `project.main_file`, described in
+[Editor workspace](/editor-workspace/#main-document). `updateProjectMainFile`
+uses the same write-access check as the other project settings. The file store
+holds the saved value, because the file tree also changes it, so the settings
+draft is empty until the field changes.
+
 ## Spelling
 
 The Project tab's Spelling field sets the project's spell-check language. The
@@ -89,15 +97,22 @@ restores every default.
 | Save & compile             | Mod+Shift+B                 | Tasks: Run Build Task                |
 | Clean build                | Unassigned                  | None                                 |
 | Format document            | Alt+Shift+F                 | Format Document                      |
-| Open Markdown preview      | Mod+Shift+V                 | Markdown: Open Preview               |
+| Open Markdown/SVG preview  | Mod+Shift+V                 | Markdown: Open Preview               |
 | Next / previous editor tab | Ctrl+PageDown / Ctrl+PageUp | View: Open Next / Previous Editor    |
 | Toggle sidebar             | Mod+Alt+B                   | View: Toggle Secondary Side Bar      |
+| Go to file                 | Mod+P                       | Go to File                           |
+| Command palette            | Mod+Shift+P                 | Show All Commands                    |
 | Search projects            | Mod+P                       | Go to File                           |
 | Search in project          | Mod+Shift+F                 | Search: Find in Files                |
 
 Bold, Italic, Underline (Mod+B/I/U) and headings (Mod+Alt+0–6) keep the
 standard rich-text bindings. New project keeps the N P sequence because the
 browser reserves Mod+N.
+
+An action can apply to one page: Search projects and New project to the dashboard,
+and Go to file and Command palette to the workspace. Actions of different pages can
+share a binding. Stored shortcuts gain new actions with their default binding, or
+none when that would take over a binding already in use.
 
 Bindings conflict when they match or when one is the prefix of another
 sequence. Explicit Ctrl and Meta modifiers are checked against Mod on their

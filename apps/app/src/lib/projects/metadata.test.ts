@@ -45,6 +45,7 @@ const metadata = {
     image: { objectKey: "sources/figure.png", updatedAt: 1 },
   },
   canWrite: true,
+  mainFile: null,
 } satisfies ProjectMetadata;
 
 test("live text exports tolerate autosaves while compilation detects saved text changes", async () => {

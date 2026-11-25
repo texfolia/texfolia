@@ -2,6 +2,15 @@ import { z } from "zod";
 
 import { keymapChords, type EditorKeymap } from "#/lib/editor/keymaps/keymaps";
 
+type ShortcutDefinition = {
+  label: string;
+  binding: string;
+  /** Whether it also runs while text is being typed. */
+  typing: boolean;
+  /** Where it applies, when not everywhere. */
+  scope?: "projects" | "workspace";
+};
+
 // Defaults follow VS Code unless a binding would take over an important
 // browser or editor function. An empty binding leaves the action unassigned.
 export const shortcutActions = {
@@ -31,7 +40,7 @@ export const shortcutActions = {
   heading6: { label: "Heading 6", binding: "Mod+Alt+6", typing: true },
   format: { label: "Format document", binding: "Alt+Shift+F", typing: true },
   markdown: {
-    label: "Open Markdown preview",
+    label: "Open Markdown or SVG preview",
     binding: "Mod+Shift+V",
     typing: true,
   },
@@ -43,14 +52,36 @@ export const shortcutActions = {
   },
   sidebar: { label: "Toggle sidebar", binding: "Mod+Alt+B", typing: false },
   panel: { label: "Toggle panel", binding: "Mod+J", typing: true },
-  search: { label: "Search projects", binding: "Mod+P", typing: true },
+  quickOpen: {
+    label: "Go to file",
+    binding: "Mod+P",
+    typing: true,
+    scope: "workspace",
+  },
+  commandPalette: {
+    label: "Command palette",
+    binding: "Mod+Shift+P",
+    typing: true,
+    scope: "workspace",
+  },
+  search: {
+    label: "Search projects",
+    binding: "Mod+P",
+    typing: true,
+    scope: "projects",
+  },
   projectSearch: {
     label: "Search in project",
     binding: "Mod+Shift+F",
     typing: true,
   },
-  newProject: { label: "New project", binding: "N P", typing: false },
-} as const;
+  newProject: {
+    label: "New project",
+    binding: "N P",
+    typing: false,
+    scope: "projects",
+  },
+} as const satisfies Record<string, ShortcutDefinition>;
 export type ShortcutAction = keyof typeof shortcutActions;
 export const shortcutIds = Object.keys(shortcutActions).filter(
   (key): key is ShortcutAction => Object.hasOwn(shortcutActions, key),
@@ -96,19 +127,37 @@ export const bindingSchema = z.string().transform((value, context) => {
   });
   return z.NEVER;
 });
-export const shortcutMapSchema = z.record(shortcutActionSchema, bindingSchema);
-export type ShortcutMap = z.infer<typeof shortcutMapSchema>;
-export const defaultShortcuts = shortcutMapSchema.parse(
-  Object.fromEntries(
-    shortcutIds.map((id) => [id, shortcutActions[id].binding]),
-  ),
-);
+export type ShortcutMap = Record<ShortcutAction, string>;
+// The actions are constants, so their keys are complete.
+export const defaultShortcuts = Object.fromEntries(
+  shortcutIds.map((id) => [id, shortcutActions[id].binding]),
+) as ShortcutMap;
+/**
+ * Stored shortcuts. Actions added since they were stored get their default
+ * binding, or none where that would take over a binding already in use.
+ */
+export const shortcutMapSchema = z
+  .partialRecord(shortcutActionSchema, bindingSchema)
+  .transform((stored): ShortcutMap => {
+    const map = { ...defaultShortcuts, ...stored };
+    for (const { first, second } of shortcutConflicts(map))
+      for (const added of [first, second])
+        if (stored[added] === undefined) map[added] = "";
+    return map;
+  });
+
+const scopeOf = (id: ShortcutAction): ShortcutDefinition["scope"] => {
+  const action: ShortcutDefinition = shortcutActions[id];
+  return action.scope;
+};
 
 export function shortcutConflicts(map: ShortcutMap) {
   const conflicts: { first: ShortcutAction; second: ShortcutAction }[] = [];
   for (const [index, first] of shortcutIds.entries()) {
     for (const second of shortcutIds.slice(index + 1)) {
       if (!map[first] || !map[second]) continue;
+      const scopes = [scopeOf(first), scopeOf(second)];
+      if (scopes[0] && scopes[1] && scopes[0] !== scopes[1]) continue;
       // Mod and explicit Ctrl/Meta can resolve to the same physical key.
       const variants = (binding: string) => [
         binding.replaceAll("Mod", "Ctrl"),
@@ -211,6 +260,56 @@ export function createSequenceMatcher() {
       return { action: complete?.id, pending: !!prefix };
     },
   };
+}
+
+export const isMac = () =>
+  typeof navigator !== "undefined" &&
+  /Mac|iPhone|iPad/.test(navigator.platform);
+
+const macKeys: Record<string, string> = {
+  Mod: "⌘",
+  Meta: "⌘",
+  Ctrl: "⌃",
+  Alt: "⌥",
+  Shift: "⇧",
+};
+const keyLabels: Record<string, string> = {
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  PageUp: "PgUp",
+  PageDown: "PgDn",
+};
+
+/** A binding as menus show it, such as ⇧⌘P or Ctrl+Shift+P. */
+export function bindingLabel(binding: string, mac: boolean) {
+  return binding
+    .split(" ")
+    .map((chord) => {
+      const parts = chord.split("+");
+      const key = parts.pop() ?? "";
+      const label = keyLabels[key] ?? key;
+      return mac
+        ? // Apple's order, with Command next to the key.
+          ["Ctrl", "Alt", "Shift", "Mod", "Meta"]
+            .filter((part) => parts.includes(part))
+            .map((part) => macKeys[part])
+            .join("") + label
+        : [
+            ...parts.map((part) => (part === "Mod" ? "Ctrl" : part)),
+            label,
+          ].join("+");
+    })
+    .join(" ");
+}
+
+/** A single chord for aria-keyshortcuts, which has no sequences. */
+export function bindingKeyShortcuts(binding: string, mac: boolean) {
+  if (!binding || binding.includes(" ")) return undefined;
+  return binding
+    .replace("Mod", mac ? "Meta" : "Control")
+    .replace("Ctrl", "Control");
 }
 
 /** Actions that keep their binding inside a Vim or Emacs editor. */

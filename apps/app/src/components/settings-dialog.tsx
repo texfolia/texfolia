@@ -5,6 +5,7 @@ import {
   IconTextSpellcheck,
   IconX,
 } from "@tabler/icons-react";
+import { useLiveQuery } from "@tanstack/react-db";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -32,7 +33,7 @@ import {
 import { Kbd } from "@texfolia/ui/kbd";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
-import { useId, useState } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
 import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
@@ -46,6 +47,11 @@ import {
   spellingLanguageSchema,
 } from "#/lib/editor/spelling/languages";
 import {
+  isMainFileCandidate,
+  projectMainFile,
+  projectPaths,
+} from "#/lib/projects";
+import {
   addPersonalWord,
   autoCompileDelays,
   maxPersonalWords,
@@ -54,6 +60,7 @@ import {
 import {
   defaultShortcuts,
   eventChord,
+  isMac,
   normalizeBinding,
   shortcutActions,
   shortcutConflicts,
@@ -61,6 +68,7 @@ import {
   type ShortcutAction,
   yieldsToKeymap,
 } from "#/lib/shortcuts/shortcuts";
+import { useProjectFiles } from "#/providers/project-files-provider";
 import {
   type SettingsSection,
   useSettingsEditing,
@@ -104,6 +112,7 @@ export function SettingsDialog() {
               </TabsContent>
               <TabsContent value="project" className="min-h-0 overflow-y-auto">
                 <div className="min-h-64 py-1">
+                  <ProjectMainFileFields />
                   <Item variant="outline" className="items-start">
                     <ItemContent>
                       <ItemTitle>LaTeX formatting</ItemTitle>
@@ -323,6 +332,58 @@ function EditorSettingsFields() {
   );
 }
 
+function ProjectMainFileFields() {
+  const { project, draftMainFile, setDraftMainFile } = useSettingsEditing();
+  const files = useProjectFiles();
+  const saved = useSyncExternalStore(
+    files.subscribe,
+    () => files.getStatus().mainFile,
+  );
+  const { data: nodes } = useLiveQuery(files.nodes);
+  const id = useId();
+  const paths = projectPaths(nodes);
+  const candidates = [...paths.values()].filter(isMainFileCandidate).sort();
+  const chosen = draftMainFile === undefined ? saved : draftMainFile;
+  const fallback = projectMainFile(paths, null)?.path;
+  return (
+    <Item variant="outline" className="mb-4 items-start">
+      <ItemContent>
+        <ItemTitle>Main document</ItemTitle>
+        <ItemDescription>
+          The file that is compiled. Shared by everyone in this project.
+        </ItemDescription>
+        <fieldset disabled={!project?.canWrite} className="mt-5">
+          <Field>
+            <FieldLabel htmlFor={`${id}-main`}>Main document</FieldLabel>
+            <NativeSelect
+              id={`${id}-main`}
+              value={chosen ?? ""}
+              onChange={(event) => {
+                const next = event.target.value || null;
+                setDraftMainFile(next === saved ? undefined : next);
+              }}
+            >
+              <NativeSelectOption value="">
+                {fallback ? `Automatic (${fallback})` : "Automatic"}
+              </NativeSelectOption>
+              {chosen !== null && !candidates.includes(chosen) && (
+                <NativeSelectOption value={chosen} disabled>
+                  {chosen} (missing)
+                </NativeSelectOption>
+              )}
+              {candidates.map((path) => (
+                <NativeSelectOption key={path} value={path}>
+                  {path}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+        </fieldset>
+      </ItemContent>
+    </Item>
+  );
+}
+
 function ProjectSpellingFields() {
   const settings = useSettingsEditing();
   const id = useId();
@@ -463,9 +524,7 @@ function ShortcutSettingsFields() {
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [chords, setChords] = useState<string[]>([]);
   const conflicts = shortcutConflicts(draft.shortcuts);
-  const mac =
-    typeof navigator !== "undefined" &&
-    /Mac|iPhone|iPad/.test(navigator.platform);
+  const mac = isMac();
   const keymap = draft.editor.keymap;
   const change = (action: ShortcutAction, binding: string) =>
     setDraft({
@@ -563,10 +622,7 @@ function ShortcutSettingsFields() {
                   return;
                 }
                 if (event.repeat || event.nativeEvent.isComposing) return;
-                const chord = eventChord(
-                  event.nativeEvent,
-                  /Mac|iPhone|iPad/.test(navigator.platform),
-                );
+                const chord = eventChord(event.nativeEvent, mac);
                 if (chord && normalizeBinding(chord) && chords.length < 4)
                   setChords((current) => [...current, chord]);
               }}

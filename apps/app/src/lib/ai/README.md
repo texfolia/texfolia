@@ -39,6 +39,10 @@ The core takes the rest as arguments:
   the session before every model request.
 - `waitUntil`: keeps the Worker running until a run is saved and settled, even when
   the client leaves.
+- `editor`: an `AssistantEditor` (`editor.ts`), which lists and opens files, undoes
+  changes, and hands over requests from the editor. The workspace's
+  `use-assistant-editor` builds it. `revert.ts` reads the changes of tool calls
+  and finds them in the current text.
 - `endpoint`, `plansUrl`, sizes, and the history resize handle:
   `AssistantSidebar` knows nothing about the workspace layout or app routes.
 

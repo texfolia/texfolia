@@ -11,8 +11,13 @@ import {
 } from "#/lib/storage/server";
 
 import type { LockProject, ProjectTransaction } from "./access";
+import { movedMainFile } from "./main-file";
 import { createNodeSchema, renameNodeSchema } from "./node.schema";
-import { newProjectNodePath, renamedProjectNodes } from "./paths";
+import {
+  newProjectNodePath,
+  projectNodePaths,
+  renamedProjectNodes,
+} from "./paths";
 
 // Callers invalidate the project build after these resolve.
 
@@ -107,11 +112,16 @@ export async function renameProjectNode({
 }) {
   data = renameNodeSchema.parse(data);
   await db.transaction(async (tx) => {
-    await lock({ tx, projectId: data.projectId, userId });
+    const found = await lock({ tx, projectId: data.projectId, userId });
     const nodes = await tx.query.projectNode.findMany({
       where: { projectId: data.projectId, deletedAt: { isNull: true } },
     });
-    renamedProjectNodes(nodes, data.nodeId, data.name, data.parentId);
+    const renamed = renamedProjectNodes(
+      nodes,
+      data.nodeId,
+      data.name,
+      data.parentId,
+    );
     await tx
       .update(projectNode)
       .set({ name: data.name, parentId: data.parentId, updatedAt: new Date() })
@@ -123,7 +133,14 @@ export async function renameProjectNode({
       );
     await tx
       .update(project)
-      .set({ updatedAt: new Date() })
+      .set({
+        updatedAt: new Date(),
+        mainFile: movedMainFile(
+          found.mainFile,
+          projectNodePaths(nodes),
+          projectNodePaths(renamed),
+        ),
+      })
       .where(eq(project.id, data.projectId));
   });
 }

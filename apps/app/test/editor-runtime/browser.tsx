@@ -35,6 +35,7 @@ const settings = {
   canWrite: project.canWrite,
   formatting: { indent: 2, wrap: true, width: 80 },
   spelling: "off" as const,
+  setMainFile: files.setMainFile,
 };
 const route = createRootRoute({
   component: () => (
@@ -79,6 +80,30 @@ const api = {
     return taken;
   },
   text: () => view().state.doc.toString(),
+  /** Replaces what differs, as a collaborator's edit would. */
+  replace: (text: string) => {
+    const { state, dispatch } = view();
+    const current = state.doc.toString();
+    let from = 0;
+    while (
+      from < Math.min(current.length, text.length) &&
+      current[from] === text[from]
+    )
+      from++;
+    let end = 0;
+    while (
+      end < Math.min(current.length, text.length) - from &&
+      current.at(-1 - end) === text.at(-1 - end)
+    )
+      end++;
+    dispatch({
+      changes: {
+        from,
+        to: current.length - end,
+        insert: text.slice(from, text.length - end),
+      },
+    });
+  },
   select: (anchor: number, head = anchor) => {
     view().focus();
     view().dispatch({ selection: { anchor, head } });

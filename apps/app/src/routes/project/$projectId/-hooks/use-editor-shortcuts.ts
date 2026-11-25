@@ -16,7 +16,6 @@ export function useEditorShortcuts({
   container,
   editor,
   isLatex,
-  isMarkdown,
   canFormat,
   readOnly,
   format,
@@ -25,7 +24,6 @@ export function useEditorShortcuts({
   container: RefObject<HTMLDivElement | null>;
   editor: RefObject<ReactCodeMirrorRef | null>;
   isLatex: boolean;
-  isMarkdown: boolean;
   canFormat: boolean;
   readOnly: boolean;
   format: (view: EditorView) => void;
@@ -33,7 +31,7 @@ export function useEditorShortcuts({
 }) {
   useAppShortcut("markdown", () => onOpenPreview?.(), {
     target: container,
-    enabled: isMarkdown && !!onOpenPreview,
+    enabled: !!onOpenPreview,
   });
   useAppShortcut(
     "bold",
