@@ -107,7 +107,9 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
 4. Seed the original templates from the production deployment context using the
    production database and source bucket as described in
    [Seed original templates](/templates/#seed-original-templates).
-5. Check the deployed production app and inspect Worker logs for database and
+5. Check that `GET /api/health` on the app answers 200. It answers 503 when the
+   database does not answer within five seconds, so an uptime monitor can use it.
+6. Check the deployed production app and inspect Worker logs for database and
    binding errors. Confirm saved writes are visible immediately and Hyperdrive
    query caching remains disabled.
 
