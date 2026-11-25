@@ -15,7 +15,7 @@ import {
   subscription,
   user,
 } from "@texfolia/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { z } from "zod";
@@ -862,6 +862,39 @@ try {
     401,
     "Retry still requires a valid session",
   );
+  // Nothing locks the project during submission, so a change meanwhile marks the
+  // build it missed as stale.
+  const changed = { ...(await fixture()), id: crypto.randomUUID() };
+  beforeSubmit = async () => {
+    await db
+      .update(projectNode)
+      .set({ name: "renamed.tex" })
+      .where(
+        and(
+          eq(projectNode.projectId, changed.projectId),
+          eq(projectNode.kind, "text"),
+        ),
+      );
+  };
+  assert.equal((await submit(changed)).status, 202);
+  beforeSubmit = async () => {};
+  await completed(changed.projectId, changed.userId, changed.id);
+  const unchanged = { ...(await fixture()), id: crypto.randomUUID() };
+  assert.equal((await submit(unchanged)).status, 202);
+  await completed(unchanged.projectId, unchanged.userId, unchanged.id);
+  for (const [{ projectId, userId }, stale] of [
+    [changed, true],
+    [unchanged, false],
+  ] as const) {
+    const response = await mf.dispatchFetch(
+      `${(await mf.ready).origin}/api/compile/${projectId}`,
+      { headers: { Cookie: cookies.get(userId) ?? "" } },
+    );
+    assert.equal(
+      z.object({ stale: z.boolean() }).parse(await response.json()).stale,
+      stale,
+    );
+  }
   console.info(
     "Compile route passed: identical and completed retries, payload/header/project/user conflicts, legacy IDs, lost responses, concurrent POSTs, source resync, assistant full snapshots before and after source wipe, share links (PDF-only limits, no writes, revocation), persisted compile timelines with pruning, session history, and Postgres reconciliation",
   );

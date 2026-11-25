@@ -1,11 +1,13 @@
 import type { Db } from "@texfolia/db";
-import { project, projectCollaboration } from "@texfolia/db/schema";
+import {
+  member,
+  project,
+  projectCollaboration,
+  projectCollaborator,
+} from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { mapLimit } from "#/lib/map-limit";
-
-// How often a collaboration room re-verifies connected users as a backstop.
-export const liveProjectAccessIntervalMs = 5000;
 
 type LiveChannel = {
   getByName(projectId: string): {
@@ -20,19 +22,29 @@ export type LiveProjects = {
   builds: LiveChannel;
 };
 
+// Callers may hold the revoking transaction open, so these stay short.
+const retryDelaysMs = [100, 400];
+
 async function invalidate(
   channel: LiveChannel,
   projectId: string,
   userIds?: string[],
 ) {
-  try {
-    await channel.getByName(projectId).invalidateAccess(userIds);
-  } catch (error) {
-    console.error("Live project access invalidation failed", {
-      projectId,
-      error,
-    });
-  }
+  for (let attempt = 0; ; attempt++)
+    try {
+      // A stub that has thrown may stay broken.
+      return await channel.getByName(projectId).invalidateAccess(userIds);
+    } catch (error) {
+      const delay = retryDelaysMs[attempt];
+      if (delay === undefined) {
+        console.error("Live project access invalidation failed", {
+          projectId,
+          error,
+        });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
 }
 
 // Live channels cache access, so every path that revokes or changes it must
@@ -94,4 +106,64 @@ export async function invalidateOrganizationAccess({
       error,
     });
   }
+}
+
+/**
+ * Tells live channels about projects an account or organization is about to lose
+ * or take with it. Cascades remove the rows that name them, so `before` collects
+ * them and `after` notifies. A failure never blocks the deletion.
+ */
+export function deletionNotice({
+  db,
+  live,
+}: {
+  db: Db;
+  live: LiveProjects | undefined;
+}) {
+  // Undefined when everyone loses access, because the project is deleted.
+  const affected = new Map<string, string[] | undefined>();
+  return {
+    async before(deleted: { userId: string } | { organizationId: string }) {
+      if (!live) return;
+      affected.clear();
+      try {
+        if ("organizationId" in deleted) {
+          for (const { id } of await db
+            .select({ id: project.id })
+            .from(project)
+            .where(eq(project.organizationId, deleted.organizationId)))
+            affected.set(id, undefined);
+          return;
+        }
+        const { userId } = deleted;
+        for (const { id } of await db
+          .select({ id: projectCollaborator.projectId })
+          .from(projectCollaborator)
+          .where(eq(projectCollaborator.userId, userId)))
+          affected.set(id, [userId]);
+        for (const { id } of await db
+          .select({ id: project.id })
+          .from(project)
+          .innerJoin(member, eq(member.organizationId, project.organizationId))
+          .where(eq(member.userId, userId)))
+          affected.set(id, [userId]);
+        for (const { id } of await db
+          .select({ id: project.id })
+          .from(project)
+          .where(eq(project.ownerId, userId)))
+          affected.set(id, undefined);
+      } catch (error) {
+        console.error("Deleted projects could not be listed", {
+          ...deleted,
+          error,
+        });
+      }
+    },
+    async after() {
+      await mapLimit([...affected], organizationConcurrency, ([id, userIds]) =>
+        invalidateProjectAccess(live, id, userIds),
+      );
+      affected.clear();
+    },
+  };
 }

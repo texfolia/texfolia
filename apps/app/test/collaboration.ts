@@ -34,6 +34,7 @@ import { createProject } from "../src/lib/projects/project.server";
 import type { BrowserApi } from "./collaboration/browser";
 import { checkDeletion } from "./collaboration/deletion";
 import { checkRevocation } from "./collaboration/revocation";
+import { checkRooms } from "./collaboration/rooms";
 import { checkScratchpad } from "./collaboration/scratchpad";
 import { checkShareLinks } from "./collaboration/share-links";
 
@@ -799,6 +800,15 @@ try {
       window.collaborationTest.value().includes("DENIED"),
     )),
   );
+  await checkRooms({
+    mf,
+    db,
+    origin: (await mf.ready).origin,
+    ownerId,
+    editorId,
+    viewerId,
+    cookies,
+  });
   await checkRevocation({
     mf,
     db,
@@ -819,7 +829,7 @@ try {
     cookies,
   });
   console.log(
-    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, live edit, build event and PDF revocation, share-link guests, and the scratchpad",
+    "Collaboration passed: convergence, offline merge/reload, viewers, cursors, undo, formatting, hibernation, compaction, R2, fresh browser, permission changes, saves beside edits, lost acknowledgements, document eviction, batched access checks, live edit, build event and PDF revocation, share-link guests, and the scratchpad",
   );
 } finally {
   await Promise.all(contexts.map((context) => context.close()));

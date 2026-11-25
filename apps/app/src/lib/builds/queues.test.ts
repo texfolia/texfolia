@@ -20,7 +20,7 @@ import {
   type CoordinatorSnapshot,
 } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
-import { HttpError } from "./project";
+import { HttpError, MissingSourceError } from "./project";
 import {
   backgroundDelay,
   compileQueue,
@@ -968,6 +968,132 @@ test("ordinary project builds keep the 30-day retention", async () => {
     expect(fixture.background.at(-1)?.body).toMatchObject({
       at: lastActivity + 30 * 24 * 60 * 60_000,
     });
+  } finally {
+    await fixture.core.close();
+  }
+});
+
+test("maintenance during a build waits for it instead of re-enqueueing, and changes schedule no immediate cleanup", async () => {
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const fixture = harness(async () => {
+    started.resolve();
+    await release.promise;
+    return output;
+  });
+  const state = () =>
+    persistedSchema.parse(JSON.parse(fixture.state.saved ?? "null"));
+  try {
+    await fixture.submit();
+    const at = Date.now() - 1;
+    await fixture.restart((saved) => {
+      saved.maintenanceAt = at;
+    });
+    const running = fixture.core.wake();
+    await started.promise;
+    const maintain = () =>
+      fixture.deliver("background", {
+        kind: "maintenance",
+        projectId: fixture.projectId,
+        at,
+      });
+    expect(await maintain()).toBe(true);
+    expect(await maintain()).toBe(true);
+    expect(fixture.background).toEqual([]);
+    expect(state().maintenanceAt).toBeNull();
+    release.resolve();
+    await running;
+    expect(fixture.background).toHaveLength(1);
+
+    await fixture.restart((saved) => {
+      saved.maintenanceAt = null;
+    });
+    for (let change = 0; change < 5; change++) await fixture.core.changed();
+    expect(fixture.background).toHaveLength(2);
+    expect(state().maintenanceAt).toBe(
+      fixture.background.at(-1)?.body.at ?? null,
+    );
+    expect(state().maintenanceAt).toBeGreaterThan(
+      Date.now() + 29 * 24 * 60 * 60_000,
+    );
+  } finally {
+    release.resolve();
+    await fixture.core.close();
+  }
+});
+
+test("only editors are remembered, and only the most recent ones", async () => {
+  const fixture = harness(async () => output);
+  const editors = () =>
+    Object.keys(
+      z
+        .object({ editors: z.record(z.string(), z.number()) })
+        .parse(JSON.parse(fixture.state.saved ?? "null")).editors,
+    );
+  const changed = (body: object) =>
+    createCoordinatorApp(fixture.core).fetch(
+      new Request(`http://local/projects/${fixture.projectId}/changed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  try {
+    for (let change = 0; change < 3; change++)
+      expect((await changed({})).status).toBe(200);
+    expect(editors()).toEqual([]);
+    expect(fixture.core.snapshot().revision).toBe(3);
+    expect((await changed({ editorId: "x" })).status).toBe(400);
+    const ids = Array.from({ length: 70 }, () => crypto.randomUUID());
+    for (const editorId of ids) await changed({ editorId, sequence: 1 });
+    // An editor that is still active is not the one forgotten.
+    await changed({ editorId: ids[6], sequence: 2 });
+    await changed({ editorId: crypto.randomUUID(), sequence: 1 });
+    expect(editors()).toHaveLength(64);
+    expect(editors()).toContain(ids[6]!);
+    expect(editors()).not.toContain(ids[7]!);
+    const { revision } = fixture.core.snapshot();
+    await changed({ editorId: ids[6], sequence: 1 });
+    expect(fixture.core.snapshot().revision).toBe(revision);
+  } finally {
+    await fixture.core.close();
+  }
+});
+
+test("a build whose saved source disappeared forces a resync that survives a restart", async () => {
+  const fixture = harness(async () => {
+    throw new MissingSourceError();
+  });
+  const text = "draft";
+  try {
+    await fixture.submit("free", {
+      mainFile: "main.tex",
+      baseRevision: 0,
+      revision: 1,
+      resync: true,
+      files: {
+        "main.tex": {
+          hash: await sourceHash(new TextEncoder().encode(text)),
+          content: text,
+        },
+      },
+      deleted: [],
+    });
+    let cleared = false;
+    let { saved } = fixture.state;
+    // The manifest must be gone before the failed build is recorded.
+    Object.defineProperty(fixture.state, "saved", {
+      get: () => saved,
+      set(value: string) {
+        saved = value;
+        const state = JSON.parse(value);
+        if (state.sources === null && state.current?.status === "running")
+          cleared = true;
+      },
+    });
+    await fixture.core.wake();
+    expect(cleared).toBe(true);
+    expect(fixture.core.snapshot().current?.status).toBe("failed");
   } finally {
     await fixture.core.close();
   }

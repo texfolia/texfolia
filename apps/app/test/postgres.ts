@@ -19,6 +19,7 @@ import {
 } from "../src/lib/projects/project.server";
 import { checkAuthRateLimit } from "./postgres/auth-rate-limit";
 import { checkComments } from "./postgres/comments";
+import { checkProjectReaders } from "./postgres/project-readers";
 import { checkSharingNotifications } from "./postgres/sharing-notifications";
 
 const connectionString = process.env.INTEGRATION_DATABASE_URL;
@@ -315,6 +316,7 @@ try {
   assert.equal(otherOwnerProject.name, created.name);
 
   await checkComments(db);
+  await checkProjectReaders(db);
   await checkSharingNotifications(db);
   await checkAuthRateLimit(connectionString);
 

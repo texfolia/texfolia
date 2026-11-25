@@ -1,10 +1,10 @@
-import { buildsFetcher } from "#/lib/builds/client";
+import { buildsFetcher, invalidateSourceBuild } from "#/lib/builds/client";
 import type { GitAction } from "#/lib/git";
 import { runGit } from "#/lib/git/git.server";
-import { invalidateSourceBuild } from "#/lib/projects/project-source.server";
 import type { ProjectAccessRequest } from "#/lib/projects/server";
 import {
   lockProject,
+  lockProjectReaders,
   shareLinkIdOf,
 } from "#/lib/sharing/project-access.server";
 
@@ -16,6 +16,12 @@ import { CollaborationRoom } from "./room";
 export class ProjectCollaboration extends CollaborationRoom<Env> {
   protected override lockProject(request: ProjectAccessRequest) {
     return lockProject(request);
+  }
+
+  protected override lockReaders(
+    request: Parameters<typeof lockProjectReaders>[0],
+  ) {
+    return lockProjectReaders(request);
   }
 
   protected override isAnonymous(userId: string) {
@@ -38,10 +44,8 @@ export class ProjectCollaboration extends CollaborationRoom<Env> {
         options.action.kind === "status" || options.action.kind === "diff"
           ? "read"
           : "write",
-      rewritesSources: ["import", "pull", "checkout"].includes(
-        options.action.kind,
-      ),
-      run: (db) => runGit({ db, bucket: this.env.SOURCES, ...options }),
+      run: (db, exclusively) =>
+        runGit({ db, bucket: this.env.SOURCES, exclusively, ...options }),
     });
   }
 }

@@ -18,6 +18,7 @@ import {
   type EmailMessage,
 } from "#/lib/email";
 import {
+  deletionNotice,
   invalidateOrganizationAccess,
   type LiveProjects,
 } from "#/lib/projects/live";
@@ -44,11 +45,21 @@ export function createEmailOTPPlugin(sendOTPEmail: DeliverEmail) {
 export function createOrganizationPlugin({
   baseURL,
   sendInvitationEmail,
+  deleting,
 }: {
   baseURL: string;
   sendInvitationEmail: DeliverEmail;
+  deleting?: ReturnType<typeof deletionNotice>;
 }) {
   return organization({
+    organizationHooks: {
+      async beforeDeleteOrganization({ organization }) {
+        await deleting?.before({ organizationId: organization.id });
+      },
+      async afterDeleteOrganization() {
+        await deleting?.after();
+      },
+    },
     requireEmailVerificationOnInvitation: true,
     async sendInvitationEmail({ id, email, organization }) {
       const invitationURL = new URL(
@@ -93,6 +104,8 @@ export function createAuth(db: Db, live?: LiveProjects) {
   const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
     apiVersion: "2026-10-28.endive",
   });
+
+  const deleting = deletionNotice({ db, live });
 
   return betterAuth({
     baseURL,
@@ -148,6 +161,12 @@ export function createAuth(db: Db, live?: LiveProjects) {
         async sendDeleteAccountVerification({ user, url }) {
           await deliver(deleteAccountEmail({ to: user.email, url }));
         },
+        async beforeDelete(user) {
+          await deleting.before({ userId: user.id });
+        },
+        async afterDelete() {
+          await deleting.after();
+        },
       },
     },
     socialProviders: {
@@ -172,6 +191,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
       createOrganizationPlugin({
         baseURL,
         sendInvitationEmail: deliver,
+        deleting,
       }),
       captcha({
         provider: "cloudflare-turnstile",

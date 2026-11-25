@@ -1,6 +1,6 @@
+import { invalidateSourceBuild } from "#/lib/builds/client";
 import { lockProject } from "#/lib/sharing/project-access.server";
 
-import { invalidateSourceBuild } from "./project-source.server";
 import * as projects from "./server";
 
 // Binds `#/lib/projects` node operations to the app's access check and

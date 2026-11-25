@@ -54,6 +54,8 @@ The schema includes a collaboration room registry.
 The registry has no foreign key to `project`, so account and organization cascades
 cannot erase pending cleanup. The hourly source sweep removes a registration
 only after the collaboration object confirms project deletion and purges its state.
+`cleanup_requested_at` marks rooms that still hold documents of deleted files; the
+sweep leaves all others asleep.
 New rooms register before writing SQLite state.
 
 The `project_job` table includes a nullable request digest for compilation-ID
@@ -66,7 +68,7 @@ released, and the row and everything it owns are retained until it is restored
 or the row is deleted. Organization project names keep their existing policy, which
 allows duplicates.
 
-1. Edit `src/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`.
+1. Edit `src/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`, then restore the indexes that the generator does not know: `bun test packages/db/src` names them. It also requires an index for every foreign key.
 2. Run `bun run db:push` against your local database.
 3. Run the integration check.
 
@@ -78,11 +80,12 @@ The `db:generate` and `db:migrate` commands remain available when reviewed migra
 
 Keep transactions limited to related database operations. Call email, billing, and compiler services outside transactions. Hyperdrive uses transaction pooling, so do not depend on session-level advisory locks, `SET` state across transactions, or a persistent connection identity.
 
-Source storage deliberately uploads immutable R2 objects while holding the
-project row lock. This serializes byte quotas, source versions, deletion, and
-garbage collection. Metadata commits only after the upload succeeds; the daily
-source sweep removes objects left by rolled-back SQL transactions. Replaced and
-deleted sources are queued in `source_garbage` for the hourly collection. See
+No transaction stays open during R2, Durable Object, or other network calls. Source
+storage uploads immutable objects first and then commits under the project row
+lock, which serializes byte quotas, source versions, and deletion. The daily source
+sweep removes objects left by rolled-back SQL transactions. Replaced and deleted
+sources are queued in `source_garbage` for the hourly collection, which claims rows
+before it deletes their objects. See
 [the web reference](../../apps/app/README.md#project-source-storage) for storage
 behavior and verification. For an existing database,
 prepare and review an upgrade against its actual schema before deploying.

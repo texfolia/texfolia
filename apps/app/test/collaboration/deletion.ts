@@ -13,6 +13,7 @@ import {
 import { eq } from "drizzle-orm";
 import type { Miniflare } from "miniflare";
 import * as Y from "yjs";
+import { z } from "zod";
 
 import {
   decodeServerMessage,
@@ -85,6 +86,10 @@ export async function checkDeletion({
       );
       assert.equal(rows[0]?.count, 0, `${table} must be purged`);
     }
+  }
+  async function usage(projectId: string) {
+    const response = await mf.dispatchFetch(`${origin}/usage/${projectId}`);
+    return z.object({ alarms: z.number() }).parse(await response.json());
   }
   async function create() {
     const created = await createProject({
@@ -547,23 +552,34 @@ export async function checkDeletion({
     client.doc.destroy();
   }
 
-  console.log("Checking retention alarm for a clean disconnected room");
-  const retention = await create();
-  const retentionRoom = await connect(retention.projectId, retention.node.id);
-  await retentionRoom.edit("alarm cleanup", true);
-  retentionRoom.socket.close();
-  await db.delete(project).where(eq(project.id, retention.projectId));
-  const retentionStorage = await storageFor(retention.projectId);
+  console.log("Checking that a clean room without sockets stays asleep");
+  const asleep = await create();
+  const asleepRoom = await connect(asleep.projectId, asleep.node.id);
+  await asleepRoom.edit("saved", true);
+  asleepRoom.socket.close();
+  asleepRoom.doc.destroy();
+  const asleepStorage = await storageFor(asleep.projectId);
+  await mf.dispatchFetch(`${origin}/backstop/${asleep.projectId}`);
   await eventually(
     async () =>
-      (
-        await retentionStorage.exec<{ count: number }>(
-          "SELECT count(*) AS count FROM documents",
-        )
-      )[0]?.count === 0,
-    "Clean room retention alarm did not purge storage",
+      (await asleepStorage.exec("SELECT duty FROM alarms")).length === 0,
+    "An idle room kept an alarm",
   );
-  await empty(retention.projectId);
-  retentionRoom.doc.destroy();
+  const { alarms } = await usage(asleep.projectId);
+  await cleanup("collect");
+  assert.deepEqual(
+    (await usage(asleep.projectId)).alarms,
+    alarms,
+    "An idle room woke up",
+  );
+  assert.equal(
+    (
+      await asleepStorage.exec<{ count: number }>(
+        "SELECT count(*) AS count FROM documents",
+      )
+    )[0]?.count,
+    1,
+  );
+  await cleanup(`project/${asleep.projectId}`);
   await cleanup("collect");
 }

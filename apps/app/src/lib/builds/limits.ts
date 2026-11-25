@@ -84,9 +84,9 @@ export class CompileUsageCore {
     return Math.max(1, Math.ceil((next - this.now()) / 1000));
   }
 
+  // Expired entries are dropped again by every load, so reads need not write.
   check(plan: Plan): Admission {
     const state = this.load();
-    this.storage.write(JSON.stringify(state));
     return this.allowance(state, plan) > 0
       ? { allowed: true }
       : { allowed: false, retryAfter: this.retryAfter(state) };
@@ -95,10 +95,8 @@ export class CompileUsageCore {
   start(plan: Plan): Reservation {
     const state = this.load();
     const remaining = this.allowance(state, plan);
-    if (remaining <= 0) {
-      this.storage.write(JSON.stringify(state));
+    if (remaining <= 0)
       return { allowed: false, retryAfter: this.retryAfter(state) };
-    }
     const timeoutMs = Math.max(
       1,
       Math.min(compilePolicy(plan).timeoutMs, Math.floor(remaining)),
@@ -152,24 +150,28 @@ export function withCompileUsage(
     if (!reservation.allowed)
       throw fairUseError(context.userId, context.plan, reservation.retryAfter);
     const started = performance.now();
-    let compileMs: number | null = null;
+    let chargedMs = 0;
     try {
       const output = await engine(project, {
         ...context,
         timeoutMs: reservation.timeoutMs,
       });
-      compileMs = output.timing.compileMs;
+      chargedMs = output.timing.compileMs ?? performance.now() - started;
       return output;
     } catch (error) {
-      if (error instanceof HttpError || error instanceof EngineError)
-        compileMs = error.timing.compileMs;
+      const compileMs =
+        error instanceof HttpError || error instanceof EngineError
+          ? error.timing.compileMs
+          : null;
+      // Without engine timing, elapsed time stands in for a cancelled build or a
+      // document that failed. Anything else is our failure and costs nothing.
+      const used =
+        context.signal?.aborted ||
+        (error instanceof HttpError && [408, 422].includes(error.status));
+      chargedMs = compileMs ?? (used ? performance.now() - started : 0);
       throw error;
     } finally {
-      // Charge cancellations/failures too; missing engine timing uses elapsed time.
-      await usage.finish(
-        reservation.id,
-        compileMs ?? performance.now() - started,
-      );
+      await usage.finish(reservation.id, chargedMs);
     }
   };
 }

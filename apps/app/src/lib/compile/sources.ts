@@ -58,73 +58,90 @@ export type CompileSnapshot = Omit<
 };
 
 export function createCompileSources(project: CompileProject) {
-  // Runs `submit` with the browser's delta when its metadata is current, or
-  // with every saved source otherwise, while the project stays locked.
-  function withCompileSources<T>(
-    options: CompileSourceOptions & {
-      submit: (sources: CompileSnapshot) => Promise<T>;
-    },
-  ) {
-    const { db, projectId, userId, mainFile, sourceRevision } = options;
-    return db.transaction(async (tx) => {
+  // The browser's delta when its metadata is current, or every saved source
+  // otherwise, with the metadata version they belong to. The project is unlocked
+  // again when this resolves, so callers that submit them check the version after.
+  async function compileSources(
+    options: CompileSourceOptions,
+  ): Promise<{ sources: CompileSnapshot; version: string }> {
+    const { db, projectId, userId, mainFile, sourceRevision, client } = options;
+    const { version, nodes } = await db.transaction(async (tx) => {
       await project.lock({ tx, projectId, userId });
-      if (
-        options.client &&
-        (await project.metadataVersion({ tx, projectId, userId })) ===
-          options.client.version
-      )
-        return options.submit({ ...options.client.delta, resync: false });
-      const nodes = await tx.query.projectNode.findMany({
-        where: { projectId, deletedAt: { isNull: true } },
+      const version = await project.metadataVersion({ tx, projectId, userId });
+      return {
+        version,
+        nodes:
+          version === client?.version
+            ? null
+            : await tx.query.projectNode.findMany({
+                where: { projectId, deletedAt: { isNull: true } },
+              }),
+      };
+    });
+    if (client && !nodes)
+      return { version, sources: { ...client.delta, resync: false } };
+    const saved = nodes ?? [];
+    const paths = project.sourcePaths(saved);
+    if (
+      !paths.size ||
+      paths.size > 200 ||
+      ![...paths.values()].includes(mainFile)
+    )
+      throw new Error("Provide 1–200 files including mainFile");
+    if (
+      saved.reduce((size, node) => size + node.sizeBytes, 0n) >=
+      10n * 1024n * 1024n
+    )
+      throw new Error("Project exceeds the compiler's 10 MiB source limit");
+    const files: CompileSnapshot["files"] = {};
+    for (const node of saved) {
+      const path = paths.get(node.id);
+      if (!path) continue;
+      // Saved objects are content addressed, so no bytes are read here.
+      const prefix = `projects/${projectId}/sources/`;
+      const hash = node.objectKey?.startsWith(prefix)
+        ? node.objectKey.slice(prefix.length)
+        : null;
+      if (node.objectKey && (!hash || !/^[0-9a-f]{64}$/.test(hash)))
+        throw new Error("Saved source hash mismatch");
+      Object.defineProperty(files, path, {
+        enumerable: true,
+        value: hash
+          ? { hash, size: Number(node.sizeBytes) }
+          : { hash: await hashSource(new Uint8Array()), content: "" },
       });
-      const paths = project.sourcePaths(nodes);
-      if (
-        !paths.size ||
-        paths.size > 200 ||
-        ![...paths.values()].includes(mainFile)
-      )
-        throw new Error("Provide 1–200 files including mainFile");
-      if (
-        nodes.reduce((size, node) => size + node.sizeBytes, 0n) >=
-        10n * 1024n * 1024n
-      )
-        throw new Error("Project exceeds the compiler's 10 MiB source limit");
-      const files: CompileSnapshot["files"] = {};
-      for (const node of nodes) {
-        const path = paths.get(node.id);
-        if (!path) continue;
-        // Saved objects are content addressed, so no bytes are read here.
-        const prefix = `projects/${projectId}/sources/`;
-        const hash = node.objectKey?.startsWith(prefix)
-          ? node.objectKey.slice(prefix.length)
-          : null;
-        if (node.objectKey && (!hash || !/^[0-9a-f]{64}$/.test(hash)))
-          throw new Error("Saved source hash mismatch");
-        Object.defineProperty(files, path, {
-          enumerable: true,
-          value: hash
-            ? { hash, size: Number(node.sizeBytes) }
-            : { hash: await hashSource(new Uint8Array()), content: "" },
-        });
-      }
-      return options.submit({
+    }
+    return {
+      version,
+      sources: {
         mainFile,
         baseRevision: sourceRevision,
         revision: sourceRevision + 1,
         files,
         deleted: [],
         resync: true,
-      });
-    });
+      },
+    };
+  }
+
+  // Whether the project still has the metadata a build was submitted with.
+  function sourcesCurrent({
+    db,
+    version,
+    ...request
+  }: Pick<CompileSourceOptions, "db" | "projectId" | "userId"> & {
+    version: string;
+  }) {
+    return db.transaction(
+      async (tx) =>
+        (await project.metadataVersion({ tx, ...request })) === version,
+    );
   }
 
   // Every saved source, as the compiler receives it after a resync.
-  function compileResync(options: CompileSourceOptions) {
-    return withCompileSources({
-      ...options,
-      submit: async (sources) => sources,
-    });
+  async function compileResync(options: CompileSourceOptions) {
+    return (await compileSources(options)).sources;
   }
 
-  return { withCompileSources, compileResync };
+  return { compileSources, sourcesCurrent, compileResync };
 }

@@ -1,8 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
+import { DutyAlarm } from "#/lib/duty-alarm";
+import { liveAccessMs } from "#/lib/projects/live-access-interval";
+
 import { liveUserHeader } from "./client";
-import { LiveAccess, liveAccessMs } from "./live-access";
+import { LiveAccess } from "./live-access";
 
 const viewerSchema = z.object({
   projectId: z.string(),
@@ -32,13 +35,11 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
   private access: LiveAccess | undefined;
   private streams = new Map<string, Set<() => void>>();
   private catchingUp = new Set<string>();
+  private alarms: DutyAlarm<Duty>;
 
   constructor(ctx: DurableObjectState, env: E) {
     super(ctx, env);
-    // An object has one alarm. Each duty keeps its own time here.
-    ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS alarms (duty TEXT PRIMARY KEY, at INTEGER NOT NULL)",
-    );
+    this.alarms = new DutyAlarm(ctx.storage, "work");
     // Answered without waking the object.
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("ping", "pong"),
@@ -181,56 +182,30 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
   }
 
   private async planAccessCheck() {
-    const [planned] = this.ctx.storage.sql
-      .exec("SELECT at FROM alarms WHERE duty = 'access'")
-      .toArray();
-    if (!planned) await this.plan("access", Date.now() + liveAccessMs);
+    if (this.alarms.planned("access") === null)
+      await this.plan("access", Date.now() + liveAccessMs);
   }
 
   /** Schedules this duty, replacing its earlier time. */
   protected async plan(duty: Duty, at: number) {
-    const { sql } = this.ctx.storage;
-    // An alarm set before duties existed was for work.
-    const [known] = sql.exec("SELECT duty FROM alarms LIMIT 1").toArray();
-    const existing = known ? null : await this.ctx.storage.getAlarm();
-    if (existing !== null)
-      sql.exec("INSERT OR IGNORE INTO alarms VALUES ('work', ?)", existing);
-    sql.exec(
-      "INSERT OR REPLACE INTO alarms VALUES (?, ?)",
-      duty,
-      Math.ceil(at),
-    );
-    await this.setNextAlarm();
-  }
-
-  private async setNextAlarm() {
-    const { at } = this.ctx.storage.sql
-      .exec<{ at: number | null }>("SELECT min(at) AS at FROM alarms")
-      .one();
-    if (at !== null) await this.ctx.storage.setAlarm(at);
+    await this.alarms.plan(duty, at);
   }
 
   override async alarm() {
-    const { sql } = this.ctx.storage;
+    const { alarms } = this;
     const now = Date.now();
-    const duties = sql
-      .exec<{ duty: Duty; at: number }>("SELECT * FROM alarms")
-      .toArray();
-    const due = (duty: Duty) =>
-      duties.some((entry) => entry.duty === duty && entry.at <= now);
-    const done = (duty: Duty) =>
-      sql.exec("DELETE FROM alarms WHERE duty = ? AND at <= ?", duty, now);
-    if (due("access")) {
-      done("access");
+    const unplanned = alarms.idle();
+    if (alarms.due("access", now)) {
+      alarms.done("access", now);
       this.access?.invalidate();
       if (await this.verifyViewers()) await this.planAccessCheck();
     }
     // A failure keeps the duty due, so the runtime's retry runs it again.
-    if (due("work") || !duties.length) {
+    if (unplanned || alarms.due("work", now)) {
       await this.work();
-      done("work");
+      alarms.done("work", now);
     }
-    await this.setNextAlarm();
+    await alarms.setNext();
   }
 
   override webSocketMessage() {

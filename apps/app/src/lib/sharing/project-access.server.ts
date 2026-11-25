@@ -1,7 +1,16 @@
-import { projectCollaborator, projectShareLink } from "@texfolia/db/schema";
-import { and, eq } from "drizzle-orm";
+import {
+  member,
+  project,
+  projectCollaborator,
+  projectShareLink,
+} from "@texfolia/db/schema";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
-import { projectLock, type ProjectGrant } from "#/lib/projects/server";
+import {
+  projectLock,
+  type ProjectGrant,
+  type ProjectTransaction,
+} from "#/lib/projects/server";
 
 // Composes project access: `#/lib/projects` checks owners and organization
 // members; collaborator invitations and share links are granted here.
@@ -73,3 +82,80 @@ const collaboratorGrant: ProjectGrant = async ({
 // Share-link principals never match an owner, member, or collaborator, so the
 // link grant runs first and the collaborator grant can deny everyone else.
 export const lockProject = projectLock([shareLinkGrant, collaboratorGrant]);
+
+// Which of these principals may read a project's sources, and whether they may
+// edit them: `lockProject` for many people in one round of queries. Locks like it,
+// so it waits behind a revocation in progress.
+export async function lockProjectReaders({
+  tx,
+  projectId,
+  userIds,
+}: {
+  tx: ProjectTransaction;
+  projectId: string;
+  userIds: readonly string[];
+}) {
+  const readers = new Map<string, { canWrite: boolean }>();
+  const [found] = await tx
+    .select({
+      ownerId: project.ownerId,
+      organizationId: project.organizationId,
+    })
+    .from(project)
+    .where(and(eq(project.id, projectId), isNull(project.deletedAt)))
+    .for("share");
+  if (!found) return readers;
+  const links = new Map<string, string>();
+  const accounts: string[] = [];
+  for (const userId of userIds) {
+    const linkId = shareLinkIdOf(userId);
+    if (linkId === null) accounts.push(userId);
+    else links.set(linkId, userId);
+  }
+  if (accounts.length && found.organizationId) {
+    for (const { userId } of await tx
+      .select({ userId: member.userId })
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, found.organizationId),
+          inArray(member.userId, accounts),
+        ),
+      )
+      .for("share"))
+      readers.set(userId, { canWrite: true });
+  } else if (accounts.length) {
+    for (const { userId, role } of await tx
+      .select({
+        userId: projectCollaborator.userId,
+        role: projectCollaborator.role,
+      })
+      .from(projectCollaborator)
+      .where(
+        and(
+          eq(projectCollaborator.projectId, projectId),
+          inArray(projectCollaborator.userId, accounts),
+        ),
+      )
+      .for("share"))
+      readers.set(userId, { canWrite: role === "editor" });
+    if (found.ownerId && accounts.includes(found.ownerId))
+      readers.set(found.ownerId, { canWrite: true });
+  }
+  if (links.size)
+    for (const { id, scope } of await tx
+      .select({ id: projectShareLink.id, scope: projectShareLink.scope })
+      .from(projectShareLink)
+      .where(
+        and(
+          eq(projectShareLink.projectId, projectId),
+          inArray(projectShareLink.id, [...links.keys()]),
+        ),
+      )
+      .for("share")) {
+      const principal = links.get(id);
+      if (principal && scope === "project")
+        readers.set(principal, { canWrite: false });
+    }
+  return readers;
+}

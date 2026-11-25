@@ -7,6 +7,8 @@ import {
   encodeClientMessage,
   encodeServerMessage,
   maxCollaborationBytes,
+  maxNameLength,
+  readAwareness,
   type ServerMessage,
 } from "./protocol";
 
@@ -113,5 +115,69 @@ describe("collaboration protocol", () => {
       );
     expect(() => decodeServerMessage(new Blob())).toThrow();
     expect(() => decodeServerMessage(bytes(9).buffer)).toThrow();
+  });
+});
+
+describe("stored awareness", () => {
+  const frame = (state: unknown) => awarenessFrame(7, 1, state);
+  const position = {
+    type: { client: 0xffffffff, clock: Number.MAX_SAFE_INTEGER },
+    tname: "source",
+    item: { client: 0xffffffff, clock: Number.MAX_SAFE_INTEGER },
+    assoc: -1,
+  };
+
+  test("keeps only the cursor, well under the attachment limit", () => {
+    const { clock, cursor } = readAwareness(
+      frame({
+        user: { name: "n".repeat(1000), color: "#000" },
+        cursor: { anchor: { ...position, extra: "x" }, head: position },
+        extra: "x".repeat(1000),
+      }),
+      7,
+    );
+    expect(clock).toBe(1);
+    expect(JSON.parse(cursor ?? "")).toEqual({
+      anchor: position,
+      head: position,
+    });
+    // The rest of an attachment: two-byte names, IDs, and flags.
+    const name = "名".repeat(maxNameLength);
+    const attachment = JSON.stringify({
+      projectId: crypto.randomUUID(),
+      nodeId: crypto.randomUUID(),
+      userId: `share:${crypto.randomUUID()}`,
+      name: "",
+      clientId: 0xffffffff,
+      awareness: { clock: Number.MAX_SAFE_INTEGER, cursor, at: Date.now() },
+      binary: true,
+      people: true,
+    });
+    expect(attachment.length + 2 * name.length).toBeLessThan(1024);
+  });
+
+  test("a cleared or absent cursor is stored without one", () => {
+    expect(readAwareness(frame(null), 7).cursor).toBeNull();
+    expect(readAwareness(frame({ cursor: null }), 7).cursor).toBe("null");
+  });
+
+  test("positions name only the document's root, and other clients are refused", () => {
+    expect(() =>
+      readAwareness(
+        frame({ cursor: { anchor: { tname: "x".repeat(900) }, head: {} } }),
+        7,
+      ),
+    ).toThrow();
+    expect(() => readAwareness(frame(null), 8)).toThrow(/identity/);
+    expect(() =>
+      decodeClientMessage(
+        buffer(
+          encodeClientMessage({
+            type: "awareness",
+            update: new Uint8Array(2049),
+          }),
+        ),
+      ),
+    ).toThrow();
   });
 });

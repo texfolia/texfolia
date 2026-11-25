@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 
-import type { Db } from "@texfolia/db";
-import { projectCollaborator, projectNode, user } from "@texfolia/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { createDb, type Db } from "@texfolia/db";
+import {
+  projectCollaborator,
+  projectCommentThread,
+  projectNode,
+  user,
+} from "@texfolia/db/schema";
+import { and, count, eq, inArray } from "drizzle-orm";
 import * as Y from "yjs";
 
 import { createCommentAnchor } from "../../src/lib/comments/anchor";
+import { maxCommentThreads } from "../../src/lib/comments/project-comments.schema";
 import {
   createCommentThread,
   deleteComment,
@@ -266,6 +272,48 @@ export async function checkComments(db: Db) {
       userId: editorId,
       data: { projectId, threadId: editorThread },
     });
+
+    // Concurrent threads cannot pass the project's limit together.
+    const [existing] = await db
+      .select({ count: count() })
+      .from(projectCommentThread)
+      .where(eq(projectCommentThread.projectId, projectId));
+    await db
+      .insert(projectCommentThread)
+      .values(
+        Array.from(
+          { length: maxCommentThreads - 1 - (existing?.count ?? 0) },
+          () => ({ projectId, nodeId: main.id, ...anchor, quote: "x" }),
+        ),
+      );
+    const connectionString = db.$client.options.connectionString;
+    assert(connectionString);
+    const connections = Array.from({ length: 4 }, () =>
+      createDb(connectionString),
+    );
+    const competing = await Promise.allSettled(
+      connections.map((connection) =>
+        createCommentThread({
+          db: connection,
+          userId: viewerId,
+          data: {
+            projectId,
+            nodeId: main.id,
+            ...anchor,
+            quote: "x",
+            body: "The last one.",
+          },
+        }),
+      ),
+    );
+    await Promise.all(connections.map(({ $client }) => $client.end()));
+    assert.equal(
+      competing.filter((result) => result.status === "fulfilled").length,
+      1,
+    );
+    await db
+      .delete(projectCommentThread)
+      .where(eq(projectCommentThread.projectId, projectId));
 
     // Threads on deleted files disappear and stop accepting changes.
     const { threadId: orphan } = await createCommentThread({

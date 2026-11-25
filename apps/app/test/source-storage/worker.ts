@@ -18,7 +18,7 @@ import {
   maxSourceProjectBytes,
   sourceContentSchema,
 } from "#/lib/storage";
-import { type SourceBucket, sweepProjectSources } from "#/lib/storage/server";
+import { collectSourceGarbage, type SourceBucket } from "#/lib/storage/server";
 
 import { compileResync } from "../../src/lib/compile/compile-source.server";
 import { getProjectMetadata } from "../../src/lib/projects/project-metadata.server";
@@ -27,7 +27,6 @@ import {
   renameProjectNode,
 } from "../../src/lib/projects/project-node.server";
 import {
-  collectProjectSources,
   deleteProjectNode,
   readProjectSource,
   saveProjectSource,
@@ -40,6 +39,7 @@ import {
 } from "../../src/lib/projects/project.server";
 
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
+import { collectProjectSources, sweepProjectSources } from "../collection";
 
 async function deleteForever(db: Db, userId: string, projectId: string) {
   await trashProject({ db, userId, projectId });
@@ -293,14 +293,11 @@ export default {
       await db
         .insert(projectCollaboration)
         .values({ projectId: pathProject.id });
-      const retiredSnapshotKey = `history/${pathProject.id}/obsolete.yjs`;
-      await bucket.put(retiredSnapshotKey, "prelaunch snapshot");
       await collectProjectSources({
         db,
         bucket,
         collaboration: env.COLLABORATION,
       });
-      assert.equal(await bucket.get(retiredSnapshotKey), null);
       assert.equal(
         (
           await db
@@ -412,6 +409,88 @@ export default {
         }),
         /changed on the server/,
       );
+      // Operations read sources after their transaction, so collection waits.
+      await collectSourceGarbage({ db, bucket });
+      assert(await bucket.get(saved.objectKey));
+      // Collection deletes the retired object outside its transaction, between
+      // another save's upload of the same bytes and that save's commit.
+      {
+        const deleting = Promise.withResolvers<void>();
+        const releaseDelete = Promise.withResolvers<void>();
+        const uploaded = Promise.withResolvers<void>();
+        const releaseSave = Promise.withResolvers<void>();
+        let uploads = 0;
+        const slowDelete: SourceBucket = {
+          get: bucket.get.bind(bucket),
+          put: bucket.put.bind(bucket),
+          list: bucket.list.bind(bucket),
+          delete: async (keys) => {
+            deleting.resolve();
+            await releaseDelete.promise;
+            await bucket.delete(keys);
+          },
+        };
+        const slowUpload: SourceBucket = {
+          get: bucket.get.bind(bucket),
+          list: bucket.list.bind(bucket),
+          delete: bucket.delete.bind(bucket),
+          put: async (...args: Parameters<SourceBucket["put"]>) => {
+            const result = await bucket.put(...args);
+            if (++uploads === 1) {
+              uploaded.resolve();
+              await releaseSave.promise;
+            }
+            return result;
+          },
+        };
+        const saving = saveProjectSource({
+          db,
+          bucket: slowUpload,
+          userId: ownerId,
+          data: {
+            projectId,
+            nodeId: main.id,
+            expectedObjectKey: edited.objectKey,
+            content: source("é 🦉"),
+          },
+        });
+        await uploaded.promise;
+        const collectorDb = createDb(env.HYPERDRIVE.connectionString);
+        const collecting = collectProjectSources({
+          db: collectorDb,
+          bucket: slowDelete,
+          collaboration: env.COLLABORATION,
+        }).finally(() => collectorDb.$client.end());
+        await deleting.promise;
+        releaseSave.resolve();
+        // The save finds the claim, and waits for the delete it cannot stop.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        assert.equal(uploads, 1);
+        releaseDelete.resolve();
+        await collecting;
+        const restored = await saving;
+        assert.equal(restored.objectKey, saved.objectKey);
+        assert.equal(uploads, 2, "The deleted object is uploaded again");
+        assert(await bucket.get(saved.objectKey));
+        // Used again, it outlives both the old claim and the next collection.
+        await collectProjectSources({
+          db,
+          bucket,
+          collaboration: env.COLLABORATION,
+        });
+        assert(await bucket.get(saved.objectKey));
+        await saveProjectSource({
+          db,
+          bucket,
+          userId: ownerId,
+          data: {
+            projectId,
+            nodeId: main.id,
+            expectedObjectKey: restored.objectKey,
+            content: source("editor saved"),
+          },
+        });
+      }
       await collectProjectSources({
         db,
         bucket,
@@ -802,10 +881,17 @@ export default {
           await db
             .select()
             .from(sourceGarbage)
-            .where(eq(sourceGarbage.projectId, projectId))
+            .where(
+              and(
+                eq(sourceGarbage.projectId, projectId),
+                isNull(sourceGarbage.deletedAt),
+              ),
+            )
         ).length,
         0,
       );
+      // The losing save uploaded its source before it found the conflict.
+      await sweepProjectSources({ db, bucket });
       assert.equal(
         (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
           .objects.length,

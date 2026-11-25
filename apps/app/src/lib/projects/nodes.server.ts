@@ -3,9 +3,14 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { z } from "zod";
 
-import { putSource, type SourceBucket } from "#/lib/storage/server";
+import {
+  checkProjectQuota,
+  commitSources,
+  prepareSource,
+  type SourceBucket,
+} from "#/lib/storage/server";
 
-import type { LockProject } from "./access";
+import type { LockProject, ProjectTransaction } from "./access";
 import { createNodeSchema, renameNodeSchema } from "./node.schema";
 import { newProjectNodePath, renamedProjectNodes } from "./paths";
 
@@ -25,28 +30,20 @@ export async function createProjectNode({
   bucket?: SourceBucket;
 }) {
   data = createNodeSchema.parse(data);
-  return db.transaction(async (tx) => {
-    await lock({ tx, projectId: data.projectId, userId: ownerId });
+  const { content, ...metadata } = data;
+  const { projectId, kind } = data;
+  const check = async (tx: ProjectTransaction) => {
+    await lock({ tx, projectId, userId: ownerId });
     const nodes = await tx.query.projectNode.findMany({
-      where: { projectId: data.projectId, deletedAt: { isNull: true } },
+      where: { projectId, deletedAt: { isNull: true } },
     });
     newProjectNodePath(nodes, data.parentId, data.name);
-    const { content, ...metadata } = data;
-    let stored: { objectKey: string | null; sizeBytes: bigint } = {
-      objectKey: null,
-      sizeBytes: 0n,
-    };
-    if (content !== undefined && data.kind !== "folder") {
-      if (!bucket) throw new Error("Source storage unavailable");
-      stored = await putSource({
-        tx,
-        bucket,
-        projectId: data.projectId,
-        content,
-        previousSize: 0n,
-        kind: data.kind,
-      });
-    }
+  };
+  const insert = async (
+    tx: ProjectTransaction,
+    stored: { objectKey: string | null; sizeBytes: bigint },
+  ) => {
+    await check(tx);
     const [node] = await tx
       .insert(projectNode)
       .values({ ...metadata, ...stored })
@@ -62,7 +59,7 @@ export async function createProjectNode({
     await tx
       .update(project)
       .set({ updatedAt: new Date() })
-      .where(eq(project.id, data.projectId));
+      .where(eq(project.id, projectId));
     return {
       ...node,
       sourceVersion: {
@@ -70,6 +67,30 @@ export async function createProjectNode({
         updatedAt: node.updatedAt.getTime(),
       },
     };
+  };
+  if (content === undefined || kind === "folder")
+    return db.transaction((tx) =>
+      insert(tx, { objectKey: null, sizeBytes: 0n }),
+    );
+  if (!bucket) throw new Error("Source storage unavailable");
+  // Nothing is stored for a caller without access or at an invalid path.
+  await db.transaction(check);
+  const upload = await prepareSource(projectId, { content, kind });
+  const { objectKey, sizeBytes } = upload;
+  return commitSources({
+    db,
+    bucket,
+    projectId,
+    uploads: [upload],
+    run: async (tx) => {
+      const created = await insert(tx, { objectKey, sizeBytes });
+      // The new file is already counted.
+      await checkProjectQuota(tx, projectId, {
+        previousSize: 0n,
+        sizeBytes: 0n,
+      });
+      return created;
+    },
   });
 }
 

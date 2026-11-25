@@ -12,7 +12,7 @@ import {
   withCompileUsage,
 } from "./limits";
 import type { CompileUsage } from "./limits";
-import { HttpError } from "./project";
+import { EngineError, HttpError, MissingSourceError } from "./project";
 
 function fixture() {
   const db = new Database(":memory:");
@@ -147,6 +147,78 @@ test("failed engine attempts count toward fair use", async () => {
   } finally {
     f.close();
   }
+});
+
+test("infrastructure failures cost nothing; cancelled builds and failed documents do", async () => {
+  const charged: number[] = [];
+  const usage: CompileUsage = {
+    check: async () => ({ allowed: true }),
+    start: async () => ({ allowed: true, id: "run", timeoutMs: 300_000 }),
+    finish: async (_id, ms) => {
+      charged.push(ms);
+    },
+  };
+  const run = async (error: unknown, signal?: AbortSignal) => {
+    charged.length = 0;
+    const engine = withCompileUsage(
+      async () => {
+        await Bun.sleep(15);
+        throw error;
+      },
+      () => usage,
+    );
+    await expect(
+      engine(emptyProject, {
+        jobId: crypto.randomUUID(),
+        userId: "user",
+        plan: "pro",
+        attempt: 1,
+        signal,
+        readSource: async () => new Uint8Array(),
+        artifacts: collectSinks().sinks,
+      }),
+    ).rejects.toBe(error);
+    expect(charged).toHaveLength(1);
+    return charged[0]!;
+  };
+  const timed = { ...unknownEngineTiming, compileMs: 700 };
+  expect(await run(new Error("No container"))).toBe(0);
+  expect(await run(new EngineError("Lost", unknownEngineTiming))).toBe(0);
+  expect(await run(new MissingSourceError())).toBe(0);
+  expect(await run(new HttpError(400, "Invalid project sources"))).toBe(0);
+  // Time the engine reported is real, whatever failed afterwards.
+  expect(await run(new EngineError("Lost", timed))).toBe(700);
+  expect(await run(new HttpError(422, "Bad TeX"))).toBeGreaterThan(10);
+  expect(
+    await run(
+      new EngineError("Aborted", unknownEngineTiming),
+      AbortSignal.abort(),
+    ),
+  ).toBeGreaterThan(10);
+});
+
+test("reading the allowance writes nothing", () => {
+  let saved: string | null = null;
+  let writes = 0;
+  let now = 1_000_000;
+  const core = new CompileUsageCore(
+    {
+      read: () => saved,
+      write: (value) => {
+        saved = value;
+        writes++;
+      },
+    },
+    () => now,
+  );
+  const runs = [core.start("pro"), core.start("pro")];
+  for (const run of runs) if (run.allowed) core.finish(run.id, 300_000);
+  writes = 0;
+  expect(core.check("pro").allowed).toBe(false);
+  expect(core.start("pro").allowed).toBe(false);
+  now += rollingWindowMs;
+  expect(core.check("pro").allowed).toBe(true);
+  expect(writes).toBe(0);
 });
 
 test("paid plans queue ahead of Free, which yields one claim window", () => {

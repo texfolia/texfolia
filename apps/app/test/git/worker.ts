@@ -4,12 +4,12 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { gitActionSchema } from "#/lib/git";
-import { collectGitObjects } from "#/lib/git/server";
+import { collectGitObjects, collectLegacyHistory } from "#/lib/git/server";
 
 import { createAuth } from "../../src/lib/auth/auth";
-import { collectProjectSources } from "../../src/lib/projects/project-source.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
+import { afterNow, collectProjectSources } from "../collection";
 
 export default {
   async fetch(request: Request, env: Env) {
@@ -41,7 +41,12 @@ export default {
           bucket: env.SOURCES,
           collaboration: env.COLLABORATION,
         });
-        await collectGitObjects({ db, bucket: env.SOURCES });
+        await collectGitObjects({
+          db,
+          bucket: env.SOURCES,
+          uploadedBefore: afterNow(),
+        });
+        await collectLegacyHistory(env.SOURCES);
         return Response.json({ ok: true });
       }
       const data = z

@@ -10,7 +10,16 @@ export const scratchpadId = "scratchpad";
 export const documentIdSchema = z.union([z.uuid(), z.literal(scratchpadId)]);
 
 export const maxCollaborationBytes = 20 * 1024 * 1024;
-const maxAwarenessBytes = 6144;
+// A client's frame repeats its user, which the room ignores. What the room keeps is
+// smaller: see `maxCursorLength`.
+const maxAwarenessBytes = 2048;
+/** Names are stored with each socket, whose storage is limited. */
+export const maxNameLength = 100;
+/**
+ * The stored cursor's JSON. With the name and IDs, a socket's stored data stays
+ * under 1 KiB of the 2 KiB that Durable Objects allow.
+ */
+const maxCursorLength = 512;
 const maxControlLength = 1024;
 
 /**
@@ -180,7 +189,8 @@ const positionId = z.object({
 });
 const relativePosition = z.object({
   type: positionId.nullable().optional(),
-  tname: z.string().nullable().optional(),
+  // Every document has one root type.
+  tname: z.literal("source").nullable().optional(),
   item: positionId.nullable().optional(),
   assoc: z.number().int().optional(),
 });
@@ -204,11 +214,8 @@ export function awarenessFrame(
   return encoding.toUint8Array(encoder);
 }
 
-export function readAwareness(
-  bytes: Uint8Array,
-  clientId: number,
-  user: { name: string; color: string },
-) {
+// A client's awareness state as JSON, without the user, which the room adds.
+export function readAwareness(bytes: Uint8Array, clientId: number) {
   const decoder = decoding.createDecoder(bytes);
   if (
     decoding.readVarUint(decoder) !== 1 ||
@@ -217,6 +224,11 @@ export function readAwareness(
     throw new Error("Invalid awareness identity");
   const clock = decoding.readVarUint(decoder);
   const raw: unknown = JSON.parse(decoding.readVarString(decoder));
-  const state = raw === null ? null : { ...awarenessState.parse(raw), user };
-  return { clock, frame: awarenessFrame(clientId, clock, state) };
+  const cursor =
+    raw === null
+      ? null
+      : JSON.stringify(awarenessState.parse(raw).cursor ?? null);
+  if (cursor !== null && cursor.length > maxCursorLength)
+    throw new Error("Invalid collaboration message");
+  return { clock, cursor };
 }

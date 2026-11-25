@@ -35,7 +35,13 @@ export function createCoordinatorApp(
   app.get("/projects/:projectId", (c) => c.json(coordinator.snapshot()));
   app.post("/projects/:projectId/changed", async (c) => {
     const body: unknown = await c.req.json();
-    const version = editorVersionSchema.safeParse(body);
+    // The app's own changes come from no editor.
+    const version = z
+      .union([
+        editorVersionSchema,
+        z.strictObject({}).transform(() => undefined),
+      ])
+      .safeParse(body);
     if (!version.success)
       return c.json({ error: "Invalid editor revision" }, 400);
     await coordinator.changed(version.data);

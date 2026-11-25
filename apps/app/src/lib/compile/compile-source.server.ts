@@ -22,5 +22,4 @@ export const compileProject: CompileProject = {
   },
 };
 
-export const { withCompileSources, compileResync } =
-  createCompileSources(compileProject);
+export const { compileResync } = createCompileSources(compileProject);

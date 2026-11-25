@@ -421,6 +421,7 @@ export async function checkRevocation({
             "ProjectCollaboration",
             { name: projectId, webSockets: "hibernate" },
           );
+          await mf.dispatchFetch(`${origin}/backstop/${projectId}`);
         }
         await eventually(
           () =>

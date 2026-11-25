@@ -54,8 +54,9 @@ without waking the object.
 Free and unknown plans may submit twice per ten seconds per user, run for 15
 seconds, and use 180 seconds of compile time per rolling hour. Pro and Team
 builds run for 300 seconds and use 600 seconds. An attempt reserves its
-allowance before it starts and settles it afterwards, including failures and
-cancellations. Paid builds queue ahead of Free ones for a container, and the
+allowance before it starts and settles it afterwards, including failed documents
+and cancellations. A failure of the compiler itself costs only the time the engine
+reported. Paid builds queue ahead of Free ones for a container, and the
 overflow queues run four Pro builds and one Free build at once.
 
 A compiler failure that is not the document's fault moves the build to its

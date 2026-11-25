@@ -19,7 +19,8 @@ modules that bind it to the app, named below, are imported by path.
 
 The feature depends on `@texfolia/db` (project nodes and the
 `project_collaboration` registry), `#/lib/storage` (source objects),
-`#/lib/projects` (the access request type and live-access interval), and
+`#/lib/projects` (the access request type and live-access interval),
+`#/lib/duty-alarm` (one alarm shared by saving and access checks), and
 `#/lib/editor/latex/format` (a text diff with no CodeMirror imports). It
 owns `yjs`, `y-protocols`, `y-indexeddb`, and `lib0`. It does not depend on
 CodeMirror; the `y-codemirror.next` binding stays in the editor route.
@@ -30,6 +31,7 @@ supplies what collaboration does not own:
 
 - `lockProject` locks the project and checks access, including collaborator and
   share-link grants.
+- `lockReaders` is the same check for several people in one transaction.
 - `isAnonymous` marks share-link principals, which have no presence.
 - `sourcesChanged` runs after the room persists sources (the app invalidates
   the compiler's build).
@@ -42,9 +44,20 @@ project removes it. `readScratchpad` is the RPC behind the assistant's tool. In
 the browser it has its own `CollaborativeDocuments`, so saving, compiling, Git,
 and export never include it.
 
-Operations that rewrite saved sources outside collaboration, such as Git, go
-through the protected `withSavedSources`: it flushes dirty documents first and
-reloads open documents afterward. The app's `gitAction` RPC uses it.
+Work on a document runs in its own queue. Loading a document, and delivering to
+someone whose access is unknown, wait for a database inside it. Saving does not: it
+takes the text in the queue, stores it outside, and records the version in the
+queue again. The `saves` table lists objects that unfinished saves may have
+committed, so a lost answer is not mistaken for a change made elsewhere. A node
+read outside the queue is only applied while the document is at the version it had
+before the read.
+
+Operations that read saved sources outside collaboration, such as Git, go through
+the protected `withSavedSources`, which saves dirty documents first. An operation
+that rewrites sources does so inside the `exclusively` it receives: that holds off
+edits, saves the latest ones, and brings open documents up to date afterward. Keep
+slow work, such as requests to a Git host, outside it. The app's `gitAction` RPC
+uses both.
 
 `collaborationAccess` takes the same lock. `CollaborativeFile` takes
 `anonymous` and a `decorateUrl` hook, which the share view uses to add its
