@@ -29,7 +29,12 @@ import {
 } from "#/lib/collaboration";
 import { gitProvider, type GitProvider } from "#/lib/git";
 import { GitRepository, gitHttp } from "#/lib/git/server";
-import { gitServer, gitCommand } from "#/lib/git/testing";
+import {
+  gitCommand,
+  gitServer,
+  legacyArchive,
+  memoryFiles,
+} from "#/lib/git/testing";
 
 import { createProject } from "../src/lib/projects/project.server";
 import { withBuildsFixture } from "./builds/miniflare";
@@ -156,7 +161,6 @@ async function action(projectId: string, action: unknown, userId = ownerId) {
   return resultSchema.parse(JSON.parse(text));
 }
 const author = { name: "Remote User", email: "remote@example.com" };
-const bytes = (value: string) => new TextEncoder().encode(value);
 try {
   for (const id of ids)
     await db.insert(user).values({
@@ -187,10 +191,10 @@ try {
   // A repository saved by the removed in-app initialize (NAT-413).
   const legacy = new GitRepository();
   await legacy.init();
-  legacy.overlay({ "main.tex": bytes("hosted history\n") });
+  legacy.overlay(memoryFiles({ "main.tex": "hosted history\n" }));
   const localOid = await legacy.commit("Local history before linking", author);
   const legacyKey = `git/${localProject.id}/${crypto.randomUUID()}.json`;
-  await (await mf.getR2Bucket("SOURCES")).put(legacyKey, legacy.serialize());
+  await (await mf.getR2Bucket("SOURCES")).put(legacyKey, legacyArchive(legacy));
   await db.insert(projectGit).values({
     projectId: localProject.id,
     provider: null,
@@ -214,12 +218,14 @@ try {
     const local = await host.create(`owner/${provider}.git`);
     const seed = new GitRepository();
     await seed.init(local);
-    seed.overlay({
-      "main.tex": bytes("initial\n"),
-      ".gitignore": bytes("*.aux\n"),
-      "nested/intro.tex": bytes("intro\n"),
-      "image.bin": new Uint8Array([0, 255, 1]),
-    });
+    seed.overlay(
+      memoryFiles({
+        "main.tex": "initial\n",
+        ".gitignore": "*.aux\n",
+        "nested/intro.tex": "intro\n",
+        "image.bin": new Uint8Array([0, 255, 1]),
+      }),
+    );
     await seed.commit("Initial import", author);
     await seed.push(gitHttp(local, "private-token"));
     await db.insert(account).values({
@@ -361,7 +367,12 @@ try {
     await action(projectId, { kind: "checkout", name: "draft" });
     const peer = new GitRepository();
     await peer.clone(local, gitHttp(local, "private-token"));
-    peer.overlay({ ...peer.sources(), "main.tex": bytes("remote update\n") });
+    peer.overlay(
+      new Map([
+        ...peer.files,
+        ...memoryFiles({ "main.tex": "remote update\n" }),
+      ]),
+    );
     await peer.commit("Remote update", author);
     await peer.push(gitHttp(local, "private-token"));
     await action(projectId, { kind: "checkout", name: "main" });
@@ -496,6 +507,71 @@ try {
     ),
     localOid,
   );
+  const large = await host.create("owner/large.git");
+  const largeSeed = new GitRepository();
+  await largeSeed.init(large);
+  largeSeed.overlay(
+    memoryFiles(
+      Object.fromEntries(
+        Array.from({ length: 800 }, (_, i) => [
+          `chapters/${i % 20}/${i}.tex`,
+          `File ${i}\n`,
+        ]),
+      ),
+    ),
+  );
+  await largeSeed.commit("Many files", author);
+  await largeSeed.push(gitHttp(large, "private-token"));
+  const largeProject = await createProject({
+    db,
+    ownerId,
+    data: { id: crypto.randomUUID(), name: `Large ${crypto.randomUUID()}` },
+  });
+  const liveNodes = async () =>
+    (
+      await db
+        .select()
+        .from(projectNode)
+        .where(eq(projectNode.projectId, largeProject.id))
+    ).filter((node) => !node.deletedAt);
+  await action(largeProject.id, {
+    kind: "import",
+    remote: "https://github.com/owner/large.git",
+  });
+  const imported = await liveNodes();
+  assert.equal(imported.length, 1 + 21 + 800);
+  largeSeed.overlay(
+    new Map([
+      ...largeSeed.files,
+      ...memoryFiles({ "chapters/3/3.tex": "Changed\n" }),
+    ]),
+  );
+  await largeSeed.commit("Change one", author);
+  await largeSeed.push(gitHttp(large, "private-token"));
+  const pullResult = await action(largeProject.id, { kind: "pull" });
+  assert.deepEqual(pullResult.status.changes, []);
+  const before = new Map(imported.map((node) => [node.id, node]));
+  const pulled = await liveNodes();
+  assert.equal(pulled.length, imported.length);
+  assert.deepEqual(
+    pulled
+      .filter(
+        (node) =>
+          before.get(node.id)?.updatedAt.getTime() !== node.updatedAt.getTime(),
+      )
+      .map((node) => node.name),
+    ["3.tex"],
+    "Pull writes only the file that changed",
+  );
+  const changedNode = pulled.find((node) => node.name === "3.tex");
+  assert(changedNode?.objectKey);
+  assert.equal(
+    await (
+      await (await mf.getR2Bucket("SOURCES")).get(changedNode.objectKey)
+    )?.text(),
+    "Changed\n",
+  );
+  console.info("An 800-file import, and a pull that writes one file, passed");
   assert.deepEqual(
     lockedRequests,
     [],

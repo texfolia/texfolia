@@ -5,6 +5,7 @@ export {
   storedMessageSchema,
   threadActionSchema,
   threadHistorySchema,
+  threadListSchema,
   threadSchema,
   type AssistantThread,
   type StoredMessage,

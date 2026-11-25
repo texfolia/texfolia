@@ -1,9 +1,13 @@
 import type { Db } from "@texfolia/db";
 import { aiThread, aiMessage } from "@texfolia/db/schema";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { AiError } from "./schema";
-import { storedMessageSchema, threadActionSchema } from "./threads";
+import {
+  storedMessageSchema,
+  threadActionSchema,
+  threadPageSize,
+} from "./threads";
 
 export const threadOwner = (projectId: string, userId: string, id: string) =>
   and(
@@ -12,12 +16,20 @@ export const threadOwner = (projectId: string, userId: string, id: string) =>
     eq(aiThread.id, id),
   );
 
+/** How many chats one user can keep in one project. */
+export const maxThreads = 200;
+// Chats from before the limit stay reachable.
+const maxListedThreads = 1000;
+
+/** The most recently used chats, and whether there are more. */
 export async function listAssistantThreads(
   db: Db,
   projectId: string,
   userId: string,
+  limit = threadPageSize,
 ) {
-  return db
+  const count = Math.min(Math.max(1, Math.trunc(limit) || 1), maxListedThreads);
+  const threads = await db
     .select({
       id: aiThread.id,
       title: aiThread.title,
@@ -26,7 +38,9 @@ export async function listAssistantThreads(
     })
     .from(aiThread)
     .where(and(eq(aiThread.projectId, projectId), eq(aiThread.userId, userId)))
-    .orderBy(desc(aiThread.updatedAt));
+    .orderBy(desc(aiThread.updatedAt), desc(aiThread.id))
+    .limit(count + 1);
+  return { threads: threads.slice(0, count), more: threads.length > count };
 }
 
 export async function readAssistantThread(
@@ -66,10 +80,26 @@ export async function manageAssistantThread(
   if (!parsed.success) throw new AiError("Choose a valid chat action.", 400);
   const action = parsed.data;
   if (action.kind === "create") {
-    const [thread] = await db
-      .insert(aiThread)
-      .values({ projectId, userId, title: action.title })
-      .returning();
+    const thread = await db.transaction(async (tx) => {
+      // Serializes one user's creations, so the count below holds.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`ai_thread:${projectId}:${userId}`}, 0))`,
+      );
+      const count = await tx.$count(
+        aiThread,
+        and(eq(aiThread.projectId, projectId), eq(aiThread.userId, userId)),
+      );
+      if (count >= maxThreads)
+        throw new AiError(
+          `This project already has ${maxThreads} of your chats. Delete an old chat first.`,
+          409,
+        );
+      const [created] = await tx
+        .insert(aiThread)
+        .values({ projectId, userId, title: action.title })
+        .returning();
+      return created;
+    });
     if (!thread) throw new AiError("Could not create chat.", 503);
     return {
       thread: {

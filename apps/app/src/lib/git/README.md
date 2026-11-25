@@ -5,11 +5,17 @@ Git integrations for the product app. Texfolia does not host Git (see
 remote linked on an integrated platform. The project's working clone is kept
 in R2 as a cache that holds unpushed commits.
 
+Actions run in a Durable Object with 128 MB, so the clone is in memory but the
+project's files are not. `repository.ts` is a Git repository without an index, over
+a lazily read working tree. `git-fs.ts` is its bounded file system, `archive.ts` its
+stored form, and `replace-files.ts` the smallest change that makes a project match a
+checkout.
+
 | Entry point         | Contents                                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `#/lib/git`         | Client-safe. Actions: `gitActionSchema` and `GitAction` (status, diff, fetch, link, import, unlink, commit, push, pull, branch, checkout), `GitStatus`, `GitResult`. Remote URLs: `gitRemoteSchema`, `gitRemoteMessage`, `gitBranchSchema`. Provider registry: `gitProviders`, `gitProvider`, `gitProviderForHost`, `gitProviderIds`, `isGitProvider`, `hasRepositoryAccess`, `gitHostsLabel` |
 | `#/lib/git/server`  | `runGit` (one action against the linked remote), `gitBranch` (cached branch for the status bar), `gitVersion` (metadata poll signal), `gitAccounts` and `gitAccount` (connected OAuth accounts), `collectGitObjects` (R2 cleanup), and the lower-level `GitRepository` and `gitHttp`                                                                                                          |
-| `#/lib/git/testing` | Bun test helpers: `gitServer` (a local `git http-backend` smart HTTP server) and `gitCommand`                                                                                                                                                                                                                                                                                                 |
+| `#/lib/git/testing` | Bun test helpers: `gitServer` (a local `git http-backend` smart HTTP server), `gitCommand`, and in-memory working trees and archives (`memoryFiles`, `repositoryArchive`, `legacyArchive`)                                                                                                                                                                                                    |
 
 The rest of the app imports the core only through these entry points. The
 modules that bind it to the app, named below, are imported by path.

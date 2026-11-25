@@ -49,18 +49,28 @@ export function createBillingPlugin({
   proPriceId,
   teamPriceId,
   createCustomerOnSignUp = true,
+  onSubscriptionChange,
 }: {
   stripeClient: Stripe;
   webhookSecret: string;
   proPriceId: string;
   teamPriceId: string;
   createCustomerOnSignUp?: boolean;
+  /** Called after a webhook reports a changed or deleted subscription. */
+  onSubscriptionChange?: (stripeSubscriptionId: string) => Promise<void>;
 }) {
   return stripe({
     stripeClient,
     stripeWebhookSecret: webhookSecret,
     createCustomerOnSignUp,
     organization: { enabled: true },
+    async onEvent(event) {
+      if (
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.deleted"
+      )
+        await onSubscriptionChange?.(event.data.object.id);
+    },
     subscription: {
       enabled: true,
       authorizeReference: authorizeOrganizationBilling,

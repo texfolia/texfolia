@@ -24,6 +24,8 @@ import {
   aiEntitlement,
   aiSpend,
   billingOverview,
+  ensureAiSubscription,
+  forgetAiSubscription,
   compilePlan,
   getAiSettings,
   getOrganizationAiSettings,
@@ -242,6 +244,121 @@ try {
       "already reported requests are not reported again",
     );
   }
+  const stripeCalls: string[] = [];
+  let itemPrice = "price_other";
+  const call =
+    <T>(name: string, result: () => T) =>
+    async () => {
+      stripeCalls.push(name);
+      return result();
+    };
+  const stripe = {
+    prices: {
+      retrieve: call("price", () => ({
+        id: "price_ai",
+        currency: "usd",
+        unit_amount_decimal: "0.0000001",
+        recurring: {
+          interval: "month",
+          interval_count: 1,
+          usage_type: "metered",
+          meter: "mtr_ai",
+        },
+      })),
+    },
+    subscriptions: {
+      retrieve: call("subscription", () => ({
+        id: "sub_pro",
+        customer: "cus_pro",
+        status: "active",
+        items: { data: [{ price: { id: itemPrice } }] },
+      })),
+    },
+    billing: {
+      meters: {
+        retrieve: call("meter", () => ({
+          event_name: "ai_nanos",
+          status: "active",
+          default_aggregation: { formula: "sum" },
+          customer_mapping: {
+            type: "by_id",
+            event_payload_key: "stripe_customer_id",
+          },
+          value_settings: { event_payload_key: "value" },
+          event_time_window: null,
+        })),
+      },
+    },
+    subscriptionItems: {
+      create: call("attach", () => {
+        itemPrice = "price_ai";
+      }),
+    },
+  } as unknown as NonNullable<
+    Parameters<typeof ensureAiSubscription>[0]["stripe"]
+  >;
+  const ensure = async (
+    changes: Partial<Parameters<typeof ensureAiSubscription>[0]> = {},
+  ) => {
+    stripeCalls.length = 0;
+    await ensureAiSubscription({
+      db,
+      config,
+      payer: {
+        customerId: "cus_pro",
+        subscriptionId: "sub_pro",
+        organizationId: null,
+      },
+      stripe,
+      ...changes,
+    });
+    return [...stripeCalls];
+  };
+  await forgetAiSubscription(db, "sub_pro");
+  assert.deepEqual(await ensure(), [
+    "price",
+    "subscription",
+    "meter",
+    "attach",
+  ]);
+  assert.deepEqual(
+    await ensure(),
+    [],
+    "an attached price needs no Stripe call",
+  );
+  assert.deepEqual(
+    await ensure({ config: { ...config, meterEventName: "ai_nanos" } }),
+    [],
+  );
+  await assert.rejects(
+    ensure({ config: { ...config, meterEventName: "changed" } }),
+    (e) => e instanceof BillingError && e.status === 503,
+    "a changed meter is checked",
+  );
+  await assert.rejects(
+    ensure({
+      payer: {
+        customerId: "cus_other",
+        subscriptionId: "sub_pro",
+        organizationId: null,
+      },
+    }),
+    (e) => e instanceof BillingError && e.status === 409,
+    "another customer's attachment does not count",
+  );
+  await forgetAiSubscription(db, "sub_pro");
+  assert.deepEqual(
+    await ensure(),
+    ["price", "subscription", "meter"],
+    "a changed subscription is checked again, and not attached twice",
+  );
+  setSystemTime(Date.now() + 25 * 60 * 60_000);
+  try {
+    assert.equal((await ensure()).length, 3, "attachments last a day");
+  } finally {
+    setSystemTime();
+  }
+  await forgetAiSubscription(db, "sub_pro");
   const active = await run("running");
   const activeRequest = await request(active);
   await reconcileAiUsage({ db, config, runId: active, requestCost, report });

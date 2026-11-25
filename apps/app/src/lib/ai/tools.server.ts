@@ -6,10 +6,12 @@ import { z } from "zod";
 import { aiEntitlement } from "#/lib/billing/server";
 import { parseCompileLog } from "#/lib/compile";
 import { gitBranchSchema, type GitAction } from "#/lib/git";
-import { projectNodePaths, projectPaths, searchProject } from "#/lib/projects";
+import { mapLimit } from "#/lib/map-limit";
+import { projectNodePaths, projectPaths } from "#/lib/projects";
 import { encodeSource } from "#/lib/storage";
 
 import { isAgentsFile, parseSkill, skillFolderName } from "./skills";
+import { readConcurrency, searchSources } from "./source-search";
 import type { AssistantContext, AssistantWorkspace } from "./workspace";
 
 /** Tools that change project state; offered only to collaborators who can edit. */
@@ -27,9 +29,9 @@ const writeToolNames = new Set([
 ]);
 
 const maxEditBytes = 64 * 1024;
-const maxSearchFileBytes = 1024n * 1024n;
 const pathSchema = z.string().min(1).max(1024);
 const maxSkills = 100;
+const maxAgentsFiles = 100;
 
 export function projectTools({
   db,
@@ -128,25 +130,23 @@ export function projectTools({
   async function readFile(path: string) {
     signal.throwIfAborted();
     await aiEntitlement(db, userId, organizationId);
-    return db.transaction(async (tx) => {
+    const node = await db.transaction(async (tx) => {
       await workspace.lock({ tx, projectId, userId, access: "read" });
       const nodes = await tx.query.projectNode.findMany({
         where: { projectId, deletedAt: { isNull: true } },
       });
       const paths = projectPaths(nodes);
-      const node = nodes.find(
-        (n) => paths.get(n.id) === path && n.kind === "text",
-      );
-      if (!node) throw new Error("Text file not found");
-      if (node.sizeBytes > BigInt(maxEditBytes))
-        throw new Error("File exceeds the assistant's 64 KiB read limit");
-      const object = node.objectKey
-        ? await workspace.bucket.get(node.objectKey)
-        : null;
-      if (node.objectKey && !object) throw new Error("Saved source is missing");
-      const content = object ? await object.text() : "";
-      return { node, content };
+      return nodes.find((n) => paths.get(n.id) === path && n.kind === "text");
     });
+    if (!node) throw new Error("Text file not found");
+    if (node.sizeBytes > BigInt(maxEditBytes))
+      throw new Error("File exceeds the assistant's 64 KiB read limit");
+    // A replaced object outlives this read, so no transaction stays open for it.
+    const object = node.objectKey
+      ? await workspace.bucket.get(node.objectKey)
+      : null;
+    if (node.objectKey && !object) throw new Error("Saved source is missing");
+    return { node, content: object ? await object.text() : "" };
   }
   async function gitAction(action: GitAction) {
     signal.throwIfAborted();
@@ -236,8 +236,11 @@ export function projectTools({
       const entries = nodes
         .filter((n) => n.kind === "text" && skillFolderName(n.path))
         .sort((a, b) => a.path.localeCompare(b.path));
-      const skills = await Promise.all(
-        entries.slice(0, maxSkills).map(async (node) => {
+      const skills = await mapLimit(
+        entries.slice(0, maxSkills),
+        readConcurrency,
+        async (node) => {
+          signal.throwIfAborted();
           if (node.sizeBytes > BigInt(maxEditBytes))
             return {
               ...parseSkill(node.path, ""),
@@ -247,19 +250,21 @@ export function projectTools({
             ? await workspace.bucket.get(node.objectKey)
             : null;
           return parseSkill(node.path, object ? await object.text() : "");
-        }),
+        },
       );
+      const agentsFiles = nodes
+        .filter((n) => n.kind === "text" && isAgentsFile(n.path))
+        .map((n) => n.path)
+        .sort(
+          (a, b) =>
+            a.split("/").length - b.split("/").length || a.localeCompare(b),
+        );
       return {
         // Shallowest first: a nested AGENTS.md applies only to its folder.
-        agentsFiles: nodes
-          .filter((n) => n.kind === "text" && isAgentsFile(n.path))
-          .map((n) => n.path)
-          .sort(
-            (a, b) =>
-              a.split("/").length - b.split("/").length || a.localeCompare(b),
-          ),
+        agentsFiles: agentsFiles.slice(0, maxAgentsFiles),
         skills,
-        truncated: entries.length > maxSkills,
+        truncated:
+          entries.length > maxSkills || agentsFiles.length > maxAgentsFiles,
       };
     }),
     toolDefinition({
@@ -291,38 +296,18 @@ export function projectTools({
       }),
     }).server(async ({ query, matchCase }) => {
       const nodes = await files();
-      const skipped: string[] = [];
-      const sources = await Promise.all(
-        nodes.flatMap((node) => {
-          if (node.kind !== "text") return [];
-          if (node.sizeBytes > maxSearchFileBytes) {
-            skipped.push(node.path);
-            return [];
-          }
-          return [
-            (async (): Promise<[string, string]> => {
-              const object = node.objectKey
-                ? await workspace.bucket.get(node.objectKey)
-                : null;
-              return [node.path, object ? await object.text() : ""];
-            })(),
-          ];
-        }),
-      );
-      const result = searchProject(sources, query, { matchCase, limit: 200 });
-      return {
-        matches: result.files.flatMap((file) =>
-          file.matches.map(({ path, line, column, preview }) => ({
-            path,
-            line,
-            column,
-            preview,
-          })),
-        ),
-        total: result.total,
-        truncated: result.truncated,
-        skipped,
-      };
+      return searchSources({
+        files: nodes.filter((node) => node.kind === "text"),
+        async read({ objectKey }) {
+          signal.throwIfAborted();
+          const object = objectKey
+            ? await workspace.bucket.get(objectKey)
+            : null;
+          return object ? object.text() : "";
+        },
+        query,
+        matchCase,
+      });
     }),
     toolDefinition({
       name: "edit_file",

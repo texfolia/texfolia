@@ -703,6 +703,15 @@ export const aiRun = pgTable(
   ],
 );
 
+// Subscriptions known to have the AI usage price, so a run need not ask Stripe.
+export const aiMeterAttachment = pgTable("ai_meter_attachment", {
+  stripeSubscriptionId: text("stripe_subscription_id").primaryKey(),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  priceId: text("price_id").notNull(),
+  meterEventName: text("meter_event_name").notNull(),
+  checkedAt: time("checked_at").notNull(),
+});
+
 export const aiRequest = pgTable(
   "ai_request",
   {

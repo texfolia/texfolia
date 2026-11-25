@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 
 import { aiConfig } from "#/lib/ai/ai-config.server";
@@ -49,13 +49,13 @@ export const Route = createFileRoute("/api/ai/$projectId")({
                     userId,
                     id,
                   )
-                : {
-                    threads: await listAssistantThreads(
-                      context.db,
-                      params.projectId,
-                      userId,
-                    ),
-                  },
+                : await listAssistantThreads(
+                    context.db,
+                    params.projectId,
+                    userId,
+                    Number(url.searchParams.get("limit") ?? undefined) ||
+                      undefined,
+                  ),
               { headers: { "Cache-Control": "no-store" } },
             );
           }
@@ -135,6 +135,7 @@ export const Route = createFileRoute("/api/ai/$projectId")({
           return await startAssistant({
             request,
             projectId: params.projectId,
+            waitUntil,
             connectionString: env.HYPERDRIVE.connectionString,
             createAuth: (db) => createAuth(db),
             workspace: assistantWorkspace(env),

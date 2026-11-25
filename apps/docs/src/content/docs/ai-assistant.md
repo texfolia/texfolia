@@ -21,9 +21,16 @@ the Gateway secrets, and the workspace panel that hosts the UI.
 `ai_message` stores ordered TanStack UI messages, including tool calls, results and
 reasoning. These tables cascade with the user and project; billing records keep
 their existing independent lifetime. The server loads the transcript and accepts
-only the new user text from the browser. It checkpoints streamed replies and
-saves partial replies when stopped. Only one reply can run in a thread at a time.
+only the new user text from the browser. It checkpoints streamed replies every five
+seconds, writing only messages that changed, and saves partial replies when stopped.
+Only one reply can run in a thread at a time. Saving the reply and settling its usage
+run under `waitUntil`, so they finish even when the browser disconnects. The thread
+accepts the next message as soon as the reply is saved, before usage is settled.
 Retry replaces the last answer while preserving the original user message.
+
+A user can keep 200 chats in a project; creating another is refused until one is
+deleted. The history list loads 50 at a time. A chat is full at 1,000 messages or
+8 MiB.
 
 The interface follows the current shadcn/ui AI Elements patterns: Message Scroller,
 Message, Input Group for Prompt Input, a Model Selector dropdown, Trace for Tool
@@ -50,7 +57,11 @@ user’s default model for new chats and the existing monthly spending cap.
    `unit_amount_decimal` to `0.0000001` cents: each usage unit is one nano-dollar
    ($0.000000001). Keep the base Pro price unchanged. The server validates the
    price and meter and attaches the usage price to the existing payer's
-   subscription on the first AI run, using an idempotency key.
+   subscription on the first AI run, using an idempotency key. It records that in
+   `ai_meter_attachment` and asks Stripe again after a day, after a webhook reports
+   that the subscription changed, or when the price or meter setting changes.
+   Webhooks must include `customer.subscription.updated` and
+   `customer.subscription.deleted`, which billing already needs.
 5. Set the following server variables in `apps/app/.env` locally, and as Worker
    secrets or variables in each deployed environment:
 
@@ -79,7 +90,8 @@ File tools can list, search, and read saved sources. Editors' runs can also
 apply several exact replacements to a file in one versioned `edit_file` call,
 and create, rename, move, or delete files and folders through the same node
 functions and path rules as the Files sidebar. `search_project` matches literal
-text, returns at most 200 lines, and skips files over 1 MiB.
+text, returns at most 200 lines, skips files over 1 MiB, and scans at most 16 MiB
+per search. It reads six files at a time and keeps only their matches.
 
 Git tools can inspect status and diffs, commit, push, pull, create branches, and
 switch branches. The assistant instructions require an explicit user request before
@@ -129,6 +141,9 @@ receive only `list_files`, `list_skills`, `search_project`, `read_file`,
 deletions, compiles, and git mutations are not offered.
 The server write checks still apply to editors' tool calls. A run stops if the
 user's role changes while it is in progress.
+
+The model catalog is cached for ten minutes, so a new, removed or repriced model can
+take that long to show. Cached prices only size reservations.
 
 ## Check metering
 

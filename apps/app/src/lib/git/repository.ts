@@ -1,21 +1,47 @@
 import { sourcePathSchema } from "@texfolia/contracts";
 import { createPatch } from "diff";
 import * as git from "isomorphic-git";
-import { createFsFromVolume, Volume } from "memfs";
 import { z } from "zod";
 
-import {
-  decodeSource,
-  encodeSource,
-  maxSourceFileBytes,
-  maxSourceProjectBytes,
-} from "#/lib/storage";
+import { mapLimit } from "#/lib/map-limit";
+import { decodeSource } from "#/lib/storage";
 
-import type { GitStatus } from "./schema";
+import { readArchive } from "./archive";
+import { GitFs } from "./git-fs";
+import { gitBranchSchema, type GitStatus } from "./schema";
 
 const maxRepositoryBytes = 20 * 1024 * 1024;
-const storedGitSchema = z.record(z.string(), z.string());
-export type GitFiles = Record<string, Uint8Array>;
+const transferMessage =
+  "Git transfer exceeds 20 MiB. Use a smaller repository.";
+const pushMessage =
+  "Push exceeds 20 MiB. Push this branch from a local clone instead.";
+const maxIgnoreBytes = 1024 * 1024;
+const maxDiffFileBytes = 128 * 1024;
+// Trees can name one subtree many times, so a small pack can hold a huge tree.
+const maxTreeEntries = 20_000;
+const legacyArchiveSchema = z.record(z.string(), z.string());
+// Maps each stored source to the Git blob with the same content.
+const blobCache = "texfolia-blobs";
+const blobCacheSchema = z.record(z.string(), z.string());
+
+/** A file in the working tree. Its content is read only when needed. */
+export type GitFile = {
+  /** The Git blob with this content, when known. */
+  oid?: string;
+  /** Bounds how many files are read at once. */
+  sizeBytes?: number;
+  read: () => Promise<Uint8Array<ArrayBuffer>>;
+};
+
+type TreeEntry = { oid: string; mode: string; type: string };
+type HeadTree = {
+  files: Map<string, TreeEntry>;
+  /** The tree of every folder, the root's under "". */
+  folders: Map<string, string>;
+};
+
+// The pack plus the ref update around it.
+const maxPushBytes = maxRepositoryBytes + 64 * 1024;
 
 export function gitHttp(
   url: string,
@@ -34,8 +60,13 @@ export function gitHttp(
       )
         throw new Error("Unexpected git server URL");
       const parts: Uint8Array<ArrayBuffer>[] = [];
+      let sent = 0;
       if (request.body)
-        for await (const part of request.body) parts.push(new Uint8Array(part));
+        for await (const part of request.body) {
+          sent += part.byteLength;
+          if (sent > maxPushBytes) throw new Error(pushMessage);
+          parts.push(part as Uint8Array<ArrayBuffer>);
+        }
       const headers = new Headers(request.headers);
       headers.set("Authorization", `Basic ${btoa(`${username}:${token}`)}`);
       const response = await fetch(target, {
@@ -60,10 +91,7 @@ export function gitHttp(
             const next = await reader.read();
             if (next.done) break;
             bytes += next.value.byteLength;
-            if (bytes > maxRepositoryBytes)
-              throw new Error(
-                "Git transfer exceeds 20 MiB. Use a smaller repository.",
-              );
+            if (bytes > maxRepositoryBytes) throw new Error(transferMessage);
             yield next.value;
           }
         } finally {
@@ -81,130 +109,217 @@ export function gitHttp(
   };
 }
 
-// A working clone of the linked remote. The remote is the source of truth; this
-// copy only carries the index, branches and commits not yet pushed (NAT-413).
-export class GitRepository {
-  private volume = new Volume();
-  readonly fs = createFsFromVolume(this.volume);
-  readonly dir = "/repo";
-  constructor() {
-    this.volume.mkdirSync(this.dir);
+function isGenerated(path: string) {
+  return path.split("/")[0]?.toLowerCase() === "out";
+}
+
+async function hashFile(file: GitFile) {
+  return (await git.hashBlob({ object: await file.read() })).oid;
+}
+
+/** Every folder that contains `path`, from the root, "". */
+function parentFolders(path: string) {
+  const parts = path.split("/").slice(0, -1);
+  return ["", ...parts.map((_, index) => parts.slice(0, index + 1).join("/"))];
+}
+
+/** How many bytes a zlib stream of `object` takes. */
+async function deflatedBytes(object: Uint8Array) {
+  const reader = new Blob([object as Uint8Array<ArrayBuffer>])
+    .stream()
+    .pipeThrough(new CompressionStream("deflate"))
+    .getReader();
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return bytes;
+    bytes += value.byteLength;
   }
+}
+
+// A working clone of the linked remote. The remote is the source of truth; this
+// copy only carries branches and commits not yet pushed (NAT-413). It has no
+// index: a commit's tree is HEAD's with the changed files replaced, and the
+// project's files stay in R2 until one of them is needed.
+export class GitRepository {
+  readonly fs = new GitFs(
+    maxRepositoryBytes + maxIgnoreBytes,
+    () => new Error("Git history exceeds 20 MiB. Use a smaller repository."),
+  );
+  // isomorphic-git locks by path across every repository in the isolate, and one
+  // Durable Object cannot wait for another's lock.
+  readonly dir = `/${crypto.randomUUID()}`;
+  private readonly gitdir = `${this.dir}/.git`;
+  // Keeps parsed pack indexes between calls.
+  private readonly cache = {};
+  private worktree = new Map<string, GitFile>();
+  private ignoreFiles: string[] = [];
+  private loadedHead: { oid: string; tree: HeadTree } | undefined;
   private args() {
-    return { fs: this.fs, dir: this.dir };
+    return {
+      fs: this.fs,
+      dir: this.dir,
+      gitdir: this.gitdir,
+      cache: this.cache,
+    };
   }
 
-  static restore(serialized: string) {
+  private addMetadata(path: string, value: Uint8Array<ArrayBuffer>) {
+    if (path.split("/").some((part) => part === ".." || part === "." || !part))
+      throw new Error("Invalid repository data");
+    // Clones saved before the index went unused still carry one.
+    if (path !== "index") this.fs.add(`${this.gitdir}/${path}`, value);
+  }
+  static async restore(body: ReadableStream<Uint8Array>) {
+    const repo = new GitRepository();
+    for await (const [path, value] of readArchive(body, maxRepositoryBytes))
+      repo.addMetadata(path, value);
+    return repo;
+  }
+  /** Restores a clone saved as Base64 in JSON. The next save converts it. */
+  static restoreLegacy(serialized: string) {
     const repo = new GitRepository();
     for (const [path, value] of Object.entries(
-      storedGitSchema.parse(JSON.parse(serialized)),
+      legacyArchiveSchema.parse(JSON.parse(serialized)),
     )) {
-      if (
-        !path.startsWith(".git/") ||
-        path.split("/").some((p) => p === ".." || p === "." || !p)
-      )
-        throw new Error("Invalid repository data");
-      repo.write(path, decodeSource(value));
+      if (!path.startsWith(".git/")) throw new Error("Invalid repository data");
+      repo.addMetadata(path.slice(".git/".length), decodeSource(value));
     }
     return repo;
   }
-  serialize() {
-    const files: Record<string, string> = {};
-    let size = 0;
-    for (const [path, value] of Object.entries(this.readAll(true))) {
-      size += value.length;
-      if (size > maxRepositoryBytes)
-        throw new Error(
-          "Git history exceeds 20 MiB. Use a smaller repository.",
-        );
-      files[path] = encodeSource(value);
-    }
-    return JSON.stringify(files);
-  }
-  write(path: string, value: Uint8Array) {
-    this.volume.mkdirSync(
-      `${this.dir}/${path.split("/").slice(0, -1).join("/")}`,
-      { recursive: true },
+  /** The files to store, checked against the size limit. */
+  metadata() {
+    const files = [...this.fs.list(this.gitdir)].filter(
+      ([path]) => path !== "index",
     );
-    this.volume.writeFileSync(`${this.dir}/${path}`, value);
-  }
-  overlay(files: GitFiles) {
-    for (const name of this.volume.readdirSync(this.dir))
-      if (name !== ".git")
-        this.volume.rmSync(`${this.dir}/${name}`, {
-          recursive: true,
-          force: true,
-        });
-    for (const [path, value] of Object.entries(files)) {
-      sourcePathSchema.parse(path);
-      if (path.split("/").some((p) => p.toLowerCase() === ".git"))
-        throw new Error(".git is reserved for repository data");
-      this.write(path, value);
-    }
-  }
-  private read(path: string) {
-    const data = this.volume.readFileSync(`${this.dir}/${path}`);
-    if (typeof data === "string") throw new Error("Expected binary file data");
-    return new Uint8Array(data);
-  }
-  private readAll(metadata = false): GitFiles {
-    const files: GitFiles = {};
-    const walk = (path: string) => {
-      for (const name of this.volume.readdirSync(`${this.dir}/${path}`)) {
-        const relative = `${path}${name}`;
-        const stat = this.volume.lstatSync(`${this.dir}/${relative}`);
-        if (stat.isSymbolicLink())
-          throw new Error(
-            "Symbolic links are not supported in Texfolia projects.",
-          );
-        if (stat.isDirectory()) walk(`${relative}/`);
-        else files[relative] = this.read(relative);
-      }
-    };
-    if (metadata) walk(".git/");
-    else
-      for (const name of this.volume.readdirSync(this.dir)) {
-        if (name === ".git" || String(name).toLowerCase() === "out") continue;
-        const stat = this.volume.lstatSync(`${this.dir}/${name}`);
-        if (stat.isSymbolicLink())
-          throw new Error(
-            "Symbolic links are not supported in Texfolia projects.",
-          );
-        if (stat.isDirectory()) walk(`${name}/`);
-        else files[String(name)] = this.read(String(name));
-      }
+    if (
+      files.reduce((total, [, value]) => total + value.byteLength, 0) >
+      maxRepositoryBytes
+    )
+      throw new Error("Git history exceeds 20 MiB. Use a smaller repository.");
     return files;
   }
-  sources() {
-    const files = this.readAll();
-    if (Object.hasOwn(files, ".gitmodules"))
-      throw new Error("Submodules are not supported in Texfolia projects.");
-    let bytes = 0;
-    const paths = new Set<string>();
-    for (const [path, value] of Object.entries(files)) {
+  /** Blobs by the stored source with the same content, from the last save. */
+  async sourceBlobs() {
+    const path = `${this.gitdir}/${blobCache}`;
+    if (!this.fs.has(path)) return new Map<string, string>();
+    const text = await this.fs.promises.readFile(path, "utf8");
+    return new Map(
+      Object.entries(blobCacheSchema.parse(JSON.parse(String(text)))),
+    );
+  }
+  saveSourceBlobs(blobs: Map<string, string>) {
+    this.fs.add(
+      `${this.gitdir}/${blobCache}`,
+      JSON.stringify(Object.fromEntries(blobs)),
+    );
+  }
+
+  /** The working tree: the project's files, or HEAD's after a checkout. */
+  get files(): ReadonlyMap<string, GitFile> {
+    return this.worktree;
+  }
+  overlay(files: ReadonlyMap<string, GitFile>) {
+    for (const path of files.keys()) {
       sourcePathSchema.parse(path);
       if (path.split("/").some((p) => p.toLowerCase() === ".git"))
         throw new Error(".git is reserved for repository data");
-      // The editor's file tree is case insensitive, including folder components.
-      const segments = path.split("/");
-      for (let i = 1; i <= segments.length; i++) {
-        const prefix = segments.slice(0, i).join("/");
-        const existing = [...paths].find(
-          (p) => p.toLowerCase() === prefix.toLowerCase(),
-        );
-        if (existing && existing !== prefix)
-          throw new Error("Repository has case-colliding file paths.");
-        paths.add(prefix);
+    }
+    this.setWorktree(files);
+  }
+  private setWorktree(files: ReadonlyMap<string, GitFile>) {
+    for (const path of this.ignoreFiles) this.fs.remove(`${this.dir}/${path}`);
+    this.ignoreFiles = [];
+    this.worktree = new Map(files);
+  }
+  async blob(oid: string): Promise<Uint8Array<ArrayBuffer>> {
+    const { blob } = await git.readBlob({ ...this.args(), oid });
+    return blob as Uint8Array<ArrayBuffer>;
+  }
+  private async headOid() {
+    try {
+      return await git.resolveRef({ ...this.args(), ref: "HEAD" });
+    } catch (error) {
+      if (error instanceof git.Errors.NotFoundError) return null;
+      throw error;
+    }
+  }
+  private async readHead(): Promise<HeadTree> {
+    const oid = await this.headOid();
+    if (!oid) return { files: new Map(), folders: new Map() };
+    if (this.loadedHead?.oid === oid) return this.loadedHead.tree;
+    const tree: HeadTree = { files: new Map(), folders: new Map() };
+    const pending = [{ path: "", oid }];
+    let entries = 0;
+    for (let folder = pending.pop(); folder; folder = pending.pop()) {
+      const read = await git.readTree({ ...this.args(), oid: folder.oid });
+      tree.folders.set(folder.path, read.oid);
+      for (const entry of read.tree) {
+        if (++entries > maxTreeEntries)
+          throw new Error("Repository has too many files and folders.");
+        const path = folder.path ? `${folder.path}/${entry.path}` : entry.path;
+        if (entry.type === "tree") pending.push({ path, oid: entry.oid });
+        else
+          tree.files.set(path, {
+            oid: entry.oid,
+            mode: entry.mode,
+            type: entry.type,
+          });
       }
-      bytes += value.length;
-      if (value.length > maxSourceFileBytes || bytes > maxSourceProjectBytes)
+    }
+    this.loadedHead = { oid, tree };
+    return tree;
+  }
+  /** Ignored files, when the working tree is clean. Git leaves them alone. */
+  private async untracked() {
+    const { files: tracked } = await this.readHead();
+    return new Map([...this.worktree].filter(([path]) => !tracked.has(path)));
+  }
+  // Makes HEAD's files the working tree, if a project can hold them.
+  private async checkoutHead(untracked: ReadonlyMap<string, GitFile>) {
+    const { files: tracked } = await this.readHead();
+    const files = new Map(untracked);
+    for (const [path, { oid, mode, type }] of tracked) {
+      if (isGenerated(path)) continue;
+      if (mode === "120000")
         throw new Error(
-          "Repository exceeds project source limits (10 MiB per file, 50 MiB total).",
+          "Symbolic links are not supported in Texfolia projects.",
         );
+      if (type === "commit" || path === ".gitmodules")
+        throw new Error("Submodules are not supported in Texfolia projects.");
+      sourcePathSchema.parse(path);
+      if (path.split("/").some((p) => p.toLowerCase() === ".git"))
+        throw new Error(".git is reserved for repository data");
+      const local = files.get(path);
+      if (local) {
+        local.oid ??= await hashFile(local);
+        if (local.oid !== oid)
+          throw new Error(
+            `${path} is ignored here but tracked in Git. Rename or delete it, then try again.`,
+          );
+      }
+      files.set(path, { oid, read: () => this.blob(oid) });
     }
-    if (Object.keys(files).length > 1000)
+    // The editor's file tree is case insensitive, including folder components.
+    const folders = new Map<string, string>();
+    const lowerPaths = new Set<string>();
+    for (const path of files.keys()) {
+      lowerPaths.add(path.toLowerCase());
+      for (const folder of parentFolders(path).slice(1)) {
+        const lower = folder.toLowerCase();
+        if ((folders.get(lower) ?? folder) !== folder)
+          throw new Error("Repository has case-colliding file paths.");
+        folders.set(lower, folder);
+      }
+    }
+    if (
+      lowerPaths.size < files.size ||
+      [...lowerPaths].some((path) => folders.has(path))
+    )
+      throw new Error("Repository has case-colliding file paths.");
+    if (files.size > 1000)
       throw new Error("Repository exceeds 1,000 source files.");
-    return files;
+    this.setWorktree(files);
   }
   async init(url?: string) {
     await git.init({ ...this.args(), defaultBranch: "main" });
@@ -222,19 +337,29 @@ export class GitRepository {
       url,
       singleBranch: true,
       depth: 50,
+      noCheckout: true,
     });
     await this.remoteBranches(http, url);
-    this.sources();
+    await this.checkoutHead(new Map());
   }
   async remoteBranches(http: git.HttpClient, url: string) {
     const refs = await git.listServerRefs({ http, url, prefix: "refs/heads/" });
-    for (const ref of refs)
+    for (const ref of refs) {
+      // The host chooses these names. One that cannot be checked out is left out.
+      const name = ref.ref.slice("refs/heads/".length);
+      if (
+        !ref.ref.startsWith("refs/heads/") ||
+        name === "HEAD" ||
+        gitBranchSchema.safeParse(name).data !== name
+      )
+        continue;
       await git.writeRef({
         ...this.args(),
-        ref: `refs/remotes/origin/${ref.ref.slice("refs/heads/".length)}`,
+        ref: `refs/remotes/origin/${name}`,
         value: ref.oid,
         force: true,
       });
+    }
   }
   async requireEmptyRemote(url: string, http: git.HttpClient) {
     const info = await git.listServerRefs({ http, url, prefix: "refs/heads/" });
@@ -242,17 +367,67 @@ export class GitRepository {
       throw new Error(
         "Link an empty repository, or import this repository as a new project to keep its history.",
       );
-    if (!this.volume.existsSync(`${this.dir}/.git/HEAD`)) await this.init();
+    if (!this.fs.has(`${this.gitdir}/HEAD`)) await this.init();
     await git.addRemote({ ...this.args(), remote: "origin", url });
-  }
-  private async matrix() {
-    return git.statusMatrix(this.args());
   }
   async currentBranch() {
     return (await git.currentBranch(this.args())) ?? null;
   }
+  private async ignored(path: string) {
+    return git.isIgnored({ ...this.args(), filepath: path });
+  }
+  // Ignore rules are read by path, so they have to be in the file system.
+  private async loadIgnoreFiles() {
+    let bytes = 0;
+    for (const [path, file] of this.worktree) {
+      if (path.split("/").at(-1) !== ".gitignore") continue;
+      if (this.fs.has(`${this.dir}/${path}`)) continue;
+      const value =
+        (file.sizeBytes ?? 0) > maxIgnoreBytes ? null : await file.read();
+      bytes += value?.byteLength ?? 0;
+      if (!value || bytes > maxIgnoreBytes)
+        throw new Error(".gitignore files exceed 1 MiB.");
+      this.fs.add(`${this.dir}/${path}`, value);
+      this.ignoreFiles.push(path);
+    }
+  }
+  private async changes(): Promise<GitStatus["changes"]> {
+    const { files: tracked } = await this.readHead();
+    const files = [...this.worktree].filter(([path]) => !isGenerated(path));
+    // Only a tracked file whose blob is unknown has to be read.
+    await mapLimit(
+      files.flatMap(([path, file]) =>
+        tracked.has(path) && !file.oid ? [file] : [],
+      ),
+      6,
+      async (file) => {
+        file.oid = await hashFile(file);
+      },
+      {
+        maxBytes: 12 * 1024 * 1024,
+        size: (file) => file.sizeBytes ?? 4 * 1024 * 1024,
+      },
+    );
+    if (files.some(([path]) => !tracked.has(path)))
+      await this.loadIgnoreFiles();
+    const changes: GitStatus["changes"] = [];
+    for (const [path, file] of files) {
+      const entry = tracked.get(path);
+      if (!entry) {
+        if (!(await this.ignored(path)))
+          changes.push({ path, status: "added" });
+      } else if (entry.oid !== file.oid)
+        changes.push({ path, status: "modified" });
+    }
+    for (const [path, { type }] of tracked)
+      if (type === "blob" && !isGenerated(path) && !this.worktree.has(path))
+        changes.push({ path, status: "deleted" });
+    return changes.sort((a, b) =>
+      a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+    );
+  }
   async status(): Promise<Omit<GitStatus, "remote">> {
-    const matrix = await this.matrix();
+    const changes = await this.changes();
     let commits: GitStatus["commits"] = [];
     try {
       commits = (await git.log({ ...this.args(), depth: 30 })).map(
@@ -276,47 +451,33 @@ export class GitRepository {
           ).filter((name) => name !== "HEAD"),
         ]),
       ].sort(),
-      changes: matrix
-        .filter(
-          ([path, head, work]) =>
-            head !== work && path.split("/")[0]?.toLowerCase() !== "out",
-        )
-        .map(([path, head, work]) => ({
-          path,
-          status: head === 0 ? "added" : work === 0 ? "deleted" : "modified",
-        })),
+      changes,
       commits,
     };
   }
   async diff() {
-    const changes = (await this.status()).changes;
+    const changes = await this.changes();
+    const { files: tracked } = await this.readHead();
     let result = "";
     for (const change of changes) {
-      let before = new Uint8Array();
-      if (change.status !== "added")
-        before = new Uint8Array(
-          (
-            await git.readBlob({
-              ...this.args(),
-              oid: await git.resolveRef({ ...this.args(), ref: "HEAD" }),
-              filepath: change.path,
-            })
-          ).blob,
-        );
-      const after =
-        change.status === "deleted" ? new Uint8Array() : this.read(change.path);
-      if (
-        before.includes(0) ||
-        after.includes(0) ||
-        before.length + after.length > 128 * 1024
-      )
-        result += `${change.status} ${change.path} (binary or large file)\n`;
-      else
-        result += createPatch(
-          change.path,
-          new TextDecoder().decode(before),
-          new TextDecoder().decode(after),
-        );
+      const summary = `${change.status} ${change.path} (binary or large file)\n`;
+      const file = this.worktree.get(change.path);
+      if ((file?.sizeBytes ?? 0) > maxDiffFileBytes) result += summary;
+      else {
+        const entry = tracked.get(change.path);
+        const before = entry ? await this.blob(entry.oid) : new Uint8Array();
+        const after = file ? await file.read() : new Uint8Array();
+        result +=
+          before.includes(0) ||
+          after.includes(0) ||
+          before.length + after.length > maxDiffFileBytes
+            ? summary
+            : createPatch(
+                change.path,
+                new TextDecoder().decode(before),
+                new TextDecoder().decode(after),
+              );
+      }
       if (result.length > 48 * 1024)
         return `${result.slice(0, 48 * 1024)}\n[diff truncated]`;
     }
@@ -324,14 +485,85 @@ export class GitRepository {
   }
   async commit(message: string, author: { name: string; email: string }) {
     if (!message.trim()) throw new Error("Write a commit message.");
-    const changes = (await this.status()).changes;
+    const changes = await this.changes();
     if (!changes.length) throw new Error("No changes to commit.");
-    for (const change of changes) {
-      if (change.status === "deleted")
-        await git.remove({ ...this.args(), filepath: change.path });
-      else await git.add({ ...this.args(), filepath: change.path });
+    const head = await this.readHead();
+    const files = new Map(head.files);
+    for (const { path } of changes) {
+      const file = this.worktree.get(path);
+      if (!file) {
+        files.delete(path);
+        continue;
+      }
+      file.oid = await git.writeBlob({
+        ...this.args(),
+        blob: await file.read(),
+      });
+      files.set(path, {
+        oid: file.oid,
+        mode: head.files.get(path)?.mode ?? "100644",
+        type: "blob",
+      });
     }
-    return git.commit({ ...this.args(), message: message.trim(), author });
+    return git.commit({
+      ...this.args(),
+      message: message.trim(),
+      author,
+      tree: await this.writeTree(
+        files,
+        head.folders,
+        changes.map(({ path }) => path),
+      ),
+    });
+  }
+  // Writes the trees of changed folders, and keeps the others'.
+  private async writeTree(
+    files: Map<string, TreeEntry>,
+    folders: Map<string, string>,
+    changed: string[],
+  ) {
+    const dirty = new Set(["", ...changed.flatMap(parentFolders)]);
+    type Entry = { path: string; mode: string; oid: string; type: string };
+    const contents = new Map<string, Entry[]>([["", []]]);
+    const add = (folder: string, entry: Entry) => {
+      const entries = contents.get(folder);
+      if (entries) entries.push(entry);
+      else contents.set(folder, [entry]);
+    };
+    for (const [path, entry] of files) {
+      const at = path.lastIndexOf("/");
+      add(path.slice(0, Math.max(at, 0)), {
+        ...entry,
+        path: path.slice(at + 1),
+      });
+      for (const folder of parentFolders(path))
+        if (!contents.has(folder)) contents.set(folder, []);
+    }
+    // Deepest first, so a folder's subfolders are written before it.
+    const depth = (folder: string) => folder.split("/").length;
+    const order = [...contents.keys()]
+      .filter(Boolean)
+      .sort((a, b) => depth(b) - depth(a));
+    const write = async (folder: string) => {
+      const known = dirty.has(folder) ? undefined : folders.get(folder);
+      return (
+        known ??
+        git.writeTree({
+          ...this.args(),
+          tree: (contents.get(folder) ?? []) as git.TreeObject,
+        })
+      );
+    };
+    for (const folder of order) {
+      const at = folder.lastIndexOf("/");
+      add(folder.slice(0, Math.max(at, 0)), {
+        path: folder.slice(at + 1),
+        mode: "040000",
+        oid: await write(folder),
+        type: "tree",
+      });
+    }
+    return write("");
   }
   async push(http: git.HttpClient) {
     const ref = await git.currentBranch(this.args());
@@ -342,10 +574,103 @@ export class GitRepository {
       remote: "origin",
       ref,
       remoteRef: ref,
+      // The pack is built in memory, so its size has to be known first.
+      onPrePush: async ({ url, localRef, remoteRef }) => {
+        await this.checkPushSize(http, url, localRef.oid, remoteRef.oid);
+        return true;
+      },
     });
   }
+  // Adds up the objects that isomorphic-git is about to pack, choosing them the
+  // same way: everything in commits the host lacks, less what the merge base and
+  // the host's default branch already contain.
+  private async checkPushSize(
+    http: git.HttpClient,
+    url: string,
+    local: string,
+    remote: string,
+  ) {
+    const refs = await git.listServerRefs({
+      http,
+      url,
+      forPush: true,
+      protocolVersion: 1,
+    });
+    const known = new Set(refs.map(({ oid }) => oid));
+    const bases: string[] = [];
+    if (!/^0+$/.test(remote))
+      bases.push(
+        ...((await git
+          .findMergeBase({ ...this.args(), oids: [local, remote] })
+          .catch(() => [])) as string[]),
+      );
+    for (const base of bases) known.add(base);
+    if (known.has(local)) return;
+    const shallowPath = `${this.gitdir}/shallow`;
+    const shallow = new Set(
+      this.fs.has(shallowPath)
+        ? String(await this.fs.promises.readFile(shallowPath, "utf8"))
+            .trim()
+            .split("\n")
+        : [],
+    );
+    const skipped = new Set<string>();
+    const listTree = async (oid: string, visit: Set<string>) => {
+      const pending = [oid];
+      for (let next = pending.pop(); next; next = pending.pop()) {
+        if (visit.has(next)) continue;
+        visit.add(next);
+        const { tree } = await git.readTree({ ...this.args(), oid: next });
+        for (const entry of tree)
+          if (entry.type === "tree") pending.push(entry.oid);
+          else if (entry.type === "blob") visit.add(entry.oid);
+      }
+    };
+    const treeOf = async (oid: string) =>
+      (await git.readCommit({ ...this.args(), oid })).commit.tree;
+    for (const base of bases) await listTree(await treeOf(base), skipped);
+    try {
+      const branch = await git.resolveRef({
+        ...this.args(),
+        ref: "refs/remotes/origin/HEAD",
+        depth: 2,
+      });
+      const name = branch.replace("refs/remotes/origin/", "refs/heads/");
+      const oid = refs.find(({ ref }) => ref === name)?.oid;
+      if (oid) await listTree(await treeOf(oid), skipped);
+    } catch {
+      // Without a local copy of the default branch, nothing is left out.
+    }
+    const objects = new Set<string>();
+    const commits = [local];
+    const visited = new Set<string>();
+    for (let oid = commits.pop(); oid; oid = commits.pop()) {
+      if (visited.has(oid)) continue;
+      visited.add(oid);
+      const { commit } = await git.readCommit({ ...this.args(), oid });
+      objects.add(oid);
+      await listTree(commit.tree, objects);
+      if (!shallow.has(oid))
+        commits.push(...commit.parent.filter((parent) => !known.has(parent)));
+    }
+    let bytes = 0;
+    for (const oid of objects) {
+      if (skipped.has(oid)) continue;
+      // A loose object is stored deflated already; a packed one may be a delta.
+      const loose = this.fs.size(
+        `${this.gitdir}/objects/${oid.slice(0, 2)}/${oid.slice(2)}`,
+      );
+      bytes +=
+        loose ??
+        (await deflatedBytes(
+          (await git.readObject({ ...this.args(), oid, format: "content" }))
+            .object as Uint8Array,
+        ));
+      if (bytes > maxRepositoryBytes) throw new Error(pushMessage);
+    }
+  }
   async requireClean() {
-    if ((await this.status()).changes.length)
+    if ((await this.changes()).length)
       throw new Error(
         "Commit your changes before pulling or switching branches.",
       );
@@ -374,9 +699,9 @@ export class GitRepository {
     author: { name: string; email: string },
   ) {
     await this.requireClean();
+    const untracked = await this.untracked();
     await git.merge({ ...this.args(), ours: ref, theirs, message, author });
-    await git.checkout({ ...this.args(), ref, remote: "origin" });
-    this.sources();
+    await this.checkoutHead(untracked);
   }
   async pull(http: git.HttpClient, author: { name: string; email: string }) {
     await this.requireClean();
@@ -400,8 +725,9 @@ export class GitRepository {
   }
   async switchBranch(name: string) {
     await this.requireClean();
-    await git.checkout({ ...this.args(), ref: name });
-    this.sources();
+    const untracked = await this.untracked();
+    await git.checkout({ ...this.args(), ref: name, noCheckout: true });
+    await this.checkoutHead(untracked);
   }
   async checkout(name: string, http?: git.HttpClient) {
     await this.requireClean();

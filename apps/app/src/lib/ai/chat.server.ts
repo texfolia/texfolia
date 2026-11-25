@@ -52,6 +52,11 @@ import { projectTools } from "./tools.server";
 import type { AssistantContext, AssistantWorkspace } from "./workspace";
 
 const maxThreadMessages = 1000;
+// Opening a chat, and each reply in it, loads all of it.
+const maxThreadBytes = 8 * 1024 * 1024;
+const checkpointMs = 5000;
+// How long a stopped run may take to end by itself.
+const stopMs = 10_000;
 /**
  * Only names the convention: the assistant discovers skills and AGENTS.md on
  * demand with list_skills and read_file, so their text costs context only
@@ -286,11 +291,31 @@ export function meteredGatewayFetch({
   };
 }
 
+// Returning from a generator that never started skips its `finally`.
+function closable<T>(
+  generator: AsyncGenerator<T>,
+  close: () => Promise<void>,
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]: () => ({
+      next: () => generator.next(),
+      async return() {
+        try {
+          return await generator.return(undefined);
+        } finally {
+          await close();
+        }
+      },
+    }),
+  };
+}
+
 export async function startAssistant({
   request,
   projectId,
   config,
   connectionString,
+  waitUntil,
   createAuth,
   workspace,
   userId,
@@ -306,6 +331,8 @@ export async function startAssistant({
   config: AiConfig;
   /** The run opens its own client, because the stream outlives the request. */
   connectionString: string;
+  /** Keeps the Worker running until the run is saved, if the client leaves. */
+  waitUntil: (promise: Promise<unknown>) => void;
   createAuth: (db: Db) => Auth;
   workspace: AssistantWorkspace;
   userId: string;
@@ -379,8 +406,19 @@ export async function startAssistant({
   if (!parsedOverride.success) throw new AiError("Choose a valid model.", 400);
   const override = parsedOverride.data;
   const db = createDb(connectionString);
-  let closed = false;
+  // Saves and closes the run once it has started.
+  let finish: (() => Promise<void>) | undefined;
   let claimedThread: string | undefined;
+  const releaseClaim = (client: Db, threadId: string) =>
+    client
+      .update(aiThread)
+      .set({ activeRunId: null, activeRunAt: null })
+      .where(
+        and(
+          threadOwner(projectId, userId, threadId),
+          eq(aiThread.activeRunId, params.runId),
+        ),
+      );
   let history: StoredMessage[] = [];
   try {
     const threadIdentifier = z.uuid().safeParse(params.threadId);
@@ -420,7 +458,7 @@ export async function startAssistant({
         "AI spending is paused. Raise your cap to continue.",
         402,
       );
-    await ensureAiSubscription(config, payer);
+    await ensureAiSubscription({ db, config, payer });
     const clientRunId = z.string().min(1).max(200).safeParse(params.runId);
     if (!clientRunId.success || params.threadId.length > 200)
       throw new AiError("Invalid chat identifier", 400);
@@ -456,6 +494,14 @@ export async function startAssistant({
           Date.now() - thread.activeRunAt.getTime() < 5 * 60_000
         )
           throw new AiError("This chat already has a reply in progress.", 409);
+        const [stored] = await tx
+          .select({
+            bytes: sql<string>`coalesce(sum(octet_length(${aiMessage.message}::text)), 0)`,
+          })
+          .from(aiMessage)
+          .where(eq(aiMessage.threadId, thread.id));
+        if (Number(stored?.bytes ?? 0) > maxThreadBytes)
+          throw new AiError("This chat is full. Start a new chat.", 413);
         const rows = await tx
           .select()
           .from(aiMessage)
@@ -531,6 +577,7 @@ export async function startAssistant({
         "This request already ran. Start a new message to continue.",
         409,
       );
+    const runId = run.id;
     const abort = new AbortController();
     const disconnect = () => abort.abort();
     request.signal.addEventListener("abort", disconnect, { once: true });
@@ -555,6 +602,124 @@ export async function startAssistant({
         throw new AiError("Your access changed. Refresh the project.", 403);
     };
     let outcome: typeof run.status = "aborted";
+    const transcript = new StreamProcessor({ initialMessages: history });
+    // The JSON of each reply message as last saved.
+    const savedMessages = new Map<string, string>();
+    let checkpointAt = Date.now();
+    let saving: Promise<void> | undefined;
+    // Saves the messages that changed, if this run still owns the thread.
+    const saveThread = async (finished: boolean) => {
+      if (!claimedThread) return;
+      const threadId = claimedThread;
+      const changed = transcript
+        .getMessages()
+        .slice(history.length)
+        .flatMap((value, offset) => {
+          const message = storedMessageSchema.parse(value);
+          const json = JSON.stringify(message);
+          if (savedMessages.get(message.id) === json) return [];
+          const position = history.length + offset;
+          return [{ id: message.id, threadId, position, message, json }];
+        });
+      if (!changed.length && !finished) return;
+      await db.transaction(async (tx) => {
+        const owned = await tx
+          .update(aiThread)
+          .set({
+            updatedAt: new Date(),
+            ...(finished ? { activeRunId: null, activeRunAt: null } : {}),
+          })
+          .where(
+            and(
+              threadOwner(projectId, userId, threadId),
+              eq(aiThread.activeRunId, params.runId),
+            ),
+          )
+          .returning({ id: aiThread.id });
+        if (owned.length && changed.length)
+          await tx
+            .insert(aiMessage)
+            .values(changed.map(({ json: _json, ...row }) => row))
+            .onConflictDoUpdate({
+              target: [aiMessage.threadId, aiMessage.id],
+              set: {
+                message: sql`excluded.message`,
+                position: sql`excluded.position`,
+              },
+            });
+      });
+      for (const { id, json } of changed) savedMessages.set(id, json);
+    };
+    // Runs beside the stream. One that fails is made up for by the next.
+    const checkpoint = () => {
+      saving ??= saveThread(false)
+        .catch((error: unknown) => {
+          console.error({ event: "ai_checkpoint_failed", runId, error });
+        })
+        .finally(() => {
+          saving = undefined;
+        });
+    };
+    const releaseThread = async () => {
+      await saving;
+      try {
+        await saveThread(true);
+      } catch (error) {
+        // A reply that cannot be saved must not block the thread too.
+        console.error({ event: "ai_thread_save_failed", runId, error });
+        if (claimedThread)
+          await releaseClaim(db, claimedThread).catch((error: unknown) => {
+            console.error({ event: "ai_thread_release_failed", runId, error });
+          });
+      }
+    };
+    // After the thread is free, the rest is no concern of the client's.
+    const settleRun = async () => {
+      await db
+        .update(aiRun)
+        .set({ status: outcome, finishedAt: new Date() })
+        .where(and(eq(aiRun.id, runId), eq(aiRun.status, "running")));
+      await reconcileAiUsage({
+        db,
+        config,
+        requestCost: gatewayRequestCost(config),
+        runId,
+      });
+    };
+    const settled = Promise.withResolvers<void>();
+    waitUntil(settled.promise);
+    let closing: Promise<void> | undefined;
+    let stopTimer: ReturnType<typeof setTimeout> | undefined;
+    // Resolves once the thread can take another message.
+    const close = () => {
+      if (closing) return closing;
+      clearTimeout(timeout);
+      clearTimeout(stopTimer);
+      request.signal.removeEventListener("abort", disconnect);
+      closing = releaseThread();
+      abort.abort();
+      void closing
+        .then(settleRun)
+        .catch((error: unknown) => {
+          // The scheduled reconciler settles what is left.
+          console.error({ event: "ai_run_settle_failed", runId, error });
+        })
+        .then(() => db.$client.end())
+        .catch((error: unknown) => {
+          console.error({ event: "ai_database_close_failed", runId, error });
+        })
+        .finally(settled.resolve);
+      return closing;
+    };
+    finish = close;
+    // A client that leaves may never read the stream to its end.
+    abort.signal.addEventListener(
+      "abort",
+      () => {
+        if (!closing) stopTimer = setTimeout(() => void close(), stopMs);
+      },
+      { once: true },
+    );
     const middleware: ChatMiddleware = {
       name: "texfolia-usage",
       // Runs before every model call, including each tool-loop iteration.
@@ -636,75 +801,18 @@ export async function startAssistant({
               signal: abort.signal,
             }),
     });
-    const runId = run.id;
-    const transcript = new StreamProcessor({ initialMessages: history });
-    let checkpointAt = Date.now();
-    const checkpoint = async (finished = false) => {
-      if (!claimedThread) return;
-      const threadId = claimedThread;
-      await db.transaction(async (tx) => {
-        const [thread] = await tx
-          .select()
-          .from(aiThread)
-          .where(threadOwner(projectId, userId, threadId))
-          .for("update");
-        if (!thread || thread.activeRunId !== params.runId) return;
-        const messages = transcript
-          .getMessages()
-          .slice(history.length)
-          .map((message) => storedMessageSchema.parse(message));
-        for (const [offset, message] of messages.entries())
-          await tx
-            .insert(aiMessage)
-            .values({
-              threadId,
-              id: message.id,
-              position: history.length + offset,
-              message,
-            })
-            .onConflictDoUpdate({
-              target: [aiMessage.threadId, aiMessage.id],
-              set: { message, position: history.length + offset },
-            });
-        await tx
-          .update(aiThread)
-          .set({
-            updatedAt: new Date(),
-            ...(finished ? { activeRunId: null, activeRunAt: null } : {}),
-          })
-          .where(eq(aiThread.id, threadId));
-      });
-    };
     async function* tracked(): AsyncGenerator<StreamChunk> {
       try {
         for await (const chunk of stream) {
           if (claimedThread) transcript.processChunk(chunk);
-          if (Date.now() - checkpointAt > 1000) {
-            await checkpoint();
+          if (Date.now() - checkpointAt > checkpointMs) {
             checkpointAt = Date.now();
+            checkpoint();
           }
           yield chunk;
         }
       } finally {
-        abort.abort();
-        clearTimeout(timeout);
-        request.signal.removeEventListener("abort", disconnect);
-        try {
-          await checkpoint(true);
-          await db
-            .update(aiRun)
-            .set({ status: outcome, finishedAt: new Date() })
-            .where(and(eq(aiRun.id, runId), eq(aiRun.status, "running")));
-          await reconcileAiUsage({
-            db,
-            config,
-            requestCost: gatewayRequestCost(config),
-            runId,
-          });
-        } finally {
-          closed = true;
-          await db.$client.end();
-        }
+        await close();
       }
     }
     if (purpose === "commit-message") {
@@ -724,22 +832,14 @@ export async function startAssistant({
         { headers: noStore },
       );
     }
-    return toServerSentEventsResponse(tracked(), {
+    return toServerSentEventsResponse(closable(tracked(), close), {
       headers: { ...noStore, "X-AI-Run-Id": run.id },
       abortController: abort,
     });
   } catch (error) {
-    if (!closed) {
-      if (claimedThread)
-        await db
-          .update(aiThread)
-          .set({ activeRunId: null, activeRunAt: null })
-          .where(
-            and(
-              threadOwner(projectId, userId, claimedThread),
-              eq(aiThread.activeRunId, params.runId),
-            ),
-          );
+    if (finish) await finish();
+    else {
+      if (claimedThread) await releaseClaim(db, claimedThread);
       await db.$client.end();
     }
     throw error;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  fetchGatewayModels,
   gatewayModels,
   parseAiConfig,
   type AiFetch,
@@ -57,7 +58,7 @@ describe("AI Gateway catalog", () => {
           },
         ],
       });
-    expect(await gatewayModels(config, fetcher)).toEqual([
+    expect(await fetchGatewayModels(config, fetcher)).toEqual([
       {
         id: model.id,
         name: model.name,
@@ -77,11 +78,76 @@ describe("AI Gateway catalog", () => {
         })),
       });
     };
-    expect((await gatewayModels(config, fetcher)).length).toBe(101);
+    expect((await fetchGatewayModels(config, fetcher)).length).toBe(101);
     expect(calls).toBe(2);
   });
   test("never falls back to a hardcoded catalog after an API failure", async () => {
     const fetcher: AiFetch = async () => new Response(null, { status: 401 });
-    await expect(gatewayModels(config, fetcher)).rejects.toThrow("401");
+    await expect(fetchGatewayModels(config, fetcher)).rejects.toThrow("401");
+  });
+});
+
+describe("model catalog cache", () => {
+  function setup() {
+    const stored = new Map<string, Response>();
+    let now = Date.now();
+    let fetches = 0;
+    return {
+      fetches: () => fetches,
+      pass: (ms: number) => (now += ms),
+      options: {
+        now: () => now,
+        fetcher: async () => {
+          fetches++;
+          return Response.json({ data: [model] });
+        },
+        cache: {
+          match: async (key: unknown) => stored.get(String(key))?.clone(),
+          put: async (key: unknown, response: Response) => {
+            stored.set(String(key), response);
+          },
+        } as Pick<Cache, "match" | "put">,
+      },
+    };
+  }
+
+  test("fetches once within ten minutes, and again afterward", async () => {
+    const account = { ...config, accountId: "1".repeat(32) };
+    const { options, fetches, pass } = setup();
+    const first = await gatewayModels(account, options);
+    expect(first[0]?.id).toBe(model.id);
+    pass(9 * 60_000);
+    expect(await gatewayModels(account, options)).toEqual(first);
+    expect(fetches()).toBe(1);
+    pass(2 * 60_000);
+    await gatewayModels(account, options);
+    expect(fetches()).toBe(2);
+  });
+
+  test("keeps accounts apart and does not cache a failure", async () => {
+    const { options, fetches } = setup();
+    const account = { ...config, accountId: "2".repeat(32) };
+    await expect(
+      gatewayModels(account, {
+        ...options,
+        fetcher: async () => new Response(null, { status: 500 }),
+      }),
+    ).rejects.toThrow("500");
+    await gatewayModels(account, options);
+    await gatewayModels({ ...config, accountId: "3".repeat(32) }, options);
+    expect(fetches()).toBe(2);
+  });
+
+  test("still works when the shared cache does not", async () => {
+    const { options } = setup();
+    const fail = async () => {
+      throw new Error("cache unavailable");
+    };
+    expect(
+      await gatewayModels(
+        { ...config, accountId: "4".repeat(32) },
+        { ...options, cache: { match: fail, put: fail } },
+      ),
+    ).toHaveLength(1);
   });
 });

@@ -8,6 +8,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import Stripe from "stripe";
 import { z } from "zod";
 
+import { forgetAiSubscription } from "#/lib/billing/metering";
 import { createBillingPlugin, enforceBillingScope } from "#/lib/billing/stripe";
 import {
   codeEmail,
@@ -212,6 +213,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
         proPriceId: process.env.STRIPE_PRO_PRICE_ID!,
         teamPriceId: process.env.STRIPE_TEAM_PRICE_ID!,
+        onSubscriptionChange: (id) => forgetAiSubscription(db, id),
       }),
       tanstackStartCookies(),
     ],

@@ -8,6 +8,14 @@ import type { SourceBucket } from "#/lib/storage/server";
 
 import { gitVersion, runGit } from "./actions";
 import { GitRepository } from "./repository";
+import {
+  archiveBody,
+  legacyArchive,
+  memoryFiles,
+  provideFixedLengthStream,
+} from "./testing";
+
+provideFixedLengthStream();
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const rootId = "22222222-2222-4222-8222-222222222222";
@@ -139,11 +147,14 @@ function createHarness({
       return {
         text: async () => new TextDecoder().decode(data),
         arrayBuffer: async () => data.slice().buffer,
+        body: archiveBody(data),
       } as unknown as R2ObjectBody;
     },
     async put(key: string, value: unknown) {
       if (typeof value === "string") objects.set(key, value);
       else if (value instanceof Uint8Array) objects.set(key, value);
+      else if (value instanceof ReadableStream)
+        objects.set(key, await new Response(value).bytes());
       return {} as R2Object;
     },
     async list() {
@@ -172,9 +183,9 @@ function createHarness({
 async function seedRepo(content: string) {
   const repo = new GitRepository();
   await repo.init(remoteUrl);
-  repo.overlay({ "main.tex": bytes(content) });
+  repo.overlay(memoryFiles({ "main.tex": content }));
   await repo.commit("Initial commit", user);
-  return repo.serialize();
+  return legacyArchive(repo);
 }
 
 test("runGit releases the project database lock before R2 reads for status, diff, and commit", async () => {
@@ -241,6 +252,23 @@ test("runGit releases the project database lock before R2 reads for status, diff
   });
   expect(commitResult.status.changes).toEqual([]);
   expect(harness.reads.length).toBeGreaterThan(0);
+
+  // The commit converted the clone, and recorded the blob of each source.
+  const savedKey = harness.getLinked()?.objectKey ?? "";
+  expect(savedKey).toEndWith(".bin");
+  harness.reads.length = 0;
+  const cleanStatus = await runGit({
+    db: harness.db,
+    bucket: harness.bucket,
+    lock: harness.lock,
+    accessToken: async () => "unused",
+    projectId,
+    user,
+    action: { kind: "status" },
+  });
+  expect(cleanStatus.status.changes).toEqual([]);
+  expect(cleanStatus.status.commits[0]?.message).toBe("Update main.tex");
+  expect(harness.reads).toEqual([savedKey]);
   expect(harness.lockedReads).toEqual([]);
 });
 
