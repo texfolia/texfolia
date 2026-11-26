@@ -1,10 +1,10 @@
+import { bibtexLanguage, latex } from "@texfolia/codemirror-lang-latex";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { CollaborativeFile } from "#/lib/collaboration/browser";
-import { bibtexLanguage, themedLatex } from "#/lib/editor/latex/highlight";
 import { markdownSupport } from "#/lib/editor/markdown";
 import { extensionOf } from "#/lib/storage/extension";
 
@@ -36,7 +36,7 @@ export function GuestText({
   const extensions = useMemo(() => {
     const extension = extensionOf(node.name);
     const language = ["tex", "ltx", "sty", "cls"].includes(extension)
-      ? [themedLatex(node.name)]
+      ? [latex({ enableAutocomplete: false, enableLinting: false })]
       : extension === "md"
         ? [markdownSupport()]
         : extension === "bib"

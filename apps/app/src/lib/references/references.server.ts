@@ -1,6 +1,5 @@
+import { parseReferenceId, type ReferenceId } from "@texfolia/editor";
 import { z } from "zod";
-
-import { parseReferenceId, type ReferenceId } from "#/lib/editor/latex/bibtex";
 
 // Looks up citation metadata and formats it as one BibTeX entry.
 //

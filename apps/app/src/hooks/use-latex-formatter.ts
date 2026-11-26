@@ -1,8 +1,8 @@
 import { isolateHistory } from "@codemirror/commands";
+import type { FormatChange, FormatSettings } from "@texfolia/editor";
 import type { EditorView } from "@uiw/react-codemirror";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { FormatChange, FormatSettings } from "#/lib/editor/latex/format";
 import { browserLatexFormatter } from "#/lib/editor/latex/formatter";
 
 export function useLatexFormatter(settings: FormatSettings) {

@@ -1,6 +1,6 @@
+import { addLatexPackage, packageInsertion } from "@texfolia/editor";
 import { useState } from "react";
 
-import { addLatexPackage, packageInsertion } from "#/lib/editor/latex/symbols";
 import { isMainFileCandidate } from "#/lib/projects";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 

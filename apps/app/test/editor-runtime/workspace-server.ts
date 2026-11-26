@@ -21,7 +21,7 @@ export function createWorkspaceServer({
     root: webRoot,
     optimizeDeps: {
       entries: [script],
-      include: ["react-pdf", "wasm-latex-tools"],
+      include: ["react-pdf"],
     },
     plugins: [
       tailwindcss(),

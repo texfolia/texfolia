@@ -1,3 +1,4 @@
+import { type LatexProblem } from "@texfolia/editor";
 import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
@@ -16,7 +17,6 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { BinaryPreview } from "#/components/binary-preview";
 import { lazyPanel } from "#/components/lazy-panel";
 import { problemPrompt, selectionPrompt } from "#/lib/ai/editor";
-import { type LatexProblem } from "#/lib/editor/latex/analysis";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import { downloadFile } from "#/lib/storage/browser";
 import { useProjectFiles } from "#/providers/project-files-provider";

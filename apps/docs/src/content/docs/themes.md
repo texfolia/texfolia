@@ -52,7 +52,7 @@ Supporting surfaces and borders mix foreground with background. Gutter border
 shorthands supply a color when present; otherwise workspace borders use a mix.
 
 [theme-editor.ts](../../../../app/src/lib/editor/themes/theme-editor.ts) uses the package's extension
-directly. [LaTeX tags](../../../../app/src/lib/editor/latex/tags.ts) inherit standard CodeMirror
+directly. [LaTeX tags](../../../../../packages/codemirror-lang-latex/src/tags.ts) inherit standard CodeMirror
 highlight tags. There is no TextMate scope mapper.
 [ThemeProvider](../../../../app/src/providers/theme-provider.tsx) applies workspace
 variables and separates committed appearance, draft selection, and live preview.

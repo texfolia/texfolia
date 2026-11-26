@@ -5,6 +5,8 @@ import {
 import { indentLess, indentMore } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
+import type { LatexProblem } from "@texfolia/editor";
+import { editorLanguage, projectProblemsChanged } from "@texfolia/editor";
 import {
   Compartment,
   EditorState,
@@ -36,11 +38,6 @@ import {
   type EditorKeymap,
   editorKeymapLabels,
 } from "#/lib/editor/keymaps/keymaps";
-import type { LatexProblem } from "#/lib/editor/latex/analysis";
-import {
-  editorLanguage,
-  projectProblemsChanged,
-} from "#/lib/editor/latex/language";
 import { markdownSupport } from "#/lib/editor/markdown";
 import type { ScrollAnchor } from "#/lib/editor/position";
 

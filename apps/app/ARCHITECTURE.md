@@ -332,7 +332,7 @@ CodeMirror update; it does not measure deployed latency.
 
 ## Editor libraries
 
-The editor uses [codemirror-lang-latex](https://github.com/TeXlyre/codemirror-lang-latex) for parsing, highlighting, folding, indentation, environment closing, completion, tooltips, and syntax diagnostics. `#/lib/editor/latex/language` ([source](src/lib/editor/latex/language.ts)) combines its completion source with project labels, citations, file paths, and package commands. A single linter merges syntax diagnostics with project and compiler diagnostics so neither replaces the other.
+The editor uses `@texfolia/codemirror-lang-latex` for parsing, highlighting, folding, indentation, completion, and syntax diagnostics. `@texfolia/editor` ([source](../../packages/editor/src/language.ts)) combines its completion source with project labels, citations, file paths, and package commands. A single linter merges syntax diagnostics with project and compiler diagnostics so neither replaces the other.
 
 Syntax linting runs in open editors and reports to the workspace Problems panel. The analysis worker checks references, citations, and missing files across the project. File-local checks for references, bibliography declarations, and package imports are disabled in project editors because those declarations can live in another file. Document-environment checks are disabled to support included fragments.
 

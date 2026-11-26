@@ -4,13 +4,13 @@ import {
   projectCollaboration,
   projectNode,
 } from "@texfolia/db/schema";
+import { formatChanges } from "@texfolia/editor";
 import { DurableObject } from "cloudflare:workers";
 import { and, eq, isNull } from "drizzle-orm";
 import * as Y from "yjs";
 import { z } from "zod";
 
 import { DutyAlarm } from "#/lib/duty-alarm";
-import { formatChanges } from "#/lib/editor/latex/format";
 import { mapLimit } from "#/lib/map-limit";
 import { liveAccessMs } from "#/lib/projects/live-access-interval";
 import type {

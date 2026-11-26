@@ -1,7 +1,7 @@
+import type { LatexProblem } from "@texfolia/editor";
 import { useCallback, useMemo, useState } from "react";
 
 import { useStableValue } from "#/hooks/use-stable-value";
-import type { LatexProblem } from "#/lib/editor/latex/analysis";
 
 function sameProblem(a: LatexProblem, b: LatexProblem) {
   return (

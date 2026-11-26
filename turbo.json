@@ -24,12 +24,7 @@
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
-      "outputs": [
-        "dist/**",
-        ".wrangler/deploy/**",
-        "public/core/**",
-        "public/dictionaries/**"
-      ]
+      "outputs": ["dist/**", ".wrangler/deploy/**", "public/dictionaries/**"]
     },
     "dev": {
       "cache": false,

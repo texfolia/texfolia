@@ -1,6 +1,6 @@
+import { entryAppendix, newBibFile } from "@texfolia/editor";
 import { useMemo, useState } from "react";
 
-import { entryAppendix, newBibFile } from "#/lib/editor/latex/bibtex";
 import type { ProjectNode } from "#/lib/projects";
 import { encodeSource } from "#/lib/storage";
 import type { FileDrafts } from "#/lib/workspace/file-drafts";

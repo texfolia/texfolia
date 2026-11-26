@@ -1,11 +1,11 @@
-import type { EditorView, ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import type { RefObject } from "react";
-
 import {
   applyLatexHeading,
   headingCommands,
   toggleLatexCommand,
-} from "#/lib/editor/latex/editor-commands";
+} from "@texfolia/editor";
+import type { EditorView, ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import type { RefObject } from "react";
+
 import { useAppShortcut } from "#/providers/shortcuts-provider";
 
 /**

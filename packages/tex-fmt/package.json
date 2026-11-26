@@ -1,0 +1,55 @@
+{
+  "name": "@texfolia/tex-fmt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebAssembly build and TypeScript wrapper for the tex-fmt LaTeX formatter.",
+  "keywords": [
+    "formatter",
+    "latex",
+    "tex-fmt",
+    "texfolia",
+    "wasm",
+    "webassembly"
+  ],
+  "homepage": "https://github.com/natebabyak/texfolia/tree/main/packages/tex-fmt",
+  "bugs": {
+    "url": "https://github.com/natebabyak/texfolia/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natebabyak/texfolia.git",
+    "directory": "packages/tex-fmt"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tex_fmt_bg.wasm": "./dist/wasm/tex_fmt_bg.wasm"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && bun run copy:wasm",
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "copy:wasm": "bun -e 'const fs=require(\"node:fs\"); fs.mkdirSync(\"dist/wasm\",{recursive:true}); for (const f of [\"tex_fmt.js\",\"tex_fmt.d.ts\",\"tex_fmt_bg.wasm\",\"tex_fmt_bg.wasm.d.ts\"]) fs.copyFileSync(\"src/wasm/\"+f, \"dist/wasm/\"+f);'",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@texfolia/tsconfig": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "typescript": "^6.0.2"
+  }
+}

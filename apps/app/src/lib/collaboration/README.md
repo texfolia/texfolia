@@ -21,7 +21,7 @@ The feature depends on `@texfolia/db` (project nodes and the
 `project_collaboration` registry), `#/lib/storage` (source objects),
 `#/lib/projects` (the access request type and live-access interval),
 `#/lib/duty-alarm` (one alarm shared by saving and access checks), and
-`#/lib/editor/latex/format` (a text diff with no CodeMirror imports). It
+`@texfolia/editor` (`formatChanges`, a text diff with no CodeMirror imports). It
 owns `yjs`, `y-protocols`, `y-indexeddb`, and `lib0`. It does not depend on
 CodeMirror; the `y-codemirror.next` binding stays in the editor route.
 

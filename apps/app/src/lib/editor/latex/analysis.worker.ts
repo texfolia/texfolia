@@ -2,9 +2,11 @@ import {
   analyzeProject,
   type AnalyzeRequest,
   type AnalyzeResponse,
+  countWords,
   scanFile,
-} from "./analysis";
-import { countWords, type WordEvent, wordEvents } from "./word-count";
+  type WordEvent,
+  wordEvents,
+} from "@texfolia/editor";
 
 const files = new Map<string, ReturnType<typeof scanFile>>();
 const words = new Map<string, WordEvent[]>();

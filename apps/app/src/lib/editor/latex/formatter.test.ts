@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
-import { defaultFormatSettings, type FormatRequest } from "./format";
+import { defaultFormatSettings, type FormatRequest } from "@texfolia/editor";
+
 import { createLatexFormatter } from "./formatter";
 
 function fakeWorker() {

@@ -1,3 +1,4 @@
+import { formatChanges } from "@texfolia/editor";
 import { IndexeddbPersistence } from "y-indexeddb";
 import {
   applyAwarenessUpdate,
@@ -6,8 +7,6 @@ import {
   removeAwarenessStates,
 } from "y-protocols/awareness";
 import * as Y from "yjs";
-
-import { formatChanges } from "#/lib/editor/latex/format";
 
 import {
   collaborationCachePrefix,
