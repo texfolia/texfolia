@@ -93,15 +93,6 @@ jobs:
       - name: Test project tags and imports
         if: steps.select.outputs.projects == 'true'
         run: bun run --cwd apps/app test:projects
-      - name: Exercise templates with Postgres and local R2
-        if: steps.select.outputs.templates == 'true'
-        run: bun run apps/app/test/templates.ts
-      - name: Exercise template seed commands with Postgres and local R2
-        if: steps.select.outputs.template-seed == 'true'
-        run: bun run packages/db/test/template-seed-cli.ts
-      - name: Exercise template previews and retries in a browser without cron
-        if: steps.select.outputs.template-lifecycle == 'true'
-        run: bun run --cwd apps/app test:template-lifecycle:prebuilt
   browser:
     name: Browser suites
     runs-on: ubuntu-latest

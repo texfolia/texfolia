@@ -66,10 +66,9 @@ export function OrganizationSettings({
           <ItemContent>
             <ItemTitle>Delete organization</ItemTitle>
             <ItemDescription>
-              Permanently deletes the organization, its{" "}
+              Permanently deletes the organization and its{" "}
               {counted(organization.projectCount, "project")} (including the
-              trash) and its {counted(organization.templateCount, "template")}.
-              Cancel its subscription in Billing first.
+              trash). Cancel its subscription in Billing first.
             </ItemDescription>
             <Button
               variant="destructive"

@@ -11,8 +11,6 @@ interface __BaseEnv_Env {
 	BACKGROUND: Queue;
 	REFERENCE_LOOKUPS: RateLimit;
 	COMPILE_LIMIT: RateLimit;
-	IMAGES: ImagesBinding;
-	TEMPLATE_REVIEWER_IDS: string;
 	EMAIL_FROM: string;
 	TURNSTILE_HOSTNAMES: string;
 	COLLABORATION: DurableObjectNamespace<import("./src/worker").ProjectCollaboration>;
@@ -35,8 +33,6 @@ declare namespace Cloudflare {
 		BACKGROUND: Queue;
 		REFERENCE_LOOKUPS: RateLimit;
 		COMPILE_LIMIT: RateLimit;
-		IMAGES: ImagesBinding;
-		TEMPLATE_REVIEWER_IDS: string;
 		EMAIL_FROM: string;
 		TURNSTILE_HOSTNAMES: string;
 		COLLABORATION: DurableObjectNamespace<import("./src/worker").ProjectCollaboration>;
@@ -51,7 +47,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "TEMPLATE_REVIEWER_IDS" | "EMAIL_FROM" | "TURNSTILE_HOSTNAMES">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "EMAIL_FROM" | "TURNSTILE_HOSTNAMES">> {}
 }
 declare module "*.txt" {
 	const value: string;

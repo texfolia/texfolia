@@ -36,8 +36,6 @@
       "new_sqlite_classes": ["ProjectBuilds", "CompileUsage"],
     },
   ],
-  // Makes the template gallery's thumbnails.
-  "images": { "binding": "IMAGES", "remote": false },
   // Builds the direct path could not run, by plan, and delayed cleanup.
   "queues": {
     "producers": [
@@ -118,7 +116,6 @@
     },
   ],
   "vars": {
-    "TEMPLATE_REVIEWER_IDS": "",
     "EMAIL_FROM": "noreply@texfolia.com",
     "TURNSTILE_HOSTNAMES": "localhost",
   },
@@ -140,7 +137,6 @@
           "bucket_name": "texfolia-compilations",
         },
       ],
-      "images": { "binding": "IMAGES" },
       "durable_objects": {
         "bindings": [
           { "name": "COLLABORATION", "class_name": "ProjectCollaboration" },
@@ -203,7 +199,6 @@
       ],
       "send_email": [{ "name": "EMAIL" }],
       "vars": {
-        "TEMPLATE_REVIEWER_IDS": "",
         "EMAIL_FROM": "noreply@texfolia.com",
         "TURNSTILE_HOSTNAMES": "app.texfolia.com,texfolia.com,www.texfolia.com",
       },

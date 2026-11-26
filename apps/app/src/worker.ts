@@ -6,10 +6,6 @@ import { reconcileAiUsage } from "#/lib/billing/server";
 import { handleBuildQueue } from "#/lib/builds/server";
 import { collectGitObjects, collectLegacyHistory } from "#/lib/git/server";
 import { sweepProjectSources } from "#/lib/storage/server";
-import {
-  collectTemplateObjects,
-  refreshTemplatePreviews,
-} from "#/lib/templates/server";
 
 import { aiConfig } from "./lib/ai/ai-config.server";
 import { collectProjectSources } from "./lib/projects/project-source.server";
@@ -64,13 +60,11 @@ export default {
         (db) => collectProjectSources({ db, bucket, collaboration }),
         (db) => collectGitObjects({ db, bucket }),
         () => collectLegacyHistory(bucket),
-        (db) => collectTemplateObjects({ db, bucket }),
       ]);
     else if (controller.cron === "41 3 * * *")
       await runScheduled(env, [(db) => sweepProjectSources({ db, bucket })]);
     else
       await runScheduled(env, [
-        (db) => refreshTemplatePreviews({ db, bucket }),
         async (db) => {
           if (!process.env.CLOUDFLARE_AI_API_TOKEN) return;
           const config = aiConfig();

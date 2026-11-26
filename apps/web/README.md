@@ -10,35 +10,25 @@ From the repository root, after [first-time setup](../../README.md#quick-start):
 bun run dev:web
 ```
 
-Open [localhost:4321](http://localhost:4321). The templates gallery needs the
-product app running too (`bun run dev`).
+Open [localhost:4321](http://localhost:4321).
 
 ## Routes
 
-| Route        | Rendering                       | Notes                                                       |
-| ------------ | ------------------------------- | ----------------------------------------------------------- |
-| `/`          | Prerendered at build time       | Landing page                                                |
-| `/pricing`   | Prerendered at build time       | Plan names and prices come from `@texfolia/contracts/plans` |
-| `/privacy`   | Prerendered at build time       | Placeholder policy for review (`noindex`)                   |
-| `/terms`     | Prerendered at build time       | Placeholder terms for review (`noindex`)                    |
-| `/templates` | Server-rendered on each request | Templates gallery; `?page=` pages through the catalog       |
+| Route      | Rendering                 | Notes                                                       |
+| ---------- | ------------------------- | ----------------------------------------------------------- |
+| `/`        | Prerendered at build time | Landing page                                                |
+| `/pricing` | Prerendered at build time | Plan names and prices come from `@texfolia/contracts/plans` |
+| `/privacy` | Prerendered at build time | Placeholder policy for review (`noindex`)                   |
+| `/terms`   | Prerendered at build time | Placeholder terms for review (`noindex`)                    |
 
 The prerendered pages are served as static assets. Everything else, including
-`/templates` and the not-found page, runs in the Worker.
+the not-found page, runs in the Worker.
 
 ## Product app links
 
 Sign-in, **Open app**, and pricing CTAs link to `PUBLIC_APP_URL` (default
 `http://localhost:3000` in development and `https://app.texfolia.com` in
 production builds). Vite inlines it at build time, so set it before building.
-
-The gallery reads `GET /api/templates` from the app in a server function, so
-browsers never call the app cross-origin. If the app is unreachable or slower
-than five seconds, the page shows a temporary-unavailable notice. Each card
-links to `/template/$templateId` on the app, which opens an independent copy.
-Signed-out visitors get **Sign in to open in Texfolia**, which signs them in or
-creates an account and returns them to the template.
-Creating a project from a template inside the app stays on the app.
 
 The site does not use auth. Sign-in, OAuth callbacks, and session cookies stay on
 `app.texfolia.com`.

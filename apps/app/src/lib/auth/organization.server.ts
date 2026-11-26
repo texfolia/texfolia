@@ -1,5 +1,5 @@
 import type { Db } from "@texfolia/db";
-import { project, template } from "@texfolia/db/schema";
+import { project } from "@texfolia/db/schema";
 import { count, eq } from "drizzle-orm";
 
 import { isOrgAdmin } from "./roles";
@@ -26,7 +26,7 @@ export async function organizationOverview(
   if (organizationId && !current) throw new Error("Organization not found");
   if (!current) return { userId, organizations, selected: null };
   const canManage = isOrgAdmin(current.role);
-  const [members, invitations, projects, templates, teams] = await Promise.all([
+  const [members, invitations, projects, teams] = await Promise.all([
     db.query.member.findMany({
       where: { organizationId: current.id },
       columns: { id: true, userId: true, role: true },
@@ -48,10 +48,6 @@ export async function organizationOverview(
       .select({ count: count() })
       .from(project)
       .where(eq(project.organizationId, current.id)),
-    db
-      .select({ count: count() })
-      .from(template)
-      .where(eq(template.organizationId, current.id)),
     db.query.team.findMany({
       where: { organizationId: current.id },
       columns: { id: true, name: true },
@@ -75,7 +71,6 @@ export async function organizationOverview(
       })),
       // Including those in the trash, which deleting the organization deletes.
       projectCount: projects[0]?.count ?? 0,
-      templateCount: templates[0]?.count ?? 0,
     },
   };
 }

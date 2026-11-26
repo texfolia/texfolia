@@ -54,12 +54,6 @@ export function Header() {
           aria-label="Main navigation"
           className="order-last flex w-full items-center justify-center gap-8 text-sm sm:order-0 sm:w-auto"
         >
-          <a
-            href={webPath("/templates")}
-            className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
-          >
-            Templates
-          </a>
           {session && (
             <Link
               to="/settings/billing"

@@ -1,6 +1,6 @@
 import { localHosts, productionHosts } from "@texfolia/contracts/hosts";
 
-/** Product app origin for CTAs and the public templates API. */
+/** Product app origin for CTAs. */
 export function appUrl() {
   const fromEnv = import.meta.env.PUBLIC_APP_URL?.replace(/\/$/, "");
   if (fromEnv) return fromEnv;

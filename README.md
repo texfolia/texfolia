@@ -17,8 +17,7 @@ A browser-based LaTeX workspace. Edit project files, check LaTeX errors, and com
 - TexFmt formatting and a Problems panel for editor, project, and compiler diagnostics
 - Side-by-side Markdown and PDF preview
 - Workspace themes, settings, and programmable shortcuts
-- Projects from a blank file, a template, or uploaded files and folders
-- A template gallery, with publishing for your own projects
+- Projects from a blank file, a Git repository, or uploaded files and folders
 
 ## Quick start
 
@@ -43,7 +42,7 @@ Then create a project and press Cmd/Ctrl+S to save and compile.
 | [Compiler](apps/compiler/README.md)  | `bun run dev:compiler` | `http://localhost:8080`                 |
 
 Other root commands: `build`, `test`, `typecheck`, `lint`, `format`,
-`db:start`, `db:stop`, `db:push` and `db:seed`. Each delegates to the
+`db:start`, `db:stop`, and `db:push`. Each delegates to the
 workspace that owns it. Secrets, Stripe webhooks and the rest are covered in the
 [local development guide](apps/docs/src/content/docs/local-development.md).
 
@@ -52,7 +51,7 @@ workspace that owns it. Secrets, Stripe webhooks and the rest are covered in the
 - **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `#/lib/editor` (feature code is under `apps/app/src/lib`); the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `#/lib/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `#/lib/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `#/lib/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `#/lib/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `#/lib/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `#/lib/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `#/lib/ai`.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
 - **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
-- **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered; the templates gallery reads the app's public catalog API.
+- **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered.
 - **Compiler:** an Effect Worker in front of an autoscaled pool of Tectonic containers that projects share. A container keeps one caller's sources and cache between compiles and wipes them before it serves another. The PDF streams back to the preview.
 
 ### Where editing and storage happen
@@ -113,10 +112,10 @@ apps/
   app/                 React product app: auth, projects, and the compile endpoint
     src/lib/           App features: ai, auth, billing, builds, collaboration, comments,
                        compile, editor, email, git, projects, references, settings,
-                       sharing, shortcuts, storage, templates, theme, workspace
+                       sharing, shortcuts, storage, theme, workspace
   compiler/            Compile service: Effect Worker, autoscaler, and the Go LaTeX engine
   docs/                Astro + Starlight documentation site
-  web/                 React marketing site: landing, pricing, policies, templates gallery
+  web/                 React marketing site: landing, pricing, policies
 packages/
   contracts/           Schemas, hosts, and plan prices shared by the apps
   db/                  Drizzle schema, PostgreSQL client, and migrations

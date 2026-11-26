@@ -17,9 +17,8 @@ Local development and CI continue to use plain Postgres and `db:push`.
    directory, including its snapshots, before deploying.
 3. Apply `bun run db:migrate` to an empty, isolated local Postgres database with
    `DATABASE_URL` set to that database. Run the integration checks in the
-   [database guide](../../../../../packages/db/ARCHITECTURE.md#verify-plain-postgres),
-   [source-storage guide](../../../../app/ARCHITECTURE.md#local-development-and-rollout),
-   and [template guide](/templates/#verification).
+   [database guide](../../../../../packages/db/ARCHITECTURE.md#verify-plain-postgres)
+   and [source-storage guide](../../../../app/ARCHITECTURE.md#local-development-and-rollout).
 4. On that disposable database, run `bun run db:push` and confirm it reports no
    schema changes. Investigate any difference before proceeding.
 5. Add `db:migrate` to the deployment workflow before either Worker deploys.
@@ -91,8 +90,8 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
 ## Migrate, deploy, and verify production
 
 1. Run the full app checks locally before deployment. Verify sign-in, project
-   creation, source save and reload, collaboration, compilation, PDF retrieval,
-   and template copying against local Postgres and local storage.
+   creation, source save and reload, collaboration, compilation, and PDF retrieval
+   against local Postgres and local storage.
 2. Run the reviewed, committed migrations from the production deployment context
    with `DATABASE_URL` set to Neon's direct connection. Use `db:migrate`.
    `db:push` accepts only local databases.
@@ -104,12 +103,9 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
    service before deploying the artifact. Selecting an environment only at deploy
    time does not retarget a Vite build. See
    [Cloudflare Vite environments](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/).
-4. Seed the original templates from the production deployment context using the
-   production database and source bucket as described in
-   [Seed original templates](/templates/#seed-original-templates).
-5. Check that `GET /api/health` on the app answers 200. It answers 503 when the
+4. Check that `GET /api/health` on the app answers 200. It answers 503 when the
    database does not answer within five seconds, so an uptime monitor can use it.
-6. Check the deployed production app and inspect Worker logs for database and
+5. Check the deployed production app and inspect Worker logs for database and
    binding errors. Confirm saved writes are visible immediately and Hyperdrive
    query caching remains disabled.
 

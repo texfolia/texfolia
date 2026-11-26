@@ -29,9 +29,6 @@ export function Header() {
           aria-label="Main navigation"
           className="order-last flex w-full items-center justify-center gap-8 text-sm sm:order-0 sm:w-auto"
         >
-          <Link to="/templates" className={navLink}>
-            Templates
-          </Link>
           <Link to="/pricing" className={navLink}>
             Pricing
           </Link>

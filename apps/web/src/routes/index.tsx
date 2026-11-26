@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { Page } from "#/components/page";
 import { pageHead } from "#/lib/head";
@@ -65,12 +65,6 @@ function Home() {
                 Start writing
                 <span aria-hidden="true">→</span>
               </a>
-              <Link
-                to="/templates"
-                className={linkButton({ variant: "outline", size: "lg" })}
-              >
-                Find a template
-              </Link>
             </div>
           </div>
         </section>
@@ -138,7 +132,7 @@ function Home() {
             What will you write next?
           </h2>
           <p className="text-muted-foreground mt-5">
-            Start with a blank page or make a template your own.
+            Start with a blank page, upload your files, or import from Git.
           </p>
           <a
             href={appPath("/projects")}

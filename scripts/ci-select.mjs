@@ -100,15 +100,6 @@ export const suites = {
     inputs: ["source-storage.ts", "source-storage/", "worker-integration.ts"],
   },
   projects: { inputs: ["projects.ts", "projects/", "worker-integration.ts"] },
-  templates: {
-    inputs: ["templates.ts", "templates/", "worker-integration.ts"],
-  },
-  "template-seed": { inputs: [] },
-  "template-lifecycle": {
-    inputs: ["template-lifecycle.ts", "template-pages.ts"],
-    build: true,
-    browser: true,
-  },
 };
 
 // Run in Checks, with the production build.
@@ -183,8 +174,7 @@ export function selectChecks(paths, { fallback = false } = {}) {
       full ||
         runtime ||
         unknownTest ||
-        (crossPackage &&
-          ["compile-route", "template-lifecycle"].includes(name)) ||
+        (crossPackage && name === "compile-route") ||
         // The engine's image holds everything in the compiler.
         (compiler && suite.job === "engine") ||
         changed(suite.inputs),

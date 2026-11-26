@@ -15,7 +15,6 @@
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
     "db:push": "bun run --cwd packages/db db:push",
-    "db:seed": "bun run --cwd packages/db db:seed",
     "db:start": "docker compose up --wait db",
     "db:stop": "docker compose stop",
     "deploy": "turbo run deploy",

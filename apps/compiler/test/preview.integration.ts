@@ -1,16 +1,33 @@
 import assert from "node:assert/strict";
 
-import { templateStarters } from "@texfolia/db/template-starters";
-
 import { compileSuccessfully } from "../scripts/engine-client";
+
+const documents = [
+  {
+    title: "Simple article",
+    source: String.raw`\documentclass[11pt]{article}
+\title{Your next paper}
+\author{Your name}
+\date{\today}
+\begin{document}
+\maketitle
+\begin{abstract}
+Summarize your question, approach, and findings here.
+\end{abstract}
+\section{Introduction}
+Introduce the problem and why it matters.
+\end{document}
+`,
+  },
+];
 
 assert(
   process.env.ENGINE_URL,
   "Set ENGINE_URL to a local compile container with pdftoppm installed",
 );
-for (const starter of templateStarters) {
+for (const document of documents) {
   const { preview, pdf } = await compileSuccessfully({
-    files: { "main.tex": starter.source },
+    files: { "main.tex": document.source },
     preview: true,
   });
   assert(preview);
@@ -24,6 +41,6 @@ for (const starter of templateStarters) {
     1200,
   );
   console.log(
-    `${starter.title}: real container compile → ${pdf.length}-byte PDF + ${preview.length}-byte first-page PNG`,
+    `${document.title}: real container compile → ${pdf.length}-byte PDF + ${preview.length}-byte first-page PNG`,
   );
 }

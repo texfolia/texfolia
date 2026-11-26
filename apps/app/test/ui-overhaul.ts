@@ -13,7 +13,6 @@ import {
   projectCollaborator,
   projectNode,
   session,
-  template,
   user,
 } from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";
@@ -50,7 +49,6 @@ const ownerId = crypto.randomUUID();
 const readerId = crypto.randomUUID();
 const organizationId = crypto.randomUUID();
 const invitationId = crypto.randomUUID();
-const templateId = crypto.randomUUID();
 let showArtifacts = false;
 const portReservation = Bun.serve({
   hostname: "127.0.0.1",
@@ -86,7 +84,6 @@ const mf = new Miniflare({
         BETTER_AUTH_SECRET: secret,
         BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
         STRIPE_SECRET_KEY: "sk_test_ui",
-        TEMPLATE_REVIEWER_IDS: ownerId,
         ...Object.fromEntries(
           ["GITHUB", "GOOGLE", "GITLAB", "MICROSOFT"].flatMap((provider) => [
             [`${provider}_CLIENT_ID`, "fixture"],
@@ -306,37 +303,6 @@ try {
     expiresAt: new Date(Date.now() + 86400_000),
     createdAt: new Date(),
   });
-  await db.insert(template).values({
-    id: templateId,
-    ownerId: readerId,
-    publisherName: "Emmy Reader",
-    title: "A simple article",
-    description: "A short article with room for your next idea.",
-    tags: ["article", "research"],
-    license: "CC0-1.0",
-    mainFile: "main.tex",
-    status: "approved",
-    visibility: "public",
-    snapshot: [
-      {
-        id: rootNode.id,
-        parentId: null,
-        name: "Article",
-        kind: "folder",
-        objectKey: null,
-        sizeBytes: 0,
-      },
-      {
-        id: crypto.randomUUID(),
-        parentId: rootNode.id,
-        name: "main.tex",
-        kind: "text",
-        objectKey: null,
-        sizeBytes: 0,
-      },
-    ],
-    previewStatus: "failed",
-  });
   async function newSession(userId: string) {
     const token = crypto.randomUUID();
     await db.insert(session).values({
@@ -378,12 +344,11 @@ try {
   await publicPage.route("https://challenges.cloudflare.com/**", (route) =>
     route.abort(),
   );
-  // Marketing /, /pricing, /privacy, /terms, /templates live on apps/web.
-  // Product public surfaces here: template detail and login.
+  // Marketing /, /pricing, /privacy, /terms live on apps/web.
+  // Product public surface here: login.
   for (const width of [1440, 768, 375, 320]) {
     await publicPage.setViewportSize({ width, height: 1000 });
     for (const [path, heading, name] of [
-      [`/template/${templateId}`, "A simple article", "template"],
       ["/login", "Sign in to Texfolia", "login"],
     ]) {
       await publicPage.goto(`${origin}${path}`);
@@ -421,18 +386,13 @@ try {
   }
   await publicPage.goto(origin);
   await publicPage.waitForURL(/\/login/);
-  await publicPage.goto(`${origin}/template/${templateId}`);
   const navigation = publicPage.getByRole("navigation", {
     name: "Main navigation",
   });
   assert.deepEqual(await navigation.getByRole("link").allTextContents(), [
-    "Templates",
     "Pricing",
   ]);
-  for (const [label, path] of [
-    ["Templates", "/templates"],
-    ["Pricing", "/pricing"],
-  ] as const) {
+  for (const [label, path] of [["Pricing", "/pricing"]] as const) {
     const href = await navigation
       .getByRole("link", { name: label, exact: true })
       .getAttribute("href");
@@ -481,7 +441,7 @@ try {
   });
   await newProject.waitFor();
   assert.equal(
-    await newProject.getByRole("button", { name: /^Template/ }).count(),
+    await newProject.getByRole("button", { name: /^Blank/ }).count(),
     1,
   );
   assert.equal(
@@ -502,21 +462,20 @@ try {
   await newProject
     .getByRole("button", { name: "All options", exact: true })
     .click();
-  await newProject.getByRole("button", { name: /^Template/ }).click();
-  await newProject.getByRole("radio", { name: /A simple article/ }).check();
+  await newProject.getByRole("button", { name: /^Blank/ }).click();
   await newProject
     .getByLabel("Project name", { exact: true })
-    .fill("Dialog template");
-  await capture(owner, "new-project-template");
+    .fill("Dialog blank");
+  await capture(owner, "new-project-blank");
   await newProject
     .getByRole("button", { name: "Create project", exact: true })
     .click();
   await owner.waitForURL(/\/project\//);
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
-  const templateCopy = (
+  const blankProject = (
     await getProjects({ db, userId: ownerId })
-  ).projects.find((item) => item.name === "Dialog template");
-  assert(templateCopy, "Template created with the in-dialog name");
+  ).projects.find((item) => item.name === "Dialog blank");
+  assert(blankProject, "Blank project created with the in-dialog name");
   await owner.goto(`${origin}/projects`);
   await owner.getByRole("button", { name: "New project", exact: true }).click();
   await newProject.getByRole("button", { name: /^Files or folder/ }).click();
@@ -689,7 +648,7 @@ try {
   assert.equal(dashboardDownload.suggestedFilename(), `${project.name}.zip`);
   await capture(owner, "projects-redesigned-desktop");
   console.info(
-    "Projects dialog template/files/folder creation, default N P, tag persistence, client filtering/sorting, rename/share/download passed",
+    "Projects dialog blank/files/folder creation, default N P, tag persistence, client filtering/sorting, rename/share/download passed",
   );
 
   await owner.getByRole("link", { name: "Settings", exact: true }).click();
@@ -1551,16 +1510,6 @@ try {
   await owner.getByRole("tab", { name: "main.tex", exact: true }).click();
   await owner.locator('.cm-content[contenteditable="true"]').waitFor();
   await capture(owner, "workspace-mobile");
-  await owner.goto(`${origin}/templates/publish`);
-  await owner
-    .getByRole("heading", { name: "Publish a template", exact: true })
-    .waitFor();
-  await capture(owner, "publish-mobile");
-  await owner.goto(`${origin}/templates/review`);
-  await owner
-    .getByRole("heading", { name: "Template review", exact: true })
-    .waitFor();
-  await capture(owner, "review-mobile");
   await owner.goto(`${origin}/accept-invitation/${invitationId}`);
   await owner
     .getByRole("heading", { name: "Join Research group", exact: true })
@@ -1579,7 +1528,7 @@ try {
   await capture(owner, "projects-mobile");
   await owner.getByRole("button", { name: "New project", exact: true }).click();
   await capture(owner, "new-project-mobile");
-  await owner.getByRole("button", { name: /^Template/ }).click();
+  await owner.getByRole("button", { name: /^Blank/ }).click();
   await owner
     .getByLabel("Project name", { exact: true })
     .fill("A new beginning");
@@ -1875,7 +1824,6 @@ try {
 } finally {
   await browser.close();
   await mf.dispose();
-  await db.delete(template).where(eq(template.id, templateId));
   await db.delete(organization).where(eq(organization.id, organizationId));
   for (const id of [ownerId, readerId])
     await db.delete(user).where(eq(user.id, id));

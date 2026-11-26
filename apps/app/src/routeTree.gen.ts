@@ -25,21 +25,15 @@ import { Route as SettingsOrganizationsRouteRouteImport } from './routes/setting
 import { Route as SettingsPreferencesRouteRouteImport } from './routes/settings/preferences/route'
 import { Route as SettingsUsageRouteRouteImport } from './routes/settings/usage/route'
 import { Route as ShareTokenRouteImport } from './routes/share/$token'
-import { Route as TemplateTemplateIdRouteRouteImport } from './routes/template/$templateId/route'
-import { Route as TemplatesPublishRouteRouteImport } from './routes/templates_/publish/route'
-import { Route as TemplatesReviewRouteRouteImport } from './routes/templates_/review/route'
 import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
 import { Route as ApiAiProjectIdRouteImport } from './routes/api/ai/$projectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api/compile/$projectId'
 import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
 import { Route as ApiReferencesIndexRouteImport } from './routes/api/references/index'
-import { Route as ApiTemplatesIndexRouteImport } from './routes/api/templates/index'
 import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api/collaboration/$projectId/$nodeId'
 import { Route as ApiProjectsProjectIdMetadataRouteImport } from './routes/api/projects/$projectId/metadata'
 import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api/sources/$projectId/$nodeId'
-import { Route as ApiTemplatesTemplateIdPreviewRouteImport } from './routes/api/templates/$templateId/preview'
-import { Route as ApiTemplatesTemplateIdSourceRouteImport } from './routes/api/templates/$templateId/source'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -125,21 +119,6 @@ const ShareTokenRoute = ShareTokenRouteImport.update({
   path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TemplateTemplateIdRouteRoute = TemplateTemplateIdRouteRouteImport.update({
-  id: '/template/$templateId',
-  path: '/template/$templateId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TemplatesPublishRouteRoute = TemplatesPublishRouteRouteImport.update({
-  id: '/templates_/publish',
-  path: '/templates/publish',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TemplatesReviewRouteRoute = TemplatesReviewRouteRouteImport.update({
-  id: '/templates_/review',
-  path: '/templates/review',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAccountExportRoute = ApiAccountExportRouteImport.update({
   id: '/api/account/export',
   path: '/api/account/export',
@@ -170,11 +149,6 @@ const ApiReferencesIndexRoute = ApiReferencesIndexRouteImport.update({
   path: '/api/references/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTemplatesIndexRoute = ApiTemplatesIndexRouteImport.update({
-  id: '/api/templates/',
-  path: '/api/templates/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiCollaborationProjectIdNodeIdRoute =
   ApiCollaborationProjectIdNodeIdRouteImport.update({
     id: '/api/collaboration/$projectId/$nodeId',
@@ -193,18 +167,6 @@ const ApiSourcesProjectIdNodeIdRoute =
     path: '/api/sources/$projectId/$nodeId',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiTemplatesTemplateIdPreviewRoute =
-  ApiTemplatesTemplateIdPreviewRouteImport.update({
-    id: '/api/templates/$templateId/preview',
-    path: '/api/templates/$templateId/preview',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiTemplatesTemplateIdSourceRoute =
-  ApiTemplatesTemplateIdSourceRouteImport.update({
-    id: '/api/templates/$templateId/source',
-    path: '/api/templates/$templateId/source',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -221,9 +183,6 @@ export interface FileRoutesByFullPath {
   '/settings/organizations': typeof SettingsOrganizationsRouteRoute
   '/settings/preferences': typeof SettingsPreferencesRouteRoute
   '/settings/usage': typeof SettingsUsageRouteRoute
-  '/template/$templateId': typeof TemplateTemplateIdRouteRoute
-  '/templates/publish': typeof TemplatesPublishRouteRoute
-  '/templates/review': typeof TemplatesReviewRouteRoute
   '/share/$token': typeof ShareTokenRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -232,12 +191,9 @@ export interface FileRoutesByFullPath {
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
   '/api/health/': typeof ApiHealthIndexRoute
   '/api/references/': typeof ApiReferencesIndexRoute
-  '/api/templates/': typeof ApiTemplatesIndexRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
-  '/api/templates/$templateId/preview': typeof ApiTemplatesTemplateIdPreviewRoute
-  '/api/templates/$templateId/source': typeof ApiTemplatesTemplateIdSourceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -253,9 +209,6 @@ export interface FileRoutesByTo {
   '/settings/organizations': typeof SettingsOrganizationsRouteRoute
   '/settings/preferences': typeof SettingsPreferencesRouteRoute
   '/settings/usage': typeof SettingsUsageRouteRoute
-  '/template/$templateId': typeof TemplateTemplateIdRouteRoute
-  '/templates/publish': typeof TemplatesPublishRouteRoute
-  '/templates/review': typeof TemplatesReviewRouteRoute
   '/share/$token': typeof ShareTokenRoute
   '/settings': typeof SettingsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -264,12 +217,9 @@ export interface FileRoutesByTo {
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
   '/api/health': typeof ApiHealthIndexRoute
   '/api/references': typeof ApiReferencesIndexRoute
-  '/api/templates': typeof ApiTemplatesIndexRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
-  '/api/templates/$templateId/preview': typeof ApiTemplatesTemplateIdPreviewRoute
-  '/api/templates/$templateId/source': typeof ApiTemplatesTemplateIdSourceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -287,9 +237,6 @@ export interface FileRoutesById {
   '/settings/organizations': typeof SettingsOrganizationsRouteRoute
   '/settings/preferences': typeof SettingsPreferencesRouteRoute
   '/settings/usage': typeof SettingsUsageRouteRoute
-  '/template/$templateId': typeof TemplateTemplateIdRouteRoute
-  '/templates_/publish': typeof TemplatesPublishRouteRoute
-  '/templates_/review': typeof TemplatesReviewRouteRoute
   '/share/$token': typeof ShareTokenRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/account/export': typeof ApiAccountExportRoute
@@ -298,12 +245,9 @@ export interface FileRoutesById {
   '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
   '/api/health/': typeof ApiHealthIndexRoute
   '/api/references/': typeof ApiReferencesIndexRoute
-  '/api/templates/': typeof ApiTemplatesIndexRoute
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
-  '/api/templates/$templateId/preview': typeof ApiTemplatesTemplateIdPreviewRoute
-  '/api/templates/$templateId/source': typeof ApiTemplatesTemplateIdSourceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -322,9 +266,6 @@ export interface FileRouteTypes {
     | '/settings/organizations'
     | '/settings/preferences'
     | '/settings/usage'
-    | '/template/$templateId'
-    | '/templates/publish'
-    | '/templates/review'
     | '/share/$token'
     | '/settings/'
     | '/api/account/export'
@@ -333,12 +274,9 @@ export interface FileRouteTypes {
     | '/api/compile/$projectId'
     | '/api/health/'
     | '/api/references/'
-    | '/api/templates/'
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/projects/$projectId/metadata'
     | '/api/sources/$projectId/$nodeId'
-    | '/api/templates/$templateId/preview'
-    | '/api/templates/$templateId/source'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -354,9 +292,6 @@ export interface FileRouteTypes {
     | '/settings/organizations'
     | '/settings/preferences'
     | '/settings/usage'
-    | '/template/$templateId'
-    | '/templates/publish'
-    | '/templates/review'
     | '/share/$token'
     | '/settings'
     | '/api/account/export'
@@ -365,12 +300,9 @@ export interface FileRouteTypes {
     | '/api/compile/$projectId'
     | '/api/health'
     | '/api/references'
-    | '/api/templates'
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/projects/$projectId/metadata'
     | '/api/sources/$projectId/$nodeId'
-    | '/api/templates/$templateId/preview'
-    | '/api/templates/$templateId/source'
   id:
     | '__root__'
     | '/'
@@ -387,9 +319,6 @@ export interface FileRouteTypes {
     | '/settings/organizations'
     | '/settings/preferences'
     | '/settings/usage'
-    | '/template/$templateId'
-    | '/templates_/publish'
-    | '/templates_/review'
     | '/share/$token'
     | '/settings/'
     | '/api/account/export'
@@ -398,12 +327,9 @@ export interface FileRouteTypes {
     | '/api/compile/$projectId'
     | '/api/health/'
     | '/api/references/'
-    | '/api/templates/'
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/projects/$projectId/metadata'
     | '/api/sources/$projectId/$nodeId'
-    | '/api/templates/$templateId/preview'
-    | '/api/templates/$templateId/source'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -414,9 +340,6 @@ export interface RootRouteChildren {
   SettingsRouteRoute: typeof SettingsRouteRouteWithChildren
   AcceptInvitationInvitationIdRouteRoute: typeof AcceptInvitationInvitationIdRouteRoute
   ProjectProjectIdRouteRoute: typeof ProjectProjectIdRouteRoute
-  TemplateTemplateIdRouteRoute: typeof TemplateTemplateIdRouteRoute
-  TemplatesPublishRouteRoute: typeof TemplatesPublishRouteRoute
-  TemplatesReviewRouteRoute: typeof TemplatesReviewRouteRoute
   ShareTokenRoute: typeof ShareTokenRoute
   ApiAccountExportRoute: typeof ApiAccountExportRoute
   ApiAiProjectIdRoute: typeof ApiAiProjectIdRoute
@@ -424,12 +347,9 @@ export interface RootRouteChildren {
   ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
   ApiHealthIndexRoute: typeof ApiHealthIndexRoute
   ApiReferencesIndexRoute: typeof ApiReferencesIndexRoute
-  ApiTemplatesIndexRoute: typeof ApiTemplatesIndexRoute
   ApiCollaborationProjectIdNodeIdRoute: typeof ApiCollaborationProjectIdNodeIdRoute
   ApiProjectsProjectIdMetadataRoute: typeof ApiProjectsProjectIdMetadataRoute
   ApiSourcesProjectIdNodeIdRoute: typeof ApiSourcesProjectIdNodeIdRoute
-  ApiTemplatesTemplateIdPreviewRoute: typeof ApiTemplatesTemplateIdPreviewRoute
-  ApiTemplatesTemplateIdSourceRoute: typeof ApiTemplatesTemplateIdSourceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -546,27 +466,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/template/$templateId': {
-      id: '/template/$templateId'
-      path: '/template/$templateId'
-      fullPath: '/template/$templateId'
-      preLoaderRoute: typeof TemplateTemplateIdRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/templates_/publish': {
-      id: '/templates_/publish'
-      path: '/templates/publish'
-      fullPath: '/templates/publish'
-      preLoaderRoute: typeof TemplatesPublishRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/templates_/review': {
-      id: '/templates_/review'
-      path: '/templates/review'
-      fullPath: '/templates/review'
-      preLoaderRoute: typeof TemplatesReviewRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/account/export': {
       id: '/api/account/export'
       path: '/api/account/export'
@@ -609,13 +508,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiReferencesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/templates/': {
-      id: '/api/templates/'
-      path: '/api/templates'
-      fullPath: '/api/templates/'
-      preLoaderRoute: typeof ApiTemplatesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/collaboration/$projectId/$nodeId': {
       id: '/api/collaboration/$projectId/$nodeId'
       path: '/api/collaboration/$projectId/$nodeId'
@@ -635,20 +527,6 @@ declare module '@tanstack/react-router' {
       path: '/api/sources/$projectId/$nodeId'
       fullPath: '/api/sources/$projectId/$nodeId'
       preLoaderRoute: typeof ApiSourcesProjectIdNodeIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/templates/$templateId/preview': {
-      id: '/api/templates/$templateId/preview'
-      path: '/api/templates/$templateId/preview'
-      fullPath: '/api/templates/$templateId/preview'
-      preLoaderRoute: typeof ApiTemplatesTemplateIdPreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/templates/$templateId/source': {
-      id: '/api/templates/$templateId/source'
-      path: '/api/templates/$templateId/source'
-      fullPath: '/api/templates/$templateId/source'
-      preLoaderRoute: typeof ApiTemplatesTemplateIdSourceRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -689,9 +567,6 @@ const rootRouteChildren: RootRouteChildren = {
   AcceptInvitationInvitationIdRouteRoute:
     AcceptInvitationInvitationIdRouteRoute,
   ProjectProjectIdRouteRoute: ProjectProjectIdRouteRoute,
-  TemplateTemplateIdRouteRoute: TemplateTemplateIdRouteRoute,
-  TemplatesPublishRouteRoute: TemplatesPublishRouteRoute,
-  TemplatesReviewRouteRoute: TemplatesReviewRouteRoute,
   ShareTokenRoute: ShareTokenRoute,
   ApiAccountExportRoute: ApiAccountExportRoute,
   ApiAiProjectIdRoute: ApiAiProjectIdRoute,
@@ -699,12 +574,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
   ApiHealthIndexRoute: ApiHealthIndexRoute,
   ApiReferencesIndexRoute: ApiReferencesIndexRoute,
-  ApiTemplatesIndexRoute: ApiTemplatesIndexRoute,
   ApiCollaborationProjectIdNodeIdRoute: ApiCollaborationProjectIdNodeIdRoute,
   ApiProjectsProjectIdMetadataRoute: ApiProjectsProjectIdMetadataRoute,
   ApiSourcesProjectIdNodeIdRoute: ApiSourcesProjectIdNodeIdRoute,
-  ApiTemplatesTemplateIdPreviewRoute: ApiTemplatesTemplateIdPreviewRoute,
-  ApiTemplatesTemplateIdSourceRoute: ApiTemplatesTemplateIdSourceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

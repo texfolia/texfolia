@@ -6,7 +6,7 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // Pages with no request-time data are rendered once at build time and served
-// as static assets. /templates reads the live catalog from the app per request.
+// as static assets.
 const staticPages = ["/", "/pricing", "/privacy", "/terms"];
 
 export default defineConfig({
