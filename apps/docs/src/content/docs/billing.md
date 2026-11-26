@@ -64,14 +64,6 @@ The pricing page advertises the enforced 10 MiB per source file and 50 MiB per
 project on every plan. It adds no project-count or editor-count caps. Document
 history uses GitHub or GitLab repositories on every plan. AI commit messages use the Pro assistant and are metered. Compile admission and fair-use behavior are unchanged.
 
-Private templates are the one count cap. Free accounts and organizations
-without a Team subscription can publish none. A personal Pro subscription allows
-up to 1,000 personal private templates, and an organization's Team subscription
-up to 1,000 private templates for that organization. Members' personal plans and
-an organization's plan do not lend to each other here, unlike compiles. Every
-private template counts until it is deleted, and existing ones stay usable after
-a downgrade. See [Template visibility](/templates/#visibility).
-
 ## Verify billing
 
 Use an isolated database whose name contains `test`. Apply the current schema with

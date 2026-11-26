@@ -15,7 +15,7 @@ export function hasOrgRole(role: string, ...roles: string[]) {
   return role.split(",").some((item) => roles.includes(item.trim()));
 }
 
-/** Owners and admins manage the organization's projects, templates, and billing. */
+/** Owners and admins manage the organization's projects and billing. */
 export function isOrgAdmin(role: string) {
   return hasOrgRole(role, "owner", "admin");
 }

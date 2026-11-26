@@ -16,7 +16,6 @@ export function Footer() {
           aria-label="Footer"
           className="text-muted-foreground [&_a:hover]:text-foreground flex flex-wrap gap-x-6 gap-y-3 [&_a]:underline-offset-4 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-4 [&_a:hover]:underline"
         >
-          <Link to="/templates">Templates</Link>
           <Link to="/pricing">Pricing</Link>
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>

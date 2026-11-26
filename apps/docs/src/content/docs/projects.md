@@ -7,15 +7,11 @@ Recent projects are the six accessible projects with the latest `updatedAt`.
 The account menu links to the same settings pages as `/settings`. Signing out
 requires confirmation.
 
-**New project** opens three choices: Template, Git repository, and Files or folder.
+**New project** opens three choices: Blank, Git repository, and Files or folder.
 The default shortcut is **N**, then **P**. The shortcut editor in Preferences
 can change this sequence. Sequences are ignored in inputs and editors.
 
-The template choice includes Blank, which creates an empty `main.tex`. Approved
-public templates are paginated inside the dialog. Template copies accept a
-project name and personal or organization destination through `openTemplate`.
-The existing collision suffix behavior also applies to a supplied name.
-The public gallery, publishing, review, and stable snapshot pages remain available.
+The Blank choice creates a project with an empty `main.tex`.
 
 Git imports use the existing GitHub and GitLab connection flow. Returning from
 account authorization restores the import dialog and its draft repository URL.

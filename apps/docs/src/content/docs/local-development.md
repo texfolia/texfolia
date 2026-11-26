@@ -84,12 +84,10 @@ Database data persists in the Compose volume. Build history and artifacts
 persist with the product app's other local Worker storage, and the engine pool
 persists in `apps/compiler/.cache/pool.sqlite`.
 
-## Change the schema or seed data
+## Change the schema
 
-`bun run dev` never changes the schema or seeds data. Run `bun run db:push`
-after changing the schema, and `bun run db:seed` to add the original templates
-to Postgres and local R2. Template previews run as project builds on the same
-compiler. See [Template lifecycle](/templates/).
+`bun run dev` never changes the schema. Run `bun run db:push`
+after changing the schema.
 
 ## Local services
 

@@ -23,7 +23,7 @@ Personal projects support collaboration with existing Texfolia accounts. The own
 
 Organization projects inherit access from membership. Every organization member is an editor on every organization project, whatever their role (`owner`, `admin`, or `member`). Members can save sources, compile, write to collaboration, and use write assistant tools. Organization projects have no viewer role and no per-project roles. Owners and admins additionally can trash, restore, permanently delete, and transfer organization projects, and link or unlink a git remote. The workspace explains this and shows no personal-project sharing form. See [Organizations](#organizations) for who manages membership.
 
-The public header links to Templates and Pricing. GitHub and GitLab integration is available from the right sidebar. Repositories can be imported from Projects. The Pro AI assistant is part of v1.
+The public header links to Pricing. GitHub and GitLab integration is available from the right sidebar. Repositories can be imported from Projects. The Pro AI assistant is part of v1.
 
 ## Organizations
 
@@ -50,7 +50,7 @@ open collaboration sockets and build streams close.
 
 - The personal owner, or an organization owner or admin, sees the project in the trash, restores it, or deletes it permanently. Collaborators, other members, and share-link visitors cannot.
 - Restoring brings back its files, collaborators, share links, comments, chats, tags, Git link, and scratchpad. Builds are not kept, so compile again. If the owner has reused the name, the restored project gets a numeric suffix.
-- **Delete permanently** removes the project row and everything stored with it, then its sources, collaboration documents, and Git clone. It cannot be undone, and it never touches the Git remote, published templates, or duplicates.
+- **Delete permanently** removes the project row and everything stored with it, then its sources, collaboration documents, and Git clone. It cannot be undone, and it never touches the Git remote or duplicates.
 - Projects are permanently deleted after 30 days in the trash, by the hourly scheduled run.
 
 Server-side, `project.deleted_at` means the project is in the trash. Storage
@@ -113,7 +113,7 @@ decisions, that stay out of the paper. Open it from the status bar or the View
 menu.
 
 - Owners, editors, and organization members edit it together with live cursors. Viewers read it. Share-link guests cannot see, connect to, or read it.
-- It is not a project file. It has no place in the file tree, project search, compiles, Git, ZIP export, templates, or duplicates.
+- It is not a project file. It has no place in the file tree, project search, compiles, Git, ZIP export, or duplicates.
 - It has no review comments. The AI assistant can read it and cannot write it; see [the assistant guide](/ai-assistant/).
 - Edits save as they are made. Offline edits stay in the browser and merge on reconnecting, like edits to files.
 

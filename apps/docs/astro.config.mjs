@@ -28,7 +28,6 @@ export default defineConfig({
             { slug: "project-controls" },
             { slug: "settings" },
             { slug: "themes" },
-            { slug: "templates" },
             { slug: "git-integration" },
             { slug: "ai-assistant" },
             { slug: "billing" },

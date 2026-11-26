@@ -52,8 +52,8 @@ function OrganizationsPage() {
         <p className="text-muted-foreground mt-2 text-sm">
           Members open the organization's projects with the access each project
           gives everyone in the organization, their teams, or them. Admins can
-          edit every project and manage members, teams, sharing, templates and
-          billing. Owners also manage roles and can delete the organization.
+          edit every project and manage members, teams, sharing, and billing.
+          Owners also manage roles and can delete the organization.
         </p>
       </div>
       <nav aria-label="Organization" className="flex flex-wrap gap-3">

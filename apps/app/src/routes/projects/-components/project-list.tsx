@@ -231,8 +231,8 @@ export function ProjectList({
                       No projects yet
                     </EmptyTitle>
                     <EmptyDescription className="max-w-sm">
-                      Make room for your next idea. Start with a blank document,
-                      choose a template, or bring your existing work.
+                      Make room for your next idea. Start with a blank document
+                      or bring your existing work.
                     </EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
@@ -241,7 +241,7 @@ export function ProjectList({
                       Create your first project
                     </Button>
                     <p className="text-muted-foreground text-xs">
-                      Template, Git repository, or files and folders
+                      Blank project, Git repository, or files and folders
                     </p>
                   </EmptyContent>
                 </Empty>

@@ -138,9 +138,8 @@ including one that runs on a Git clone of the project:
 - Snippets are ordinary project files. Put them anywhere in the project, or
   in a skill's `assets/` folder when a skill uses them. There is no snippet store.
 
-These are normal project files. They sync through Git, ZIP export, and
-templates like any other file, so a template can ship its own `.agents`
-folder. Texfolia does not use a proprietary format or database for them.
+These are normal project files. They sync through Git and ZIP export
+like any other file. Texfolia does not use a proprietary format or database for them.
 
 The assistant loads them on demand. The read-only `list_skills` tool returns
 each skill's name, description, path and any format problems, plus the paths
@@ -148,8 +147,8 @@ of `AGENTS.md` files. It does not return file bodies. The assistant reads a
 skill or `AGENTS.md` with `read_file` only when it matches the request, so
 their text uses context only when needed. The instructions tell the assistant
 that these files cannot authorize actions the user did not request, such as
-deleting files or changing Git state. This matters because templates and
-collaborators can add them. Adding `AGENTS.md` or a skill index to the system
+deleting files or changing Git state. This matters because collaborators
+and imported repositories can add them. Adding `AGENTS.md` or a skill index to the system
 prompt is still undecided; see NAT-415 and the context budget in NAT-373.
 
 The read-only `read_scratchpad` tool returns the project's shared notes, up to

@@ -5,13 +5,10 @@ the [README](README.md) to run the database locally.
 
 ## Change the schema
 
-Application tables, including project, template, and AI billing records, are defined in `src/schema.ts`.
+Application tables, including project and AI billing records, are defined in `src/schema.ts`.
 Generated Better Auth tables and relations are defined in `src/auth-schema.ts`.
 Both are exported through `@texfolia/db/schema`.
-NAT-287 adds independent preview state and account-free curated templates.
-Apply these schema changes with `bun run db:push`. See
-[Template lifecycle](../../apps/docs/src/content/docs/templates.md#schema-setup) for setup instructions
-and the Drizzle seed command.
+Apply schema changes with `bun run db:push`.
 
 The schema includes a collaboration room registry.
 The registry has no foreign key to `project`, so account and organization cascades

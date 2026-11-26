@@ -13,7 +13,6 @@ import {
   projectNode,
   session,
   tag,
-  template,
   user,
 } from "@texfolia/db/schema";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
@@ -38,7 +37,6 @@ export async function exportAccountData(db: Db, userId: string) {
     projects,
     tags,
     comments,
-    templates,
     aiUsage,
   ] = await Promise.all([
     db
@@ -133,23 +131,6 @@ export async function exportAccountData(db: Db, userId: string) {
       .orderBy(desc(projectComment.createdAt)),
     db
       .select({
-        id: template.id,
-        title: template.title,
-        description: template.description,
-        tags: template.tags,
-        license: template.license,
-        visibility: template.visibility,
-        status: template.status,
-        mainFile: template.mainFile,
-        rejectionReason: template.rejectionReason,
-        unpublishedAt: template.unpublishedAt,
-        createdAt: template.createdAt,
-      })
-      .from(template)
-      .where(eq(template.ownerId, userId))
-      .orderBy(desc(template.createdAt)),
-    db
-      .select({
         id: aiRun.id,
         projectId: aiRun.projectId,
         model: aiRun.model,
@@ -180,7 +161,6 @@ export async function exportAccountData(db: Db, userId: string) {
     projects,
     tags,
     comments,
-    templates,
     aiUsage,
   };
 }

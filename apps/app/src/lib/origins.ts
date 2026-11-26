@@ -1,6 +1,6 @@
 import { localHosts, productionHosts } from "@texfolia/contracts/hosts";
 
-/** Marketing site origin for Templates, Pricing, Privacy, and Terms links. */
+/** Marketing site origin for Pricing, Privacy, and Terms links. */
 export function webOrigin() {
   const fromEnv = import.meta.env.PUBLIC_WEB_URL?.replace(/\/$/, "");
   if (fromEnv) return fromEnv;

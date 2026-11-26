@@ -19,7 +19,6 @@ export function Footer() {
           aria-label="Footer"
           className="text-muted-foreground [&_a:hover]:text-foreground flex flex-wrap gap-x-6 gap-y-3 [&_a]:underline-offset-4 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-4 [&_a:hover]:underline"
         >
-          <a href={webPath("/templates")}>Templates</a>
           <a href={webPath("/pricing")}>Pricing</a>
           <a href={webPath("/privacy")}>Privacy</a>
           <a href={webPath("/terms")}>Terms</a>

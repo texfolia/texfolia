@@ -32,7 +32,7 @@ choice returns when a file comes back there, as after a Git branch switch.
 
 Without a choice, or while its file is missing, the main document is `main.tex`,
 else the first `.tex` file, outermost folders first (`projectMainFile` in
-`#/lib/projects`). Share links open it first, duplicates and templates keep it, and
+`#/lib/projects`). Share links open it first, duplicates keep it, and
 the assistant's `compile` tool uses it by default.
 
 ## Go to file and the command palette

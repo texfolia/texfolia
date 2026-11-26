@@ -22,23 +22,6 @@ access live in [`#/lib/projects`](src/lib/projects/README.md). The
 feature's bound modules add collaborator and share-link grants, build
 invalidation, collaboration cleanup, and review-comment versions.
 
-## Public templates
-
-The public gallery lives on the marketing site ([`apps/web`](../web/README.md) at
-`/templates`) and loads `GET /api/templates` from this app. Stable snapshots use
-`/template/$templateId`, and saved projects can be published at
-`/templates/publish`. Reviewers use `/templates/review`. Every snapshot is
-reviewed. Preview generation and retries run independently of moderation,
-including in local development without cron.
-
-The catalog, snapshot, preview, review, and cleanup code lives in
-[`#/lib/templates`](src/lib/templates/README.md). Its server functions pass in
-the project lock and R2 binding; the routes and create-from-template UI live under
-`src/routes`.
-
-See [Template lifecycle](../docs/src/content/docs/templates.md) for the design, original Drizzle
-seeds, schema setup, retention, and verification commands.
-
 ## Project source storage
 
 Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed

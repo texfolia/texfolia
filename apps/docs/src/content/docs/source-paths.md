@@ -29,9 +29,7 @@ limit. Accented letters and emoji can use multiple bytes. The `.tex` extension
 counts toward the limit. Source paths have no automatic trimming or renaming.
 
 Creation validates the assembled path under the project lock before writing
-source objects or node metadata. Template publishing validates every path before
-copying source objects, and opening a template validates its snapshot before
-creating the destination project. Compilation validates all active nodes,
+source objects or node metadata. Compilation validates all active nodes,
 including unreferenced files and empty folders.
 
 ## Repair existing invalid paths
@@ -50,10 +48,6 @@ lengths. Legacy paths that already exceed the limit can be shortened in several
 steps, and unrelated invalid names can be repaired separately. No migration
 silently changes names or LaTeX references.
 
-Published template snapshots are immutable. An invalid legacy snapshot cannot be
-opened as a project. Its source ZIP remains downloadable so the publisher can
-repair the original project and publish a new snapshot.
-
 ## Run the policy checks
 
 From the repository root, run:
@@ -64,8 +58,8 @@ bun test apps/app/src/lib/builds/source-sync.test.ts apps/app/src/lib/projects/n
 ```
 
 The Go checks also write each accepted fixture path to the filesystem. The web
-source-storage and template integration suites cover validation before R2 writes,
-legacy-path repair, content preservation, and rejection of invalid snapshots.
+source-storage integration suite covers validation before R2 writes,
+legacy-path repair, and content preservation.
 
 To check boundary paths and generated SyncTeX files with a real local engine, run:
 

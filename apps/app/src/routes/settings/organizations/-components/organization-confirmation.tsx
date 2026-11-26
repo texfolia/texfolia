@@ -85,7 +85,7 @@ function DeleteOrganization({ org }: { org: OrganizationState }) {
   return (
     <ConfirmationBody
       title={`Delete ${organization.name}?`}
-      description="Its projects and templates are deleted for every member. This cannot be undone."
+      description="Its projects are deleted for every member. This cannot be undone."
       error={error}
       pending={pending}
       disabled={typedName !== organization.name}

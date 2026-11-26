@@ -60,9 +60,8 @@ test("compiler runtime changes also exercise its web consumers", () => {
     "compile-engine",
     "workspace-upload",
     "compile-route",
-    "template-lifecycle",
   ]);
-  assert.equal(plan["postgres-build"], true);
+  assert.equal(plan["postgres-build"], false);
 });
 
 test("shared contract fixtures run every check", () => {

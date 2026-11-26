@@ -188,12 +188,12 @@ Storage totals use binary units, and hovering shows the exact byte count.
 
 `GET /api/account/export` streams a ZIP:
 
-| Path                 | Contents                                                                                                                |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `account.json`       | Profile, connected accounts, sessions, organizations, AI settings and usage, project records, tags, comments, templates |
-| `ai-chats/<id>.json` | Each of the user's AI chats                                                                                             |
-| `projects/<name>/…`  | Saved files of personal projects the user owns, including those in the trash                                            |
-| `missing-files.txt`  | Present only when some files could not be read from storage                                                             |
+| Path                 | Contents                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `account.json`       | Profile, connected accounts, sessions, organizations, AI settings and usage, project records, tags, comments |
+| `ai-chats/<id>.json` | Each of the user's AI chats                                                                                  |
+| `projects/<name>/…`  | Saved files of personal projects the user owns, including those in the trash                                 |
+| `missing-files.txt`  | Present only when some files could not be read from storage                                                  |
 
 It holds no credentials, OAuth tokens, or session tokens. Files of shared and
 organization projects stay out. Chats in those projects keep only their text,

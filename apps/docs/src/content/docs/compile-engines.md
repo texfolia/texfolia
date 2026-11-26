@@ -82,7 +82,6 @@ The [Worker](../../../../compiler/worker.ts) uses `POOL.getByName("autoscaler")`
 maps `TectonicContainer` to the Dockerfile, with `basic` instances and a cap of 20.
 The [local pool](../../../../compiler/src/local-containers.ts) also uses one image,
 configured through `ENGINE_IMAGE` in [index.ts](../../../../compiler/src/index.ts).
-Template previews are project builds and use the same pool and image.
 
 ## Proposed engine contract
 
@@ -167,9 +166,6 @@ behavior through an explicit legacy migration. An unknown or unsupported ID
 must never take that fallback. Record the chosen default for new requests in the
 selection decision. If selection becomes a project setting, also define its
 membership checks, copy and import behavior, and how changes mark output stale.
-
-Template-preview builds follow the same target contract. They use the
-Tectonic default until their selection policy is decided. No extra picker or database column is implied by this backend contract.
 
 ## Proposed cache isolation and migration
 
