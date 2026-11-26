@@ -5,7 +5,11 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema/index.ts",
+    "./schema/projects": "./src/schema/projects.ts",
+    "./schema/sharing": "./src/schema/sharing.ts",
+    "./schema/comments": "./src/schema/comments.ts",
+    "./schema/ai": "./src/schema/ai.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

@@ -4,10 +4,46 @@ import { is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 
 import * as schema from "./schema";
+import * as aiSchema from "./schema/ai";
+import * as commentsSchema from "./schema/comments";
+import * as projectsSchema from "./schema/projects";
+import * as sharingSchema from "./schema/sharing";
 
 function indexes(table: PgTable) {
   return getTableConfig(table).indexes.map((index) => index.config.name);
 }
+
+function tableNames(mod: Record<string, unknown>) {
+  return Object.values(mod)
+    .filter((value): value is PgTable => is(value, PgTable))
+    .map((table) => getTableConfig(table).name)
+    .toSorted();
+}
+
+test("all tables remain in the default public schema", () => {
+  const namespaced: string[] = [];
+  for (const table of Object.values(schema)) {
+    if (!is(table, PgTable)) continue;
+    const config = getTableConfig(table);
+    if (config.schema !== undefined)
+      namespaced.push(`${config.schema}.${config.name}`);
+  }
+  expect(namespaced).toEqual([]);
+});
+
+test("feature modules can be imported in isolation and compose into the barrel", () => {
+  const barrelTables = new Set(tableNames(schema));
+  for (const feature of [
+    projectsSchema,
+    sharingSchema,
+    commentsSchema,
+    aiSchema,
+  ]) {
+    const names = tableNames(feature);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) expect(barrelTables.has(name)).toBe(true);
+  }
+});
 
 // `bun run auth:schema` regenerates auth-schema.ts without these.
 test("hand-written auth indexes survive schema generation", () => {
