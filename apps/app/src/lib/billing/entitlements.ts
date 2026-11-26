@@ -36,6 +36,32 @@ export async function compilePlan(db: Db, userId: string) {
 }
 
 /**
+ * The plan of one billing account: a user's personal subscription, or an
+ * organization's Team subscription. Unlike {@link compilePlan}, a user's
+ * organizations do not lend their plan to the user's personal account.
+ */
+export async function accountPlan(
+  db: Pick<Db, "query">,
+  account: { userId: string } | { organizationId: string },
+) {
+  const personal = "userId" in account;
+  const subscriptions = (
+    await db.query.subscription.findMany({
+      columns: { plan: true, periodEnd: true },
+      where: {
+        referenceId: personal ? account.userId : account.organizationId,
+        plan: { in: personal ? ["pro", "team"] : ["team"] },
+        status: { in: ["active", "trialing"] },
+      },
+    })
+  ).filter((subscription) => current(subscription));
+  if (!subscriptions.length) return "free";
+  return subscriptions.some((subscription) => subscription.plan === "team")
+    ? "team"
+    : "pro";
+}
+
+/**
  * The Stripe customer and subscription that pay for this user's AI usage in a
  * project. An organization pays only for its members' usage in its own
  * projects; everywhere else, including personal projects and other

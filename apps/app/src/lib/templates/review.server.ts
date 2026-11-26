@@ -1,6 +1,6 @@
 import type { Db } from "@texfolia/db";
 import { template, templateReport } from "@texfolia/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
@@ -21,10 +21,18 @@ export async function reportTemplate({
   templateId: string;
   reason: string;
 }) {
+  // Reviewers moderate what can be redistributed, so private templates, which
+  // they never see, cannot be reported.
   const [found] = await db
     .select({ id: template.id })
     .from(template)
-    .where(and(eq(template.id, templateId), availableTemplate));
+    .where(
+      and(
+        eq(template.id, templateId),
+        availableTemplate,
+        ne(template.visibility, "private"),
+      ),
+    );
   if (!found) throw new Error("Template not found");
   await db
     .insert(templateReport)
@@ -50,7 +58,13 @@ export async function templateReviewQueue({
   const pending = await db
     .select(publicColumns)
     .from(template)
-    .where(and(eq(template.status, "pending"), isNull(template.unpublishedAt)))
+    .where(
+      and(
+        eq(template.status, "pending"),
+        isNull(template.unpublishedAt),
+        ne(template.visibility, "private"),
+      ),
+    )
     .orderBy(template.createdAt)
     .limit(100);
   const reports = await db
@@ -87,7 +101,8 @@ export async function reviewTemplate({
       .from(template)
       .where(eq(template.id, templateId))
       .for("update");
-    if (!found) throw new Error("Template not found");
+    if (!found || found.visibility === "private")
+      throw new Error("Template not found");
     if (found.ownerId === userId)
       throw new Error("Another reviewer must review your template");
     await tx

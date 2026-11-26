@@ -49,7 +49,7 @@ export const Route = createFileRoute("/template/$templateId")({
             ...(template.previewUrl
               ? [{ property: "og:image", content: template.previewUrl }]
               : []),
-            ...(template.visibility === "unlisted" ||
+            ...(template.visibility !== "public" ||
             template.status !== "approved" ||
             !template.published
               ? [{ name: "robots", content: "noindex, nofollow" }]
@@ -146,17 +146,19 @@ function TemplatePage() {
                 </li>
               ))}
             </ul>
-            <p className="mt-6 text-sm">
-              License:{" "}
-              <a
-                href={templateLicenseUrls[template.license]}
-                rel="noreferrer"
-                target="_blank"
-                className="underline underline-offset-4"
-              >
-                {templateLicenseLabels[template.license]}
-              </a>
-            </p>
+            {template.license && (
+              <p className="mt-6 text-sm">
+                License:{" "}
+                <a
+                  href={templateLicenseUrls[template.license]}
+                  rel="noreferrer"
+                  target="_blank"
+                  className="underline underline-offset-4"
+                >
+                  {templateLicenseLabels[template.license]}
+                </a>
+              </p>
+            )}
             <a
               href={`/api/templates/${template.id}/source`}
               className="mt-3 inline-block text-sm underline underline-offset-4"
@@ -176,6 +178,13 @@ function TemplatePage() {
                 the gallery.
               </p>
             )}
+            {template.visibility === "private" && (
+              <p className="text-muted-foreground mt-3 text-sm">
+                {template.forOrganization
+                  ? "Private — only members of the organization can see and open it. Not shown in the gallery."
+                  : "Private — only you can see and open it. Not shown in the gallery."}
+              </p>
+            )}
             {template.canManage && (
               <div className="mt-6">
                 <TemplateActions
@@ -192,7 +201,11 @@ function TemplatePage() {
               >
                 <h2 className="font-medium">Unpublished</h2>
                 <p className="text-muted-foreground text-sm">
-                  Only its publisher and reviewers can see this page.
+                  {template.visibility !== "private"
+                    ? "Only its publisher and reviewers can see this page."
+                    : template.forOrganization
+                      ? "Only its publisher and the organization’s owners and admins can see this page."
+                      : "Only you can see this page."}{" "}
                   Republishing keeps the URL and the review.
                 </p>
               </div>
@@ -312,55 +325,57 @@ function TemplatePage() {
                 {error}
               </p>
             )}
-            {template.status === "approved" && template.published && (
-              <details className="mt-10 border-t pt-5">
-                <summary className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm text-sm outline-none focus-visible:ring-2">
-                  Report this template
-                </summary>
-                {reported ? (
-                  <p role="status" className="mt-4">
-                    Report received. A reviewer will check it.
-                  </p>
-                ) : account.signedIn ? (
-                  <form
-                    className="mt-4 space-y-3"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void run(async () => {
-                        await reportTemplate({
-                          data: { templateId: template.id, reason },
+            {template.status === "approved" &&
+              template.published &&
+              template.visibility !== "private" && (
+                <details className="mt-10 border-t pt-5">
+                  <summary className="text-muted-foreground focus-visible:ring-ring cursor-pointer rounded-sm text-sm outline-none focus-visible:ring-2">
+                    Report this template
+                  </summary>
+                  {reported ? (
+                    <p role="status" className="mt-4">
+                      Report received. A reviewer will check it.
+                    </p>
+                  ) : account.signedIn ? (
+                    <form
+                      className="mt-4 space-y-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void run(async () => {
+                          await reportTemplate({
+                            data: { templateId: template.id, reason },
+                          });
+                          setReported(true);
                         });
-                        setReported(true);
-                      });
-                    }}
-                  >
-                    <label htmlFor="report-reason" className="block text-sm">
-                      Describe the licensing, safety, or content concern.
-                    </label>
-                    <Textarea
-                      id="report-reason"
-                      required
-                      minLength={10}
-                      maxLength={2000}
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      className="min-h-32"
-                    />
-                    <Button variant="outline" disabled={busy}>
-                      Send report
-                    </Button>
-                  </form>
-                ) : (
-                  <Link
-                    to="/login"
-                    search={{ redirectTo: `/template/${template.id}` }}
-                    className="mt-4 inline-block underline"
-                  >
-                    Sign in to report
-                  </Link>
-                )}
-              </details>
-            )}
+                      }}
+                    >
+                      <label htmlFor="report-reason" className="block text-sm">
+                        Describe the licensing, safety, or content concern.
+                      </label>
+                      <Textarea
+                        id="report-reason"
+                        required
+                        minLength={10}
+                        maxLength={2000}
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        className="min-h-32"
+                      />
+                      <Button variant="outline" disabled={busy}>
+                        Send report
+                      </Button>
+                    </form>
+                  ) : (
+                    <Link
+                      to="/login"
+                      search={{ redirectTo: `/template/${template.id}` }}
+                      className="mt-4 inline-block underline"
+                    >
+                      Sign in to report
+                    </Link>
+                  )}
+                </details>
+              )}
           </section>
         </div>
       </main>

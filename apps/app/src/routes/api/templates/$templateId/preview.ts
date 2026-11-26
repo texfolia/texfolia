@@ -16,7 +16,8 @@ export const Route = createFileRoute("/api/templates/$templateId/preview")({
           return new Response("Not found", { status: 404 });
         const { db } = context;
         const { templateId } = params;
-        // Anyone can see an approved template, so only others need a session.
+        // Anyone can see an approved public or unlisted template, so only
+        // others, including private templates, need a session.
         let found = await findTemplate({ db, templateId });
         if (!found) {
           const session = await context.auth.api.getSession({

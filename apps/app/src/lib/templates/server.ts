@@ -6,6 +6,7 @@ export {
   getTemplate,
   isTemplateReviewer,
   listMyTemplates,
+  listPrivateTemplates,
   listTemplates,
   templateArchive,
   templateDestinations,

@@ -31,7 +31,7 @@ publishing. This implementation retains user publishing with simpler review.
 
 ## Review
 
-Moderation is `pending`, `approved`, or `rejected`. Every new user snapshot starts
+Moderation is `pending`, `approved`, or `rejected`. Every new public or unlisted user snapshot starts
 pending. Reviewers cannot review their own snapshots. Approval controls public
 access, gallery membership, source downloads, and project copies. Unlisted
 approved snapshots are accessible by URL and carry `noindex, nofollow`.
@@ -45,6 +45,44 @@ published for, can unpublish, republish, or delete it. Unpublishing sets
 `unpublished_at` and keeps the review status, so republishing needs no new review.
 Deleting removes the row and leaves the objects to the sweep. Publishing limits count
 `template_publication` rows, so deleting a template does not make room for another.
+
+## Visibility
+
+Visibility is `public`, `unlisted`, or `private`, and is fixed when the snapshot is
+published. To change it, publish a new snapshot.
+
+- **Public** snapshots are in the gallery and `GET /api/templates` once approved.
+- **Unlisted** snapshots are left out of the gallery, but anyone with the URL can
+  open, preview, and download them once approved.
+- **Private** snapshots are for their audience only. A personal one is for its
+  publisher. One published from an organization project is for that
+  organization's members; only its publisher and the organization's owners and
+  admins manage it, as with other organization templates. Everyone else, signed
+  out or not, gets a not-found response for the page, preview, ZIP, copy, and
+  report. Reviewers cannot see them either.
+
+Private snapshots cannot be redistributed, so they need no license
+(`template.license` is null) and no redistribution confirmation. They skip review
+and start `approved`, and never enter the review queue or take reports. They are
+never in the gallery; members find them under **Your snapshots** and in the
+new-project picker (`listPrivateTemplates`). Their pages, previews, and ZIPs are
+`private, no-store` and `noindex, nofollow`.
+
+Private templates are limited by plan. A personal one counts against its
+publisher's personal plan; an organization's count against that organization's
+Team subscription, never a member's personal plan:
+
+| Plan                | Private templates |
+| ------------------- | ----------------- |
+| Free                | 0                 |
+| Pro (personal)      | 1,000             |
+| Team (organization) | 1,000             |
+
+Every private template counts until it is deleted, including unpublished ones;
+deleting one makes room immediately. After a downgrade to Free, existing private
+templates stay usable, but no new ones can be published. The three-per-hour and
+ten-per-day publishing limits apply to private snapshots too. The limits are
+`privateTemplateLimits` in `#/lib/templates`.
 
 ## Gallery filters
 
@@ -92,7 +130,7 @@ Images binding `IMAGES`, and stores it beside the PNG as
 Previews of approved public templates are sent with
 `Cache-Control: public, max-age=86400` and an `ETag`, without reading the session.
 A withdrawn template's image can therefore stay in browsers for up to a day.
-Previews of unlisted or unapproved templates are always `private, no-store`.
+Previews of unlisted, private, or unapproved templates are always `private, no-store`.
 
 ## Retention
 
@@ -150,7 +188,10 @@ the stable template routes. It does not deploy Workers or change reviewer access
 ## Schema setup
 
 The app is entirely in development. Apply the current Drizzle schema with
-`bun run db:push`, then seed the matching database and R2 bucket. No generated
+`bun run db:push`, then seed the matching database and R2 bucket. NAT-471 adds
+the `private` value to `template_visibility` (`ALTER TYPE ... ADD VALUE` in a
+generated migration), makes `template.license` nullable, and adds
+`template_license_check`. No generated
 migrations or legacy data backfills are required. Set `TEMPLATE_REVIEWER_IDS`
 for the target environment.
 

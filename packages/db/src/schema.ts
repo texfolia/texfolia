@@ -478,6 +478,8 @@ export const relations = defineRelations(
 export const templateVisibility = pgEnum("template_visibility", [
   "public",
   "unlisted",
+  // Only its owner, or the members of its organization, can see it.
+  "private",
 ]);
 export const templateStatus = pgEnum("template_status", [
   "pending",
@@ -510,7 +512,8 @@ export const template = pgTable(
     title: text("title").notNull(),
     description: text("description").notNull(),
     tags: text("tags").array().notNull(),
-    license: templateLicense("license").notNull(),
+    // Null only for private templates, which nobody else may redistribute.
+    license: templateLicense("license"),
     visibility: templateVisibility("visibility").notNull(),
     status: templateStatus("status").notNull().default("pending"),
     mainFile: text("main_file").notNull(),
@@ -558,6 +561,10 @@ export const template = pgTable(
     check(
       "template_curated_owner_check",
       sql`${table.ownerId} IS NOT NULL OR ${table.organizationId} IS NULL`,
+    ),
+    check(
+      "template_license_check",
+      sql`${table.visibility} = 'private' OR ${table.license} IS NOT NULL`,
     ),
   ],
 );
