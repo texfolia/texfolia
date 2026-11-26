@@ -163,9 +163,11 @@ export function ProjectComments() {
         )}
         {comments.data && !shown.length && !comments.draft && (
           <p className="text-muted-foreground p-3">
-            {filter === "open"
-              ? "No open comments. Select text in a file, then choose Add comment from the editor toolbar or context menu."
-              : "No resolved comments."}
+            {filter !== "open"
+              ? "No resolved comments."
+              : comments.data.canComment
+                ? "No open comments. Select text in a file, then choose Add comment from the editor toolbar or context menu."
+                : "No open comments. You can view this project but not comment on it."}
           </p>
         )}
         <ul className="divide-y">
@@ -275,7 +277,10 @@ function ThreadCard({ thread }: { thread: Located }) {
   if (!comments.data) return null;
   const { data, run, selectThread, activeId } = comments;
   const active = activeId === thread.id;
-  const canDelete = data.canModerate || thread.createdBy === data.userId;
+  // Google Docs rules: commenters resolve any thread and manage their own
+  // comments; editors also delete anyone's; viewers only read.
+  const canDelete =
+    data.canModerate || (data.canComment && thread.createdBy === data.userId);
   // The anchored text was deleted when its range collapsed.
   const detached =
     thread.range !== null && thread.range.from === thread.range.to;
@@ -335,26 +340,28 @@ function ThreadCard({ thread }: { thread: Located }) {
           </span>
           <Quote text={thread.quote} />
         </button>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          disabled={busy}
-          aria-label={thread.resolvedAt ? "Reopen thread" : "Resolve thread"}
-          title={thread.resolvedAt ? "Reopen" : "Resolve"}
-          onClick={() =>
-            void act(() =>
-              resolveCommentThread({
-                data: {
-                  projectId,
-                  threadId: thread.id,
-                  resolved: !thread.resolvedAt,
-                },
-              }),
-            )
-          }
-        >
-          {thread.resolvedAt ? <IconRestore /> : <IconCheck />}
-        </Button>
+        {data.canComment && (
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            disabled={busy}
+            aria-label={thread.resolvedAt ? "Reopen thread" : "Resolve thread"}
+            title={thread.resolvedAt ? "Reopen" : "Resolve"}
+            onClick={() =>
+              void act(() =>
+                resolveCommentThread({
+                  data: {
+                    projectId,
+                    threadId: thread.id,
+                    resolved: !thread.resolvedAt,
+                  },
+                }),
+              )
+            }
+          >
+            {thread.resolvedAt ? <IconRestore /> : <IconCheck />}
+          </Button>
+        )}
         {canDelete && (
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -400,7 +407,11 @@ function ThreadCard({ thread }: { thread: Located }) {
           <li key={comment.id}>
             <CommentItem
               comment={comment}
-              own={comment.authorId === data.userId}
+              canEdit={data.canComment && comment.authorId === data.userId}
+              canDelete={
+                data.canModerate ||
+                (data.canComment && comment.authorId === data.userId)
+              }
               onUpdate={(body) =>
                 act(() =>
                   updateComment({
@@ -426,42 +437,44 @@ function ThreadCard({ thread }: { thread: Located }) {
           </li>
         ))}
       </ol>
-      <form
-        aria-label="Reply"
-        className="space-y-1"
-        onSubmit={(event) => void submitReply(event)}
-      >
-        <Textarea
+      {data.canComment && (
+        <form
           aria-label="Reply"
-          placeholder={thread.resolvedAt ? "Reply to reopen…" : "Reply…"}
-          maxLength={maxCommentLength}
-          value={reply}
-          disabled={busy}
-          className="min-h-8 py-1 text-xs md:text-xs"
-          onFocus={() => selectThread(thread.id)}
-          onChange={(event) => setReply(event.target.value)}
-          onKeyDown={composerKeys(
-            () => void submitReply(),
-            () => setReply(""),
+          className="space-y-1"
+          onSubmit={(event) => void submitReply(event)}
+        >
+          <Textarea
+            aria-label="Reply"
+            placeholder={thread.resolvedAt ? "Reply to reopen…" : "Reply…"}
+            maxLength={maxCommentLength}
+            value={reply}
+            disabled={busy}
+            className="min-h-8 py-1 text-xs md:text-xs"
+            onFocus={() => selectThread(thread.id)}
+            onChange={(event) => setReply(event.target.value)}
+            onKeyDown={composerKeys(
+              () => void submitReply(),
+              () => setReply(""),
+            )}
+          />
+          {reply.trim() && (
+            <div className="flex justify-end gap-1">
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setReply("")}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="xs" disabled={busy}>
+                Reply
+              </Button>
+            </div>
           )}
-        />
-        {reply.trim() && (
-          <div className="flex justify-end gap-1">
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setReply("")}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" size="xs" disabled={busy}>
-              Reply
-            </Button>
-          </div>
-        )}
-      </form>
+        </form>
+      )}
       {error && (
         <p role="alert" className="text-destructive">
           {error}
@@ -477,13 +490,15 @@ function ThreadCard({ thread }: { thread: Located }) {
 
 function CommentItem({
   comment,
-  own,
+  canEdit,
+  canDelete,
   busy,
   onUpdate,
   onDelete,
 }: {
   comment: CommentThread["comments"][number];
-  own: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   busy: boolean;
   onUpdate: (body: string) => Promise<boolean>;
   onDelete: () => void;
@@ -504,7 +519,7 @@ function CommentItem({
           {dateFormat.format(comment.createdAt)}
           {comment.editedAt && " (edited)"}
         </span>
-        {own && editing === null && (
+        {(canEdit || canDelete) && editing === null && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -517,12 +532,16 @@ function CommentItem({
               <IconDots />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setEditing(comment.body)}>
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                Delete
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem onClick={() => setEditing(comment.body)}>
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                  Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

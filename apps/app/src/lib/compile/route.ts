@@ -1,6 +1,5 @@
 import {
   acceptedJobSchema,
-  buildSnapshotSchema,
   compileJobSchema,
   previewTimingSchema,
   type JobTiming,
@@ -152,9 +151,8 @@ async function checkProject<Context extends { db: Db }>(
   // Share links only read builds; they never submit work or report telemetry.
   if (principal.share && request.method !== "GET")
     return json({ error: "Project not found" }, 404);
-  let shareScope: "project" | "pdf" | null;
   try {
-    ({ shareScope } = await db.transaction((tx) =>
+    await db.transaction((tx) =>
       project.lock({
         tx,
         projectId,
@@ -163,15 +161,14 @@ async function checkProject<Context extends { db: Db }>(
           request.method === "GET" || request.method === "PATCH"
             ? "read"
             : "write",
-        content: "build",
       }),
-    ));
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "Project not found")
       return json({ error: "Project not found" }, 404);
     throw error;
   }
-  return { userId: principal.userId, name: principal.name, shareScope };
+  return { userId: principal.userId, name: principal.name };
 }
 
 async function readSources(request: Request) {
@@ -319,19 +316,6 @@ async function readPreviewTiming(request: Request) {
   } catch {
     return null;
   }
-}
-
-async function isLatestPdf(projectId: string, path: string) {
-  const response = await fetchBuilds(`/projects/${projectId}`);
-  if (!response.ok) return false;
-  const snapshot = buildSnapshotSchema.safeParse(
-    await response.json().catch(() => null),
-  );
-  return (
-    snapshot.success &&
-    snapshot.data.artifacts?.pdf != null &&
-    snapshot.data.artifacts.pdf === path
-  );
 }
 
 // Handlers for `/api/compile/$projectId`. The app supplies authentication,
@@ -630,11 +614,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
       );
       if (denied instanceof Response) return denied;
       const url = new URL(request.url);
-      // PDF-only links see the build stream and the latest PDF, but not job
-      // logs or other generated files, which can quote the sources.
-      const pdfOnly = denied.shareScope === "pdf";
       if (url.searchParams.get("history") === "1") {
-        if (pdfOnly) return json({ error: "Not found" }, 404);
         const session = url.searchParams.has(sessionHistoryParam)
           ? sessionElapsedSchema.safeParse(
               url.searchParams.get(sessionHistoryParam),
@@ -673,12 +653,6 @@ export function createCompileHandlers<Context extends { db: Db }>(
       if (!url.searchParams.has("job")) {
         try {
           const file = url.searchParams.get("file");
-          if (
-            file !== null &&
-            pdfOnly &&
-            !(await isLatestPdf(params.projectId, file))
-          )
-            return json({ error: "File not found" }, 404);
           if (file !== null)
             return await fetchBuilds(
               `/projects/${params.projectId}/build/files?path=${encodeURIComponent(file)}&version=${encodeURIComponent(url.searchParams.get("version") ?? "")}`,
@@ -695,8 +669,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
         }
       }
       const parsedId = idSchema.safeParse(url.searchParams.get("job"));
-      if (!parsedId.success || pdfOnly)
-        return json({ error: "Job not found" }, 404);
+      if (!parsedId.success) return json({ error: "Job not found" }, 404);
       const id = parsedId.data;
       const job = await db.query.projectJob.findFirst({
         columns: { id: true, status: true, createdAt: true },

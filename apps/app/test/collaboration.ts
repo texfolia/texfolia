@@ -818,7 +818,15 @@ try {
     viewerId,
     cookies,
   });
-  await checkShareLinks({ mf, db, origin, ownerId, editorId, cookies });
+  await checkShareLinks({
+    mf,
+    db,
+    origin,
+    ownerId,
+    editorId,
+    linkedId: viewerId,
+    cookies,
+  });
   await checkScratchpad({
     mf,
     db,

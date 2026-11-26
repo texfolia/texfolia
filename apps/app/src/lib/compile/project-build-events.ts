@@ -29,17 +29,13 @@ export class ProjectBuildEvents {
   constructor(
     projectId: string,
     private onSnapshot: (snapshot: BuildSnapshot) => void,
-    // Lets a caller add credentials, such as a share token, to the stream URL.
-    decorateUrl: (url: string) => string = (url) => url,
     private createSocket: (url: string) => BuildSocket = (url) => {
       const resolved = new URL(url, window.location.href);
       resolved.protocol = resolved.protocol === "https:" ? "wss:" : "ws:";
       return new WebSocket(resolved);
     },
   ) {
-    this.url = decorateUrl(
-      `/api/compile/${encodeURIComponent(projectId)}?events=1`,
-    );
+    this.url = `/api/compile/${encodeURIComponent(projectId)}?events=1`;
     globalThis.addEventListener?.("online", this.online);
     this.connect();
   }

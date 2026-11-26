@@ -140,10 +140,10 @@ async function checkMainFile({
   const link = await createShareLink({
     db,
     userId: ownerId,
-    data: { projectId, scope: "project" },
+    data: { projectId, role: "viewer" },
   });
   assert.equal(
-    (await getSharedProject({ db, token: link.token })).mainFile,
+    (await getSharedProject({ db, token: link.token, projectId }))?.mainFile,
     "volume.tex",
   );
   // A file that comes back at the path, as after a branch switch, is it again.
@@ -218,7 +218,7 @@ async function checkLifecycle({
   const link = await createShareLink({
     db,
     userId: ownerId,
-    data: { projectId, scope: "project" },
+    data: { projectId, role: "viewer" },
   });
   const guest = sharePrincipal(link.id);
   const outsiders = [viewerId, editorId, strangerId, guest];
@@ -243,9 +243,9 @@ async function checkLifecycle({
       /Project not found/,
     );
   }
-  await assert.rejects(
-    getSharedProject({ db, token: link.token }),
-    /Project not found/,
+  assert.equal(
+    await getSharedProject({ db, token: link.token, projectId }),
+    null,
   );
   await assert.rejects(
     trashProject({ db, userId: ownerId, projectId }),
@@ -290,7 +290,7 @@ async function checkLifecycle({
   assert.deepEqual(await sources(ownerId, projectId), before);
   assert.equal((await listed(viewerId, projectId))?.canWrite, false);
   assert.equal(
-    (await getSharedProject({ db, token: link.token })).projectId,
+    (await getSharedProject({ db, token: link.token, projectId }))?.projectId,
     projectId,
   );
   await assert.rejects(
@@ -466,9 +466,9 @@ async function checkLifecycle({
       .sort(),
     [editorId, ownerId].sort(),
   );
-  await assert.rejects(
-    getSharedProject({ db, token: link.token }),
-    /not found/,
+  assert.equal(
+    await getSharedProject({ db, token: link.token, projectId }),
+    null,
   );
   for (const action of [
     () => trashProject({ db, userId: ownerId, projectId }),
@@ -482,10 +482,10 @@ async function checkLifecycle({
       createShareLink({
         db,
         userId: ownerId,
-        data: { projectId, scope: "project" },
+        data: { projectId, role: "viewer" },
       }),
   ])
-    await assert.rejects(action(), /Project not found|Only the project owner/);
+    await assert.rejects(action(), /Project not found|manage/);
 
   // Organization projects: owners and admins manage, members receive.
   await db

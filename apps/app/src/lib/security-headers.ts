@@ -17,7 +17,8 @@ export function withSecurityHeaders({
   const secured = new Response(response.body, response);
   secured.headers.set("X-Content-Type-Options", "nosniff");
   secured.headers.set("X-Frame-Options", "SAMEORIGIN");
-  secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (!secured.headers.has("Referrer-Policy"))
+    secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 
   // Vite's refresh preamble uses inline scripts without a nonce in development.
   if (!development) {

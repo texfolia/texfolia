@@ -98,11 +98,15 @@ export function createProjectsStore({
           formatWidth: 80,
           spellcheckLanguage: "en-US",
           mainFile: null,
+          organizationRole: null,
           collaborators: [],
           owner: null,
           people: [],
           tags: [],
+          role: "editor",
           canWrite: true,
+          canComment: true,
+          guest: false,
           canManage: true,
         })
         .when("settled");

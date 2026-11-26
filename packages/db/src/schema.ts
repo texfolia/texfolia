@@ -16,14 +16,17 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { organization, user } from "./auth-schema";
+import { organization, team, user } from "./auth-schema";
 
 export * from "./auth-schema";
 
 const NIL_UUID = sql`'00000000-0000-0000-0000-000000000000'::uuid`;
 
-export const projectCollaboratorRole = pgEnum("project_collaborator_role", [
+// Can edit, can comment, or can view. Collaborators, teams, share links, and
+// the organization-wide level all grant one of these.
+export const projectRole = pgEnum("project_role", [
   "editor",
+  "commenter",
   "viewer",
 ]);
 
@@ -60,6 +63,11 @@ export const project = pgTable(
     // the file is deleted. Null, or a missing file, means main.tex or the first
     // .tex file.
     mainFile: text("main_file"),
+    // What every member of the owning organization may do, like Google Docs'
+    // general access. Null means only the organization's owners and admins,
+    // plus the people and teams granted access. Every member could edit before
+    // roles existed, hence the default. Personal projects ignore it.
+    organizationRole: projectRole("organization_role").default("editor"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -130,6 +138,8 @@ export const projectTag = pgTable(
   ],
 );
 
+// People granted access to one project. On an organization project they must be
+// members of the organization; the grant stops applying when they leave it.
 export const projectCollaborator = pgTable(
   "project_collaborator",
   {
@@ -139,7 +149,7 @@ export const projectCollaborator = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: projectCollaboratorRole("role").notNull().default("viewer"),
+    role: projectRole("role").notNull().default("viewer"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -154,13 +164,9 @@ export const projectCollaborator = pgTable(
   ],
 );
 
-export const projectShareLinkScope = pgEnum("project_share_link_scope", [
-  "project",
-  "pdf",
-]);
-
-// Read-only links for people without an account. Only the token's SHA-256 is
-// stored; the token itself is returned once, when the link is created.
+// Capability links. Anyone may redeem a view link; comment and edit links need
+// an account. Only the token's SHA-256 is stored; the token itself is returned
+// once, when the link is created.
 export const projectShareLink = pgTable(
   "project_share_link",
   {
@@ -169,7 +175,7 @@ export const projectShareLink = pgTable(
       .notNull()
       .references(() => project.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull().unique(),
-    scope: projectShareLinkScope("scope").notNull(),
+    role: projectRole("role").notNull(),
     createdBy: text("created_by")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -180,6 +186,55 @@ export const projectShareLink = pgTable(
   (table) => [
     index("project_share_link_project_id_idx").on(table.projectId),
     index("project_share_link_created_by_idx").on(table.createdBy),
+  ],
+);
+
+// An account that redeemed a share link. It has the link's role for as long as
+// the link exists: revoking the link deletes these rows.
+export const projectShareGrant = pgTable(
+  "project_share_grant",
+  {
+    linkId: uuid("link_id")
+      .notNull()
+      .references(() => projectShareLink.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.linkId, table.userId] }),
+    index("project_share_grant_project_id_user_id_idx").on(
+      table.projectId,
+      table.userId,
+    ),
+    index("project_share_grant_user_id_idx").on(table.userId),
+  ],
+);
+
+// Teams of the owning organization granted access to one of its projects.
+export const projectTeam = pgTable(
+  "project_team",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+    role: projectRole("role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.teamId] }),
+    index("project_team_team_id_idx").on(table.teamId),
   ],
 );
 
@@ -400,7 +455,10 @@ export const relations = defineRelations(
     projectCollaborator,
     projectJob,
     projectNode,
+    projectShareGrant,
     projectShareLink,
+    projectTeam,
+    team,
     projectTag,
     tag,
     organization,
@@ -409,6 +467,8 @@ export const relations = defineRelations(
   (r) => ({
     project: {
       collaborators: r.many.projectCollaborator(),
+      shareGrants: r.many.projectShareGrant(),
+      teams: r.many.projectTeam(),
       jobs: r.many.projectJob(),
       nodes: r.many.projectNode(),
       owner: r.one.user({
@@ -446,6 +506,26 @@ export const relations = defineRelations(
       project: r.one.project({
         from: r.projectShareLink.projectId,
         to: r.project.id,
+      }),
+    },
+    projectShareGrant: {
+      link: r.one.projectShareLink({
+        from: r.projectShareGrant.linkId,
+        to: r.projectShareLink.id,
+      }),
+      project: r.one.project({
+        from: r.projectShareGrant.projectId,
+        to: r.project.id,
+      }),
+    },
+    projectTeam: {
+      project: r.one.project({
+        from: r.projectTeam.projectId,
+        to: r.project.id,
+      }),
+      team: r.one.team({
+        from: r.projectTeam.teamId,
+        to: r.team.id,
       }),
     },
     projectNode: {

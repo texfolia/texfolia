@@ -4,7 +4,12 @@ export * from "../workspace-upload/rpc";
 export async function listComments() {
   const response = await fetch("/fixture/comments");
   if (!response.ok)
-    return { threads: [], canModerate: false, userId: "runtime-test" };
+    return {
+      threads: [],
+      canComment: true,
+      canModerate: false,
+      userId: "runtime-test",
+    };
   return JSON.parse(await response.text(), (key, value: unknown) =>
     key === "createdAt" ? new Date(String(value)) : value,
   ) as unknown;

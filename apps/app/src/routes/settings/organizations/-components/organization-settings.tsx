@@ -13,6 +13,7 @@ import { authClient } from "#/lib/auth/auth-client";
 
 import { OrganizationConfirmation } from "./organization-confirmation";
 import { OrganizationMembers } from "./organization-members";
+import { OrganizationTeams } from "./organization-teams";
 import {
   check,
   type Organization,
@@ -41,6 +42,7 @@ export function OrganizationSettings({
       </p>
       {org.canManage && <OrganizationName org={org} />}
       <OrganizationMembers org={org} />
+      <OrganizationTeams org={org} />
       <Item variant="outline">
         <ItemContent>
           <ItemTitle>Leave organization</ItemTitle>

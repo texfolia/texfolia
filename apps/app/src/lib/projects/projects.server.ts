@@ -1,9 +1,14 @@
 import type { Db } from "@texfolia/db";
 import {
+  member,
   project,
+  projectCollaborator,
   projectNode,
+  projectShareGrant,
   projectTag,
+  projectTeam,
   tag,
+  teamMember,
   user,
 } from "@texfolia/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -23,6 +28,7 @@ import type {
   updateProjectMainFileSchema,
   updateProjectSpellingSchema,
 } from "./project.schema";
+import { projectPermissions, strongerRole, type ProjectRole } from "./roles";
 
 // `lock` is the app's composed access check (see `projectLock`).
 type ProjectOwner = { db: Db; ownerId: string; lock: LockProject };
@@ -147,7 +153,7 @@ export async function createProject({
       owner: owner ?? null,
       people: owner ? [{ ...owner, role: "owner" }] : [],
       tags: [],
-      canWrite: true,
+      ...projectPermissions("editor"),
       canManage: true,
     };
   });
@@ -157,8 +163,10 @@ export const projectPageSize = 100;
 export const maxProjectPageSize = 200;
 
 // Projects the viewer may open: live personal projects they own or collaborate
-// on, plus every live project in an organization they belong to. Relation
-// filters compile to EXISTS subqueries, so access costs no extra round trip.
+// on; organization projects open to every member, or shared with them or one
+// of their teams, or any project when they manage the organization; and any
+// project whose share link they redeemed. Mirrors `lockProject`. The filter
+// compiles to EXISTS subqueries, so access costs no extra round trip.
 type ProjectFilter = Extract<
   NonNullable<Parameters<Db["query"]["project"]["findMany"]>[0]>["where"],
   object
@@ -167,14 +175,59 @@ type ProjectFilter = Extract<
 export function accessibleProjects(userId: string): ProjectFilter {
   return {
     deletedAt: { isNull: true },
-    OR: [
-      {
-        organizationId: { isNull: true },
-        OR: [{ ownerId: userId }, { collaborators: { userId } }],
-      },
-      { organization: { members: { userId } } },
-    ],
+    RAW: (t) => sql`(
+      (${t.organizationId} is null and (
+        ${t.ownerId} = ${userId}
+        or exists (select 1 from ${projectCollaborator} where ${projectCollaborator.projectId} = ${t.id} and ${projectCollaborator.userId} = ${userId})
+      ))
+      or exists (
+        select 1 from ${member}
+        where ${member.organizationId} = ${t.organizationId} and ${member.userId} = ${userId}
+        and (
+          ${t.organizationRole} is not null
+          or ${member.role} ~ '(^|,)\\s*(owner|admin)\\s*(,|$)'
+          or exists (select 1 from ${projectCollaborator} where ${projectCollaborator.projectId} = ${t.id} and ${projectCollaborator.userId} = ${userId})
+          or exists (
+            select 1 from ${projectTeam}
+            inner join ${teamMember} on ${teamMember.teamId} = ${projectTeam.teamId}
+            where ${projectTeam.projectId} = ${t.id} and ${teamMember.userId} = ${userId}
+          )
+        )
+      )
+      or exists (select 1 from ${projectShareGrant} where ${projectShareGrant.projectId} = ${t.id} and ${projectShareGrant.userId} = ${userId})
+    )`,
   };
+}
+
+// The strongest role among the grants `getProjects` loads, as `lockProject`
+// computes it.
+function viewerRole(
+  row: {
+    ownerId: string | null;
+    organizationId: string | null;
+    organizationRole: ProjectRole | null;
+    collaborators: { userId: string; role: ProjectRole }[];
+    shareGrants: { link: { role: ProjectRole } | null }[];
+    teams: { role: ProjectRole }[];
+  },
+  members: { userId: string; role: string }[] | undefined,
+  userId: string,
+): ProjectRole {
+  let role: ProjectRole | null = null;
+  for (const grant of row.shareGrants)
+    role = strongerRole(role, grant.link?.role ?? null);
+  if (!row.organizationId) {
+    if (row.ownerId === userId) return "editor";
+  } else {
+    const membership = members?.find((person) => person.userId === userId);
+    if (!membership) return role ?? "viewer";
+    if (isOrgAdmin(membership.role)) return "editor";
+    role = strongerRole(role, row.organizationRole);
+    for (const team of row.teams) role = strongerRole(role, team.role);
+  }
+  for (const person of row.collaborators)
+    if (person.userId === userId) role = strongerRole(role, person.role);
+  return role ?? "viewer";
 }
 
 // One relational query: access, tags, people, and the viewer's organization
@@ -200,6 +253,16 @@ export async function getProjects({
         with: {
           user: { columns: { id: true, name: true, image: true } },
         },
+      },
+      // Only the viewer's own grants decide their role.
+      shareGrants: {
+        columns: { userId: true },
+        where: { userId },
+        with: { link: { columns: { role: true } } },
+      },
+      teams: {
+        columns: { role: true },
+        where: { team: { teamMembers: { userId } } },
       },
       // Tags are private to each user, so only the viewer's catalog applies.
       tags: { columns: { name: true }, where: { userId } },
@@ -233,31 +296,34 @@ export async function getProjects({
 
   const page = rows.slice(0, take);
   return {
-    projects: page.map(({ tags, organization, ...row }) => ({
-      ...row,
-      tags: tags.map((item) => item.name).sort(),
-      people: organization
-        ? organization.members.flatMap((person) =>
-            person.user ? [{ ...person.user, role: person.role }] : [],
-          )
-        : [
-            ...(row.owner ? [{ ...row.owner, role: "owner" }] : []),
-            ...row.collaborators.flatMap((person) =>
+    projects: page.map(
+      ({ tags, organization, shareGrants, teams, ...row }) => ({
+        ...row,
+        tags: tags.map((item) => item.name).sort(),
+        people: organization
+          ? organization.members.flatMap((person) =>
               person.user ? [{ ...person.user, role: person.role }] : [],
-            ),
-          ],
-      canWrite:
-        !!organization ||
-        row.ownerId === userId ||
-        row.collaborators.some(
-          (person) => person.userId === userId && person.role === "editor",
+            )
+          : [
+              ...(row.owner ? [{ ...row.owner, role: "owner" }] : []),
+              ...row.collaborators.flatMap((person) =>
+                person.user ? [{ ...person.user, role: person.role }] : [],
+              ),
+            ],
+        ...projectPermissions(
+          viewerRole(
+            { ...row, shareGrants, teams },
+            organization?.members,
+            userId,
+          ),
         ),
-      canManage:
-        row.ownerId === userId ||
-        !!organization?.members.some(
-          (person) => person.userId === userId && isOrgAdmin(person.role),
-        ),
-    })),
+        canManage:
+          row.ownerId === userId ||
+          !!organization?.members.some(
+            (person) => person.userId === userId && isOrgAdmin(person.role),
+          ),
+      }),
+    ),
     nextCursor: rows.length > take ? (page.at(-1)?.id ?? null) : null,
   };
 }
@@ -334,8 +400,8 @@ export async function getProject({
   projectId,
   bucket,
 }: ProjectOwner & { projectId: string; bucket?: SourceBucket }) {
-  const { result, canWrite } = await db.transaction(async (tx) => {
-    const { canWrite } = await lock({
+  const { result, permissions } = await db.transaction(async (tx) => {
+    const { role, canWrite, canComment } = await lock({
       tx,
       projectId,
       userId: ownerId,
@@ -353,7 +419,7 @@ export async function getProject({
       },
     });
     if (!result) throw new Error("Project not found");
-    return { result, canWrite };
+    return { result, permissions: { role, canWrite, canComment } };
   });
   const sourceVersions: Record<
     string,
@@ -387,7 +453,7 @@ export async function getProject({
       name,
       kind,
     })),
-    canWrite,
+    ...permissions,
     sourceVersions,
     sourceContents,
   };

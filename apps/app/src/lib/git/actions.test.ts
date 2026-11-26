@@ -130,11 +130,14 @@ function createHarness({
     formatWidth: 80,
     spellcheckLanguage: "en-US",
     mainFile: null,
+    organizationRole: null,
     createdAt: new Date(1),
     updatedAt: new Date(1),
     deletedAt: null,
+    role: "editor",
     canWrite: true,
-    shareScope: null,
+    canComment: true,
+    guest: false,
   });
 
   const bucket: SourceBucket = {

@@ -1,6 +1,6 @@
 import type { LockProject, ProjectTransaction } from "./access";
 
-// The file tree, saved source versions, main document, and write access, read
+// The file tree, saved source versions, main document, and access, read
 // inside the caller's transaction under a shared project lock.
 export async function readProjectMetadata({
   tx,
@@ -13,7 +13,7 @@ export async function readProjectMetadata({
   userId: string;
   lock: LockProject;
 }) {
-  const { canWrite, mainFile } = await lock({
+  const { canWrite, canComment, mainFile } = await lock({
     tx,
     projectId,
     userId,
@@ -39,6 +39,7 @@ export async function readProjectMetadata({
         ]),
     ),
     canWrite,
+    canComment,
     mainFile,
   };
 }

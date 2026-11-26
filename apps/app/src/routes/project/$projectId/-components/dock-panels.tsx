@@ -97,8 +97,10 @@ export function FileEditor({
             threads: openThreads,
             activeId: comments.activeId,
             onSelect: (id) => comments.selectThread(id, true),
-            onAdd: (anchor) =>
-              comments.startComment({ ...anchor, nodeId: params.node.id }),
+            onAdd: comments.data?.canComment
+              ? (anchor) =>
+                  comments.startComment({ ...anchor, nodeId: params.node.id })
+              : undefined,
           }
         : undefined,
     [comments, openThreads, params.node.id],

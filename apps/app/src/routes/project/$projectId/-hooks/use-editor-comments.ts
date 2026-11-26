@@ -18,7 +18,8 @@ export type EditorComments = {
   threads: (CommentAnchor & { id: string })[];
   activeId: string | undefined;
   onSelect: (id: string) => void;
-  onAdd: (draft: CommentAnchor & { quote: string }) => void;
+  // Absent for viewers, who read comments but cannot add them.
+  onAdd?: (draft: CommentAnchor & { quote: string }) => void;
 };
 
 /**
@@ -39,6 +40,7 @@ export function useEditorComments({
   const commentsRef = useRef(comments);
   commentsRef.current = comments;
   const commenting = !!comments && !!collaboration;
+  const canAdd = commenting && !!comments.onAdd;
   const commentExtension = useMemo(
     () =>
       commenting
@@ -83,7 +85,7 @@ export function useEditorComments({
   }, [collaboration, commentThreads, activeCommentId, commentExtension, view]);
 
   function addComment() {
-    if (!view || !collaboration || !comments) return;
+    if (!view || !collaboration || !comments?.onAdd) return;
     let { from, to } = view.state.selection.main;
     // Without a selection, comment on the cursor's line.
     if (from === to) ({ from, to } = view.state.doc.lineAt(from));
@@ -98,5 +100,5 @@ export function useEditorComments({
     });
   }
 
-  return { commenting, commentExtension, addComment };
+  return { canAdd, commentExtension, addComment };
 }

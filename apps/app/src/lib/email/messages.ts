@@ -8,12 +8,12 @@ const codePurposes = {
 };
 export type EmailCodeType = keyof typeof codePurposes;
 
-export type ProjectCollaboratorEmailRole = "viewer" | "editor";
-export type ProjectShareLinkEmailScope = "project" | "pdf";
+export type ProjectEmailRole = "viewer" | "commenter" | "editor";
 
-const shareLinkScopeAccess: Record<ProjectShareLinkEmailScope, string> = {
-  project: "view its sources and PDF",
-  pdf: "view its PDF",
+const roleAccess: Record<ProjectEmailRole, string> = {
+  viewer: "view",
+  commenter: "comment on",
+  editor: "edit",
 };
 
 function escapeHtml(value: string) {
@@ -77,10 +77,10 @@ export function projectCollaboratorEmail({
   to: string;
   projectName: string;
   inviterName: string;
-  role: ProjectCollaboratorEmailRole;
+  role: ProjectEmailRole;
   url: URL;
 }): EmailMessage {
-  const access = role === "editor" ? "edit" : "view";
+  const access = roleAccess[role];
   const safeProjectSubject = cleanSubjectText(projectName);
   const safeInviter = escapeHtml(inviterName);
   const safeProject = escapeHtml(projectName);
@@ -97,16 +97,21 @@ export function projectShareLinkEmail({
   to,
   projectName,
   senderName,
-  scope,
+  role,
   url,
 }: {
   to: string;
   projectName: string;
   senderName: string;
-  scope: ProjectShareLinkEmailScope;
+  role: ProjectEmailRole;
   url: URL;
 }): EmailMessage {
-  const access = shareLinkScopeAccess[scope];
+  const access = roleAccess[role];
+  // Anyone can open a view link; comment and edit links need an account.
+  const signIn =
+    role === "viewer"
+      ? "without signing in"
+      : "after signing in or creating an account";
   const safeSenderSubject = cleanSubjectText(senderName);
   const safeProjectSubject = cleanSubjectText(projectName);
   const safeSender = escapeHtml(senderName);
@@ -115,8 +120,8 @@ export function projectShareLinkEmail({
   return {
     to,
     subject: `${safeSenderSubject} shared ${safeProjectSubject} on Texfolia`,
-    text: `${senderName} shared a read-only link to "${projectName}" on Texfolia so you can ${access} without signing in: ${url.href}`,
-    html: `<p>${safeSender} shared a read-only link to <strong>${safeProject}</strong> on Texfolia so you can ${access} without signing in.</p><p><a href="${safeUrl}">Open shared link</a></p>`,
+    text: `${senderName} shared a link to "${projectName}" on Texfolia so you can ${access} it ${signIn}: ${url.href}`,
+    html: `<p>${safeSender} shared a link to <strong>${safeProject}</strong> on Texfolia so you can ${access} it ${signIn}.</p><p><a href="${safeUrl}">Open shared link</a></p>`,
   };
 }
 

@@ -14,6 +14,7 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from "#/lib/collaboration";
+import { shareCookieName } from "#/lib/sharing/share-token";
 
 import { createProject } from "../../src/lib/projects/project.server";
 
@@ -97,14 +98,15 @@ export async function checkScratchpad({
   ) {
     const clientId = Math.floor(Math.random() * 0xffffffff);
     return mf.dispatchFetch(
-      `${origin}/api/collaboration/${projectId}/${scratchpadId}?protocol=2&clientId=${clientId}${"token" in auth ? `&share=${auth.token}` : ""}`,
+      `${origin}/api/collaboration/${projectId}/${scratchpadId}?protocol=2&clientId=${clientId}`,
       {
         headers: {
           Origin: origin,
           Upgrade: "websocket",
-          ...("userId" in auth
-            ? { Cookie: cookies.get(auth.userId) ?? "" }
-            : {}),
+          Cookie:
+            "userId" in auth
+              ? (cookies.get(auth.userId) ?? "")
+              : `${shareCookieName(projectId)}=${auth.token}`,
         },
       },
     );
@@ -219,16 +221,25 @@ export async function checkScratchpad({
     // Anyone else is refused, however they ask.
     const stranger = crypto.randomUUID();
     await denied(projectId, stranger);
-    for (const scope of ["project", "pdf"]) {
+    // Anonymous guests never open it: a view link's guest is refused, and a
+    // comment link without an account is no credential at all.
+    for (const [role, status] of [
+      ["viewer", 404],
+      ["commenter", 401],
+    ] as const) {
       const link = z
         .object({ id: z.uuid(), token: z.string() })
         .parse(
           await (
-            await post(`/access/share-create/${projectId}`, { scope })
+            await post(`/access/share-create/${projectId}`, { role })
           ).json(),
         );
       const asGuest = await request(projectId, { token: link.token });
-      assert.equal(asGuest.status, 404, `${scope} link opened the scratchpad`);
+      assert.equal(
+        asGuest.status,
+        status,
+        `${role} link opened the scratchpad`,
+      );
       await denied(projectId, `share:${link.id}`);
     }
     assert.equal(

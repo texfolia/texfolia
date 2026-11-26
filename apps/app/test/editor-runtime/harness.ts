@@ -38,7 +38,10 @@ export function fixtureProject(
     formatWidth: 80,
     spellcheckLanguage: "en-US",
     mainFile: null,
+    organizationRole: null,
+    role: "editor",
     canWrite: true,
+    canComment: true,
     nodes: [
       {
         id: rootId,

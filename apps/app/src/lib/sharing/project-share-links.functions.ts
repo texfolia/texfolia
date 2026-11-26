@@ -7,7 +7,6 @@ import { createEmailDelivery } from "#/lib/email";
 import {
   createShareLinkSchema,
   revokeShareLinkSchema,
-  sharedProjectSchema,
   shareLinksSchema,
 } from "./project-share-links.schema";
 
@@ -47,24 +46,4 @@ export const revokeShareLink = createServerFn({ method: "POST" })
       data,
       live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
     });
-  });
-
-// Anonymous: the token is the credential.
-export const getSharedProject = createServerFn({ method: "GET" })
-  .validator(sharedProjectSchema)
-  .handler(async ({ data, context }) => {
-    const server = await import("./project-share-links.server");
-    try {
-      return await server.getSharedProject({
-        db: context.db,
-        token: data.token,
-      });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        ["Share link not found", "Project not found"].includes(error.message)
-      )
-        return null;
-      throw error;
-    }
   });

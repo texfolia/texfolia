@@ -96,10 +96,17 @@ export async function checkSharingNotifications(db: Db) {
     );
 
     // Only people who manage access see emails.
-    const emails = async (userId: string) =>
-      (await getProjectAccess({ db, userId, projectId })).people
-        .map((person) => person.email)
-        .sort();
+    const emails = async (userId: string) => {
+      const access = await getProjectAccess({ db, userId, projectId });
+      const people = new Map(
+        [
+          ...(access.owner ? [access.owner] : []),
+          ...access.people,
+          ...(access.organization?.managers ?? []),
+        ].map((person) => [person.id, person.email]),
+      );
+      return [...people.values()].sort();
+    };
     assert.deepEqual(
       await emails(ownerId),
       [ownerEmail, collaboratorEmail].sort(),
@@ -114,7 +121,7 @@ export async function checkSharingNotifications(db: Db) {
         data: { projectId, email: ownerEmail, role: "editor" },
         email,
       }),
-      /already own/,
+      /already have access/,
     );
     assert.equal(
       await grantProjectAccess({
@@ -148,7 +155,7 @@ export async function checkSharingNotifications(db: Db) {
     const bare = await createShareLink({
       db,
       userId: ownerId,
-      data: { projectId, scope: "project" },
+      data: { projectId, role: "viewer" },
       email,
     });
     assert.equal(bare.notification, "none");
@@ -159,14 +166,14 @@ export async function checkSharingNotifications(db: Db) {
     const emailed = await createShareLink({
       db,
       userId: ownerId,
-      data: { projectId, scope: "pdf", recipientEmail: externalEmail },
+      data: { projectId, role: "commenter", recipientEmail: externalEmail },
       email,
     });
     assert.equal(emailed.notification, "queued");
     assert.equal(sent.length, 2);
     assert.equal(sent[1]?.to, externalEmail);
     assert(sent[1]?.text.includes(`${baseURL}/share/${emailed.token}`));
-    assert(sent[1]?.text.includes("view its PDF without signing in"));
+    assert(sent[1]?.text.includes("comment on it after signing in"));
 
     // Owner and existing collaborators are rejected before creating a share link.
     const linksBefore = (
@@ -178,12 +185,12 @@ export async function checkSharingNotifications(db: Db) {
         userId: ownerId,
         data: {
           projectId,
-          scope: "project",
+          role: "viewer",
           recipientEmail: ownerEmail.toUpperCase(),
         },
         email,
       }),
-      /already own/,
+      /already have access/,
     );
     await assert.rejects(
       createShareLink({
@@ -191,7 +198,7 @@ export async function checkSharingNotifications(db: Db) {
         userId: ownerId,
         data: {
           projectId,
-          scope: "project",
+          role: "viewer",
           recipientEmail: collaboratorEmail,
         },
         email,
@@ -210,7 +217,7 @@ export async function checkSharingNotifications(db: Db) {
       userId: ownerId,
       data: {
         projectId,
-        scope: "project",
+        role: "viewer",
         recipientEmail: "another-reviewer@example.com",
       },
       email: {
@@ -245,7 +252,7 @@ export async function checkSharingNotifications(db: Db) {
       createShareLink({
         db,
         userId: ownerId,
-        data: { projectId, scope: "pdf", recipientEmail: externalEmail },
+        data: { projectId, role: "commenter", recipientEmail: externalEmail },
         email,
       });
     const limitedBefore = sent.length;
@@ -258,7 +265,7 @@ export async function checkSharingNotifications(db: Db) {
     await createShareLink({
       db,
       userId: ownerId,
-      data: { projectId, scope: "pdf" },
+      data: { projectId, role: "commenter" },
     });
     // A new minute allows sharing until the daily budget runs out.
     const aMinuteAgo = new Date(Date.now() - 61_000);

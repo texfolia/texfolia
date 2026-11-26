@@ -33,7 +33,7 @@ export function getProjectMetadata({
       ...metadata,
       // Share-link guests cannot see comments or Git.
       commentsVersion: signedIn
-        ? await commentsVersion(tx, options.projectId)
+        ? await commentsVersion(tx, options.projectId, metadata.canComment)
         : undefined,
       gitVersion: signedIn
         ? await gitVersion(tx, options.projectId)

@@ -1,56 +1,64 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { getSharedProject } from "#/lib/sharing/project-share-links.functions";
+import { LinkNoLongerWorks } from "#/components/link-no-longer-works";
 import { shareTokenPattern } from "#/lib/sharing/share-token";
-import { ThemeProvider } from "#/providers/theme-provider";
 
-import { SharedProjectView } from "./-components/shared-project-view";
-
+// The link people receive. It only redeems the token and redirects to the
+// project's one URL, `/project/$projectId`, so the token leaves the address bar
+// and is never sent as a Referer. Links that no longer work fall through to the
+// page below.
 export const Route = createFileRoute("/share/$token")({
   ssr: false,
-  loader: async ({ params }) => {
-    if (!shareTokenPattern.test(params.token)) throw notFound();
-    const project = await getSharedProject({ data: { token: params.token } });
-    if (!project) throw notFound();
-    return { project };
-  },
-  head: ({ loaderData }) => ({
-    meta: [
-      {
-        title: loaderData?.project
-          ? `${loaderData.project.name} | Texfolia`
-          : "Shared project | Texfolia",
+  server: {
+    handlers: {
+      GET: async ({ request, params, context, next }) => {
+        if (!shareTokenPattern.test(params.token)) return next();
+        const [
+          { env },
+          { redeemShareLink },
+          { shareCookie, clearShareCookie },
+        ] = await Promise.all([
+          import("cloudflare:workers"),
+          import("#/lib/sharing/project-share-links.server"),
+          import("#/lib/sharing/share-cookie.server"),
+        ]);
+        const session = await context.auth.api.getSession({
+          headers: request.headers,
+          query: { disableRefresh: true },
+        });
+        const redeemed = await redeemShareLink({
+          db: context.db,
+          token: params.token,
+          userId: session?.user.id ?? null,
+          live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
+        });
+        if (!redeemed) return next();
+        const { projectId, signIn } = redeemed;
+        const secure = new URL(request.url).protocol === "https:";
+        const project = `/project/${encodeURIComponent(projectId)}`;
+        const headers = new Headers({
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "no-referrer",
+          Location: signIn
+            ? `/login?${new URLSearchParams({ redirectTo: project })}`
+            : project,
+        });
+        headers.append(
+          "Set-Cookie",
+          session
+            ? clearShareCookie(projectId, secure)
+            : shareCookie(projectId, params.token, { pending: signIn, secure }),
+        );
+        return new Response(null, { status: 303, headers });
       },
+    },
+  },
+  head: () => ({
+    meta: [
+      { title: "Shared project | Texfolia" },
       { name: "robots", content: "noindex, nofollow" },
       { name: "referrer", content: "no-referrer" },
     ],
   }),
-  notFoundComponent: () => (
-    <main
-      id="main-content"
-      className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-4 px-6"
-    >
-      <h1 className="text-2xl">This link no longer works</h1>
-      <p className="text-muted-foreground">
-        The owner may have revoked it, or the project was deleted. Ask them for
-        a new link.
-      </p>
-      <Link to="/" className="underline">
-        Go to Texfolia
-      </Link>
-    </main>
-  ),
-  remountDeps: ({ params }) => params.token,
-  component: SharePage,
+  component: LinkNoLongerWorks,
 });
-
-function SharePage() {
-  const { project } = Route.useLoaderData();
-  const { token } = Route.useParams();
-  return (
-    // Guests have no account settings; appearance stays in this browser.
-    <ThemeProvider userId="share-guest">
-      <SharedProjectView project={project} token={token} />
-    </ThemeProvider>
-  );
-}

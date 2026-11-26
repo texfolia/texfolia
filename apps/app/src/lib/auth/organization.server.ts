@@ -6,7 +6,7 @@ import { isOrgAdmin } from "./roles";
 
 /**
  * The organization settings page: the user's organizations, and the selected
- * one's members. Invitations are for the people who manage them.
+ * one's members and teams. Invitations are for the people who manage them.
  */
 export async function organizationOverview(
   db: Db,
@@ -26,7 +26,7 @@ export async function organizationOverview(
   if (organizationId && !current) throw new Error("Organization not found");
   if (!current) return { userId, organizations, selected: null };
   const canManage = isOrgAdmin(current.role);
-  const [members, invitations, projects, templates] = await Promise.all([
+  const [members, invitations, projects, templates, teams] = await Promise.all([
     db.query.member.findMany({
       where: { organizationId: current.id },
       columns: { id: true, userId: true, role: true },
@@ -52,6 +52,12 @@ export async function organizationOverview(
       .select({ count: count() })
       .from(template)
       .where(eq(template.organizationId, current.id)),
+    db.query.team.findMany({
+      where: { organizationId: current.id },
+      columns: { id: true, name: true },
+      with: { teamMembers: { columns: { userId: true } } },
+      orderBy: { name: "asc" },
+    }),
   ]);
   return {
     userId,
@@ -62,6 +68,11 @@ export async function organizationOverview(
         user ? [{ ...member, ...user }] : [],
       ),
       invitations,
+      // Teams group members for sharing projects; see `projectTeam`.
+      teams: teams.map(({ teamMembers, ...item }) => ({
+        ...item,
+        userIds: teamMembers.map((teamMember) => teamMember.userId),
+      })),
       // Including those in the trash, which deleting the organization deletes.
       projectCount: projects[0]?.count ?? 0,
       templateCount: templates[0]?.count ?? 0,

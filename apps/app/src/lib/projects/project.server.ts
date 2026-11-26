@@ -61,7 +61,11 @@ export async function getProject(
   const project = await projects.getProject({ ...args, lock: lockProject });
   // The versions the metadata poll reports, so a workspace starts with them.
   const versions = await args.db.transaction(async (tx) => ({
-    commentsVersion: await commentsVersion(tx, args.projectId),
+    commentsVersion: await commentsVersion(
+      tx,
+      args.projectId,
+      project.canComment,
+    ),
     gitVersion: await gitVersion(tx, args.projectId),
   }));
   return { ...project, ...versions };

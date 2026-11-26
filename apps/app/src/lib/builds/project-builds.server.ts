@@ -165,7 +165,6 @@ export class ProjectBuilds extends LiveProject {
           projectId,
           userId,
           access: "read",
-          content: "build",
         }),
       );
     } finally {

@@ -25,19 +25,21 @@ import { getProjectMetadata } from "../../src/lib/projects/project-metadata.serv
 import { createProject } from "../../src/lib/projects/project.server";
 import { sharePrincipal } from "../../src/lib/sharing/project-access.server";
 
-// Review comments: viewers can comment, strangers and share links cannot,
-// authors own their comments, and every change moves the metadata version.
+// Review comments follow Google Docs: viewers only read them, commenters add,
+// reply, and resolve, authors own their comments, editors moderate, strangers
+// and share-link guests see nothing, and every change moves the metadata
+// version.
 export async function checkComments(db: Db) {
-  const [ownerId, editorId, viewerId, strangerId] = Array.from(
-    { length: 4 },
+  const [ownerId, editorId, commenterId, viewerId, strangerId] = Array.from(
+    { length: 5 },
     () => crypto.randomUUID(),
   );
-  assert(ownerId && editorId && viewerId && strangerId);
-  const ids = [ownerId, editorId, viewerId, strangerId];
+  assert(ownerId && editorId && commenterId && viewerId && strangerId);
+  const ids = [ownerId, editorId, commenterId, viewerId, strangerId];
   await db.insert(user).values(
     ids.map((id, index) => ({
       id,
-      name: ["Owner", "Editor", "Viewer", "Stranger"][index] ?? id,
+      name: ["Owner", "Editor", "Commenter", "Viewer", "Stranger"][index] ?? id,
       email: `${id}@example.com`,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -52,6 +54,7 @@ export async function checkComments(db: Db) {
     const projectId = created.id;
     await db.insert(projectCollaborator).values([
       { projectId, userId: editorId, role: "editor" },
+      { projectId, userId: commenterId, role: "commenter" },
       { projectId, userId: viewerId, role: "viewer" },
     ]);
     const nodes = await db
@@ -70,12 +73,12 @@ export async function checkComments(db: Db) {
       (await getProjectMetadata({ db, projectId, userId: ownerId }))
         .commentsVersion;
     const initialVersion = await version();
-    assert.equal(initialVersion, "0:0");
+    assert.equal(initialVersion, "0:0:c");
 
-    // Viewers comment even though they cannot edit.
+    // Commenters comment even though they cannot edit.
     const { threadId } = await createCommentThread({
       db,
-      userId: viewerId,
+      userId: commenterId,
       data: {
         projectId,
         nodeId: main.id,
@@ -87,17 +90,72 @@ export async function checkComments(db: Db) {
     const afterCreate = await version();
     assert.notEqual(afterCreate, initialVersion);
 
-    const asViewer = await listComments({ db, userId: viewerId, projectId });
-    assert.equal(asViewer.canModerate, false);
-    assert.equal(asViewer.threads.length, 1);
-    const [thread] = asViewer.threads;
+    const asCommenter = await listComments({
+      db,
+      userId: commenterId,
+      projectId,
+    });
+    assert.equal(asCommenter.canModerate, false);
+    assert.equal(asCommenter.canComment, true);
+    assert.equal(asCommenter.threads.length, 1);
+    const [thread] = asCommenter.threads;
     assert.equal(thread?.anchorStart, anchor.anchorStart);
     assert.equal(thread?.anchorEnd, anchor.anchorEnd);
-    assert.equal(thread?.comments[0]?.authorName, "Viewer");
+    assert.equal(thread?.comments[0]?.authorName, "Commenter");
     assert.equal(thread?.comments[0]?.body, "Is this significant?");
     assert.equal(
       (await listComments({ db, userId: ownerId, projectId })).canModerate,
       true,
+    );
+
+    // Viewers read comments but cannot add, reply, resolve, edit, or delete.
+    const asViewer = await listComments({ db, userId: viewerId, projectId });
+    assert.equal(asViewer.canComment, false);
+    assert.equal(asViewer.canModerate, false);
+    assert.equal(asViewer.threads.length, 1);
+    assert.match(
+      (await getProjectMetadata({ db, projectId, userId: viewerId }))
+        .commentsVersion ?? "",
+      /:v$/,
+    );
+    const viewOnly = /You can only view comments/;
+    await assert.rejects(
+      createCommentThread({
+        db,
+        userId: viewerId,
+        data: {
+          projectId,
+          nodeId: main.id,
+          ...anchor,
+          quote: "The effect is large.",
+          body: "Viewers cannot comment",
+        },
+      }),
+      viewOnly,
+    );
+    await assert.rejects(
+      replyToCommentThread({
+        db,
+        userId: viewerId,
+        data: { projectId, threadId, body: "Hi" },
+      }),
+      viewOnly,
+    );
+    await assert.rejects(
+      resolveCommentThread({
+        db,
+        userId: viewerId,
+        data: { projectId, threadId, resolved: true },
+      }),
+      viewOnly,
+    );
+    await assert.rejects(
+      deleteCommentThread({
+        db,
+        userId: viewerId,
+        data: { projectId, threadId },
+      }),
+      viewOnly,
     );
 
     // People without project access and share-link guests see nothing.
@@ -148,7 +206,7 @@ export async function checkComments(db: Db) {
       /range is invalid/,
     );
 
-    // Anyone with access resolves; a reply reopens.
+    // Commenters and editors resolve any thread; a reply reopens.
     await resolveCommentThread({
       db,
       userId: editorId,
@@ -166,46 +224,51 @@ export async function checkComments(db: Db) {
     assert.equal(listed.threads[0]?.resolvedAt, null);
     assert.deepEqual(
       listed.threads[0]?.comments.map((comment) => comment.authorName),
-      ["Viewer", "Owner"],
+      ["Commenter", "Owner"],
     );
     await resolveCommentThread({
       db,
-      userId: viewerId,
+      userId: commenterId,
       data: { projectId, threadId, resolved: true },
     });
     await resolveCommentThread({
       db,
-      userId: viewerId,
+      userId: commenterId,
       data: { projectId, threadId, resolved: false },
     });
     listed = await listComments({ db, userId: ownerId, projectId });
     assert.equal(listed.threads[0]?.resolvedAt, null);
 
-    // Only authors edit or delete their own comments.
-    const viewerComment = listed.threads[0]?.comments[0];
+    // Only authors edit their comments. Commenters delete only their own;
+    // editors also delete other people's.
+    const commenterComment = listed.threads[0]?.comments[0];
     const ownerComment = listed.threads[0]?.comments[1];
-    assert(viewerComment && ownerComment);
+    assert(commenterComment && ownerComment);
     await assert.rejects(
       updateComment({
         db,
         userId: ownerId,
-        data: { projectId, commentId: viewerComment.id, body: "Edited" },
+        data: { projectId, commentId: commenterComment.id, body: "Edited" },
       }),
       /Comment not found/,
     );
     await assert.rejects(
       deleteComment({
         db,
-        userId: editorId,
-        data: { projectId, commentId: viewerComment.id },
+        userId: commenterId,
+        data: { projectId, commentId: ownerComment.id },
       }),
       /Comment not found/,
     );
     const beforeEdit = await version();
     await updateComment({
       db,
-      userId: viewerId,
-      data: { projectId, commentId: viewerComment.id, body: "Is it robust?" },
+      userId: commenterId,
+      data: {
+        projectId,
+        commentId: commenterComment.id,
+        body: "Is it robust?",
+      },
     });
     assert.notEqual(await version(), beforeEdit);
     listed = await listComments({ db, userId: ownerId, projectId });
@@ -222,16 +285,16 @@ export async function checkComments(db: Db) {
     // Deleting a thread's last comment deletes the thread.
     await deleteComment({
       db,
-      userId: viewerId,
-      data: { projectId, commentId: viewerComment.id },
+      userId: editorId,
+      data: { projectId, commentId: commenterComment.id },
     });
     assert.equal(
       (await listComments({ db, userId: ownerId, projectId })).threads.length,
       0,
     );
-    assert.equal(await version(), "0:0");
+    assert.equal(await version(), "0:0:c");
 
-    // A viewer cannot delete someone else's thread; editors can.
+    // A commenter cannot delete someone else's thread; editors can.
     const { threadId: editorThread } = await createCommentThread({
       db,
       userId: editorId,
@@ -246,14 +309,14 @@ export async function checkComments(db: Db) {
     await assert.rejects(
       deleteCommentThread({
         db,
-        userId: viewerId,
+        userId: commenterId,
         data: { projectId, threadId: editorThread },
       }),
       /author or an editor/,
     );
-    const { threadId: viewerThread } = await createCommentThread({
+    const { threadId: commenterThread } = await createCommentThread({
       db,
-      userId: viewerId,
+      userId: commenterId,
       data: {
         projectId,
         nodeId: main.id,
@@ -265,7 +328,7 @@ export async function checkComments(db: Db) {
     await deleteCommentThread({
       db,
       userId: ownerId,
-      data: { projectId, threadId: viewerThread },
+      data: { projectId, threadId: commenterThread },
     });
     await deleteCommentThread({
       db,
@@ -295,7 +358,7 @@ export async function checkComments(db: Db) {
       connections.map((connection) =>
         createCommentThread({
           db: connection,
-          userId: viewerId,
+          userId: commenterId,
           data: {
             projectId,
             nodeId: main.id,
@@ -318,7 +381,7 @@ export async function checkComments(db: Db) {
     // Threads on deleted files disappear and stop accepting changes.
     const { threadId: orphan } = await createCommentThread({
       db,
-      userId: viewerId,
+      userId: commenterId,
       data: {
         projectId,
         nodeId: main.id,
@@ -332,13 +395,14 @@ export async function checkComments(db: Db) {
       .set({ deletedAt: new Date() })
       .where(and(eq(projectNode.id, main.id)));
     assert.equal(
-      (await listComments({ db, userId: viewerId, projectId })).threads.length,
+      (await listComments({ db, userId: commenterId, projectId })).threads
+        .length,
       0,
     );
     await assert.rejects(
       replyToCommentThread({
         db,
-        userId: viewerId,
+        userId: commenterId,
         data: { projectId, threadId: orphan, body: "Hello?" },
       }),
       /Comment not found/,

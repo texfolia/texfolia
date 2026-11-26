@@ -235,7 +235,8 @@ try {
   assert.equal(organizationProjects.length, 1);
   assert.equal(organizationProjects[0]?.ownerId, null);
   assert.equal(organizationProjects[0]?.organizationId, organizationId);
-  // Plain `member` role is an editor by policy (docs/project-controls.md).
+  // A collaborator grant on an organization project counts only while the
+  // person is a member (docs/project-controls.md).
   assert.equal(
     (
       await getProject({

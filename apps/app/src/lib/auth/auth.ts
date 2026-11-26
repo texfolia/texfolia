@@ -21,6 +21,7 @@ import {
 import { lazy } from "#/lib/lazy";
 import {
   deletionNotice,
+  teamAccessNotice,
   invalidateOrganizationAccess,
   type LiveProjects,
 } from "#/lib/projects/live";
@@ -29,6 +30,7 @@ import { AUTH_EMAIL_CAPTCHA_ACTION } from "./captcha";
 import {
   assertAccountDeletable,
   assertOrganizationPolicy,
+  maxTeamsPerOrganization,
   memberOrganizations,
   organizationRoles,
   syncSeats,
@@ -55,14 +57,36 @@ export function createOrganizationPlugin({
   baseURL,
   sendInvitationEmail,
   deleting,
+  teams,
 }: {
   baseURL: string;
   sendInvitationEmail: DeliverEmail;
   deleting?: ReturnType<typeof deletionNotice>;
+  teams?: ReturnType<typeof teamAccessNotice>;
 }) {
   return organization({
     roles: organizationRoles,
+    // Teams group members so a project can be shared with all of them at once.
+    teams: {
+      enabled: true,
+      defaultTeam: { enabled: false },
+      allowRemovingAllTeams: true,
+      maximumTeams: maxTeamsPerOrganization,
+    },
     organizationHooks: {
+      // Teams can be granted project access, so changes reach live channels.
+      async afterAddTeamMember({ team, teamMember }) {
+        await teams?.after(team.id, [teamMember.userId]);
+      },
+      async afterRemoveTeamMember({ team, teamMember }) {
+        await teams?.after(team.id, [teamMember.userId]);
+      },
+      async beforeDeleteTeam({ team }) {
+        await teams?.before(team.id);
+      },
+      async afterDeleteTeam({ team }) {
+        await teams?.after(team.id);
+      },
       async beforeDeleteOrganization({ organization }) {
         await deleting?.before({ organizationId: organization.id });
       },
@@ -278,6 +302,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
         baseURL,
         sendInvitationEmail: deliver,
         deleting,
+        teams: teamAccessNotice({ db, live }),
       }),
       captcha({
         provider: "cloudflare-turnstile",

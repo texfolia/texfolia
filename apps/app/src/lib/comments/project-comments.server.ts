@@ -27,16 +27,21 @@ import {
   type updateCommentSchema,
 } from "./project-comments.schema";
 
-// Everyone with read access to the project can comment, including viewers.
-// Share-link guests have no account, so they can neither read nor write
-// comments.
+// Google Docs rules: viewers read comments; commenters also add, reply, resolve
+// and reopen any thread, and edit or delete their own comments; editors also
+// delete anyone's. Anonymous share-link guests have no account, so they can
+// neither read nor write comments.
 async function lockForComments(
   tx: ProjectTransaction,
   projectId: string,
   userId: string,
+  access: "read" | "comment" = "comment",
 ) {
   if (shareLinkIdOf(userId) !== null) throw new Error("Project not found");
-  return lockProject({ tx, projectId, userId, access: "read" });
+  const found = await lockProject({ tx, projectId, userId, access: "read" });
+  if (access === "comment" && !found.canComment)
+    throw new Error("You can only view comments on this project.");
+  return found;
 }
 
 // Threads on deleted files are hidden and cannot change. The row lock
@@ -72,12 +77,13 @@ function touchThread(tx: ProjectTransaction, threadId: string) {
     .where(eq(projectCommentThread.id, threadId));
 }
 
-// Locks a comment written by `userId`; other people's comments are not found.
-async function lockOwnComment(
+// Locks a comment written by `authorId`, or by anyone when it is null; other
+// people's comments are not found.
+async function lockComment(
   tx: ProjectTransaction,
   projectId: string,
   commentId: string,
-  userId: string,
+  authorId: string | null,
 ) {
   const [found] = await tx
     .select({ threadId: projectComment.threadId })
@@ -85,7 +91,7 @@ async function lockOwnComment(
     .where(
       and(
         eq(projectComment.id, commentId),
-        eq(projectComment.authorId, userId),
+        authorId === null ? undefined : eq(projectComment.authorId, authorId),
       ),
     );
   if (!found) throw new Error("Comment not found");
@@ -103,7 +109,12 @@ export async function listComments({
   projectId: string;
 }) {
   return db.transaction(async (tx) => {
-    const { canWrite } = await lockForComments(tx, projectId, userId);
+    const { canWrite, canComment } = await lockForComments(
+      tx,
+      projectId,
+      userId,
+      "read",
+    );
     const resolver = alias(user, "resolver");
     const threads = await tx
       .select({
@@ -157,6 +168,7 @@ export async function listComments({
     }
     return {
       userId,
+      canComment,
       canModerate: canWrite,
       // A thread whose every comment was deleted with its author's account
       // has nothing left to show.
@@ -172,10 +184,13 @@ export type CommentThreads = Awaited<ReturnType<typeof listComments>>;
 export type CommentThread = CommentThreads["threads"][number];
 
 // A version of the project's comments for the workspace metadata poll. Every
-// change bumps a thread's updatedAt or changes the thread count.
+// change bumps a thread's updatedAt or changes the thread count. It also
+// changes with whether the viewer may comment, so the panel reloads when
+// their role does.
 export async function commentsVersion(
   tx: ProjectTransaction,
   projectId: string,
+  canComment: boolean,
 ) {
   const [row] = await tx
     .select({
@@ -184,7 +199,7 @@ export async function commentsVersion(
     })
     .from(projectCommentThread)
     .where(eq(projectCommentThread.projectId, projectId));
-  return `${row?.threads ?? 0}:${row?.updatedAt?.getTime() ?? 0}`;
+  return `${row?.threads ?? 0}:${row?.updatedAt?.getTime() ?? 0}:${canComment ? "c" : "v"}`;
 }
 
 export async function createCommentThread({
@@ -215,8 +230,8 @@ export async function createCommentThread({
         ),
       );
     if (!node) throw new Error("File not found");
-    // Viewers hold the project lock in shared mode, so it does not serialize
-    // the count.
+    // Commenters hold the project lock in shared mode, so it does not
+    // serialize the count.
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`comment-threads:${data.projectId}`}, 0))`,
     );
@@ -307,7 +322,8 @@ export async function resolveCommentThread({
   });
 }
 
-// The thread's author and project editors can delete a whole thread.
+// The thread's author, if they can still comment, and project editors can
+// delete a whole thread.
 export async function deleteCommentThread({
   db,
   userId,
@@ -339,7 +355,7 @@ export async function updateComment({
 }) {
   await db.transaction(async (tx) => {
     await lockForComments(tx, data.projectId, userId);
-    const { threadId } = await lockOwnComment(
+    const { threadId } = await lockComment(
       tx,
       data.projectId,
       data.commentId,
@@ -353,8 +369,8 @@ export async function updateComment({
   });
 }
 
-// Authors delete their own comments. Deleting a thread's last comment deletes
-// the thread.
+// Authors delete their own comments, and editors anyone's. Deleting a thread's
+// last comment deletes the thread.
 export async function deleteComment({
   db,
   userId,
@@ -365,12 +381,12 @@ export async function deleteComment({
   data: z.infer<typeof deleteCommentSchema>;
 }) {
   await db.transaction(async (tx) => {
-    await lockForComments(tx, data.projectId, userId);
-    const { threadId } = await lockOwnComment(
+    const { canWrite } = await lockForComments(tx, data.projectId, userId);
+    const { threadId } = await lockComment(
       tx,
       data.projectId,
       data.commentId,
-      userId,
+      canWrite ? null : userId,
     );
     await tx
       .delete(projectComment)

@@ -6,19 +6,16 @@ import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { CollaborativeFile } from "#/lib/collaboration/browser";
 import { bibtexLanguage, themedLatex } from "#/lib/editor/latex/highlight";
 import { markdownSupport } from "#/lib/editor/markdown";
-import { withShareToken } from "#/lib/sharing/share-token";
 import { extensionOf } from "#/lib/storage/extension";
 
-import type { SharedNode } from "./shared-project-view";
+import type { GuestNode } from "./guest-workspace";
 
-export function SharedText({
+export function GuestText({
   projectId,
   node,
-  token,
 }: {
   projectId: string;
-  node: SharedNode;
-  token: string;
+  node: GuestNode;
 }) {
   const theme = useEditorTheme();
   const [value, setValue] = useState("");
@@ -31,7 +28,6 @@ export function SharedText({
         userId: "share-guest",
         canWrite: false,
         anonymous: true,
-        decorateUrl: (url) => withShareToken(url, token),
         onChange: setValue,
       }),
   );

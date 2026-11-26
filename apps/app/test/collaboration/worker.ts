@@ -16,8 +16,10 @@ import {
   trashProject,
 } from "../../src/lib/projects/project.server";
 import { lockProject } from "../../src/lib/sharing/project-access.server";
+import { projectRoleSchema } from "../../src/lib/sharing/project-share-links.schema";
 import {
   createShareLink,
+  redeemShareLink,
   revokeShareLink,
 } from "../../src/lib/sharing/project-share-links.server";
 import {
@@ -178,10 +180,17 @@ export default {
               userId: ownerId,
               data: {
                 projectId,
-                scope: body.scope === "pdf" ? "pdf" : "project",
+                role: projectRoleSchema.parse(body.role),
               },
             }),
           );
+        else if (action === "share-redeem")
+          await redeemShareLink({
+            db,
+            token: body.token ?? "",
+            userId: body.userId ?? null,
+            live,
+          });
         else if (action === "share-revoke")
           await revokeShareLink({
             db,
@@ -303,7 +312,6 @@ export class BuildsFixture extends LiveProject {
           projectId,
           userId,
           access: "read",
-          content: "build",
         }),
       );
     } finally {

@@ -58,6 +58,7 @@ const workspace = await startWorkspace({
     if (url.pathname === "/fixture/comments")
       return Response.json({
         threads,
+        canComment: true,
         canModerate: true,
         userId: "runtime-test",
       });
