@@ -386,14 +386,18 @@ try {
   }
   await publicPage.goto(origin);
   await publicPage.waitForURL(/\/login/);
-  const navigation = publicPage.getByRole("navigation", {
-    name: "Main navigation",
+  const legalNavigation = publicPage.getByRole("navigation", {
+    name: "Legal information",
   });
-  assert.deepEqual(await navigation.getByRole("link").allTextContents(), [
-    "Pricing",
+  assert.deepEqual(await legalNavigation.getByRole("link").allTextContents(), [
+    "Privacy Policy",
+    "Terms of Service",
   ]);
-  for (const [label, path] of [["Pricing", "/pricing"]] as const) {
-    const href = await navigation
+  for (const [label, path] of [
+    ["Privacy Policy", "/privacy"],
+    ["Terms of Service", "/terms"],
+  ] as const) {
+    const href = await legalNavigation
       .getByRole("link", { name: label, exact: true })
       .getAttribute("href");
     assert(href, `${label} link missing href`);
