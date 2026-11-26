@@ -1,3 +1,4 @@
+import { formatChanges } from "@texfolia/editor";
 import { EditorState, EditorView, keymap } from "@uiw/react-codemirror";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
@@ -7,7 +8,6 @@ import {
   encodeClientMessage,
 } from "#/lib/collaboration";
 import { CollaborativeFile } from "#/lib/collaboration/browser";
-import { formatChanges } from "#/lib/editor/latex/format";
 
 const parameters = new URLSearchParams(location.search);
 const file = new CollaborativeFile({

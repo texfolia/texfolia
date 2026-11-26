@@ -1,9 +1,9 @@
+import { latexCompletion } from "@texfolia/editor";
 import { useMemo } from "react";
 
 import { useLatexAnalysis } from "#/hooks/use-latex-analysis";
 import { useStableCallback } from "#/hooks/use-stable-callback";
 import { useStableValue } from "#/hooks/use-stable-value";
-import { latexCompletion } from "#/lib/editor/latex/completion";
 import {
   type ProjectNode,
   projectMainFile,

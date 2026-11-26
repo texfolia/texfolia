@@ -1,11 +1,12 @@
-import { createWorkerClient } from "#/lib/worker-client";
-
 import type {
   FormatChange,
   FormatRequest,
   FormatResponse,
   FormatSettings,
-} from "./format";
+} from "@texfolia/editor";
+
+import { createWorkerClient } from "#/lib/worker-client";
+
 import { createFormatWorker } from "./workers";
 
 export type LatexFormatter = (

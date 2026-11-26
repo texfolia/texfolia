@@ -2,12 +2,15 @@ import { expect, test } from "bun:test";
 
 import { ensureSyntaxTree, highlightingFor } from "@codemirror/language";
 import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
+import {
+  bibtexLanguage,
+  latex,
+  latexTags,
+} from "@texfolia/codemirror-lang-latex";
 import * as uiw from "@uiw/codemirror-themes-all";
 import { EditorState, EditorView, type Extension } from "@uiw/react-codemirror";
 
 import { renderThemeCatalog } from "../../../../scripts/generate-theme-catalog";
-import { bibtexLanguage, themedLatex } from "../latex/highlight";
-import { latexTags } from "../latex/tags";
 import {
   appearanceSchema,
   defaultAppearance,
@@ -162,7 +165,7 @@ function highlighted(doc: string, extension: Extension) {
 test("rich LaTeX grammar emits distinct command, environment, math, argument, option and comment tags", () => {
   const spans = highlighted(
     "\\documentclass[letterpaper]{article}\n\\begin{document}\n% Hello\n\\textbf{word} $x+2$\n\\end{document}",
-    themedLatex("main.tex"),
+    latex({ enableAutocomplete: false, enableLinting: false }),
   );
   expect(spans).toContainEqual({ text: "\\documentclass", style: "command" });
   expect(spans).toContainEqual({ text: "document", style: "environment" });

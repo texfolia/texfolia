@@ -1,5 +1,6 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { useNavigate } from "@tanstack/react-router";
+import { type FormatSettings } from "@texfolia/editor";
 import {
   createContext,
   type ReactNode,
@@ -12,7 +13,6 @@ import {
 } from "react";
 
 import { useStableActions } from "#/hooks/use-stable-callback";
-import { type FormatSettings } from "#/lib/editor/latex/format";
 import type { SpellingLanguage } from "#/lib/editor/spelling/languages";
 import {
   updateProjectFormatting,

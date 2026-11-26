@@ -1,8 +1,8 @@
+import { editorLanguage } from "@texfolia/editor";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { editorLanguage } from "#/lib/editor/latex/language";
 import { browserSpellChecker } from "#/lib/editor/spelling/checker";
 import {
   personalDictionaryChanged,

@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { FormatResponse } from "@texfolia/editor";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { chromium, type Browser } from "playwright";
-
-import type { FormatResponse } from "#/lib/editor/latex/format";
-import { latexToolsPath } from "#/lib/editor/latex/tools";
 
 import { pdfFixture } from "./pdf-fixture";
 
@@ -19,6 +17,7 @@ function asset(pattern: RegExp) {
 }
 asset(/^styles-.*\.css$/);
 const formatter = asset(/^format\.worker-.*\.js$/);
+const texFmtWasm = asset(/^tex_fmt_bg-.*\.wasm$/);
 const pdf = asset(/^pdf\.worker\.min-.*\.mjs$/);
 const cssFiles = assets.filter((name) => name.endsWith(".css"));
 for (const name of cssFiles) {
@@ -144,11 +143,7 @@ const runtime = new Miniflare({
 let browser: Browser | undefined;
 try {
   const origin = (await runtime.ready).origin;
-  for (const path of [
-    formatter,
-    `/${latexToolsPath}/texfmt/tex_fmt.js`,
-    "/dictionaries/en-US.aff",
-  ]) {
+  for (const path of [formatter, texFmtWasm, "/dictionaries/en-US.aff"]) {
     const response = await fetch(new URL(path, origin));
     assert.equal(response.status, 200, path);
     await response.body?.cancel();

@@ -1,0 +1,74 @@
+{
+  "name": "@texfolia/editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Framework-agnostic LaTeX editor extensions, analysis, outline, word count, BibTeX, and symbol utilities for CodeMirror 6.",
+  "keywords": [
+    "bibtex",
+    "codemirror",
+    "codemirror6",
+    "editor",
+    "latex",
+    "outline",
+    "texfolia",
+    "word-count"
+  ],
+  "homepage": "https://github.com/natebabyak/texfolia/tree/main/packages/editor",
+  "bugs": {
+    "url": "https://github.com/natebabyak/texfolia/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natebabyak/texfolia.git",
+    "directory": "packages/editor"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && bun run copy:assets",
+    "copy:assets": "bun -e 'const fs=require(\"node:fs\"); fs.copyFileSync(\"src/symbols.json\", \"dist/symbols.json\");'",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@texfolia/codemirror-lang-latex": "workspace:*",
+    "diff": "^8.0.4"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/lint": "^6.9.0",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.5",
+    "@lezer/highlight": "^1.2.5",
+    "@texfolia/tsconfig": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "typescript": "^6.0.2"
+  },
+  "peerDependencies": {
+    "@codemirror/autocomplete": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/lint": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "@lezer/highlight": "^1.0.0"
+  }
+}

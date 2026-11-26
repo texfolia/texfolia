@@ -1,19 +1,9 @@
-import { TexFmt } from "wasm-latex-tools";
-
 import {
   formatChanges,
   type FormatRequest,
   type FormatResponse,
-} from "./format";
-import { latexToolsPath } from "./tools";
-
-const formatter = new TexFmt(
-  false,
-  new URL(
-    `${import.meta.env.BASE_URL}${latexToolsPath}/texfmt`,
-    self.location.origin,
-  ).href,
-);
+} from "@texfolia/editor";
+import { formatLatex } from "@texfolia/tex-fmt";
 
 async function respond({
   id,
@@ -21,15 +11,12 @@ async function respond({
   settings,
 }: FormatRequest): Promise<FormatResponse> {
   try {
-    const result = await formatter.format({
-      input: source,
+    const result = await formatLatex(source, {
       tabsize: settings.indent,
       wrap: settings.wrap,
       wraplen: settings.width,
       usetabs: false,
     });
-    if (!result.success)
-      throw new Error(result.error ?? "Could not format LaTeX.");
     return { id, changes: formatChanges(source, result.output) };
   } catch (error) {
     return {

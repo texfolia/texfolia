@@ -1,0 +1,121 @@
+@top Document { content* }
+
+@skip { space | Comment }
+
+content {
+  Environment |
+  DisplayMath |
+  InlineMath |
+  Command |
+  OptionalArgument |
+  BracedGroup |
+  EscapedChar |
+  Number |
+  MathOperator |
+  Text |
+  Punctuation
+}
+
+Environment {
+  BeginEnv content* EndEnv
+}
+
+BeginEnv {
+  BeginCommand "{" EnvName "}"
+}
+
+EndEnv {
+  EndCommand "{" EnvName "}"
+}
+
+BeginCommand { @specialize[@name=BeginCommand]<CommandName, "\\begin"> }
+EndCommand { @specialize[@name=EndCommand]<CommandName, "\\end"> }
+
+EnvName {
+  Text
+}
+
+DisplayMath {
+  DoubleDollar mathContent* DoubleDollar |
+  OpenDisplayMath mathContent* CloseDisplayMath
+}
+
+InlineMath {
+  SingleDollar mathContent* SingleDollar |
+  OpenInlineMath mathContent* CloseInlineMath
+}
+
+mathContent {
+  Environment |
+  Command |
+  OptionalArgument |
+  BracedGroup |
+  EscapedChar |
+  MathOperator |
+  Number |
+  Text |
+  Punctuation
+}
+
+Command {
+  CommandName
+}
+
+OptionalArgument {
+  "[" bracketContent* "]"
+}
+
+bracketContent {
+  Command |
+  BracedGroup |
+  EscapedChar |
+  InlineMath |
+  MathOperator |
+  Number |
+  Text |
+  Punctuation
+}
+
+BracedGroup {
+  "{" content* "}"
+}
+
+@tokens {
+  space { $[ \t\n\r]+ }
+  Comment { "%" ![\n]* }
+
+  DoubleDollar { "$$" }
+  SingleDollar { "$" }
+  OpenDisplayMath { "\\[" }
+  CloseDisplayMath { "\\]" }
+  OpenInlineMath { "\\(" }
+  CloseInlineMath { "\\)" }
+
+  CommandName { "\\" (@asciiLetter | "@")+ "*"? }
+  EscapedChar { "\\" ![\n] }
+
+  Number { $[0-9]+ ("." $[0-9]+)? }
+  MathOperator { $[+\-*/=<>^_&|!] }
+  Text { ![ \t\n\r%\\{}\[\]$+\-*/=<>^_&|!0-9,.?;:'"()~`]+ }
+  Punctuation { $[,.?;:'"()~`]+ }
+
+  "{" "}" "[" "]"
+
+  @precedence {
+    Comment,
+    DoubleDollar,
+    SingleDollar,
+    OpenDisplayMath,
+    CloseDisplayMath,
+    OpenInlineMath,
+    CloseInlineMath,
+    CommandName,
+    EscapedChar,
+    Number,
+    MathOperator,
+    Punctuation,
+    Text
+  }
+}
+
+@detectDelim

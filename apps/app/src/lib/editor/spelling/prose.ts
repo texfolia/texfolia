@@ -1,5 +1,4 @@
-import { maskLatexSource } from "../latex/analysis";
-import { type WordSpan, wordEvents } from "../latex/word-count";
+import { maskLatexSource, type WordSpan, wordEvents } from "@texfolia/editor";
 
 /** A prose word to spell check, with its range in the source. */
 export type ProseWord = { from: number; to: number; word: string };

@@ -12,10 +12,8 @@ license is in `node_modules`, the Go module cache, or the engine image.
   bibliographies (Artistic License 2.0, LPPL).
 - The [TeX Live](https://tug.org/texlive/) and [CTAN](https://ctan.org)
   communities, whose packages the engine bundle carries.
-- [TeXlyre](https://github.com/TeXlyre)'s
-  [codemirror-lang-latex](https://github.com/TeXlyre/codemirror-lang-latex)
-  (AGPL-3.0) and [wasm-latex-tools](https://github.com/TeXlyre/wasm-latex-tools)
-  (AGPL-3.0), which bundles [tex-fmt](https://github.com/WGUNDERWOOD/tex-fmt).
+- [tex-fmt](https://github.com/WGUNDERWOOD/tex-fmt): LaTeX source formatter
+  (MIT), compiled to WebAssembly in `@texfolia/tex-fmt`.
 
 ## Editor and workspace
 

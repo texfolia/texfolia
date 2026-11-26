@@ -1,13 +1,12 @@
 import { IconX } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
-
 import {
   latexPreamble,
   type LatexSymbol,
   searchLatexSymbols,
-} from "#/lib/editor/latex/symbols";
+} from "@texfolia/editor";
+import { Button } from "@texfolia/ui/button";
+import { Input } from "@texfolia/ui/input";
+import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 /** The file whose preamble loads packages. Its text is followed while open. */
 export type SymbolPreambleSource = {

@@ -1,4 +1,5 @@
 import { type BuildSnapshot } from "@texfolia/contracts";
+import type { LatexProblem } from "@texfolia/editor";
 import {
   type RefObject,
   useEffect,
@@ -16,7 +17,6 @@ import {
   requestCompilation,
   type CompileSources,
 } from "#/lib/compile";
-import type { LatexProblem } from "#/lib/editor/latex/analysis";
 import { invalidProjectPaths } from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import { InvalidSourcePathError } from "#/lib/storage";

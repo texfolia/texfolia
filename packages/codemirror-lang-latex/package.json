@@ -1,0 +1,73 @@
+{
+  "name": "@texfolia/codemirror-lang-latex",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clean-room LaTeX and BibTeX language support for CodeMirror 6.",
+  "keywords": [
+    "bibtex",
+    "codemirror",
+    "codemirror6",
+    "language",
+    "latex",
+    "lezer",
+    "texfolia"
+  ],
+  "homepage": "https://github.com/natebabyak/texfolia/tree/main/packages/codemirror-lang-latex",
+  "bugs": {
+    "url": "https://github.com/natebabyak/texfolia/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/natebabyak/texfolia.git",
+    "directory": "packages/codemirror-lang-latex"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "bun run build:grammar && tsc -p tsconfig.build.json && bun -e 'const fs=require(\"node:fs\"); fs.copyFileSync(\"src/parser.js\", \"dist/parser.js\"); fs.copyFileSync(\"src/parser.d.ts\", \"dist/parser.d.ts\");'",
+    "build:grammar": "lezer-generator src/latex.grammar -o src/parser.js --noTerms",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/lint": "^6.9.0",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.5",
+    "@lezer/common": "^1.2.3",
+    "@lezer/generator": "^1.7.3",
+    "@lezer/highlight": "^1.2.5",
+    "@lezer/lr": "^1.4.2",
+    "@texfolia/tsconfig": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "typescript": "^6.0.2"
+  },
+  "peerDependencies": {
+    "@codemirror/autocomplete": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/lint": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "@lezer/common": "^1.0.0",
+    "@lezer/highlight": "^1.0.0",
+    "@lezer/lr": "^1.0.0"
+  }
+}

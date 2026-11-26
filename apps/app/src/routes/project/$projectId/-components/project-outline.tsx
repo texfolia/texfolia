@@ -1,8 +1,8 @@
+import { type OutlineEntry, projectOutline } from "@texfolia/editor";
 import { Button } from "@texfolia/ui/button";
 import { useMemo } from "react";
 
 import { useDraftSources } from "#/hooks/use-draft-sources";
-import { type OutlineEntry, projectOutline } from "#/lib/editor/latex/outline";
 import {
   useWorkspace,
   useWorkspaceActions,

@@ -121,9 +121,7 @@ jobs:
           playwright: "true"
       - name: Copy browser assets
         if: steps.select.outputs.browser == 'true'
-        run: |
-          bun run --cwd apps/app latex:assets
-          bun run --cwd apps/app spelling:assets
+        run: bun run --cwd apps/app spelling:assets
       - name: Exercise sign-in on the development server
         if: steps.select.outputs.login == 'true'
         run: bun run --cwd apps/app test:login

@@ -1,11 +1,8 @@
+import { type AnalyzeResponse, emptyAnalysis } from "@texfolia/editor";
+import { LatexAnalyzer } from "@texfolia/editor";
+import { emptyWordCount } from "@texfolia/editor";
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  type AnalyzeResponse,
-  emptyAnalysis,
-} from "#/lib/editor/latex/analysis";
-import { LatexAnalyzer } from "#/lib/editor/latex/analyzer";
-import { emptyWordCount } from "#/lib/editor/latex/word-count";
 import { createAnalysisWorker } from "#/lib/editor/latex/workers";
 
 export function useLatexAnalysis(paths: string[], main?: string) {

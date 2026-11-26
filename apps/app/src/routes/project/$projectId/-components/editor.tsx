@@ -1,6 +1,9 @@
 import type { CompletionSource } from "@codemirror/autocomplete";
 import { redoDepth, undoDepth } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
+import type { LatexProblem } from "@texfolia/editor";
+import { defaultFormatSettings, type FormatSettings } from "@texfolia/editor";
+import { addLatexPackage, insertLatexSymbol } from "@texfolia/editor";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -26,12 +29,6 @@ import { useStableCallback } from "#/hooks/use-stable-callback";
 import { documentCachingStopped } from "#/lib/collaboration/browser";
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import type { EditorCommand } from "#/lib/editor/editor-command";
-import type { LatexProblem } from "#/lib/editor/latex/analysis";
-import {
-  defaultFormatSettings,
-  type FormatSettings,
-} from "#/lib/editor/latex/format";
-import { addLatexPackage, insertLatexSymbol } from "#/lib/editor/latex/symbols";
 import {
   type EditorJump,
   type EditorSnapshot,

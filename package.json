@@ -10,6 +10,7 @@
     "auth:schema": "bun run --cwd apps/app auth:schema",
     "build": "turbo run build",
     "cf:typegen": "turbo run cf:typegen",
+    "changeset": "changeset",
     "check:repo": "bun run scripts/check-repo.mjs",
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
@@ -27,11 +28,14 @@
     "format:check": "oxfmt --check && turbo run format:check",
     "lint": "bun run check:repo && oxlint && turbo run lint",
     "lint:fix": "oxlint --fix",
+    "release": "turbo run build --filter=@texfolia/codemirror-lang-latex --filter=@texfolia/tex-fmt --filter=@texfolia/editor && changeset publish",
     "setup": "bun run scripts/setup.ts",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "version-packages": "changeset version"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.4",
     "@types/bun": "^1.4.4",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",

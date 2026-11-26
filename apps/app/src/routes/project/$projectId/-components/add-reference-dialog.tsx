@@ -1,3 +1,11 @@
+import {
+  entryAppendix,
+  newBibFile,
+  parseReferenceId,
+  setEntryKey,
+  uniqueEntryKey,
+  validEntryKey,
+} from "@texfolia/editor";
 import { Button } from "@texfolia/ui/button";
 import { Checkbox } from "@texfolia/ui/checkbox";
 import {
@@ -17,15 +25,6 @@ import {
 import { Input } from "@texfolia/ui/input";
 import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useId, useState } from "react";
-
-import {
-  entryAppendix,
-  newBibFile,
-  parseReferenceId,
-  setEntryKey,
-  uniqueEntryKey,
-  validEntryKey,
-} from "#/lib/editor/latex/bibtex";
 
 export type AddReferenceRequest = {
   /** An undefined \cite key the new entry should define. */

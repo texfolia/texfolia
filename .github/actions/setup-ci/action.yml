@@ -28,6 +28,9 @@ runs:
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-turbo-bun-1.4.4-${{ github.job }}-${{ hashFiles('bun.lock') }}-
           ${{ runner.os }}-${{ runner.arch }}-turbo-bun-1.4.4-${{ github.job }}-
+    - name: Build workspace packages
+      shell: bash
+      run: bunx turbo run build --filter=./packages/*
     - name: Read Playwright version
       if: inputs.playwright == 'true'
       id: playwright
