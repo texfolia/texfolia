@@ -9,21 +9,17 @@ export type CompileTransaction = Parameters<
   Parameters<Db["transaction"]>[0]
 >[0];
 
-export type CompileShareScope = "project" | "pdf" | null;
-
 // The project aggregate, which the app owns. Compile code locks projects and
 // reads their metadata and paths only through these calls.
 export type CompileProject = {
   // Locks the project for the caller and checks access. Throws
-  // `Error("Project not found")` when the caller cannot use it. "build" covers
-  // build files, the PDF, and the live build stream.
+  // `Error("Project not found")` when the caller cannot use it.
   lock(options: {
     tx: CompileTransaction;
     projectId: string;
     userId: string;
     access?: "read" | "write";
-    content?: "sources" | "build";
-  }): Promise<{ shareScope: CompileShareScope }>;
+  }): Promise<unknown>;
   // The metadata version the browser sends as `X-Source-Metadata`. Throws when
   // a saved path is invalid.
   metadataVersion(options: {

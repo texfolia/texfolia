@@ -29,6 +29,19 @@ test("security headers preserve redirects and separate session cookies", () => {
   });
   expect(authenticated.headers.getSetCookie()).toEqual(headers.getSetCookie());
   expect(authenticated.headers.get("Cache-Control")).toBe("no-store");
+
+  const share = withSecurityHeaders({
+    response: new Response(null, {
+      status: 303,
+      headers: {
+        Location: "/project/123",
+        "Referrer-Policy": "no-referrer",
+      },
+    }),
+    nonce: "test-nonce",
+    url: "https://www.texfolia.com/share/token",
+  });
+  expect(share.headers.get("Referrer-Policy")).toBe("no-referrer");
 });
 
 test("API, errors, and PDF streams retain their body, status, and headers", async () => {

@@ -60,8 +60,8 @@ slow work, such as requests to a Git host, outside it. The app's `gitAction` RPC
 uses both.
 
 `collaborationAccess` takes the same lock. `CollaborativeFile` takes
-`anonymous` and a `decorateUrl` hook, which the share view uses to add its
-share token to the socket URL.
+`anonymous` for share-link guests, who have no presence. Their HttpOnly share
+cookie authenticates the socket, so the URL never carries a token.
 
 `CollaborativeDocuments` connects a document while something holds it. Releasing
 the last hold saves its unacknowledged edits and closes it. `unsynced.ts` marks

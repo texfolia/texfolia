@@ -1,4 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import {
+  getRequestHeaders,
+  getRequestUrl,
+  setResponseHeader,
+} from "@tanstack/react-start/server";
 import { env } from "cloudflare:workers";
 
 import { ensureSession } from "#/lib/auth/auth.functions";
@@ -196,3 +201,71 @@ export const updateProjectFormatting = createServerFn({ method: "POST" })
       data,
     });
   });
+
+/**
+ * Everything `/project/$projectId` can show, for anyone who opens it. Signed-in
+ * accounts get the workspace if they have access; a share cookie left from
+ * before they signed in is redeemed onto the account first. Anonymous visitors
+ * get the view-only guest page when their share cookie holds a live view link,
+ * and are asked to sign in otherwise.
+ */
+export const openProject = createServerFn({ method: "GET" })
+  .validator(projectIdSchema)
+  .handler(async ({ data, context }) => {
+    const headers = getRequestHeaders();
+    const [{ readShareCookie, clearShareCookie }, sharing, session] =
+      await Promise.all([
+        import("#/lib/sharing/share-cookie.server"),
+        import("#/lib/sharing/project-share-links.server"),
+        context.auth.api.getSession({ headers }),
+      ]);
+    const token = readShareCookie(headers.get("Cookie"), data.projectId);
+    const secure = getRequestUrl().protocol === "https:";
+    setResponseHeader("Cache-Control", "private, no-store");
+    if (session) {
+      if (token !== null) {
+        await sharing.redeemShareLink({
+          db: context.db,
+          token,
+          userId: session.user.id,
+          live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
+        });
+        setResponseHeader(
+          "Set-Cookie",
+          clearShareCookie(data.projectId, secure),
+        );
+      }
+      const server = await import("./project.server");
+      try {
+        return {
+          kind: "workspace" as const,
+          userId: session.user.id,
+          project: await server.getProject({
+            db: context.db,
+            ownerId: session.user.id,
+            projectId: data.projectId,
+            bucket: env.SOURCES,
+          }),
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Project not found")
+          return { kind: "missing" as const };
+        throw error;
+      }
+    }
+    if (token === null) return { kind: "sign-in" as const };
+    const link = await sharing.resolveShareToken(context.db, token);
+    if (link?.projectId === data.projectId && link.role !== "viewer")
+      return { kind: "sign-in" as const };
+    const shared = await sharing.getSharedProject({
+      db: context.db,
+      token,
+      projectId: data.projectId,
+    });
+    if (shared) return { kind: "guest" as const, project: shared };
+    setResponseHeader("Set-Cookie", clearShareCookie(data.projectId, secure));
+    return { kind: "revoked" as const };
+  });
+
+export type OpenedProject = Awaited<ReturnType<typeof openProject>>;
+export type GuestProject = Extract<OpenedProject, { kind: "guest" }>["project"];

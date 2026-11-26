@@ -1,10 +1,12 @@
 import type { Db } from "@texfolia/db";
 import {
+  project,
   projectCollaborator,
+  projectShareGrant,
   projectShareLink,
   user,
 } from "@texfolia/db/schema";
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import {
@@ -14,9 +16,12 @@ import {
 } from "#/lib/email";
 import {
   invalidateProjectAccess,
+  isProjectManager,
+  requireProjectManager,
   type LiveProjects,
+  type ProjectRole,
+  type ProjectTransaction,
 } from "#/lib/projects/server";
-import type { ProjectTransaction } from "#/lib/projects/server";
 import { encodeSource } from "#/lib/storage";
 
 import { lockProject, sharePrincipal } from "./project-access.server";
@@ -45,16 +50,17 @@ function createToken() {
     .replace(/=+$/, "");
 }
 
-// Share links follow the collaborator rules: only a personal project's owner
-// manages them. Organization projects have no share links in v1.
+// Share links follow the collaborator rules: the people who manage the
+// project (`isProjectManager`) manage its links.
 async function lockManagedProject(
   tx: ProjectTransaction,
   projectId: string,
   userId: string,
 ) {
   const found = await lockProject({ tx, projectId, userId });
-  if (found.organizationId || found.ownerId !== userId)
-    throw new Error("Only the project owner can manage share links.");
+  await requireProjectManager(tx, found, userId).catch(() => {
+    throw new Error("Only people who manage this project can manage links.");
+  });
   return found;
 }
 
@@ -62,7 +68,7 @@ function listLinks(tx: ProjectTransaction, projectId: string) {
   return tx
     .select({
       id: projectShareLink.id,
-      scope: projectShareLink.scope,
+      role: projectShareLink.role,
       createdAt: projectShareLink.createdAt,
     })
     .from(projectShareLink)
@@ -81,7 +87,7 @@ export async function listShareLinks({
 }) {
   return db.transaction(async (tx) => {
     const found = await lockProject({ tx, projectId, userId, access: "read" });
-    if (found.organizationId || found.ownerId !== userId)
+    if (!(await isProjectManager(tx, found, userId)))
       return { canManage: false, links: [] };
     return { canManage: true, links: await listLinks(tx, projectId) };
   });
@@ -111,13 +117,13 @@ export async function createShareLink({
       );
     let senderName = "Someone";
     if (recipientEmail) {
-      const [owner] = await tx
+      const [sender] = await tx
         .select({ name: user.name, email: user.email })
         .from(user)
         .where(eq(user.id, userId))
         .limit(1);
-      if (owner && owner.email.toLowerCase() === recipientEmail)
-        throw new Error("You already own this project.");
+      if (sender && sender.email.toLowerCase() === recipientEmail)
+        throw new Error("You already have access to this project.");
       const [existingCollaborator] = await tx
         .select({ userId: projectCollaborator.userId })
         .from(projectCollaborator)
@@ -132,7 +138,7 @@ export async function createShareLink({
       if (existingCollaborator)
         throw new Error("That person already has access to this project.");
       await takeSharingEmail(tx, userId);
-      senderName = owner?.name ?? senderName;
+      senderName = sender?.name ?? senderName;
     }
     const token = createToken();
     const [link] = await tx
@@ -140,12 +146,12 @@ export async function createShareLink({
       .values({
         projectId: data.projectId,
         tokenHash: await hashShareToken(token),
-        scope: data.scope,
+        role: data.role,
         createdBy: userId,
       })
       .returning({
         id: projectShareLink.id,
-        scope: projectShareLink.scope,
+        role: projectShareLink.role,
         createdAt: projectShareLink.createdAt,
       });
     if (!link) throw new Error("Share link could not be created.");
@@ -161,7 +167,7 @@ export async function createShareLink({
           to: recipientEmail,
           projectName: created.projectName,
           senderName: created.senderName,
-          scope: created.link.scope,
+          role: created.link.role,
           url,
         }),
       );
@@ -187,6 +193,11 @@ export async function revokeShareLink({
 }) {
   await db.transaction(async (tx) => {
     await lockManagedProject(tx, data.projectId, userId);
+    // Accounts that redeemed the link lose its grant with it.
+    const redeemed = await tx
+      .select({ userId: projectShareGrant.userId })
+      .from(projectShareGrant)
+      .where(eq(projectShareGrant.linkId, data.linkId));
     await tx
       .delete(projectShareLink)
       .where(
@@ -198,6 +209,7 @@ export async function revokeShareLink({
     // Invalidate before commit so open sockets re-verify behind this lock.
     await invalidateProjectAccess(live, data.projectId, [
       sharePrincipal(data.linkId),
+      ...redeemed.map((grant) => grant.userId),
     ]);
   });
 }
@@ -208,42 +220,110 @@ export async function resolveShareToken(db: Db, token: string) {
     .select({
       id: projectShareLink.id,
       projectId: projectShareLink.projectId,
-      scope: projectShareLink.scope,
+      role: projectShareLink.role,
     })
     .from(projectShareLink)
     .where(eq(projectShareLink.tokenHash, await hashShareToken(token)));
   return link ?? null;
 }
 
-export async function getSharedProject({
+export type RedeemedShareLink = {
+  projectId: string;
+  role: ProjectRole;
+  // Comment and edit links need an account; the caller asks them to sign in.
+  signIn: boolean;
+};
+
+/**
+ * Validates a share token for a live project. A signed-in account gets a grant
+ * tied to the link, so revoking the link revokes the grant. Without an account
+ * nothing is stored: a view link's guest presents the token again, from the
+ * share cookie, on every request.
+ */
+export async function redeemShareLink({
   db,
   token,
+  userId,
+  live,
 }: {
   db: Db;
   token: string;
+  userId: string | null;
+  live?: LiveProjects;
+}): Promise<RedeemedShareLink | null> {
+  if (!shareTokenSchema.safeParse(token).success) return null;
+  const tokenHash = await hashShareToken(token);
+  return db.transaction(async (tx) => {
+    // Locking the link and project rows orders this after a revocation or
+    // deletion in progress.
+    const [link] = await tx
+      .select({
+        id: projectShareLink.id,
+        projectId: projectShareLink.projectId,
+        role: projectShareLink.role,
+      })
+      .from(projectShareLink)
+      .innerJoin(
+        project,
+        and(
+          eq(project.id, projectShareLink.projectId),
+          isNull(project.deletedAt),
+        ),
+      )
+      .where(eq(projectShareLink.tokenHash, tokenHash))
+      .for("share");
+    if (!link) return null;
+    if (userId === null)
+      return {
+        projectId: link.projectId,
+        role: link.role,
+        signIn: link.role !== "viewer",
+      };
+    const [granted] = await tx
+      .insert(projectShareGrant)
+      .values({ linkId: link.id, projectId: link.projectId, userId })
+      .onConflictDoNothing()
+      .returning({ linkId: projectShareGrant.linkId });
+    // A socket opened before may have cached less access.
+    if (granted) await invalidateProjectAccess(live, link.projectId, [userId]);
+    return { projectId: link.projectId, role: link.role, signIn: false };
+  });
+}
+
+// What an anonymous guest's view-only page shows: the file list and main file.
+// Sources and the PDF load from the API with the share cookie.
+export async function getSharedProject({
+  db,
+  token,
+  projectId,
+}: {
+  db: Db;
+  token: string;
+  projectId: string;
 }) {
   const link = await resolveShareToken(db, token);
-  if (!link) throw new Error("Share link not found");
+  if (!link || link.projectId !== projectId || link.role !== "viewer")
+    return null;
   return db.transaction(async (tx) => {
     const found = await lockProject({
       tx,
-      projectId: link.projectId,
+      projectId,
       userId: sharePrincipal(link.id),
       access: "read",
-      content: link.scope === "pdf" ? "build" : "sources",
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "Project not found")
+        return null;
+      throw error;
     });
-    const nodes =
-      link.scope === "project"
-        ? await tx.query.projectNode.findMany({
-            columns: { id: true, parentId: true, name: true, kind: true },
-            where: { projectId: link.projectId, deletedAt: { isNull: true } },
-          })
-        : [];
+    if (!found) return null;
+    const nodes = await tx.query.projectNode.findMany({
+      columns: { id: true, parentId: true, name: true, kind: true },
+      where: { projectId, deletedAt: { isNull: true } },
+    });
     return {
       projectId: found.id,
       name: found.name,
-      scope: link.scope,
-      mainFile: link.scope === "project" ? found.mainFile : null,
+      mainFile: found.mainFile,
       nodes,
     };
   });

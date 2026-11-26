@@ -3,7 +3,6 @@
 export {
   createCompileSources,
   type CompileProject,
-  type CompileShareScope,
   type CompileSnapshot,
   type CompileSourceOptions,
   type CompileTransaction,

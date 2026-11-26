@@ -62,7 +62,7 @@ export async function importGitProject() {
   throw new Error("Git import is outside the upload fixture");
 }
 export async function getProjectAccess() {
-  return { canManage: false, people: [] };
+  return { canManage: false, organization: null, owner: null, people: [] };
 }
 export async function grantProjectAccess() {
   throw new Error("Sharing is outside the upload fixture");
@@ -70,6 +70,11 @@ export async function grantProjectAccess() {
 export async function revokeProjectAccess() {
   throw new Error("Sharing is outside the upload fixture");
 }
+export {
+  revokeProjectAccess as setOrganizationRole,
+  revokeProjectAccess as grantTeamAccess,
+  revokeProjectAccess as revokeTeamAccess,
+};
 
 export async function updateProjectFormatting({
   data,

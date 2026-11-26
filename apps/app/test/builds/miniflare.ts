@@ -7,6 +7,7 @@ type Service = NonNullable<WorkerOptions["serviceBindings"]>[string];
 const fixtureScript = `
 import { DurableObject } from "cloudflare:workers";
 export class ProjectBuilds extends DurableObject {
+  invalidateAccess() {}
   async fetch(request) {
     if (!new URL(request.url).pathname.endsWith("/events"))
       return this.env.HANDLER.fetch(request);

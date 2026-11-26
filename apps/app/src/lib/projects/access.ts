@@ -1,8 +1,17 @@
 import type { Db } from "@texfolia/db";
-import { member, project, projectShareLink } from "@texfolia/db/schema";
+import { member, project } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
+
+import {
+  projectPermissions,
+  roleAllows,
+  strongerRole,
+  type ProjectAccessLevel,
+  type ProjectPermissions,
+  type ProjectRole,
+} from "./roles";
 
 export type ProjectTransaction = Parameters<
   Parameters<Db["transaction"]>[0]
@@ -14,39 +23,34 @@ export type ProjectAccessRequest = {
   tx: ProjectTransaction;
   projectId: string;
   userId: string;
-  access?: "read" | "write";
-  // "build" covers build files, the PDF, and the live build stream. PDF-only
-  // share links can read only these.
-  content?: "sources" | "build";
+  access?: ProjectAccessLevel;
 };
 
-export type ProjectAccess = {
-  canWrite: boolean;
-  // Set only by link-based grants; owner and organization access is `null`.
-  shareScope: (typeof projectShareLink.$inferSelect)["scope"] | null;
-};
+export type ProjectAccess = ProjectPermissions;
 
-// Access this feature does not own, such as collaborators or share links.
-// A grant runs only when owner and organization checks do not apply, sees the
-// locked project row, and returns `null` when it does not apply either. It
-// throws to deny.
-export type ProjectGrant = (
-  request: Required<Omit<ProjectAccessRequest, "tx">> & {
-    tx: ProjectTransaction;
-    project: ProjectRow;
-  },
-) => Promise<ProjectAccess | null>;
+export type ProjectGrantResult = { role: ProjectRole; guest?: boolean } | null;
 
-// Owner and organization access. Every organization role can edit
-// organization projects; see docs/project-controls.md.
+// Access this feature does not own, such as collaborators, teams, or share
+// links. A grant sees the locked project row and returns the role it gives,
+// or `null`. Roles from every source add up; see `strongerRole`.
+export type ProjectGrant = (request: {
+  tx: ProjectTransaction;
+  projectId: string;
+  userId: string;
+  project: ProjectRow;
+}) => Promise<ProjectGrantResult>;
+
+// Owner and organization access. A personal project's owner, and an
+// organization's owners and admins, can edit. Other members get the project's
+// organization-wide role, if it has one; see docs/project-controls.md.
 async function ownerAccess(
   tx: ProjectTransaction,
   found: ProjectRow,
   userId: string,
-): Promise<ProjectAccess | null> {
+): Promise<ProjectGrantResult> {
   if (found.organizationId) {
     const [membership] = await tx
-      .select({ userId: member.userId })
+      .select({ role: member.role })
       .from(member)
       .where(
         and(
@@ -55,20 +59,22 @@ async function ownerAccess(
         ),
       )
       .for("share");
-    return membership ? { canWrite: true, shareScope: null } : null;
+    if (!membership) return null;
+    if (isOrgAdmin(membership.role)) return { role: "editor" };
+    return found.organizationRole ? { role: found.organizationRole } : null;
   }
-  return found.ownerId === userId ? { canWrite: true, shareScope: null } : null;
+  return found.ownerId === userId ? { role: "editor" } : null;
 }
 
-// Locks a live project row (exclusively for writes, shared for reads) and
-// checks access: owner or organization member first, then each grant in
-// order. Throws "Project not found" when nothing grants access.
+// Locks a live project row (exclusively for writes, shared otherwise) and
+// checks access: the strongest role from owner and organization access and
+// every grant. Throws "Project not found" when none allows `access`, so people
+// without access cannot tell the project exists.
 export async function lockProject({
   tx,
   projectId,
   userId,
   access = "write",
-  content = "sources",
   grants = [],
 }: ProjectAccessRequest & { grants?: readonly ProjectGrant[] }) {
   const [found] = await tx
@@ -79,23 +85,43 @@ export async function lockProject({
   if (!found) throw new Error("Project not found");
   let granted = await ownerAccess(tx, found, userId);
   for (const grant of grants) {
-    if (granted) break;
-    granted = await grant({
-      tx,
-      projectId,
-      userId,
-      access,
-      content,
-      project: found,
-    });
+    if (granted?.role === "editor") break;
+    const next = await grant({ tx, projectId, userId, project: found });
+    if (next && strongerRole(granted?.role, next.role) === next.role)
+      granted = next;
   }
-  if (!granted) throw new Error("Project not found");
-  return { ...found, ...granted };
+  if (!granted || !roleAllows(granted.role, access))
+    throw new Error("Project not found");
+  return {
+    ...found,
+    ...projectPermissions(granted.role, granted.guest ?? false),
+  };
 }
 
-// Only the owner of a personal project, or an owner or admin of the project's
-// organization, may trash, restore, permanently delete, or transfer it. Callers
-// hold the project row's lock. Collaborators and share links never pass.
+// Whether this person manages the project: the owner of a personal project, or
+// an owner or admin of its organization. Managers share, trash, restore,
+// permanently delete, and transfer it. Collaborators, teams, and share links
+// never manage. Callers hold the project row's lock.
+export async function isProjectManager(
+  tx: ProjectTransaction,
+  found: Pick<ProjectRow, "ownerId" | "organizationId">,
+  userId: string,
+) {
+  if (!found.organizationId) return found.ownerId === userId;
+  const [membership] = await tx
+    .select({ role: member.role })
+    .from(member)
+    .where(
+      and(
+        eq(member.organizationId, found.organizationId),
+        eq(member.userId, userId),
+      ),
+    )
+    .for("share");
+  return !!membership && isOrgAdmin(membership.role);
+}
+
+// Throws unless `isProjectManager`.
 export async function requireProjectManager(
   tx: ProjectTransaction,
   found: Pick<ProjectRow, "ownerId" | "organizationId">,

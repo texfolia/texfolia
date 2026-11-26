@@ -56,7 +56,6 @@ function openEvents(onSnapshot: (snapshot: BuildSnapshot) => void = () => {}) {
   const events = new ProjectBuildEvents(
     "project",
     onSnapshot,
-    (url) => `${url}&share=token`,
     (url) => new FakeSocket(url),
   );
   streams.push(events);
@@ -544,7 +543,7 @@ test("a lost socket reconnects until the stream is closed and reports each outag
   const kinds: string[] = [];
   events.subscribe((event) => kinds.push(event.kind));
   const first = FakeSocket.latest;
-  expect(first.url).toBe("/api/compile/project?events=1&share=token");
+  expect(first.url).toBe("/api/compile/project?events=1");
   source.message("pong");
   source.message(snapshot(crypto.randomUUID(), "running", 1));
   source.drop();

@@ -6,28 +6,35 @@ import { grantProjectAccessSchema } from "./project-sharing.schema";
 const projectId = "00000000-0000-4000-8000-000000000001";
 
 test("createShareLinkSchema allows bare links without a recipient email", () => {
-  expect(createShareLinkSchema.parse({ projectId, scope: "project" })).toEqual({
+  expect(createShareLinkSchema.parse({ projectId, role: "viewer" })).toEqual({
     projectId,
-    scope: "project",
+    role: "viewer",
   });
+  expect(
+    createShareLinkSchema.safeParse({ projectId, role: "commenter" }).success,
+  ).toBe(true);
+  // PDF-only links no longer exist.
+  expect(
+    createShareLinkSchema.safeParse({ projectId, role: "pdf" }).success,
+  ).toBe(false);
 });
 
 test("createShareLinkSchema trims and lowercases an optional recipient email", () => {
   expect(
     createShareLinkSchema.parse({
       projectId,
-      scope: "pdf",
+      role: "editor",
       recipientEmail: "  Reviewer@Example.COM ",
     }),
   ).toEqual({
     projectId,
-    scope: "pdf",
+    role: "editor",
     recipientEmail: "reviewer@example.com",
   });
   expect(
     createShareLinkSchema.safeParse({
       projectId,
-      scope: "project",
+      role: "viewer",
       recipientEmail: "not-an-email",
     }).success,
   ).toBe(false);

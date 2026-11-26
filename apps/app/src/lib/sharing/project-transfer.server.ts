@@ -4,6 +4,7 @@ import {
   project,
   projectCollaborator,
   projectShareLink,
+  projectTeam,
   user,
 } from "@texfolia/db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
@@ -75,8 +76,8 @@ export async function transferProject({
           ? "Only organization members can receive this project."
           : "Share the project with this person before transferring it.",
       );
-    // Collaborator rows grant nothing in an organization, so none may take
-    // effect when the project leaves it.
+    // An organization project's people and teams are its members; none keep
+    // access when the project leaves it.
     await tx
       .delete(projectCollaborator)
       .where(
@@ -90,6 +91,9 @@ export async function transferProject({
     await tx
       .delete(projectShareLink)
       .where(eq(projectShareLink.projectId, data.projectId));
+    await tx
+      .delete(projectTeam)
+      .where(eq(projectTeam.projectId, data.projectId));
     await tx.insert(projectCollaborator).values({
       projectId: data.projectId,
       userId,
@@ -102,7 +106,11 @@ export async function transferProject({
     );
     await tx
       .update(project)
-      .set({ ownerId: data.userId, organizationId: null, name })
+      .set({
+        ownerId: data.userId,
+        organizationId: null,
+        name,
+      })
       .where(eq(project.id, data.projectId));
     // Invalidate before commit so open sockets re-verify behind this lock.
     await invalidateProjectAccess(live, data.projectId);

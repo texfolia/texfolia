@@ -26,6 +26,10 @@ import { compileDeltaSchema, hashSource } from "#/lib/compile";
 import { projectMetadataSchema, projectMetadataVersion } from "#/lib/projects";
 
 import { createProject } from "../src/lib/projects/project.server";
+import {
+  createShareLink,
+  revokeShareLink,
+} from "../src/lib/sharing/project-share-links.server";
 import { withBuildsFixture } from "./builds/miniflare";
 
 declare global {
@@ -702,6 +706,82 @@ try {
     await editor.locator(".cm-content").first().innerText(),
     /Offline recovery marker/,
   );
+
+  // Unified /project/$projectId share-link entry: redeem-and-redirect without
+  // leaving the token in the URL, lightweight guest bundle for view links,
+  // sign-in gate for edit/comment links, and immediate revocation.
+  console.info(
+    "Checking unified share-link redirect, guest shell, and revocation",
+  );
+  const viewLink = await createShareLink({
+    db,
+    userId: ownerId,
+    data: { projectId, role: "viewer" },
+  });
+  const editLink = await createShareLink({
+    db,
+    userId: ownerId,
+    data: { projectId, role: "editor" },
+  });
+  const viewRedirect = await fetch(`${origin}/share/${viewLink.token}`, {
+    redirect: "manual",
+  });
+  assert.equal(viewRedirect.status, 303);
+  assert.equal(viewRedirect.headers.get("location"), `/project/${projectId}`);
+  assert.equal(viewRedirect.headers.get("referrer-policy"), "no-referrer");
+  assert.match(viewRedirect.headers.get("set-cookie") ?? "", /HttpOnly/i);
+  const editRedirect = await fetch(`${origin}/share/${editLink.token}`, {
+    redirect: "manual",
+  });
+  assert.equal(editRedirect.status, 303);
+  assert.equal(
+    editRedirect.headers.get("location"),
+    `/login?redirectTo=${encodeURIComponent(`/project/${projectId}`)}`,
+  );
+
+  const guestContext = await browser.newContext();
+  const guestScripts: string[] = [];
+  const guest = await guestContext.newPage();
+  guest.setDefaultTimeout(20_000);
+  guest.on("pageerror", (error) => errors.push(error.message));
+  guest.on("request", (request) => {
+    if (request.resourceType() === "script") guestScripts.push(request.url());
+  });
+  await guest.goto(`${origin}/share/${viewLink.token}`);
+  await guest.waitForURL(`${origin}/project/${projectId}`);
+  await guest.getByText("View only", { exact: true }).waitFor();
+  assert(
+    !guestScripts.some((url) => url.includes("member-workspace")),
+    `Anonymous guest downloaded the member workspace bundle: ${guestScripts.join(", ")}`,
+  );
+
+  // Signed-in user with no access redeems an edit link onto their account.
+  await editor.goto(`${origin}/share/${editLink.token}`);
+  await editor.waitForURL(`${origin}/project/${projectId}`);
+  await editor.locator('.cm-content[contenteditable="true"]').waitFor();
+
+  await revokeShareLink({
+    db,
+    userId: ownerId,
+    data: { projectId, linkId: viewLink.id },
+  });
+  await revokeShareLink({
+    db,
+    userId: ownerId,
+    data: { projectId, linkId: editLink.id },
+  });
+  await guest.reload();
+  await guest
+    .getByRole("heading", { name: "This link no longer works" })
+    .waitFor();
+  await guest.goto(`${origin}/share/${viewLink.token}`);
+  await guest
+    .getByRole("heading", { name: "This link no longer works" })
+    .waitFor();
+  await editor.reload();
+  await editor.getByRole("heading", { name: "Project not found" }).waitFor();
+  await guestContext.close();
+
   await db.insert(organization).values({
     id: organizationId,
     name: "Metadata organization",

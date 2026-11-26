@@ -5,27 +5,28 @@ import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  projectRoleLabels,
+  projectRoles,
+  type ProjectRole,
+} from "#/lib/projects/roles";
+import {
   createShareLink,
   listShareLinks,
   revokeShareLink,
 } from "#/lib/sharing/project-share-links.functions";
 import {
   createShareLinkSchema,
-  shareLinkScopeSchema,
-  type ShareLinkScope,
+  projectRoleSchema,
 } from "#/lib/sharing/project-share-links.schema";
 import { sharePath } from "#/lib/sharing/share-token";
 
-const scopeLabels: Record<ShareLinkScope, string> = {
-  project: "Sources and PDF",
-  pdf: "PDF only",
-};
+const roleOptions = [...projectRoles].reverse();
 
 type Links = Awaited<ReturnType<typeof listShareLinks>>["links"];
 
 export function ProjectShareLinks({ projectId }: { projectId: string }) {
   const [links, setLinks] = useState<Links>();
-  const [scope, setScope] = useState<ShareLinkScope>("project");
+  const [role, setRole] = useState<ProjectRole>("viewer");
   const [recipientEmail, setRecipientEmail] = useState("");
   // The full link is only available right after creation.
   const [created, setCreated] = useState<{ id: string; url: string }>();
@@ -81,8 +82,9 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
         Share links
       </h3>
       <p className="text-muted-foreground">
-        Anyone with a link can view without signing in. Links don’t expire;
-        revoke them when they’re no longer needed.
+        Anyone with a view link can open the project without signing in. Comment
+        and edit links ask people to sign in first. Links don’t expire; revoking
+        one ends access for everyone who used it.
       </p>
       {links && links.length > 0 && (
         <ul className="divide-y rounded-sm border">
@@ -90,7 +92,7 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
             <li key={link.id} className="space-y-1 px-2 py-1.5">
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1">
-                  <span className="block">{scopeLabels[link.scope]}</span>
+                  <span className="block">{projectRoleLabels[link.role]}</span>
                   <span className="text-muted-foreground">
                     Created {new Date(link.createdAt).toLocaleDateString()}
                   </span>
@@ -99,7 +101,7 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
                   variant="ghost"
                   size="xs"
                   disabled={busy}
-                  aria-label={`Revoke ${scopeLabels[link.scope]} link created ${new Date(link.createdAt).toLocaleString()}`}
+                  aria-label={`Revoke ${projectRoleLabels[link.role]} link created ${new Date(link.createdAt).toLocaleString()}`}
                   onClick={() =>
                     void run(async () => {
                       await revokeShareLink({
@@ -144,7 +146,7 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
           const trimmedEmail = recipientEmail.trim();
           const parsed = createShareLinkSchema.safeParse({
             projectId,
-            scope,
+            role,
             ...(trimmedEmail ? { recipientEmail: trimmedEmail } : {}),
           });
           if (!parsed.success) {
@@ -183,20 +185,19 @@ export function ProjectShareLinks({ projectId }: { projectId: string }) {
         <div className="flex gap-1">
           <NativeSelect
             aria-label="Share link access"
-            value={scope}
+            value={role}
             disabled={busy}
             onChange={(event) => {
-              const parsed = shareLinkScopeSchema.safeParse(event.target.value);
-              if (parsed.success) setScope(parsed.data);
+              const parsed = projectRoleSchema.safeParse(event.target.value);
+              if (parsed.success) setRole(parsed.data);
             }}
             className="min-w-0 flex-1"
           >
-            <NativeSelectOption value="project">
-              {scopeLabels.project}
-            </NativeSelectOption>
-            <NativeSelectOption value="pdf">
-              {scopeLabels.pdf}
-            </NativeSelectOption>
+            {roleOptions.map((option) => (
+              <NativeSelectOption key={option} value={option}>
+                {projectRoleLabels[option]}
+              </NativeSelectOption>
+            ))}
           </NativeSelect>
           <Button type="submit" size="sm" disabled={busy}>
             {busy

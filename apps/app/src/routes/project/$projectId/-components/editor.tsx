@@ -223,7 +223,11 @@ export function Editor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [autosaved]);
 
-  const { commenting, commentExtension, addComment } = useEditorComments({
+  const {
+    canAdd: canAddComment,
+    commentExtension,
+    addComment,
+  } = useEditorComments({
     view,
     collaboration,
     comments,
@@ -421,7 +425,7 @@ export function Editor({
             {allowOpenFile && (
               <OpenFileAction onClick={() => fileInput.current?.click()} />
             )}
-            {commenting && <AddCommentAction onClick={addComment} />}
+            {canAddComment && <AddCommentAction onClick={addComment} />}
             <FindAction onClick={find} />
             {isLatex && (
               <SymbolsAction
@@ -523,7 +527,7 @@ export function Editor({
               Ask AI about selection
             </ContextMenuItem>
           )}
-          {commenting && (
+          {canAddComment && (
             <ContextMenuItem onClick={addComment}>Add comment</ContextMenuItem>
           )}
           <ContextCommand command="cut">Cut</ContextCommand>

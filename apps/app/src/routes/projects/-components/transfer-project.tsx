@@ -18,7 +18,10 @@ import {
 } from "#/lib/sharing/project-sharing.functions";
 import { useProjects } from "#/providers/projects-provider";
 
-type Person = Awaited<ReturnType<typeof getProjectAccess>>["people"][number];
+type Person = Pick<
+  Awaited<ReturnType<typeof getProjectAccess>>["people"][number],
+  "id" | "name" | "email"
+>;
 
 export function TransferProject({
   project,
@@ -39,7 +42,9 @@ export function TransferProject({
       .then((access) => {
         if (active)
           setPeople(
-            access.people.filter((person) => person.id !== store.ownerId),
+            (access.organization?.members ?? access.people).filter(
+              (person) => person.id !== store.ownerId,
+            ),
           );
       })
       .catch(() => {

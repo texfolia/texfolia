@@ -6,8 +6,11 @@ import { createEmailDelivery } from "#/lib/email";
 
 import {
   grantProjectAccessSchema,
+  grantTeamAccessSchema,
   projectAccessSchema,
   revokeProjectAccessSchema,
+  revokeTeamAccessSchema,
+  setOrganizationRoleSchema,
   transferProjectSchema,
 } from "./project-sharing.schema";
 
@@ -53,6 +56,42 @@ export const transferProject = createServerFn({ method: "POST" })
     const session = await ensureSession();
     const server = await import("./project-transfer.server");
     return server.transferProject({
+      db: context.db,
+      userId: session.user.id,
+      data,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
+    });
+  });
+export const setOrganizationRole = createServerFn({ method: "POST" })
+  .validator(setOrganizationRoleSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-sharing.server");
+    return server.setOrganizationRole({
+      db: context.db,
+      userId: session.user.id,
+      data,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
+    });
+  });
+export const grantTeamAccess = createServerFn({ method: "POST" })
+  .validator(grantTeamAccessSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-sharing.server");
+    return server.grantTeamAccess({
+      db: context.db,
+      userId: session.user.id,
+      data,
+      live: { collaboration: env.COLLABORATION, builds: env.BUILDS },
+    });
+  });
+export const revokeTeamAccess = createServerFn({ method: "POST" })
+  .validator(revokeTeamAccessSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-sharing.server");
+    return server.revokeTeamAccess({
       db: context.db,
       userId: session.user.id,
       data,

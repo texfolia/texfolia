@@ -19,8 +19,8 @@ import {
 // grants apply, such as collaborators and share links.
 export type CollaborationLock = (request: ProjectAccessRequest) => Promise<{
   canWrite: boolean;
-  /** Set only for share-link principals. */
-  shareScope: "project" | "pdf" | null;
+  /** Anonymous share-link guests. */
+  guest: boolean;
 }>;
 
 export async function collaborationAccess(
@@ -55,8 +55,8 @@ export async function collaborationAccess(
   });
 }
 
-// The scratchpad is internal to people with their own access to the project, so
-// share links of either scope cannot open it.
+// The scratchpad is for people signed in with access to the project, including
+// through a share link; anonymous guests cannot open it. Editors may edit it.
 export async function scratchpadAccess(
   db: Db,
   projectId: string,
@@ -64,13 +64,13 @@ export async function scratchpadAccess(
   options: { lock: CollaborationLock; register?: boolean },
 ) {
   return db.transaction(async (tx) => {
-    const { canWrite, shareScope } = await options.lock({
+    const { canWrite, guest } = await options.lock({
       tx,
       projectId,
       userId,
       access: "read",
     });
-    if (shareScope !== null) throw new Error("File not found");
+    if (guest) throw new Error("File not found");
     if (options.register)
       await tx
         .insert(projectCollaboration)

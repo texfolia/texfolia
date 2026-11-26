@@ -4,6 +4,8 @@ import {
   project,
   projectCollaboration,
   projectCollaborator,
+  projectShareGrant,
+  projectTeam,
 } from "@texfolia/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
@@ -142,6 +144,11 @@ export function deletionNotice({
           .where(eq(projectCollaborator.userId, userId)))
           affected.set(id, [userId]);
         for (const { id } of await db
+          .select({ id: projectShareGrant.projectId })
+          .from(projectShareGrant)
+          .where(eq(projectShareGrant.userId, userId)))
+          affected.set(id, [userId]);
+        for (const { id } of await db
           .select({ id: project.id })
           .from(project)
           .innerJoin(member, eq(member.organizationId, project.organizationId))
@@ -164,6 +171,57 @@ export function deletionNotice({
         invalidateProjectAccess(live, id, userIds),
       );
       affected.clear();
+    },
+  };
+}
+
+/**
+ * Tells live channels about access that changed with a team: its members, or
+ * the team itself. `before` lists the projects shared with the team, because
+ * deleting a team cascades to those grants; `after` notifies them.
+ */
+export function teamAccessNotice({
+  db,
+  live,
+}: {
+  db: Db;
+  live: LiveProjects | undefined;
+}) {
+  const affected = new Map<string, string[]>();
+  async function projects(teamId: string) {
+    return db
+      .select({ id: projectTeam.projectId })
+      .from(projectTeam)
+      .where(eq(projectTeam.teamId, teamId));
+  }
+  return {
+    async before(teamId: string) {
+      if (!live) return;
+      try {
+        affected.set(
+          teamId,
+          (await projects(teamId)).map(({ id }) => id),
+        );
+      } catch (error) {
+        console.error("Team projects could not be listed", { teamId, error });
+      }
+    },
+    // Everyone re-verifies when `userIds` is undefined.
+    async after(teamId: string, userIds?: string[]) {
+      if (!live) return;
+      try {
+        const ids =
+          affected.get(teamId) ?? (await projects(teamId)).map(({ id }) => id);
+        affected.delete(teamId);
+        await mapLimit(ids, organizationConcurrency, (id) =>
+          invalidateProjectAccess(live, id, userIds),
+        );
+      } catch (error) {
+        console.error("Team live access invalidation failed", {
+          teamId,
+          error,
+        });
+      }
     },
   };
 }

@@ -30,6 +30,8 @@ function createTestAuth() {
       verification: [],
       organization: [],
       member: [],
+      team: [],
+      teamMember: [],
       invitation: [],
       subscription: [],
     }),
@@ -452,6 +454,46 @@ test("only owners change roles, and promote other owners", async () => {
   expect(await setRole(member.headers, admin.memberId, "member")).toMatchObject(
     { role: "member" },
   );
+});
+
+test("owners and admins manage teams; members cannot", async () => {
+  const { auth, owner, organizationId, join } = await createTeam();
+  const admin = await join("admin@example.com", "admin");
+  const member = await join("member@example.com", "member");
+  await expect(
+    auth.api.createTeam({
+      headers: member.headers,
+      body: { name: "Members", organizationId },
+    }),
+  ).rejects.toMatchObject(forbidden);
+  const team = await auth.api.createTeam({
+    headers: admin.headers,
+    body: { name: "Reviewers", organizationId },
+  });
+  await expect(
+    auth.api.addTeamMember({
+      headers: member.headers,
+      body: { teamId: team.id, userId: member.user.id, organizationId },
+    }),
+  ).rejects.toMatchObject(forbidden);
+  for (const headers of [admin.headers, owner.headers])
+    await auth.api.addTeamMember({
+      headers,
+      body: { teamId: team.id, userId: member.user.id, organizationId },
+    });
+  expect(
+    (await auth.api.listUserTeams({ headers: member.headers })).map(
+      (joined) => joined.id,
+    ),
+  ).toEqual([team.id]);
+  await auth.api.removeTeamMember({
+    headers: admin.headers,
+    body: { teamId: team.id, userId: member.user.id, organizationId },
+  });
+  await auth.api.removeTeam({
+    headers: admin.headers,
+    body: { teamId: team.id, organizationId },
+  });
 });
 
 test("admins invite and remove members, and only owners invite and remove admins", async () => {

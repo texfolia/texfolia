@@ -34,7 +34,7 @@ export async function duplicateProject({
       .where(eq(user.id, userId));
     if (!owner) throw new Error("Project not found");
     const source = await lock({ tx, projectId, userId, access: "read" });
-    if (source.shareScope) throw new Error("Project not found");
+    if (source.guest) throw new Error("Project not found");
     const nodes = await tx.query.projectNode.findMany({
       where: { projectId, deletedAt: { isNull: true } },
     });

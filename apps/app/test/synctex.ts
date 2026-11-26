@@ -32,7 +32,10 @@ const project: ProjectDetails = {
   formatWidth: 80,
   spellcheckLanguage: "en-US",
   mainFile: null,
+  organizationRole: null,
+  role: "editor",
   canWrite: true,
+  canComment: true,
   nodes: [
     { id: rootId, projectId, parentId: null, name: "root", kind: "folder" },
     { id: mainId, projectId, parentId: rootId, name: "main.tex", kind: "text" },

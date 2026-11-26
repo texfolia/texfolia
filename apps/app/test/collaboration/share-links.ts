@@ -14,6 +14,7 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from "#/lib/collaboration";
+import { shareCookieName } from "#/lib/sharing/share-token";
 
 async function eventually(
   check: () => Promise<boolean> | boolean,
@@ -28,13 +29,17 @@ async function eventually(
 
 const createdLink = z.object({ id: z.uuid(), token: z.string() });
 
-// Anonymous share-link viewers: read-only, no presence, and revocable live.
+// Share links. Anonymous guests present a view link's token in the share
+// cookie: read-only, no presence, and revocable live. Comment and edit links
+// do nothing without an account; redeemed by one, they grant its role until
+// the link is revoked.
 export async function checkShareLinks({
   mf,
   db,
   origin,
   ownerId,
   editorId,
+  linkedId,
   cookies,
 }: {
   mf: Miniflare;
@@ -42,6 +47,8 @@ export async function checkShareLinks({
   origin: string;
   ownerId: string;
   editorId: string;
+  // Has no access until it redeems an edit link.
+  linkedId: string;
   cookies: Map<string, string>;
 }) {
   console.log("Checking share-link collaboration access");
@@ -78,28 +85,28 @@ export async function checkShareLinks({
       assert(response.ok, `Share ${action} failed`);
       return response;
     }
-    const link = createdLink.parse(
-      await (await access("share-create", { scope: "project" })).json(),
-    );
-    const pdfLink = createdLink.parse(
-      await (await access("share-create", { scope: "pdf" })).json(),
-    );
+    const create = async (role: string) =>
+      createdLink.parse(await (await access("share-create", { role })).json());
+    const link = await create("viewer");
+    const otherLink = await create("viewer");
+    const commentLink = await create("commenter");
+    const editLink = await create("editor");
+    const shareCookie = (token: string) =>
+      `${shareCookieName(projectId)}=${token}`;
 
     async function connect(
       clientId: number,
       auth: { userId: string } | { token: string },
     ) {
-      const url =
-        "token" in auth
-          ? `${socketUrl}?protocol=2&clientId=${clientId}&share=${auth.token}`
-          : `${socketUrl}?protocol=2&clientId=${clientId}`;
+      const url = `${socketUrl}?protocol=2&clientId=${clientId}`;
       const response = await mf.dispatchFetch(url, {
         headers: {
           Origin: origin,
           Upgrade: "websocket",
-          ...("userId" in auth
-            ? { Cookie: cookies.get(auth.userId) ?? "" }
-            : {}),
+          Cookie:
+            "userId" in auth
+              ? (cookies.get(auth.userId) ?? "")
+              : shareCookie(auth.token),
         },
       });
       assert.equal(response.status, 101, "Socket did not upgrade");
@@ -193,24 +200,43 @@ export async function checkShareLinks({
       "Guest edit reached the room",
     );
 
-    // PDF-only links never open sources.
-    assert.equal(
-      (
-        await mf.dispatchFetch(
-          `${socketUrl}?protocol=2&clientId=4&share=${pdfLink.token}`,
-          { headers: { Origin: origin, Upgrade: "websocket" } },
-        )
-      ).status,
-      404,
-      "PDF-only link opened a source",
-    );
+    // Without an account, comment and edit links open nothing, and a token in
+    // the URL is not a credential.
+    for (const [headers, label] of [
+      [{ Cookie: shareCookie(commentLink.token) }, "comment link"],
+      [{ Cookie: shareCookie(editLink.token) }, "edit link"],
+      [{}, "token in the URL"],
+    ] as const)
+      assert.equal(
+        (
+          await mf.dispatchFetch(
+            `${socketUrl}?protocol=2&clientId=4&share=${link.token}`,
+            { headers: { Origin: origin, Upgrade: "websocket", ...headers } },
+          )
+        ).status,
+        401,
+        `Anonymous ${label} opened a source`,
+      );
 
-    // Both link kinds follow the live build stream.
-    const [guestEvents, pdfEvents] = await Promise.all(
-      [link.token, pdfLink.token].map(async (token) => {
+    // An account that redeems an edit link edits through it.
+    await access("share-redeem", { token: editLink.token, userId: linkedId });
+    const linked = await connect(5, { userId: linkedId });
+    const linkedSync = linked.messages.find((m) => m.type === "sync");
+    assert(linkedSync?.type === "sync");
+    assert.equal(linkedSync.canWrite, true, "Edit link did not grant editing");
+
+    // Guests follow the live build stream.
+    const [guestEvents, otherEvents] = await Promise.all(
+      [link.token, otherLink.token].map(async (token) => {
         const response = await mf.dispatchFetch(
-          `${origin}/api/compile/${projectId}?events=1&share=${token}`,
-          { headers: { Origin: origin, Upgrade: "websocket" } },
+          `${origin}/api/compile/${projectId}?events=1`,
+          {
+            headers: {
+              Origin: origin,
+              Upgrade: "websocket",
+              Cookie: shareCookie(token),
+            },
+          },
         );
         assert.equal(response.status, 101);
         const socket = response.webSocket;
@@ -231,7 +257,7 @@ export async function checkShareLinks({
         return { frames, closeCode: () => closeCode };
       }),
     );
-    assert(guestEvents && pdfEvents);
+    assert(guestEvents && otherEvents);
 
     // Revocation closes the guest's socket and stream; other links keep working.
     const before = guest.messages.length;
@@ -257,8 +283,8 @@ export async function checkShareLinks({
       body: secret,
     });
     await eventually(
-      () => pdfEvents.frames.includes(secret),
-      "PDF link lost build updates",
+      () => otherEvents.frames.includes(secret),
+      "Another link lost build updates",
     );
     await eventually(
       () => guestEvents.closeCode() !== 0,
@@ -268,17 +294,38 @@ export async function checkShareLinks({
     assert.equal(guestEvents.frames.length, 1, "Revoked guest got events");
     assert.equal(
       (
-        await mf.dispatchFetch(
-          `${socketUrl}?protocol=2&clientId=3&share=${link.token}`,
-          {
-            headers: { Origin: origin, Upgrade: "websocket" },
+        await mf.dispatchFetch(`${socketUrl}?protocol=2&clientId=3`, {
+          headers: {
+            Origin: origin,
+            Upgrade: "websocket",
+            Cookie: shareCookie(link.token),
           },
-        )
+        })
       ).status,
       401,
       "Revoked link reconnected",
     );
-    for (const client of [owner, editor, guest]) client.doc.destroy();
+    // Revoking the edit link ends the access it gave the account, live.
+    await access("share-revoke", { linkId: editLink.id });
+    await eventually(
+      () => linked.closeCode() !== 0,
+      "Revoked link grant kept its socket",
+    );
+    assert.equal(linked.closeCode(), 1008);
+    assert.equal(
+      (
+        await mf.dispatchFetch(`${socketUrl}?protocol=2&clientId=5`, {
+          headers: {
+            Origin: origin,
+            Upgrade: "websocket",
+            Cookie: cookies.get(linkedId) ?? "",
+          },
+        })
+      ).status,
+      404,
+      "Revoked link grant reconnected",
+    );
+    for (const client of [owner, editor, guest, linked]) client.doc.destroy();
   } finally {
     for (const socket of sockets) if (socket?.readyState === 1) socket.close();
     await db.delete(project).where(eq(project.id, projectId));

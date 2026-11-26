@@ -18,20 +18,26 @@ import { hasOrgRole } from "./roles";
 type AuthContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
 
 /**
- * Roles decide who manages an organization. Every member can edit its projects.
- * Unlike Better Auth's own admins, ours cannot change roles. Removing an admin
- * and inviting one depend on the other person, so `assertOrganizationPolicy`
- * checks those.
+ * Roles decide who manages an organization, including its teams. Owners and
+ * admins can edit every organization project; what members can do depends on
+ * each project's sharing (see `lockProject`).
+ * Unlike Better Auth's own admins, ours cannot change roles: Better Auth ties
+ * team membership to `member: ["update"]`, which also allows role changes, so
+ * `assertOrganizationPolicy` keeps those to owners. Removing an admin and
+ * inviting one depend on the other person, so it checks those too.
  */
 export const organizationRoles = {
   owner: ownerAc,
   admin: defaultAc.newRole({
     organization: ["update"],
     invitation: ["create", "cancel"],
-    member: ["create", "delete"],
+    member: ["create", "update", "delete"],
+    team: ["create", "update", "delete"],
   }),
   member: memberAc,
 };
+
+export const maxTeamsPerOrganization = 100;
 
 async function findMembers(
   ctx: AuthContext,
@@ -59,8 +65,15 @@ const removeSchema = z.object({
   organizationId: z.string().optional(),
 });
 
-/** Only owners may invite or remove people who manage the organization. */
+/**
+ * Only owners may change roles, or invite or remove people who manage the
+ * organization.
+ */
 export async function assertOrganizationPolicy(ctx: AuthContext) {
+  if (ctx.path === "/organization/update-member-role") {
+    await assertOwner(ctx);
+    return;
+  }
   const inviting = ctx.path === "/organization/invite-member";
   if (!inviting && ctx.path !== "/organization/remove-member") return;
   // The endpoint rejects bodies and sessions that this cannot use.
@@ -199,4 +212,25 @@ export async function syncSeats(
 export async function memberOrganizations(ctx: AuthContext, userId: string) {
   const members = await findMembers(ctx, "userId", userId);
   return members.map(({ organizationId }) => organizationId);
+}
+
+const organizationBodySchema = z.object({
+  organizationId: z.string().optional(),
+});
+
+async function assertOwner(ctx: AuthContext) {
+  const session = await getSessionFromCtx(ctx, { disableCookieCache: true });
+  if (!session) return;
+  const body = organizationBodySchema.safeParse(ctx.body);
+  const organizationId =
+    (body.success ? body.data.organizationId : undefined) ??
+    session.session.activeOrganizationId;
+  if (typeof organizationId !== "string") return;
+  const members = await findMembers(ctx, "organizationId", organizationId);
+  const actor = members.find((member) => member.userId === session.user.id);
+  // The endpoint rejects people who are not members.
+  if (actor && !isOwner(actor))
+    throw new APIError("FORBIDDEN", {
+      message: "Only an organization owner can change roles.",
+    });
 }

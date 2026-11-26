@@ -10,7 +10,7 @@ export const authClient = createAuthClient({
   plugins: [
     emailOTPClient(),
     lastLoginMethodClient(),
-    organizationClient(),
+    organizationClient({ teams: { enabled: true } }),
     stripeClient({ subscription: true }),
   ],
 });

@@ -79,14 +79,23 @@ test("project collaborator emails include role, project link, and escape HTML", 
   });
   expect(viewerMail.text).toContain("so you can view it");
   expect(viewerMail.html).toContain("so you can view it");
+
+  const commenterMail = projectCollaboratorEmail({
+    to: "reviewer@example.com",
+    projectName: "Draft",
+    inviterName: "Ada",
+    role: "commenter",
+    url: new URL("https://app.texfolia.com/project/proj-3"),
+  });
+  expect(commenterMail.text).toContain("so you can comment on it");
 });
 
-test("project share-link emails describe the scope and link without requiring sign-in", () => {
+test("project share-link emails describe the role and whether to sign in", () => {
   const projectMail = projectShareLinkEmail({
     to: "reviewer@example.com",
     projectName: "Thesis & <Draft>",
     senderName: "Ada\nLovelace",
-    scope: "project",
+    role: "viewer",
     url: new URL("https://app.texfolia.com/share/abc_123"),
   });
   expect(projectMail.to).toBe("reviewer@example.com");
@@ -94,7 +103,7 @@ test("project share-link emails describe the scope and link without requiring si
     "Ada Lovelace shared Thesis & <Draft> on Texfolia",
   );
   expect(projectMail.text).toContain(
-    "view its sources and PDF without signing in: https://app.texfolia.com/share/abc_123",
+    "so you can view it without signing in: https://app.texfolia.com/share/abc_123",
   );
   expect(projectMail.html).toContain(
     "<strong>Thesis &amp; &lt;Draft&gt;</strong>",
@@ -103,15 +112,22 @@ test("project share-link emails describe the scope and link without requiring si
     '<a href="https://app.texfolia.com/share/abc_123">Open shared link</a>',
   );
 
-  const pdfMail = projectShareLinkEmail({
-    to: "reviewer@example.com",
-    projectName: "Thesis",
-    senderName: "Ada",
-    scope: "pdf",
-    url: new URL("https://app.texfolia.com/share/pdf_456"),
-  });
-  expect(pdfMail.text).toContain("view its PDF without signing in");
-  expect(pdfMail.html).toContain("view its PDF without signing in");
+  for (const [role, access] of [
+    ["commenter", "comment on it"],
+    ["editor", "edit it"],
+  ] as const) {
+    const mail = projectShareLinkEmail({
+      to: "reviewer@example.com",
+      projectName: "Thesis",
+      senderName: "Ada",
+      role,
+      url: new URL("https://app.texfolia.com/share/def_456"),
+    });
+    expect(mail.text).toContain(
+      `so you can ${access} after signing in or creating an account`,
+    );
+    expect(mail.html).toContain(`so you can ${access} after signing in`);
+  }
 });
 
 test("messages go out from the configured address and delivery errors reject", async () => {

@@ -46,6 +46,7 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id"),
+    activeTeamId: text("active_team_id"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );
@@ -125,6 +126,40 @@ export const member = pgTable(
   ],
 );
 
+export const team = pgTable(
+  "team",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    memberCount: integer("member_count").default(0).notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),
+  },
+  (table) => [index("team_organizationId_idx").on(table.organizationId)],
+);
+
+export const teamMember = pgTable(
+  "team_member",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => team.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    membershipKey: text("membership_key").unique(),
+    createdAt: timestamp("created_at"),
+  },
+  (table) => [
+    index("teamMember_teamId_idx").on(table.teamId),
+    index("teamMember_userId_idx").on(table.userId),
+  ],
+);
+
 export const invitation = pgTable(
   "invitation",
   {
@@ -134,6 +169,7 @@ export const invitation = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     role: text("role"),
+    teamId: text("team_id"),
     status: text("status").default("pending").notNull(),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").notNull(),
@@ -193,6 +229,8 @@ export const authRelations = defineRelationsPart(
     verification,
     organization,
     member,
+    team,
+    teamMember,
     invitation,
     subscription,
     rateLimit,
@@ -214,6 +252,10 @@ export const authRelations = defineRelationsPart(
       invitations: r.many.invitation({
         from: r.user.id,
         to: r.invitation.inviterId,
+      }),
+      teamMembers: r.many.teamMember({
+        from: r.user.id,
+        to: r.teamMember.userId,
       }),
     },
     session: {
@@ -237,6 +279,10 @@ export const authRelations = defineRelationsPart(
         from: r.organization.id,
         to: r.invitation.organizationId,
       }),
+      teams: r.many.team({
+        from: r.organization.id,
+        to: r.team.organizationId,
+      }),
     },
     member: {
       organization: r.one.organization({
@@ -245,6 +291,26 @@ export const authRelations = defineRelationsPart(
       }),
       user: r.one.user({
         from: r.member.userId,
+        to: r.user.id,
+      }),
+    },
+    team: {
+      organization: r.one.organization({
+        from: r.team.organizationId,
+        to: r.organization.id,
+      }),
+      teamMembers: r.many.teamMember({
+        from: r.team.id,
+        to: r.teamMember.teamId,
+      }),
+    },
+    teamMember: {
+      team: r.one.team({
+        from: r.teamMember.teamId,
+        to: r.team.id,
+      }),
+      user: r.one.user({
+        from: r.teamMember.userId,
         to: r.user.id,
       }),
     },
