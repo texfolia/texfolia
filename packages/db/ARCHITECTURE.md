@@ -5,9 +5,16 @@ the [README](README.md) to run the database locally.
 
 ## Change the schema
 
-Application tables, including project and AI billing records, are defined in `src/schema.ts`.
-Generated Better Auth tables and relations are defined in `src/auth-schema.ts`.
-Both are exported through `@texfolia/db/schema`.
+Application tables are split into per-feature TypeScript modules under `src/schema/`, all targeting the default `public` Postgres schema (no `pgSchema` namespaces):
+
+- `src/schema/projects.ts` — `project`, `project_git`, `tag`, `project_tag`, `project_node`, `project_job`, `project_collaboration`, `source_garbage`, and their enums.
+- `src/schema/sharing.ts` — `project_collaborator`, `project_share_link`, `project_share_grant`, `project_team`, `sharing_limit`, and `sharing_limit_window`.
+- `src/schema/comments.ts` — `project_comment_thread`, `project_comment`.
+- `src/schema/ai.ts` — `ai_settings`, `ai_organization_settings`, `ai_thread`, `ai_message`, `ai_run`, `ai_meter_attachment`, `ai_request`, and their enums.
+- `src/schema/index.ts` — barrel re-exporting every feature module and `src/auth-schema.ts`, plus cross-feature `defineRelations`.
+
+Generated Better Auth tables and relations stay in `src/auth-schema.ts`.
+Everything is exported through `@texfolia/db/schema` (and individual feature modules via `@texfolia/db/schema/<feature>`).
 Apply schema changes with `bun run db:push`.
 
 The schema includes a collaboration room registry.
@@ -30,7 +37,7 @@ allows duplicates.
 
 Steps:
 
-1. Edit `src/schema.ts`. For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`, then restore the indexes that the generator does not know: `bun test packages/db/src` names them. It also requires an index for every foreign key.
+1. Edit the relevant feature module in `src/schema/` (and `src/schema/index.ts` if adding cross-feature relations). For auth changes, run `bun run auth:schema` from the repository root to regenerate `src/auth-schema.ts`, then restore the indexes that the generator does not know: `bun test packages/db/src` names them. It also requires an index for every foreign key.
 2. Run `bun run db:push` against your local database.
 3. Run the integration check.
 
