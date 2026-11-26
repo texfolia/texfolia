@@ -123,6 +123,7 @@ function waitForCompletion(options: {
         void check();
         return;
       }
+      if (event.kind !== "snapshot") return;
       const { current, latestBuild } = event.snapshot;
       const matching = [current, latestBuild].find(
         (build) => build?.id === jobId,

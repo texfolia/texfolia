@@ -1,4 +1,4 @@
-import { fetchBuilds } from "#/lib/builds/client";
+import { fetchBuilds, notifyProjectMetadataChanged } from "#/lib/builds/client";
 import {
   cleanupDeletedCollaboration,
   type CollaborationCleanup,
@@ -37,10 +37,15 @@ export function updateProjectSpelling(
   return projects.updateProjectSpelling({ ...args, lock: lockProject });
 }
 
-export function updateProjectMainFile(
+export async function updateProjectMainFile(
   args: Locked<Parameters<typeof projects.updateProjectMainFile>[0]>,
 ) {
-  return projects.updateProjectMainFile({ ...args, lock: lockProject });
+  const mainFile = await projects.updateProjectMainFile({
+    ...args,
+    lock: lockProject,
+  });
+  await notifyProjectMetadataChanged(args.data.projectId);
+  return mainFile;
 }
 
 export function renameProject(

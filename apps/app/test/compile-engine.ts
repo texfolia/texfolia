@@ -167,8 +167,9 @@ try {
     `${origin.replace("http", "ws")}/projects/${projectId}/events`,
   );
   socket.onmessage = ({ data }) => {
-    const { current } = buildSnapshotSchema.parse(JSON.parse(String(data)));
-    if (current) events.push(current.status);
+    const parsed = buildSnapshotSchema.safeParse(JSON.parse(String(data)));
+    if (parsed.success && parsed.data.current)
+      events.push(parsed.data.current.status);
   };
   await new Promise((resolve) => {
     socket.onopen = resolve;

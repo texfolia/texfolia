@@ -27,7 +27,8 @@ export const Route = createFileRoute("/api/projects/$projectId/metadata")({
             projectId: params.projectId,
             userId: principal.userId,
           });
-          // Open workspaces poll this, and most polls find nothing new.
+          // Workspaces resync on push, reconnect, and visibility regain; unchanged
+          // resyncs return 304 without replacing client state.
           const etag = weakEtag(await projectMetadataHash(metadata));
           const tagged = { ...headers, ETag: etag };
           return matchesEtag(request, etag)

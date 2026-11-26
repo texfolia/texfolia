@@ -61,6 +61,15 @@ export async function fetchBuilds(
   });
 }
 
+async function defaultBuildsFetcher(): Promise<Pick<Fetcher, "fetch"> | null> {
+  try {
+    const { env } = await import("cloudflare:workers");
+    return env?.BUILDS ? buildsFetcher(env.BUILDS) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Marks a project's build stale after its sources changed. The change is already
  * committed, so a failure is only logged.
@@ -84,6 +93,33 @@ export async function invalidateSourceBuild(
       throw new Error(`Build invalidation returned ${response.status}`);
   } catch (error) {
     console.error("Source committed but build invalidation failed", {
+      projectId,
+      error,
+    });
+  }
+}
+
+/**
+ * Broadcasts a metadata invalidation over the project's live WebSocket so open
+ * workspace tabs resync immediately instead of polling. The change is already
+ * committed, so a failure is only logged.
+ */
+export async function notifyProjectMetadataChanged(
+  projectId: string,
+  builds?: Pick<Fetcher, "fetch">,
+) {
+  const fetcher = builds ?? (await defaultBuildsFetcher());
+  if (!fetcher) return;
+  try {
+    const response = await fetchBuilds(
+      `/projects/${encodeURIComponent(projectId)}/metadata-changed`,
+      { method: "POST" },
+      fetcher,
+    );
+    if (!response.ok)
+      throw new Error(`Metadata notification returned ${response.status}`);
+  } catch (error) {
+    console.error("Project change committed but metadata notification failed", {
       projectId,
       error,
     });

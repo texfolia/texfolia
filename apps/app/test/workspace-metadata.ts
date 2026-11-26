@@ -371,6 +371,8 @@ try {
     },
     { times: 1 },
   );
+  // Trigger a metadata resync, hold its response, and write locally before it lands.
+  await owner.evaluate(() => window.dispatchEvent(new Event("online")));
   await captured.promise;
   await createFile(owner, "chapter.tex");
   release.resolve();
@@ -577,15 +579,27 @@ try {
     await promise.catch(() => assert.fail(`${path} did not connect`));
     socket.close();
   }
-  console.info("Checking unchanged metadata is not sent again");
-  const unchanged = await editor.waitForResponse(
+  console.info("Checking idle visible tab does not poll metadata");
+  await editor.waitForTimeout(500);
+  let idleRequests = 0;
+  const countIdleRequest = (request: { url: () => string }) => {
+    if (request.url().endsWith("/metadata")) idleRequests++;
+  };
+  editor.on("request", countIdleRequest);
+  await editor.waitForTimeout(3_500);
+  editor.off("request", countIdleRequest);
+  assert.equal(idleRequests, 0, "An idle visible tab does not poll metadata");
+  console.info("Checking unchanged metadata resync returns 304");
+  const unchangedPromise = editor.waitForResponse(
     (response) =>
       response.url().endsWith(`/api/projects/${projectId}/metadata`) &&
       response.status() === 304,
   );
+  await editor.evaluate(() => window.dispatchEvent(new Event("online")));
+  const unchanged = await unchangedPromise;
   assert.equal((await unchanged.allHeaders())["cache-control"], "no-store");
   console.info(
-    "Checking a hidden tab pauses polling and catches up when shown",
+    "Checking a hidden tab defers metadata pushes and catches up when shown",
   );
   const setVisibility = (state: "hidden" | "visible") =>
     editor.evaluate((state) => {
@@ -597,15 +611,15 @@ try {
     }, state);
   await setVisibility("hidden");
   // Lets a request that was already running finish.
-  await editor.waitForTimeout(1_000);
+  await editor.waitForTimeout(500);
   let hiddenRequests = 0;
   const countRequest = (request: { url: () => string }) => {
     if (request.url().endsWith("/metadata")) hiddenRequests++;
   };
   editor.on("request", countRequest);
   await createFile(owner, "while-hidden.tex");
-  await editor.waitForTimeout(5_000);
-  assert.equal(hiddenRequests, 0, "A hidden tab does not poll");
+  await editor.waitForTimeout(2_000);
+  assert.equal(hiddenRequests, 0, "A hidden tab does not fetch metadata");
   editor.off("request", countRequest);
   await setVisibility("visible");
   await editor
@@ -682,6 +696,15 @@ try {
         eq(projectCollaborator.userId, editorId),
       ),
     );
+  const buildsNamespace = await mf.getDurableObjectNamespace(
+    "BUILDS",
+    "builds-fixture",
+  );
+  await buildsNamespace
+    .get(buildsNamespace.idFromName(projectId))
+    .fetch(`http://builds/projects/${projectId}/metadata-changed`, {
+      method: "POST",
+    });
   await editor
     .getByRole("alert")
     .filter({ hasText: "Project access is no longer available" })
