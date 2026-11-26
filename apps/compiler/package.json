@@ -4,14 +4,14 @@
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
-    "build": "docker build --platform linux/amd64 -t texfolia-latex-engine:local -f Dockerfile ../..",
     "cf:typegen": "wrangler types --include-runtime=false --strict-vars=false && oxfmt worker-configuration.d.ts",
     "deploy": "wrangler deploy --env production",
-    "dev": "bun --watch src/index.ts",
+    "dev": "bun run engine:build && bun --watch src/index.ts",
+    "engine:build": "docker build --platform linux/amd64 -t texfolia-latex-engine:local -f Dockerfile ../..",
     "format": "gofmt -w engine",
     "format:check": "bun run scripts/check-go-format.ts",
     "lint": "cd engine && go vet ./...",
-    "start": "bun run src/index.ts",
+    "start": "bun run engine:build && bun run src/index.ts",
     "test": "bun test && cd engine && go test -race ./...",
     "typecheck": "tsc --noEmit"
   },

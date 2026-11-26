@@ -4,12 +4,14 @@ TanStack Start + React marketing site for Texfolia, deployed to Cloudflare
 Workers as `texfolia-web` (`texfolia.com` and `www.texfolia.com`). Local runs use
 `texfolia-web-local`.
 
+From the repository root, after [first-time setup](../../README.md#quick-start):
+
 ```sh
-cp apps/web/.env.example apps/web/.env
-bun run --cwd apps/web dev
+bun run dev:web
 ```
 
-Open [localhost:4321](http://localhost:4321).
+Open [localhost:4321](http://localhost:4321). The templates gallery needs the
+product app running too (`bun run dev`).
 
 ## Routes
 
@@ -50,6 +52,8 @@ generation, `components.json` points the shadcn CLI at `@texfolia/ui`, and
 development only. Commit `src/routeTree.gen.ts` exactly as the generator writes it.
 
 ## Commands
+
+Run with `bun run --cwd apps/web <command>`, or `dev:web` from the root.
 
 ```sh
 bun run --cwd apps/web build      # Production build with prerendered pages

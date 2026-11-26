@@ -1,4 +1,4 @@
-# TypeScript configuration
+# @texfolia/tsconfig
 
 `@texfolia/tsconfig` holds the TypeScript settings that every workspace extends.
 
