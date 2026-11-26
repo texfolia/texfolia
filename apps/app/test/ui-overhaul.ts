@@ -389,6 +389,7 @@ try {
   const legalNavigation = publicPage.getByRole("navigation", {
     name: "Legal information",
   });
+  await legalNavigation.waitFor();
   assert.deepEqual(await legalNavigation.getByRole("link").allTextContents(), [
     "Privacy Policy",
     "Terms of Service",
