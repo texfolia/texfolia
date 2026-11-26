@@ -1,181 +1,46 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
+  "envMode": "loose",
   "cacheMaxSize": "200MB",
   "globalDependencies": [
-    "packages/tsconfig/**",
     "tsconfig.json",
+    "packages/tsconfig/*.json",
     "scripts/local-environment.mts",
     ".oxlintrc.json",
     ".oxfmtrc.json",
-    ".github/**",
-    ".env*",
-    ".dev.vars*",
-    "apps/*/.env*",
-    "apps/*/.dev.vars*",
-    "packages/*/.env*",
-    "packages/*/.dev.vars*"
+    ".github/workflows/**",
+    ".github/actions/**"
   ],
+  "globalEnv": ["CI", "NODE_ENV", "CI_BUN_VERSION", "CI_GO_VERSION"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
       "outputs": ["dist/**"]
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "outputs": [],
-      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"]
-    },
-    "typecheck": {
-      "dependsOn": ["^typecheck"],
-      "outputs": []
-    },
-    "compiler#build": {
-      "cache": false,
-      "passThroughEnv": ["DOCKER_*"]
-    },
-    "compiler#dev": {
-      "dependsOn": ["compiler#build"],
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "app#dev": {
-      "dependsOn": ["@texfolia/db#db:start"],
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "web#dev": {
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "docs#dev": {
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "db:push": {
-      "cache": false,
-      "passThroughEnv": ["DATABASE_URL"]
-    },
-    "start": {
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
-    },
-    "preview": {
-      "cache": false,
-      "persistent": true,
-      "dependsOn": ["build"],
-      "passThroughEnv": ["*"]
-    },
-    "cf:typegen": {
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "auth:schema": {
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "deploy": {
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "app#deploy": {
-      "dependsOn": ["app#build", "compiler#deploy"],
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "web#deploy": {
-      "dependsOn": ["web#build"],
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "docs#deploy": {
-      "dependsOn": ["docs#build"],
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "lint": {
-      "outputs": [],
-      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS"]
-    },
-    "format": {
-      "cache": false
-    },
-    "format:check": {
-      "outputs": []
-    },
-    "compiler#start": {
-      "dependsOn": ["compiler#build"],
-      "cache": false,
-      "persistent": true,
-      "passThroughEnv": ["*"]
     },
     "app#build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
       "outputs": [
         "dist/**",
         ".wrangler/deploy/**",
         "public/core/**",
         "public/dictionaries/**"
-      ],
-      "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"]
-    },
-    "web#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
-      "env": ["CLOUDFLARE_ENV", "PUBLIC_*"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"]
-    },
-    "docs#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
-    },
-    "generate-routes": {
-      "cache": false
-    },
-    "latex:assets": {
-      "cache": false
-    },
-    "db:generate": {
-      "cache": false,
-      "passThroughEnv": ["DATABASE_URL"]
-    },
-    "db:migrate": {
-      "cache": false,
-      "passThroughEnv": ["DATABASE_URL"]
-    },
-    "db:start": {
-      "cache": false,
-      "passThroughEnv": ["DOCKER_*", "COMPOSE_*"]
-    },
-    "db:seed": {
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "app#test": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [],
-      "env": [
-        "BETTER_AUTH_*",
-        "TURNSTILE_*",
-        "STRIPE_*",
-        "CLOUDFLARE_*",
-        "GITHUB_CLIENT_*",
-        "GOOGLE_CLIENT_*",
-        "GITLAB_CLIENT_*",
-        "MICROSOFT_CLIENT_*"
       ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
     },
     "app#typecheck": {
       "dependsOn": ["^typecheck"],
@@ -183,20 +48,23 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/compiler/src/**",
         "$TURBO_ROOT$/apps/compiler/scripts/engine-client.ts"
-      ],
-      "outputs": []
+      ]
     },
-    "compiler#test": {
-      "dependsOn": ["^build"],
-      "outputs": [],
-      "env": ["CI_GO_VERSION", "GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS"],
-      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH"]
+    "lint": {},
+    "format": {
+      "cache": false
     },
-    "compiler#lint": {
-      "outputs": [],
-      "env": ["CI_GO_VERSION", "GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS"],
-      "passThroughEnv": ["GOCACHE", "GOMODCACHE", "GOPATH"]
+    "format:check": {},
+    "cf:typegen": {
+      "cache": false
+    },
+    "deploy": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "app#deploy": {
+      "dependsOn": ["build", "compiler#deploy"],
+      "cache": false
     }
-  },
-  "globalEnv": ["CI", "NODE_ENV", "CI_BUN_VERSION"]
+  }
 }

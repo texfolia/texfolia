@@ -17,8 +17,8 @@ Local development and CI continue to use plain Postgres and `db:push`.
    directory, including its snapshots, before deploying.
 3. Apply `bun run db:migrate` to an empty, isolated local Postgres database with
    `DATABASE_URL` set to that database. Run the integration checks in the
-   [database guide](../../../../../packages/db/README.md#verify-plain-postgres),
-   [source-storage guide](../../../../app/README.md#local-development-and-rollout),
+   [database guide](../../../../../packages/db/ARCHITECTURE.md#verify-plain-postgres),
+   [source-storage guide](../../../../app/ARCHITECTURE.md#local-development-and-rollout),
    and [template guide](/templates/#verification).
 4. On that disposable database, run `bun run db:push` and confirm it reports no
    schema changes. Investigate any difference before proceeding.

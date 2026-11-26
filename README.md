@@ -25,24 +25,27 @@ A browser-based LaTeX workspace. Edit project files, check LaTeX errors, and com
 Requires [Bun](https://bun.sh) 1.4.4, [Docker](https://www.docker.com) with Compose, and the [Stripe CLI](https://docs.stripe.com/stripe-cli).
 
 ```sh
-git clone https://github.com/natebabyak/texfolia.git
+git clone https://github.com/texfolia/texfolia.git
 cd texfolia
 bun install
-cp apps/app/.env.example apps/app/.env
-cp apps/web/.env.example apps/web/.env
-cp packages/db/.env.example packages/db/.env
-# Fill in the secrets in apps/app/.env, then:
-bun run db:start
-bun run db:push
-bun run dev
+bun run setup   # create .env files, start Postgres, apply the schema
+bun run dev     # start every app
 ```
 
-Open the product app at [localhost:3000](http://localhost:3000), the marketing
-site at [localhost:4321](http://localhost:4321), and the docs site at
-[localhost:4322](http://localhost:4322). Create a project and press
-Cmd/Ctrl+S to save and compile.
+Fill in the Stripe and Turnstile values in `apps/app/.env` before you sign in.
+Then create a project and press Cmd/Ctrl+S to save and compile.
 
-Secrets, Stripe webhooks, and running each app on its own are covered in the [local development guide](apps/docs/src/content/docs/local-development.md).
+| App                                  | Run on its own         | URL                                     |
+| ------------------------------------ | ---------------------- | --------------------------------------- |
+| [Product app](apps/app/README.md)    | `bun run dev:app`      | [localhost:3000](http://localhost:3000) |
+| [Marketing site](apps/web/README.md) | `bun run dev:web`      | [localhost:4321](http://localhost:4321) |
+| [Documentation](apps/docs/README.md) | `bun run dev:docs`     | [localhost:4322](http://localhost:4322) |
+| [Compiler](apps/compiler/README.md)  | `bun run dev:compiler` | `http://localhost:8080`                 |
+
+Other root commands: `build`, `test`, `typecheck`, `lint`, `format`,
+`db:start`, `db:stop`, `db:push` and `db:seed`. Each delegates to the
+workspace that owns it. Secrets, Stripe webhooks and the rest are covered in the
+[local development guide](apps/docs/src/content/docs/local-development.md).
 
 ## System design
 
@@ -101,14 +104,14 @@ sequenceDiagram
     B->>W: Fetch job status or saved PDF
 ```
 
-More detail: [product app](apps/app/README.md), [marketing site](apps/web/README.md), [project builds](apps/app/src/lib/builds/README.md), and the [docs](apps/docs/README.md) app.
+More detail: [product app architecture](apps/app/ARCHITECTURE.md), [project builds](apps/app/src/lib/builds/README.md), and the [compiler](apps/compiler/README.md).
 
 ## Repository layout
 
 ```text
 apps/
   app/                 React product app: auth, projects, and the compile endpoint
-    src/lib/      App features: ai, auth, billing, builds, collaboration, comments,
+    src/lib/           App features: ai, auth, billing, builds, collaboration, comments,
                        compile, editor, email, git, projects, references, settings,
                        sharing, shortcuts, storage, templates, theme, workspace
   compiler/            Compile service: Effect Worker, autoscaler, and the Go LaTeX engine
@@ -123,7 +126,9 @@ packages/
 
 ## Contributing
 
-Texfolia is still in development and isn't accepting contributions yet.
+Texfolia is still in development and isn't accepting contributions yet. See
+[CONTRIBUTING.md](.github/CONTRIBUTING.md), [SECURITY.md](.github/SECURITY.md) to report a
+vulnerability, and [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) for the projects Texfolia builds on.
 
 ## License
 

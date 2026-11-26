@@ -4,8 +4,10 @@ Astro + Starlight documentation site for Texfolia, built as static
 assets for Cloudflare Workers (`texfolia-docs`; local runs use
 `texfolia-docs-local`).
 
+From the repository root:
+
 ```sh
-bun run --cwd apps/docs dev
+bun run dev:docs
 ```
 
 Open [localhost:4322](http://localhost:4322).
