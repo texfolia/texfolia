@@ -3,7 +3,12 @@ export {
   createBillingPlugin,
   enforceBillingScope,
 } from "./stripe";
-export { aiEntitlement, compilePlan, type AiPayer } from "./entitlements";
+export {
+  accountPlan,
+  aiEntitlement,
+  compilePlan,
+  type AiPayer,
+} from "./entitlements";
 export {
   aiSpend,
   ensureAiSubscription,

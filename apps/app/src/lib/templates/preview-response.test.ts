@@ -32,7 +32,7 @@ function harness({ broken = false } = {}) {
     }: {
       etag?: string | null;
       status?: "approved" | "pending" | "rejected";
-      visibility?: "public" | "unlisted";
+      visibility?: "public" | "unlisted" | "private";
       unpublishedAt?: Date | null;
     } = {},
   ) =>
@@ -63,9 +63,10 @@ test("public previews are cached by anyone and revalidated without storage", asy
   expect(bucket.get).not.toHaveBeenCalled();
 });
 
-test("unlisted and unapproved previews and thumbnails stay private", async () => {
+test("unlisted, private and unapproved previews and thumbnails stay private", async () => {
   for (const state of [
     { visibility: "unlisted" },
+    { visibility: "private" },
     { status: "pending" },
     { status: "rejected" },
     { status: "pending", visibility: "unlisted" },

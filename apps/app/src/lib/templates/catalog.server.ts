@@ -8,6 +8,7 @@ import {
   ilike,
   inArray,
   isNull,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -46,10 +47,48 @@ export const availableTemplate = and(
   isNull(template.unpublishedAt),
 );
 
-function isAvailable(
-  found: Pick<typeof template.$inferSelect, "status" | "unpublishedAt">,
+type Audience = Pick<
+  typeof template.$inferSelect,
+  "status" | "unpublishedAt" | "visibility" | "ownerId" | "organizationId"
+>;
+
+/**
+ * Whether the user may open, preview and download an available template.
+ * Anyone may use a public or unlisted one. A private one is only for its owner,
+ * or for the members of the organization it was published for.
+ */
+export async function usesTemplate(
+  db: Db | ProjectTransaction,
+  found: Audience,
+  userId: string | undefined,
 ) {
-  return found.status === "approved" && !found.unpublishedAt;
+  if (found.status !== "approved" || found.unpublishedAt) return false;
+  if (found.visibility !== "private") return true;
+  if (!userId) return false;
+  if (!found.organizationId) return found.ownerId === userId;
+  const [membership] = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(
+      and(
+        eq(member.organizationId, found.organizationId),
+        eq(member.userId, userId),
+      ),
+    );
+  return !!membership;
+}
+
+/** The private templates that a user may use. */
+function privateTo(userId: string, organizationIds: string[]) {
+  return and(
+    eq(template.visibility, "private"),
+    or(
+      and(eq(template.ownerId, userId), isNull(template.organizationId)),
+      organizationIds.length
+        ? inArray(template.organizationId, organizationIds)
+        : undefined,
+    ),
+  );
 }
 
 // Every word must appear somewhere in the template.
@@ -133,15 +172,55 @@ export async function findTemplate({
     .from(template)
     .where(eq(template.id, templateId));
   if (!found) return null;
+  if (await usesTemplate(db, found, userId)) return found;
+  if (!userId) return null;
+  // Reviewers never see private templates, which skip review. A private
+  // organization template stays with the organization's members.
+  if (found.visibility === "private") {
+    if (!found.organizationId && found.ownerId === userId) return found;
+    return (await managesTemplate(db, found, userId)) ? found : null;
+  }
   if (
-    isAvailable(found) ||
-    (userId &&
-      (found.ownerId === userId ||
-        isTemplateReviewer(userId, reviewers) ||
-        (await managesTemplate(db, found, userId))))
+    found.ownerId === userId ||
+    isTemplateReviewer(userId, reviewers) ||
+    (await managesTemplate(db, found, userId))
   )
     return found;
   return null;
+}
+
+/**
+ * The available private templates a user may open, for the new-project picker.
+ * They are never in {@link listTemplates}.
+ */
+export async function listPrivateTemplates({
+  db,
+  userId,
+  page = 0,
+  q,
+}: { db: Db; userId: string } & Partial<
+  Pick<z.infer<typeof listTemplatesSchema>, "page" | "q">
+>) {
+  const memberships = await db
+    .select({ organizationId: member.organizationId })
+    .from(member)
+    .where(eq(member.userId, userId));
+  return db
+    .select(publicColumns)
+    .from(template)
+    .where(
+      and(
+        availableTemplate,
+        privateTo(
+          userId,
+          memberships.map(({ organizationId }) => organizationId),
+        ),
+        q ? matchesSearch(q) : undefined,
+      ),
+    )
+    .orderBy(desc(template.createdAt), desc(template.id))
+    .limit(24)
+    .offset(page * 24);
 }
 
 export async function listMyTemplates({
@@ -158,6 +237,9 @@ export async function listMyTemplates({
   const managed = memberships.flatMap(({ organizationId, role }) =>
     isOrgAdmin(role) ? [organizationId] : [],
   );
+  const joined = memberships.flatMap(({ organizationId, role }) =>
+    isOrgAdmin(role) ? [] : [organizationId],
+  );
   const rows = await db
     .select({
       ...publicColumns,
@@ -168,8 +250,23 @@ export async function listMyTemplates({
     .from(template)
     .where(
       or(
-        eq(template.ownerId, userId),
+        and(
+          eq(template.ownerId, userId),
+          // A private organization template stays with the organization.
+          or(
+            ne(template.visibility, "private"),
+            isNull(template.organizationId),
+          ),
+        ),
         managed.length ? inArray(template.organizationId, managed) : undefined,
+        // Plain members see their organizations' usable private templates.
+        joined.length
+          ? and(
+              availableTemplate,
+              eq(template.visibility, "private"),
+              inArray(template.organizationId, joined),
+            )
+          : undefined,
       ),
     )
     .orderBy(desc(template.createdAt))
@@ -202,6 +299,8 @@ export async function getTemplate(options: Parameters<typeof findTemplate>[0]) {
     hasPreview: !!found.previewKey,
     previewStatus: found.previewStatus,
     published: !found.unpublishedAt,
+    /** Whether it was published for an organization. */
+    forOrganization: !!found.organizationId,
     /** Whether the viewer may hide or delete it. */
     canManage,
     canRetryPreview: reviews || found.ownerId === options.userId,

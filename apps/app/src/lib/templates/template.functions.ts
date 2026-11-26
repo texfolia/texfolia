@@ -31,6 +31,20 @@ export const listMyTemplates = createServerFn({ method: "GET" }).handler(
   },
 );
 
+/** Private templates the user may open, for the new-project picker. */
+export const listPrivateTemplates = createServerFn({ method: "GET" })
+  .validator(listTemplatesSchema.pick({ page: true, q: true }))
+  .handler(async ({ context, data }) => {
+    setResponseHeader("Cache-Control", "private, no-store");
+    const session = await ensureSession();
+    const server = await import("./server");
+    return server.listPrivateTemplates({
+      db: context.db,
+      userId: session.user.id,
+      ...data,
+    });
+  });
+
 async function templateAccount(db: Db, userId: string | undefined) {
   const server = await import("./server");
   return userId

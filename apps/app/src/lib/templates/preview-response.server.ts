@@ -8,8 +8,8 @@ import { templateThumbnail, thumbnailKey } from "./thumbnail.server";
 /**
  * The stored preview, or its thumbnail for `?size=thumbnail`. Browsers and
  * shared caches keep only what is in the public gallery: an unlisted template
- * is for people with its link, and an unapproved one for its owner and
- * reviewers.
+ * is for people with its link, a private one for its owner or organization,
+ * and an unapproved one for its owner and reviewers.
  */
 export async function templatePreview({
   request,

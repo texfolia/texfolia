@@ -21,7 +21,9 @@ export const templateLicenseUrls = {
 };
 
 export const templateIdSchema = z.object({ templateId: z.uuid() });
-export const publishTemplateSchema = z.object({
+export const templateVisibilities = ["public", "unlisted", "private"] as const;
+export type TemplateVisibility = (typeof templateVisibilities)[number];
+const publicationSchema = z.object({
   projectId: z.uuid(),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(4000),
@@ -32,10 +34,22 @@ export const publishTemplateSchema = z.object({
     .array(z.string().trim().min(1).max(32))
     .max(8)
     .transform((tags) => [...new Set(tags.map((tag) => tag.toLowerCase()))]),
-  license: z.enum(templateLicenses),
-  visibility: z.enum(["public", "unlisted"]),
-  redistributionConfirmed: z.literal(true),
 });
+/**
+ * Public and unlisted snapshots can be redistributed, so they need an open
+ * license and the publisher's confirmation. Private ones stay with their owner
+ * or organization and need neither.
+ */
+export const publishTemplateSchema = z.discriminatedUnion("visibility", [
+  publicationSchema.extend({
+    visibility: z.enum(["public", "unlisted"]),
+    license: z.enum(templateLicenses),
+    redistributionConfirmed: z.literal(true),
+  }),
+  publicationSchema.extend({ visibility: z.literal("private") }),
+]);
+/** The most private templates an owner or organization may keep, by plan. */
+export const privateTemplateLimits = { free: 0, pro: 1000, team: 1000 };
 // Postgres text cannot hold a NUL.
 const filterSchema = z
   .string()

@@ -7,6 +7,7 @@ import {
   project,
   projectCollaborator,
   projectNode,
+  subscription,
   template,
   templatePublication,
   user,
@@ -18,12 +19,18 @@ import { z } from "zod";
 
 import { encodeSource } from "#/lib/storage";
 import { type SourceBucket, sweepProjectSources } from "#/lib/storage/server";
-import { publishTemplateSchema, templateSnapshotSchema } from "#/lib/templates";
+import {
+  privateTemplateLimits,
+  publishTemplateSchema,
+  templateSnapshotSchema,
+} from "#/lib/templates";
 import {
   collectTemplateObjects,
   deleteTemplate,
   findTemplate,
   getTemplate,
+  listMyTemplates,
+  listPrivateTemplates,
   listTemplates,
   openTemplate,
   publishTemplate as publishTemplateSnapshot,
@@ -31,6 +38,7 @@ import {
   refreshTemplatePreviews,
   reportTemplate,
   reviewTemplate,
+  setTemplatePublished,
   templateArchive,
   templateReviewQueue,
 } from "#/lib/templates/server";
@@ -62,6 +70,15 @@ export default {
     const editorId = crypto.randomUUID();
     const reviewerId = crypto.randomUUID();
     const organizationId = crypto.randomUUID();
+    const privateIds = {
+      organization: crypto.randomUUID(),
+      users: [
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+      ] as const,
+    };
     const sourceText =
       "\\documentclass{article}\n\\begin{document}Original é snapshot\\end{document}";
     const encode = (text: string) =>
@@ -240,6 +257,7 @@ export default {
         redistributionConfirmed: true,
       });
       assert.deepEqual(data.tags, ["article"]);
+      if (data.visibility === "private") throw new Error("Expected public");
       assert(
         !publishTemplateSchema.safeParse({ ...data, license: undefined })
           .success,
@@ -1023,6 +1041,348 @@ export default {
         "Simple article (2)",
         "Simple article (3)",
       ]);
+      // Private templates: personal ones for their owner, organization ones
+      // for its members, never for reviewers or strangers.
+      const privateOrgId = privateIds.organization;
+      const [payer, freeUser, privateAdmin, privateMember] = privateIds.users;
+      for (const id of privateIds.users)
+        await db.insert(user).values({
+          id,
+          name: "Private template test user",
+          email: `${id}@example.com`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      await db.insert(organization).values({
+        id: privateOrgId,
+        name: "Private template team",
+        slug: privateOrgId,
+        createdAt: new Date(),
+      });
+      await db.insert(member).values(
+        [
+          [privateAdmin, "admin"],
+          [privateMember, "member"],
+        ].map(([userId, role]) => ({
+          id: crypto.randomUUID(),
+          organizationId: privateOrgId,
+          userId: userId!,
+          role: role!,
+          createdAt: new Date(),
+        })),
+      );
+      const sourceOf = async (userId: string, organizationId: string | null) =>
+        (
+          await openTemplate({
+            db,
+            bucket,
+            userId,
+            data: { templateId: seeds[0]!.id, organizationId },
+          })
+        ).id;
+      const privateData = (projectId: string) =>
+        publishTemplateSchema.parse({
+          projectId,
+          title: "Private article",
+          description: "A snapshot only its audience may use",
+          tags: ["private"],
+          visibility: "private",
+        });
+      const subscribe = (referenceId: string, plan: "pro" | "team") =>
+        db.insert(subscription).values({
+          id: crypto.randomUUID(),
+          plan,
+          referenceId,
+          status: "active",
+          periodEnd: new Date(Date.now() + 86_400_000),
+        });
+      const freeSource = await sourceOf(freeUser, null);
+      await assert.rejects(
+        publishTemplate({
+          db,
+          bucket,
+          userId: freeUser,
+          data: privateData(freeSource),
+        }),
+        /Private templates require Pro/,
+      );
+      // An organization's Team plan does not lend private templates to its
+      // members' personal accounts.
+      await subscribe(privateOrgId, "team");
+      await db.insert(member).values({
+        id: crypto.randomUUID(),
+        organizationId: privateOrgId,
+        userId: freeUser,
+        role: "member",
+        createdAt: new Date(),
+      });
+      await assert.rejects(
+        publishTemplate({
+          db,
+          bucket,
+          userId: freeUser,
+          data: privateData(freeSource),
+        }),
+        /Private templates require Pro/,
+      );
+      await db.delete(member).where(eq(member.userId, freeUser));
+
+      await subscribe(payer, "pro");
+      const personalPrivate = await publishTemplate({
+        db,
+        bucket,
+        userId: payer,
+        data: privateData(await sourceOf(payer, null)),
+      });
+      const [personalRow] = await db
+        .select()
+        .from(template)
+        .where(eq(template.id, personalPrivate.id));
+      assert.equal(personalRow?.status, "approved", "Private skips review");
+      assert.equal(personalRow?.license, null);
+      assert.equal(personalRow?.visibility, "private");
+      for (const userId of [undefined, freeUser, privateMember, reviewerId])
+        assert.equal(
+          await findTemplate({
+            db,
+            templateId: personalPrivate.id,
+            userId,
+            reviewers: reviewerId,
+          }),
+          null,
+          "Only the owner sees a personal private template",
+        );
+      assert(
+        await getTemplate({
+          db,
+          templateId: personalPrivate.id,
+          userId: payer,
+        }),
+      );
+      assert(
+        !(await listTemplates({ db, q: "Private article" })).some(
+          (item) => item.id === personalPrivate.id,
+        ),
+      );
+      assert(
+        !(
+          await templateReviewQueue({
+            db,
+            userId: reviewerId,
+            reviewers: reviewerId,
+          })
+        ).pending.some((item) => item.id === personalPrivate.id),
+      );
+      await assert.rejects(
+        reportTemplate({
+          db,
+          userId: freeUser,
+          templateId: personalPrivate.id,
+          reason: "Guessing the ID should not reveal it",
+        }),
+        /Template not found/,
+      );
+      await assert.rejects(
+        reviewTemplate({
+          db,
+          userId: reviewerId,
+          reviewers: reviewerId,
+          templateId: personalPrivate.id,
+          decision: "rejected",
+          reason: "Reviewers do not moderate private templates",
+        }),
+        /Template not found/,
+      );
+      await assert.rejects(
+        openTemplate({
+          db,
+          bucket,
+          userId: freeUser,
+          data: { templateId: personalPrivate.id, organizationId: null },
+        }),
+        /Template not found/,
+      );
+      assert(
+        await openTemplate({
+          db,
+          bucket,
+          userId: payer,
+          data: { templateId: personalPrivate.id, organizationId: null },
+        }),
+      );
+      assert.deepEqual(
+        (await listPrivateTemplates({ db, userId: payer })).map(
+          (item) => item.id,
+        ),
+        [personalPrivate.id],
+      );
+      assert.deepEqual(
+        await listPrivateTemplates({ db, userId: freeUser }),
+        [],
+      );
+
+      // Organization private templates follow the organization's plan.
+      await db
+        .delete(subscription)
+        .where(eq(subscription.referenceId, privateOrgId));
+      const orgSource = await sourceOf(privateAdmin, privateOrgId);
+      await assert.rejects(
+        publishTemplate({
+          db,
+          bucket,
+          userId: privateAdmin,
+          data: privateData(orgSource),
+        }),
+        /require a Team plan/,
+      );
+      await subscribe(privateOrgId, "team");
+      const orgPrivate = await publishTemplate({
+        db,
+        bucket,
+        userId: privateAdmin,
+        data: privateData(orgSource),
+      });
+      for (const userId of [undefined, payer, freeUser, reviewerId])
+        assert.equal(
+          await findTemplate({
+            db,
+            templateId: orgPrivate.id,
+            userId,
+            reviewers: reviewerId,
+          }),
+          null,
+          "Strangers and reviewers cannot see an organization's private template",
+        );
+      assert(
+        await findTemplate({
+          db,
+          templateId: orgPrivate.id,
+          userId: privateMember,
+        }),
+      );
+      const copied = await openTemplate({
+        db,
+        bucket,
+        userId: privateMember,
+        data: { templateId: orgPrivate.id, organizationId: null },
+      });
+      assert(copied.id);
+      assert.deepEqual(
+        (await listPrivateTemplates({ db, userId: privateMember })).map(
+          (item) => item.id,
+        ),
+        [orgPrivate.id],
+      );
+      const memberList = await listMyTemplates({ db, userId: privateMember });
+      assert.deepEqual(
+        memberList.map((item) => [item.id, item.canManage]),
+        [[orgPrivate.id, false]],
+      );
+      for (const action of [
+        () =>
+          setTemplatePublished({
+            db,
+            userId: privateMember,
+            templateId: orgPrivate.id,
+            published: false,
+          }),
+        () =>
+          deleteTemplate({
+            db,
+            userId: privateMember,
+            templateId: orgPrivate.id,
+          }),
+      ])
+        await assert.rejects(action(), /Template not found/);
+      // An unpublished private template is gone for members and still counts.
+      await setTemplatePublished({
+        db,
+        userId: privateAdmin,
+        templateId: orgPrivate.id,
+        published: false,
+      });
+      assert.equal(
+        await findTemplate({
+          db,
+          templateId: orgPrivate.id,
+          userId: privateMember,
+        }),
+        null,
+      );
+      assert.deepEqual(
+        await listMyTemplates({ db, userId: privateMember }),
+        [],
+      );
+      assert(
+        await findTemplate({
+          db,
+          templateId: orgPrivate.id,
+          userId: privateAdmin,
+        }),
+      );
+
+      // Every kept private template counts toward the plan's limit, and
+      // deleting one makes room.
+      await db.insert(template).values(
+        Array.from({ length: privateTemplateLimits.team - 1 }, () => ({
+          organizationId: privateOrgId,
+          ownerId: privateAdmin,
+          publisherName: "Private template team",
+          title: "Filler",
+          description: "Counts toward the limit",
+          tags: [],
+          visibility: "private" as const,
+          status: "approved" as const,
+          mainFile: "main.tex",
+          snapshot: [],
+          previewStatus: "failed" as const,
+        })),
+      );
+      await db
+        .delete(templatePublication)
+        .where(eq(templatePublication.userId, privateAdmin));
+      await assert.rejects(
+        publishTemplate({
+          db,
+          bucket,
+          userId: privateAdmin,
+          data: privateData(orgSource),
+        }),
+        /Private template limit reached \(1000\)/,
+      );
+      await deleteTemplate({
+        db,
+        userId: privateAdmin,
+        templateId: orgPrivate.id,
+      });
+      assert(
+        await publishTemplate({
+          db,
+          bucket,
+          userId: privateAdmin,
+          data: privateData(orgSource),
+        }),
+      );
+
+      // Dropping to Free keeps existing private templates but refuses more.
+      await db.delete(subscription).where(eq(subscription.referenceId, payer));
+      assert(
+        await findTemplate({
+          db,
+          templateId: personalPrivate.id,
+          userId: payer,
+        }),
+      );
+      await assert.rejects(
+        publishTemplate({
+          db,
+          bucket,
+          userId: payer,
+          data: privateData(await sourceOf(payer, null)),
+        }),
+        /Private templates require Pro/,
+      );
+
       await db.delete(user).where(eq(user.id, viewerId));
       assert.equal(await getTemplate({ db, templateId: unlisted.id }), null);
       await collectTemplateObjects({
@@ -1051,13 +1411,30 @@ export default {
         organizationId,
       );
       return new Response(
-        "Template integration passed: real Postgres/local R2, immutable snapshots, text/binary/tree copies, source deletion, personal/org access and revocation, licenses, concurrent publishing limits, unlisted visibility, preview persistence, snapshot review, reports and rejection.",
+        "Template integration passed: real Postgres/local R2, immutable snapshots, text/binary/tree copies, source deletion, personal/org access and revocation, licenses, concurrent publishing limits, unlisted and private visibility, private plan limits, preview persistence, snapshot review, reports and rejection.",
       );
     } finally {
       if (seededIds.length)
         await db.delete(template).where(inArray(template.id, seededIds));
       await db.delete(organization).where(eq(organization.id, organizationId));
-      for (const id of [publisherId, viewerId, editorId, reviewerId])
+      await db
+        .delete(organization)
+        .where(eq(organization.id, privateIds.organization));
+      await db
+        .delete(subscription)
+        .where(
+          inArray(subscription.referenceId, [
+            privateIds.organization,
+            ...privateIds.users,
+          ]),
+        );
+      for (const id of [
+        publisherId,
+        viewerId,
+        editorId,
+        reviewerId,
+        ...privateIds.users,
+      ])
         await db.delete(user).where(eq(user.id, id));
       await db.$client.end();
     }

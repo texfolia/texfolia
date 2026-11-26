@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { readSession } from "#/lib/session-storage";
 import {
   getTemplateAccount,
+  listPrivateTemplates,
   listTemplates,
 } from "#/lib/templates/template.functions";
 
@@ -63,6 +64,10 @@ function Templates({
   const [templates, setTemplates] = useState<
     Awaited<ReturnType<typeof listTemplates>>
   >([]);
+  // Private templates the user may open, which the public gallery never lists.
+  const [privateTemplates, setPrivateTemplates] = useState<
+    Awaited<ReturnType<typeof listPrivateTemplates>>
+  >([]);
   const [destinations, setDestinations] = useState<
     { id: string; name: string }[]
   >([]);
@@ -78,13 +83,16 @@ function Templates({
     let active = true;
     setLoading(true);
     setError("");
+    const data = { page, q: search || undefined };
     void Promise.all([
-      listTemplates({ data: { page, q: search || undefined } }),
+      listTemplates({ data }),
+      listPrivateTemplates({ data }),
       getTemplateAccount(),
     ])
-      .then(([rows, account]) => {
+      .then(([rows, privateRows, account]) => {
         if (active) {
           setTemplates(rows);
+          setPrivateTemplates(privateRows);
           setDestinations(account.destinations);
         }
       })
@@ -110,6 +118,7 @@ function Templates({
     }, 300);
     return () => clearTimeout(timer);
   }, [query, search]);
+  const hasNext = templates.length === 24 || privateTemplates.length === 24;
   function markPending(value: boolean) {
     setPending(value);
     onPendingChange(value);
@@ -133,6 +142,7 @@ function Templates({
               title: "Blank",
               description: "An empty main.tex, ready for your ideas.",
             },
+            ...privateTemplates,
             ...templates,
           ].map((template) => (
             <label
@@ -152,6 +162,12 @@ function Templates({
               <span className="min-w-0">
                 <span className="block text-sm font-medium">
                   {template.title}
+                  {"visibility" in template &&
+                    template.visibility === "private" && (
+                      <span className="text-muted-foreground ml-2 text-xs font-normal">
+                        Private
+                      </span>
+                    )}
                 </span>
                 <span className="text-muted-foreground block truncate text-xs">
                   {template.description}
@@ -166,11 +182,15 @@ function Templates({
           Loading templates…
         </p>
       )}
-      {!loading && !error && search && !templates.length && (
-        <p role="status" className="text-muted-foreground text-xs">
-          No templates match “{search}”.
-        </p>
-      )}
+      {!loading &&
+        !error &&
+        search &&
+        !templates.length &&
+        !privateTemplates.length && (
+          <p role="status" className="text-muted-foreground text-xs">
+            No templates match “{search}”.
+          </p>
+        )}
       {error && (
         <div role="alert" className="text-destructive text-sm">
           {error}{" "}
@@ -183,7 +203,7 @@ function Templates({
           </Button>
         </div>
       )}
-      {(page > 0 || templates.length === 24) && (
+      {(page > 0 || hasNext) && (
         <div className="flex items-center justify-between text-xs">
           <Button
             variant="ghost"
@@ -200,7 +220,7 @@ function Templates({
           <Button
             variant="ghost"
             size="sm"
-            disabled={pending || loading || templates.length < 24}
+            disabled={pending || loading || !hasNext}
             onClick={() => {
               setSelected(null);
               setPage((value) => value + 1);

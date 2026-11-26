@@ -8,10 +8,11 @@ import {
   templatePublication,
   user,
 } from "@texfolia/db/schema";
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, count, eq, gte, isNull, lt } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
+import { accountPlan } from "#/lib/billing/server";
 import { mapLimit } from "#/lib/map-limit";
 import { assertProjectSourcePaths, projectPaths } from "#/lib/projects";
 import { availableProjectName, type LockProject } from "#/lib/projects/server";
@@ -22,9 +23,10 @@ import {
   type SourceTransaction,
 } from "#/lib/storage/server";
 
-import { availableTemplate } from "./catalog.server";
+import { availableTemplate, usesTemplate } from "./catalog.server";
 import {
   openTemplateSchema,
+  privateTemplateLimits,
   publishTemplateSchema,
   templateSnapshotSchema,
 } from "./schema";
@@ -118,6 +120,7 @@ async function checkPublication(
   if (!source.organizationId) {
     if (source.ownerId !== userId)
       throw new Error("Only the project owner can publish templates");
+    if (data.visibility === "private") await checkPrivateLimit(tx, { userId });
     return { organizationId: null, publisherName: publisher.name };
   }
   const { organizationId } = source;
@@ -137,7 +140,53 @@ async function checkPublication(
     .from(organization)
     .where(eq(organization.id, organizationId));
   if (!org) throw new Error("Organization not found");
+  if (data.visibility === "private")
+    await checkPrivateLimit(tx, { organizationId });
   return { organizationId, publisherName: org.name };
+}
+
+/**
+ * Refuses another private template once its owner or organization keeps as
+ * many as its plan allows. Every private template counts until it is deleted,
+ * unpublished or not. The row lock serializes an organization's admins.
+ */
+async function checkPrivateLimit(
+  tx: SourceTransaction,
+  account: { userId: string } | { organizationId: string },
+) {
+  const personal = "userId" in account;
+  if (!personal)
+    await tx
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.id, account.organizationId))
+      .for("update");
+  const plan = await accountPlan(tx, account);
+  const limit = privateTemplateLimits[plan];
+  const [kept] = await tx
+    .select({ count: count() })
+    .from(template)
+    .where(
+      and(
+        eq(template.visibility, "private"),
+        personal
+          ? and(
+              eq(template.ownerId, account.userId),
+              isNull(template.organizationId),
+            )
+          : eq(template.organizationId, account.organizationId),
+      ),
+    );
+  if ((kept?.count ?? 0) < limit) return;
+  if (!limit)
+    throw new Error(
+      personal
+        ? "Private templates require Pro. Upgrade, or publish it as public or unlisted."
+        : "Private organization templates require a Team plan. Upgrade, or publish it as public or unlisted.",
+    );
+  throw new Error(
+    `Private template limit reached (${limit}). Delete one to make room.`,
+  );
 }
 
 export async function publishTemplate({
@@ -216,8 +265,12 @@ export async function publishTemplate({
         title: data.title,
         description: data.description,
         tags: data.tags,
-        license: data.license,
         visibility: data.visibility,
+        // Nobody outside its audience sees a private template, so it skips
+        // the gallery review and needs no redistribution license.
+        ...(data.visibility === "private"
+          ? { license: null, status: "approved" as const }
+          : { license: data.license }),
         mainFile: data.mainFile,
         snapshot: templateSnapshotSchema.parse(snapshot),
       });
@@ -245,7 +298,8 @@ async function checkOpening(
     .from(template)
     .where(and(eq(template.id, data.templateId), availableTemplate))
     .for("share");
-  if (!source) throw new Error("Template not found");
+  if (!source || !(await usesTemplate(tx, source, userId)))
+    throw new Error("Template not found");
   if (data.organizationId) {
     const [membership] = await tx
       .select()

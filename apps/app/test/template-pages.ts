@@ -27,6 +27,7 @@ const ownerId = crypto.randomUUID();
 const publicId = crypto.randomUUID();
 const unlistedId = crypto.randomUUID();
 const pendingId = crypto.randomUUID();
+const privateId = crypto.randomUUID();
 const rootId = crypto.randomUUID();
 const marker = crypto.randomUUID();
 const snapshot = [
@@ -86,10 +87,16 @@ try {
       visibility: "public",
       status: "pending",
     },
+    {
+      id: privateId,
+      title: `Private ${marker}`,
+      visibility: "private",
+      status: "approved",
+    },
   ] satisfies {
     id: string;
     title: string;
-    visibility: "public" | "unlisted";
+    visibility: "public" | "unlisted" | "private";
     status: "approved" | "pending";
   }[]) {
     await db.insert(template).values({
@@ -114,7 +121,8 @@ try {
     !listed.some(
       (item) =>
         item.title === `Unlisted ${marker}` ||
-        item.title === `Pending ${marker}`,
+        item.title === `Pending ${marker}` ||
+        item.title === `Private ${marker}`,
     ),
   );
   // Marketing gallery HTML when apps/web is reachable (skipped in app-only CI).
@@ -126,7 +134,8 @@ try {
       assert(html.includes(`Public ${marker}`));
       assert(
         !html.includes(`Unlisted ${marker}`) &&
-          !html.includes(`Pending ${marker}`),
+          !html.includes(`Pending ${marker}`) &&
+          !html.includes(`Private ${marker}`),
       );
       galleryHtmlChecked = true;
     }
@@ -154,7 +163,9 @@ try {
   const unlistedPage = await fetch(new URL(`/template/${unlistedId}`, baseUrl));
   assert.equal(unlistedPage.status, 200);
   assert((await unlistedPage.text()).includes("noindex, nofollow"));
-  for (const id of [pendingId, crypto.randomUUID(), "invalid"])
+  // A private template is not found for anyone outside its audience, even with
+  // its URL.
+  for (const id of [pendingId, privateId, crypto.randomUUID(), "invalid"])
     assert.equal(
       (await fetch(new URL(`/template/${id}`, baseUrl))).status,
       404,
@@ -162,10 +173,13 @@ try {
   for (const path of [
     `/api/templates/${pendingId}/preview`,
     `/api/templates/${pendingId}/source`,
+    `/api/templates/${privateId}/preview`,
+    `/api/templates/${privateId}/preview?size=thumbnail`,
+    `/api/templates/${privateId}/source`,
   ])
     assert.equal((await fetch(new URL(path, baseUrl))).status, 404);
   console.log(
-    "Template page integration passed: public catalog API, optional web gallery HTML, detail HTML without JavaScript, absolute sharing image, unlisted noindex, pending/unknown 404s, protected image/source endpoints.",
+    "Template page integration passed: public catalog API, optional web gallery HTML, detail HTML without JavaScript, absolute sharing image, unlisted noindex, pending/private/unknown 404s, protected image/source endpoints.",
   );
 } finally {
   await db.delete(user).where(eq(user.id, ownerId));
