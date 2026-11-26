@@ -3,7 +3,10 @@ import { project, projectNode } from "@texfolia/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
-import { invalidateSourceBuild } from "#/lib/builds/client";
+import {
+  invalidateSourceBuild,
+  notifyProjectMetadataChanged,
+} from "#/lib/builds/client";
 import {
   cleanupDeletedCollaboration,
   collectCollaborationSources,
@@ -82,7 +85,10 @@ export async function saveProjectSource({
       return { objectKey, updatedAt: updatedAt.getTime() };
     },
   });
-  await invalidateSourceBuild(projectId);
+  await Promise.all([
+    invalidateSourceBuild(projectId),
+    notifyProjectMetadataChanged(projectId),
+  ]);
   return version;
 }
 
@@ -136,7 +142,10 @@ export async function deleteProjectNode({
       .where(eq(project.id, projectId));
   });
   await cleanupDeletedCollaboration(collaboration, projectId);
-  await invalidateSourceBuild(projectId);
+  await Promise.all([
+    invalidateSourceBuild(projectId),
+    notifyProjectMetadataChanged(projectId),
+  ]);
 }
 
 export async function readProjectSource({

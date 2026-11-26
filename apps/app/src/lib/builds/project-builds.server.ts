@@ -70,6 +70,36 @@ export class ProjectBuilds extends LiveProject {
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS state_chunks (part INTEGER PRIMARY KEY, value TEXT NOT NULL)",
     );
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)",
+    );
+  }
+
+  private metadataVersion(): number {
+    return (
+      this.ctx.storage.sql
+        .exec<{ version: number }>("SELECT version FROM metadata WHERE id = 1")
+        .toArray()[0]?.version ?? 0
+    );
+  }
+
+  private bumpMetadataVersion(): number {
+    const next = this.metadataVersion() + 1;
+    this.ctx.storage.sql.exec(
+      "INSERT OR REPLACE INTO metadata (id, version) VALUES (1, ?)",
+      next,
+    );
+    return next;
+  }
+
+  private metadataFrame(version = this.metadataVersion()): string {
+    return JSON.stringify({ type: "metadata", version });
+  }
+
+  /** Broadcasts a metadata invalidation event to connected workspace tabs. */
+  notifyMetadata(projectId: string, userIds?: readonly string[]) {
+    const version = this.bumpMetadataVersion();
+    this.broadcastFrame(projectId, this.metadataFrame(version), userIds);
   }
 
   private coordinator(projectId: string) {
@@ -139,6 +169,13 @@ export class ProjectBuilds extends LiveProject {
       return Response.json({ error: "Invalid project ID" }, { status: 400 });
     if (path === `/projects/${id.data}/events`)
       return this.openSocket(request, id.data);
+    if (
+      request.method === "POST" &&
+      path === `/projects/${id.data}/metadata-changed`
+    ) {
+      this.notifyMetadata(id.data);
+      return new Response(null, { status: 204 });
+    }
     const response = await createCoordinatorApp(
       this.coordinator(id.data),
       (submission) =>
@@ -154,6 +191,14 @@ export class ProjectBuilds extends LiveProject {
 
   protected override liveFrame(projectId: string) {
     return JSON.stringify(this.coordinator(projectId).snapshot());
+  }
+
+  protected override extraLiveFrames() {
+    return [this.metadataFrame()];
+  }
+
+  protected override onAccessVerified(projectId: string, userIds?: string[]) {
+    this.notifyMetadata(projectId, userIds);
   }
 
   protected override async checkLiveAccess(projectId: string, userId: string) {

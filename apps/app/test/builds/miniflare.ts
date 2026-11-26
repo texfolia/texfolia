@@ -7,17 +7,38 @@ type Service = NonNullable<WorkerOptions["serviceBindings"]>[string];
 const fixtureScript = `
 import { DurableObject } from "cloudflare:workers";
 export class ProjectBuilds extends DurableObject {
-  invalidateAccess() {}
+  sockets = new Set();
+  metadataVersion = 0;
+  invalidateAccess(userIds) {
+    this.notifyMetadata();
+  }
+  notifyMetadata() {
+    this.metadataVersion++;
+    const frame = JSON.stringify({ type: "metadata", version: this.metadataVersion });
+    for (const ws of this.sockets) {
+      if (ws.readyState === 1) ws.send(frame);
+    }
+  }
   async fetch(request) {
-    if (!new URL(request.url).pathname.endsWith("/events"))
+    const pathname = new URL(request.url).pathname;
+    if (request.method === "POST" && pathname.endsWith("/metadata-changed")) {
+      this.notifyMetadata();
+      return new Response(null, { status: 204 });
+    }
+    if (!pathname.endsWith("/events"))
       return this.env.HANDLER.fetch(request);
     // The handler streams one snapshot per line; a viewer gets one per message.
     const { body } = await this.env.HANDLER.fetch(request.url);
     const [client, server] = Object.values(new WebSocketPair());
     server.accept();
+    this.sockets.add(server);
+    server.send(JSON.stringify({ type: "metadata", version: this.metadataVersion }));
     const reader = body.getReader();
     server.addEventListener("message", () => server.send("pong"));
-    server.addEventListener("close", () => void reader.cancel());
+    server.addEventListener("close", () => {
+      this.sockets.delete(server);
+      void reader.cancel();
+    });
     void (async () => {
       const decoder = new TextDecoder();
       let text = "";
@@ -29,7 +50,10 @@ export class ProjectBuilds extends DurableObject {
         text = lines.pop();
         for (const line of lines) server.send(line);
       }
-    })().catch(() => server.close());
+    })().catch(() => {
+      this.sockets.delete(server);
+      server.close();
+    });
     return new Response(null, { status: 101, webSocket: client });
   }
 }

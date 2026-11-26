@@ -23,6 +23,12 @@ type Duty = "work" | "access";
 export abstract class LiveProject<E = Env> extends DurableObject<E> {
   // The frame a socket receives on connect and whenever `publish` runs.
   protected abstract liveFrame(projectId: string): string;
+  // Additional frames sent after `liveFrame` on connect and after access catch-up.
+  protected extraLiveFrames(_projectId: string): string[] {
+    return [];
+  }
+  // Called after `invalidateAccess` finishes verifying connected viewers.
+  protected onAccessVerified(_projectId: string, _userIds?: string[]): void {}
   // Rejects when the user cannot read the project's builds.
   protected abstract checkLiveAccess(
     projectId: string,
@@ -72,6 +78,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     server.serializeAttachment({ projectId, userId } satisfies Viewer);
     this.ctx.acceptWebSocket(server, userId === null ? [] : [userId]);
     server.send(this.liveFrame(projectId));
+    for (const extra of this.extraLiveFrames(projectId)) server.send(extra);
     if (userId !== null) await this.planAccessCheck();
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -96,13 +103,26 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
 
   /** Sends the current frame to every viewer, checking only unverified ones. */
   protected publish(projectId: string) {
+    this.broadcastFrame(projectId, this.liveFrame(projectId));
+  }
+
+  /**
+   * Sends `frame` to every open viewer (or only those in `userIds`), verifying
+   * any viewer whose cached access has expired before delivering.
+   */
+  protected broadcastFrame(
+    projectId: string,
+    frame: string,
+    userIds?: readonly string[],
+  ) {
     const sockets = this.ctx.getWebSockets();
     if (!sockets.length) return;
-    const frame = this.liveFrame(projectId);
+    const target = userIds ? new Set(userIds) : null;
     const access = this.accessFor(projectId);
     const unverified = new Set<string>();
     for (const ws of sockets) {
       const { userId } = this.viewer(ws);
+      if (target && (userId === null || !target.has(userId))) continue;
       if (userId === null || access.fresh(userId)) this.send(ws, frame);
       else unverified.add(userId);
     }
@@ -121,8 +141,12 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     } finally {
       this.catchingUp.delete(userId);
     }
-    const frame = this.liveFrame(projectId);
-    for (const ws of this.ctx.getWebSockets(userId)) this.send(ws, frame);
+    const frames = [
+      this.liveFrame(projectId),
+      ...this.extraLiveFrames(projectId),
+    ];
+    for (const ws of this.ctx.getWebSockets(userId))
+      for (const frame of frames) this.send(ws, frame);
   }
 
   private send(ws: WebSocket, frame: string) {
@@ -158,18 +182,23 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
    */
   async invalidateAccess(userIds?: string[]) {
     this.access?.invalidate(userIds);
-    this.ctx.waitUntil(this.verifyViewers(userIds));
+    this.ctx.waitUntil(
+      this.verifyViewers(userIds).then(({ projectId }) => {
+        if (projectId) this.onAccessVerified(projectId, userIds);
+      }),
+    );
   }
 
   // Closes viewers who lost access, including those nothing is sent to.
   private async verifyViewers(userIds?: string[]) {
     const users = [...this.viewers()];
+    const projectId = users[0]?.[1];
     const watching = new Set([
       ...users.map(([userId]) => userId),
       ...this.streams.keys(),
     ]);
-    const access = this.access ?? (users[0] && this.accessFor(users[0][1]));
-    if (!access) return watching.size;
+    const access = this.access ?? (projectId && this.accessFor(projectId));
+    if (!access) return { watching: watching.size, projectId };
     for (const userId of watching) {
       if (userIds && !userIds.includes(userId)) continue;
       try {
@@ -178,7 +207,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
         this.disconnect(userId);
       }
     }
-    return watching.size;
+    return { watching: watching.size, projectId };
   }
 
   private async planAccessCheck() {
@@ -198,7 +227,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     if (alarms.due("access", now)) {
       alarms.done("access", now);
       this.access?.invalidate();
-      if (await this.verifyViewers()) await this.planAccessCheck();
+      if ((await this.verifyViewers()).watching) await this.planAccessCheck();
     }
     // A failure keeps the duty due, so the runtime's retry runs it again.
     if (unplanned || alarms.due("work", now)) {

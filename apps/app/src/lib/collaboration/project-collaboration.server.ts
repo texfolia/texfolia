@@ -1,4 +1,8 @@
-import { buildsFetcher, invalidateSourceBuild } from "#/lib/builds/client";
+import {
+  buildsFetcher,
+  invalidateSourceBuild,
+  notifyProjectMetadataChanged,
+} from "#/lib/builds/client";
 import type { GitAction } from "#/lib/git";
 import { runGit } from "#/lib/git/git.server";
 import type { ProjectAccessRequest } from "#/lib/projects/server";
@@ -28,8 +32,12 @@ export class ProjectCollaboration extends CollaborationRoom<Env> {
     return shareLinkIdOf(userId) !== null;
   }
 
-  protected override sourcesChanged(projectId: string) {
-    return invalidateSourceBuild(projectId, buildsFetcher(this.env.BUILDS));
+  protected override async sourcesChanged(projectId: string) {
+    const builds = buildsFetcher(this.env.BUILDS);
+    await Promise.all([
+      invalidateSourceBuild(projectId, builds),
+      notifyProjectMetadataChanged(projectId, builds),
+    ]);
   }
 
   async gitAction(options: {
@@ -37,15 +45,20 @@ export class ProjectCollaboration extends CollaborationRoom<Env> {
     user: { id: string; name: string; email: string };
     action: GitAction;
   }) {
-    return this.withSavedSources({
+    const readOnly =
+      options.action.kind === "status" || options.action.kind === "diff";
+    const result = await this.withSavedSources({
       projectId: options.projectId,
       userId: options.user.id,
-      access:
-        options.action.kind === "status" || options.action.kind === "diff"
-          ? "read"
-          : "write",
+      access: readOnly ? "read" : "write",
       run: (db, exclusively) =>
         runGit({ db, bucket: this.env.SOURCES, exclusively, ...options }),
     });
+    if (!readOnly)
+      await notifyProjectMetadataChanged(
+        options.projectId,
+        buildsFetcher(this.env.BUILDS),
+      );
+    return result;
   }
 }

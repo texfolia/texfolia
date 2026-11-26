@@ -1,7 +1,16 @@
 import { buildSnapshotSchema, type BuildSnapshot } from "@texfolia/contracts";
+import { z } from "zod";
 
-type BuildEvent =
+const metadataEventSchema = z.object({
+  type: z.literal("metadata"),
+  version: z.number().int().nonnegative(),
+});
+
+export type BuildEvent =
   | { kind: "snapshot"; snapshot: BuildSnapshot }
+  | { kind: "metadata"; version: number }
+  | { kind: "reconnected" }
+  | { kind: "access-revoked" }
   | { kind: "disconnected" };
 
 type BuildSocket = Pick<
@@ -12,9 +21,11 @@ type BuildSocket = Pick<
 const pingMs = 15_000;
 const silentMs = 45_000;
 const maxRetryMs = 30_000;
+const accessRevokedCloseCode = 1008;
 
-// Follows a project's builds over a WebSocket, reconnecting until closed. The
-// server sends the current snapshot on every connect.
+// Follows a project's builds and metadata invalidations over one WebSocket,
+// reconnecting until closed. The server sends the current build snapshot and
+// metadata version on every connect.
 export class ProjectBuildEvents {
   private socket: BuildSocket | undefined;
   private reconnect: ReturnType<typeof setTimeout> | undefined;
@@ -23,12 +34,14 @@ export class ProjectBuildEvents {
   private closed = false;
   private listeners = new Set<(event: BuildEvent) => void>();
   private snapshot: BuildSnapshot | null = null;
+  private metadataVersion: number | null = null;
+  private hasConnected = false;
   private disconnected = false;
   private url: string;
 
   constructor(
     projectId: string,
-    private onSnapshot: (snapshot: BuildSnapshot) => void,
+    private onSnapshot?: (snapshot: BuildSnapshot) => void,
     private createSocket: (url: string) => BuildSocket = (url) => {
       const resolved = new URL(url, window.location.href);
       resolved.protocol = resolved.protocol === "https:" ? "wss:" : "ws:";
@@ -38,6 +51,10 @@ export class ProjectBuildEvents {
     this.url = `/api/compile/${encodeURIComponent(projectId)}?events=1`;
     globalThis.addEventListener?.("online", this.online);
     this.connect();
+  }
+
+  private emit(event: BuildEvent) {
+    for (const listener of this.listeners) listener(event);
   }
 
   private connect() {
@@ -50,22 +67,51 @@ export class ProjectBuildEvents {
     }, pingMs);
     // The server answers pings without waking. A peer that never sends anything
     // may also not be told when the server closes the socket.
-    socket.onopen = () => socket.send("ping");
+    socket.onopen = () => {
+      if (this.socket !== socket) return;
+      socket.send("ping");
+      const reconnected = this.hasConnected && this.disconnected;
+      this.hasConnected = true;
+      this.attempts = 0;
+      this.disconnected = false;
+      if (reconnected) this.emit({ kind: "reconnected" });
+    };
     socket.onmessage = (event: MessageEvent<unknown>) => {
       if (this.socket !== socket) return;
       heardAt = Date.now();
       if (event.data !== "pong") this.receive(event.data);
     };
-    socket.onclose = () => this.lost(socket);
+    socket.onclose = (event?: { code?: number }) => {
+      if (this.socket !== socket) return;
+      if (event?.code === accessRevokedCloseCode)
+        this.emit({ kind: "access-revoked" });
+      this.lost(socket);
+    };
   }
 
   private receive(data: unknown) {
-    let snapshot: BuildSnapshot;
+    let parsed: unknown;
     try {
-      snapshot = buildSnapshotSchema.parse(JSON.parse(String(data)));
+      parsed = JSON.parse(String(data));
     } catch {
       return;
     }
+    const metadata = metadataEventSchema.safeParse(parsed);
+    if (metadata.success) {
+      this.attempts = 0;
+      this.disconnected = false;
+      if (
+        this.metadataVersion !== null &&
+        metadata.data.version <= this.metadataVersion
+      )
+        return;
+      this.metadataVersion = metadata.data.version;
+      this.emit({ kind: "metadata", version: metadata.data.version });
+      return;
+    }
+    const result = buildSnapshotSchema.safeParse(parsed);
+    if (!result.success) return;
+    const snapshot = result.data;
     this.attempts = 0;
     this.disconnected = false;
     const previous = this.snapshot;
@@ -79,9 +125,8 @@ export class ProjectBuildEvents {
     )
       return;
     this.snapshot = snapshot;
-    this.onSnapshot(snapshot);
-    for (const listener of this.listeners)
-      listener({ kind: "snapshot", snapshot });
+    this.onSnapshot?.(snapshot);
+    this.emit({ kind: "snapshot", snapshot });
   }
 
   private lost(socket: BuildSocket) {
@@ -96,7 +141,7 @@ export class ProjectBuildEvents {
     );
     if (this.disconnected) return;
     this.disconnected = true;
-    for (const listener of this.listeners) listener({ kind: "disconnected" });
+    this.emit({ kind: "disconnected" });
   }
 
   private online = () => {
@@ -108,6 +153,8 @@ export class ProjectBuildEvents {
   subscribe(listener: (event: BuildEvent) => void) {
     this.listeners.add(listener);
     if (this.snapshot) listener({ kind: "snapshot", snapshot: this.snapshot });
+    if (this.metadataVersion !== null)
+      listener({ kind: "metadata", version: this.metadataVersion });
     if (this.disconnected) listener({ kind: "disconnected" });
     return () => this.listeners.delete(listener);
   }

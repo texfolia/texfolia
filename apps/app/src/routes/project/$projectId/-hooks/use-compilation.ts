@@ -20,6 +20,7 @@ import {
 import { invalidProjectPaths } from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import { InvalidSourcePathError } from "#/lib/storage";
+import { useProjectBuildEvents } from "#/providers/project-files-provider";
 
 import { useSharedPdf } from "./use-shared-pdf";
 
@@ -160,20 +161,26 @@ export function useCompilation({
     onError: setCompileError,
   });
 
+  const sharedEvents = useProjectBuildEvents();
   const snapshotArrived = useEffectEvent((snapshot: BuildSnapshot) => {
     latestBuild.current = snapshot;
     setBuild(snapshot);
     if (!snapshot.stale && edits.caughtUp()) setSourceChanged(false);
   });
   useEffect(() => {
-    const events = new ProjectBuildEvents(projectId, snapshotArrived);
+    if (sharedEvents === null) return;
+    const events = sharedEvents ?? new ProjectBuildEvents(projectId);
     buildEvents.current = events;
+    const unsubscribe = events.subscribe((event) => {
+      if (event.kind === "snapshot") snapshotArrived(event.snapshot);
+    });
     return () => {
-      events.close();
+      unsubscribe();
+      if (!sharedEvents) events.close();
       buildEvents.current = null;
       compilation.current?.abort();
     };
-  }, [projectId]);
+  }, [projectId, sharedEvents]);
 
   // A cheap key for the file tree's shape, recomputed only when nodes change.
   // Another main document makes another PDF.

@@ -9,6 +9,7 @@ import { and, asc, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
+import { notifyProjectMetadataChanged } from "#/lib/builds/client";
 import type { ProjectTransaction } from "#/lib/projects/server";
 import {
   lockProject,
@@ -216,7 +217,7 @@ export async function createCommentThread({
     !decodeCommentPosition(data.anchorEnd)
   )
     throw new Error("The comment range is invalid. Select the text again.");
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     await lockForComments(tx, data.projectId, userId);
     const [node] = await tx
       .select({ id: projectNode.id })
@@ -260,6 +261,8 @@ export async function createCommentThread({
       .values({ threadId: thread.id, authorId: userId, body: data.body });
     return { threadId: thread.id };
   });
+  await notifyProjectMetadataChanged(data.projectId);
+  return created;
 }
 
 export async function replyToCommentThread({
@@ -271,7 +274,7 @@ export async function replyToCommentThread({
   userId: string;
   data: z.infer<typeof replyToCommentThreadSchema>;
 }) {
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     await lockForComments(tx, data.projectId, userId);
     await lockThread(tx, data.projectId, data.threadId);
     const [existing] = await tx
@@ -293,6 +296,8 @@ export async function replyToCommentThread({
       .where(eq(projectCommentThread.id, data.threadId));
     return { commentId: comment?.id };
   });
+  await notifyProjectMetadataChanged(data.projectId);
+  return created;
 }
 
 export async function resolveCommentThread({
@@ -320,6 +325,7 @@ export async function resolveCommentThread({
       )
       .where(eq(projectCommentThread.id, data.threadId));
   });
+  await notifyProjectMetadataChanged(data.projectId);
 }
 
 // The thread's author, if they can still comment, and project editors can
@@ -342,6 +348,7 @@ export async function deleteCommentThread({
       .delete(projectCommentThread)
       .where(eq(projectCommentThread.id, data.threadId));
   });
+  await notifyProjectMetadataChanged(data.projectId);
 }
 
 export async function updateComment({
@@ -367,6 +374,7 @@ export async function updateComment({
       .where(eq(projectComment.id, data.commentId));
     await touchThread(tx, threadId);
   });
+  await notifyProjectMetadataChanged(data.projectId);
 }
 
 // Authors delete their own comments, and editors anyone's. Deleting a thread's
@@ -401,4 +409,5 @@ export async function deleteComment({
         .delete(projectCommentThread)
         .where(eq(projectCommentThread.id, threadId));
   });
+  await notifyProjectMetadataChanged(data.projectId);
 }

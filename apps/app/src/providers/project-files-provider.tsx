@@ -1,6 +1,13 @@
-import { createContext, type ReactNode, useContext, useEffect } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import type { z } from "zod";
 
+import { ProjectBuildEvents } from "#/lib/compile";
 import {
   projectMetadataSchema,
   projectSourcesFingerprint,
@@ -155,6 +162,7 @@ export function createProjectFilesStore({
 
   type SourceVersion = (typeof sourceVersions)[string];
   return {
+    projectId,
     nodes,
     sourceVersions: sourceVersions as Readonly<typeof sourceVersions>,
     /** Copies the known versions so a long operation reads a consistent set. */
@@ -295,6 +303,10 @@ export function createProjectFilesStore({
 const ProjectFilesContext = createContext<ReturnType<
   typeof createProjectFilesStore
 > | null>(null);
+// `undefined` means no provider; `null` means the provider is mounting.
+const ProjectBuildEventsContext = createContext<
+  ProjectBuildEvents | null | undefined
+>(undefined);
 
 export function ProjectFilesProvider({
   store,
@@ -303,57 +315,106 @@ export function ProjectFilesProvider({
   store: ReturnType<typeof createProjectFilesStore>;
   children: ReactNode;
 }) {
+  const [events, setEvents] = useState<ProjectBuildEvents | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
+    const live = new ProjectBuildEvents(store.projectId);
+    setEvents(live);
     let refreshing = false;
-    // Hidden tabs do not poll; they refresh when they are shown again.
-    const schedule = () => {
-      clearTimeout(timer);
-      if (!controller.signal.aborted && document.visibilityState !== "hidden")
-        timer = setTimeout(refresh, 2000);
-    };
-    const poll = async () => {
-      if (
-        refreshing ||
-        controller.signal.aborted ||
-        document.visibilityState === "hidden"
-      )
+    let pendingRefresh = false;
+    let dirtyWhileHidden = false;
+    let seenVersion: number | null = null;
+    let wasHidden = document.visibilityState === "hidden";
+
+    const refresh = async (force = false) => {
+      if (controller.signal.aborted) return;
+      if (!force && document.visibilityState === "hidden") {
+        dirtyWhileHidden = true;
         return;
-      clearTimeout(timer);
+      }
+      if (refreshing) {
+        pendingRefresh = true;
+        return;
+      }
       refreshing = true;
+      dirtyWhileHidden = false;
       try {
         await store.refresh(controller.signal);
       } catch {
         // Offline sessions retain their metadata and Yjs recovery cache.
       } finally {
         refreshing = false;
-        schedule();
+        if (
+          pendingRefresh &&
+          !controller.signal.aborted &&
+          (force || document.visibilityState !== "hidden")
+        ) {
+          pendingRefresh = false;
+          void refresh(force);
+        }
       }
     };
-    const refresh = () => void poll();
+
+    const unsubscribe = live.subscribe((event) => {
+      if (event.kind === "metadata") {
+        if (seenVersion === null) {
+          seenVersion = event.version;
+          return;
+        }
+        if (event.version > seenVersion) {
+          seenVersion = event.version;
+          void refresh();
+        }
+        return;
+      }
+      if (event.kind === "reconnected") {
+        void refresh();
+        return;
+      }
+      if (event.kind === "access-revoked") void refresh(true);
+    });
+
+    const onOnline = () => void refresh();
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") clearTimeout(timer);
-      else refresh();
+      if (document.visibilityState === "hidden") {
+        wasHidden = true;
+        return;
+      }
+      if (wasHidden || dirtyWhileHidden) {
+        wasHidden = false;
+        void refresh();
+      }
     };
-    // The route has just loaded this store.
-    schedule();
-    window.addEventListener("online", refresh);
-    window.addEventListener("focus", refresh);
+
+    // Initial fetch on open establishes the ETag and catches changes between
+    // route load and WebSocket connect. Subsequent updates arrive via push.
+    void refresh();
+    window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       controller.abort();
-      clearTimeout(timer);
-      window.removeEventListener("online", refresh);
-      window.removeEventListener("focus", refresh);
+      unsubscribe();
+      live.close();
+      setEvents(null);
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [store]);
-  return <ProjectFilesContext value={store}>{children}</ProjectFilesContext>;
+  return (
+    <ProjectFilesContext value={store}>
+      <ProjectBuildEventsContext value={events}>
+        {children}
+      </ProjectBuildEventsContext>
+    </ProjectFilesContext>
+  );
 }
 
 export function useProjectFiles() {
   const store = useContext(ProjectFilesContext);
   if (!store) throw new Error("Missing project files provider");
   return store;
+}
+
+export function useProjectBuildEvents() {
+  return useContext(ProjectBuildEventsContext);
 }
