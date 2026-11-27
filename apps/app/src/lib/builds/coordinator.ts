@@ -61,6 +61,8 @@ const savedSchema = coordinatorSnapshotSchema.extend({
   editors: z.record(jobIdSchema, z.number().int().nonnegative()).default({}),
   sources: syncedProjectSchema.nullable().default(null),
   maintenanceAt: z.number().nullable().default(null),
+  // Recent replaced or superseded jobs so direct /jobs/:id lookups work without R2 result files.
+  recentJobs: z.array(buildSchema).default([]),
   // Template preview projects are temporary and expire a day after last use.
   preview: z.boolean().default(false),
   pending: z
@@ -79,6 +81,7 @@ const retentionMs = 30 * 24 * 60 * 60_000;
 export const previewRetentionMs = 24 * 60 * 60_000;
 // Tabs whose last sequence is remembered. Older ones have long stopped sending.
 const maxEditors = 64;
+const maxRecentJobs = 16;
 type RunContext = {
   attempt: number;
   delivery: "direct" | "overflow";
@@ -133,9 +136,17 @@ export class ProjectCoordinatorCore {
           editors: {},
           sources: null,
           maintenanceAt: null,
+          recentJobs: [],
           preview: false,
         };
     this.trimEditors();
+  }
+
+  private rememberJob(job: Build) {
+    this.state.recentJobs = [
+      ...this.state.recentJobs.filter((entry) => entry.id !== job.id),
+      job,
+    ].slice(-maxRecentJobs);
   }
 
   // The least recently seen editors come first.
@@ -253,13 +264,15 @@ export class ProjectCoordinatorCore {
           ? previous.id
           : undefined;
       if (previous && supersededId) {
-        await this.reconcile({
-          id: previous.id,
+        const superseded: Build = {
+          ...previous,
           status: "failed",
-          createdAt: previous.createdAt,
           error: "Compilation superseded by a newer revision",
-          log: previous.log,
-        });
+        };
+        this.rememberJob(superseded);
+        await this.reconcile(superseded);
+      } else if (previous) {
+        this.rememberJob(previous);
       }
       this.livePdf = null;
       // Persist the new revision and its wake-up before returning acceptance.
@@ -330,6 +343,7 @@ export class ProjectCoordinatorCore {
       this.state.current = null;
       this.state.pending = null;
       this.state.sources = null;
+      this.state.recentJobs = [];
       this.persist();
       this.pruneDrafts();
       for await (const key of this.options.store.keys(
@@ -399,6 +413,7 @@ export class ProjectCoordinatorCore {
         this.state.latestBuild = null;
         this.state.current = null;
         this.state.sources = null;
+        this.state.recentJobs = [];
         this.persist();
       }
       return { at, before, expired, revision: this.state.revision };
@@ -473,7 +488,8 @@ export class ProjectCoordinatorCore {
       return structuredClone(this.state.current);
     if (this.state.latestBuild?.id === id)
       return structuredClone(this.state.latestBuild);
-    return null;
+    const recent = this.state.recentJobs.find((job) => job.id === id);
+    return recent ? structuredClone(recent) : null;
   }
 
   async previewImage(id: string) {
