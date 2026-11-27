@@ -106,12 +106,24 @@ export const Route = createFileRoute("/api/ai/$projectId")({
           });
           if (new URL(request.url).searchParams.get("reconcile") === "1") {
             const config = aiConfig();
-            await reconcileAiUsage({
+            const { retryAfterSeconds } = await reconcileAiUsage({
               db: context.db,
               config,
               requestCost: gatewayRequestCost(config),
               userId: access.userId,
             });
+            if (retryAfterSeconds !== null)
+              waitUntil(
+                env.BACKGROUND.send(
+                  { kind: "reconcile-ai-usage" },
+                  { delaySeconds: retryAfterSeconds + 5 },
+                ).catch((error: unknown) => {
+                  console.error({
+                    event: "ai_reconcile_schedule_failed",
+                    error,
+                  });
+                }),
+              );
             return Response.json(
               await assistantConfiguration({
                 db: context.db,
@@ -139,6 +151,12 @@ export const Route = createFileRoute("/api/ai/$projectId")({
             connectionString: env.HYPERDRIVE.connectionString,
             createAuth: (db) => createAuth(db),
             workspace: assistantWorkspace(env),
+            scheduleReconcile: async (runId, delaySeconds) => {
+              await env.BACKGROUND.send(
+                { kind: "reconcile-ai-usage", runId },
+                { delaySeconds },
+              );
+            },
             ...access,
             body: await readAiBody(request),
             config: aiConfig(),

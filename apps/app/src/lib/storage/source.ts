@@ -50,3 +50,13 @@ export const saveSourceSchema = z.object({
   expectedObjectKey: z.string().nullable(),
   content: sourceContentSchema,
 });
+
+/** Extracts the SHA-256 content hash from a source object key (`<uuid>-<sha256>` or legacy `<sha256>`). */
+export function sourceHashFromKey(
+  objectKey: string | null | undefined,
+): string | null {
+  if (!objectKey) return null;
+  const name = objectKey.slice(objectKey.lastIndexOf("/") + 1);
+  const match = /(?:^|-)([0-9a-f]{64})$/.exec(name);
+  return match?.[1] ?? null;
+}

@@ -1,17 +1,6 @@
 import type { Db } from "@texfolia/db";
-import { project, projectNode, sourceGarbage } from "@texfolia/db/schema";
-import {
-  and,
-  eq,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { projectNode, sourceGarbage } from "@texfolia/db/schema";
+import { and, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { mapLimit } from "#/lib/map-limit";
 
@@ -19,6 +8,7 @@ import {
   decodeSource,
   maxSourceFileBytes,
   maxSourceProjectBytes,
+  sourceHashFromKey,
 } from "./source";
 
 // `R2Bucket` is the ambient Workers type from `wrangler types`.
@@ -57,17 +47,16 @@ export async function copySource({
     ? new Uint8Array(await object.arrayBuffer())
     : new Uint8Array();
   const hash = await contentHash(bytes);
-  if (bytes.byteLength !== sizeBytes || (from && !from.endsWith(`/${hash}`)))
+  const expectedHash = from ? sourceHashFromKey(from) : null;
+  if (bytes.byteLength !== sizeBytes || (from && expectedHash !== hash))
     throw new Error("Source integrity check failed");
-  const objectKey = `${to}/${hash}`;
-  await bucket.put(objectKey, bytes, {
-    httpMetadata: { contentType: "application/octet-stream" },
-  });
+  const objectKey = `${to}/${crypto.randomUUID()}-${hash}`;
+  await bucket.put(objectKey, bytes, sourceOptions);
   return objectKey;
 }
 
 // One source, hashed and checked, ready for `commitSources`. A stored one is in
-// the bucket already, and its bytes are read again only if that object is lost.
+// the bucket already.
 export type SourceUpload = {
   objectKey: string;
   sizeBytes: bigint;
@@ -80,6 +69,7 @@ const sourceOptions = {
 };
 
 // Prepares bytes the caller already has. Bytes of a text file must be UTF-8.
+// Every upload gets a unique UUID prefix so retired keys are never reused.
 export async function prepareSourceBytes(
   projectId: string,
   bytes: Uint8Array<ArrayBuffer>,
@@ -87,7 +77,7 @@ export async function prepareSourceBytes(
   if (bytes.byteLength > maxSourceFileBytes)
     throw new Error("File exceeds 10 MiB");
   return {
-    objectKey: `${sourcePrefix(projectId)}${await contentHash(bytes)}`,
+    objectKey: `${sourcePrefix(projectId)}${crypto.randomUUID()}-${await contentHash(bytes)}`,
     sizeBytes: BigInt(bytes.byteLength),
     bytes,
   };
@@ -138,19 +128,10 @@ export const sourceConcurrency = 6;
 /** How many source bytes one operation holds for those reads or writes. */
 export const sourceBytesInFlight = 16 * 1024 * 1024;
 
-// Collection is done with a claim after this long, even if it crashed.
-const claimTimeoutMs = 5 * 60_000;
-const claimRetries = 20;
-const claimRetryMs = 250;
-
-// Collection claimed one of the objects, so it may be gone.
-class SourceClaimedError extends Error {}
-
-// Uploads sources, then runs `run` in a transaction that points nodes at them.
-// `run` must lock the project row for writing (or insert it), and may run more
-// than once. No transaction is open during an upload, so collection may delete an
-// object between its upload and the commit. It leaves a claim behind, which this
-// finds under the same lock, uploads the object again, and retries.
+// Uploads sources to unique per-upload keys, then runs `run` in a transaction
+// that points nodes at them. Because keys are unique, collection can never race
+// with an upload, and a rolled-back transaction deletes its uploaded objects
+// immediately.
 export async function commitSources<T>({
   db,
   bucket,
@@ -165,69 +146,44 @@ export async function commitSources<T>({
   run: (tx: SourceTransaction) => Promise<T>;
 }): Promise<T> {
   const byKey = new Map(uploads.map((upload) => [upload.objectKey, upload]));
-  // Claims whose delete had finished before the last upload.
-  const settled = new Set<string>();
-  let pending = [...byKey.values()].filter((upload) => !upload.stored);
-  for (let attempt = 0; ; attempt++) {
+  const uploadedKeys: string[] = [];
+  for (const upload of byKey.values())
+    if (upload.stored) uploadedKeys.push(upload.objectKey);
+  const pending = [...byKey.values()].filter((upload) => !upload.stored);
+  try {
     await mapLimit(
       pending,
       sourceConcurrency,
-      async ({ objectKey, bytes }) =>
-        storeSource(bucket, {
+      async ({ objectKey, bytes }) => {
+        await storeSource(bucket, {
           objectKey,
           bytes: typeof bytes === "function" ? await bytes() : bytes,
-        }),
+        });
+        uploadedKeys.push(objectKey);
+      },
       {
         maxBytes: sourceBytesInFlight,
         size: ({ sizeBytes }) => Number(sizeBytes),
       },
     );
-    pending = [];
-    let deleting = false;
-    try {
-      return await db.transaction(async (tx) => {
-        const result = await run(tx);
-        const claims = byKey.size
-          ? await tx
-              .select()
-              .from(sourceGarbage)
-              .where(
-                and(
-                  eq(sourceGarbage.projectId, projectId),
-                  inArray(sourceGarbage.objectKey, [...byKey.keys()]),
-                  isNotNull(sourceGarbage.claimedAt),
-                ),
-              )
-          : [];
-        for (const { id, objectKey, claimedAt, deletedAt } of claims) {
-          const claim = `${id}:${claimedAt?.getTime()}`;
-          if (settled.has(claim)) continue;
-          if (
-            deletedAt ||
-            (claimedAt && claimedAt.getTime() < Date.now() - claimTimeoutMs)
-          ) {
-            settled.add(claim);
-            const upload = byKey.get(objectKey);
-            if (upload) pending.push(upload);
-          } else deleting = true;
-        }
-        if (deleting || pending.length) throw new SourceClaimedError();
-        return result;
+    return await db.transaction(run);
+  } catch (error) {
+    if (uploadedKeys.length)
+      await bucket.delete(uploadedKeys).catch((deleteError: unknown) => {
+        console.error("Failed to clean up uncommitted source uploads", {
+          projectId,
+          count: uploadedKeys.length,
+          error: deleteError,
+        });
       });
-    } catch (error) {
-      if (!(error instanceof SourceClaimedError)) throw error;
-      if (attempt >= claimRetries)
-        throw new Error("Source storage is busy. Try again.");
-      if (deleting)
-        await new Promise((resolve) => setTimeout(resolve, claimRetryMs));
-    }
+    throw error;
   }
 }
 
 // Queues keys that nodes stop referencing. Call it in the same transaction as
 // the node change, so a rollback also discards the queue entry.
 export async function retireSources(
-  tx: SourceTransaction,
+  tx: Pick<SourceTransaction, "insert">,
   projectId: string,
   objectKeys: Iterable<string | null | undefined>,
 ) {
@@ -239,27 +195,13 @@ export async function retireSources(
       .values([...keys].map((objectKey) => ({ projectId, objectKey })));
 }
 
-// Locks a project the way source writes do. Projects in the trash keep their
-// sources; only a deleted row releases them.
-async function lockProjectForCollection(
-  tx: SourceTransaction,
-  projectId: string,
-) {
-  const [found] = await tx
-    .select({ id: project.id })
-    .from(project)
-    .where(eq(project.id, projectId))
-    .for("update");
-  return Boolean(found);
-}
-
 async function liveSourceKeys(
-  tx: SourceTransaction,
+  db: Pick<Db, "select">,
   projectId: string,
   keys: string[],
 ) {
   const references = keys.length
-    ? await tx
+    ? await db
         .select({ key: projectNode.objectKey })
         .from(projectNode)
         .where(
@@ -271,25 +213,6 @@ async function liveSourceKeys(
         )
     : [];
   return new Set(references.map((node) => node.key));
-}
-
-// Deletes claimed objects, then records that they are gone. A failure leaves the
-// claims, which the next collection takes over.
-async function deleteClaimed(
-  { db, bucket }: { db: Db; bucket: SourceBucket },
-  claimed: { id: bigint; objectKey: string }[],
-) {
-  if (!claimed.length) return;
-  await bucket.delete([...new Set(claimed.map((row) => row.objectKey))]);
-  await db
-    .update(sourceGarbage)
-    .set({ deletedAt: new Date() })
-    .where(
-      inArray(
-        sourceGarbage.id,
-        claimed.map((row) => row.id),
-      ),
-    );
 }
 
 // R2 deletes at most 1,000 keys per call.
@@ -314,7 +237,8 @@ export async function deletePrefix(
 const retiredMs = 60 * 60_000;
 
 // Deletes queued source objects that no live node references. Work scales with
-// recently replaced or deleted sources, not with the bucket.
+// recently replaced or deleted sources, not with the bucket. Because keys are
+// unique per upload, no project lock or two-phase claim is needed.
 export async function collectSourceGarbage({
   db,
   bucket,
@@ -324,147 +248,41 @@ export async function collectSourceGarbage({
   bucket: SourceBucket;
   retiredBefore?: Date;
 }) {
-  await db
-    .delete(sourceGarbage)
-    .where(lt(sourceGarbage.deletedAt, new Date(Date.now() - retiredMs)));
-  const due = and(
-    lte(sourceGarbage.createdAt, retiredBefore),
-    isNull(sourceGarbage.deletedAt),
-    or(
-      isNull(sourceGarbage.claimedAt),
-      lt(sourceGarbage.claimedAt, new Date(Date.now() - claimTimeoutMs)),
-    ),
-  );
-  const projectIds = await db
-    .selectDistinct({ projectId: sourceGarbage.projectId })
-    .from(sourceGarbage)
-    .where(due);
-  for (const { projectId } of projectIds) {
-    let remaining = true;
-    while (remaining) {
-      const batch = await db.transaction(async (tx) => {
-        const live = await lockProjectForCollection(tx, projectId);
-        const queued = await tx
-          .select()
-          .from(sourceGarbage)
-          .where(and(eq(sourceGarbage.projectId, projectId), due))
-          .orderBy(sourceGarbage.id)
-          .limit(garbageBatchSize);
-        const keys = [...new Set(queued.map((row) => row.objectKey))];
-        const kept = live
-          ? await liveSourceKeys(tx, projectId, keys)
-          : new Set<string | null>();
-        // Used and retired again since: the newer row waits its own time.
-        if (keys.length)
-          for (const { objectKey } of await tx
-            .select({ objectKey: sourceGarbage.objectKey })
-            .from(sourceGarbage)
-            .where(
-              and(
-                eq(sourceGarbage.projectId, projectId),
-                inArray(sourceGarbage.objectKey, keys),
-                gt(sourceGarbage.createdAt, retiredBefore),
-                isNull(sourceGarbage.deletedAt),
-              ),
-            ))
-            kept.add(objectKey);
-        const claimed = queued.filter(
-          (row) =>
-            row.objectKey.startsWith(sourcePrefix(projectId)) &&
-            !kept.has(row.objectKey),
-        );
-        const claimedIds = new Set(claimed.map((row) => row.id));
-        const released = queued.filter((row) => !claimedIds.has(row.id));
-        if (released.length)
-          await tx.delete(sourceGarbage).where(
-            inArray(
-              sourceGarbage.id,
-              released.map((row) => row.id),
-            ),
-          );
-        if (claimed.length)
-          await tx
-            .update(sourceGarbage)
-            .set({ claimedAt: new Date() })
-            .where(inArray(sourceGarbage.id, [...claimedIds]));
-        return { claimed, remaining: queued.length === garbageBatchSize };
-      });
-      await deleteClaimed({ db, bucket }, batch.claimed);
-      ({ remaining } = batch);
-    }
-  }
-}
-
-// Long enough for any upload whose transaction has yet to commit.
-const unreferencedMs = 24 * 60 * 60_000;
-
-// Safety net for objects the queue cannot see: uploads whose SQL transaction
-// rolled back and projects removed by account or organization cascades. It
-// lists the whole prefix, so it runs daily rather than hourly.
-export async function sweepProjectSources({
-  db,
-  bucket,
-  uploadedBefore = new Date(Date.now() - unreferencedMs),
-}: {
-  db: Db;
-  bucket: SourceBucket;
-  uploadedBefore?: Date;
-}) {
-  let cursor: string | undefined;
-  do {
-    const page = await bucket.list({
-      prefix: "projects/",
-      cursor,
-      limit: garbageBatchSize,
-    });
+  let lastId = 0n;
+  for (;;) {
+    const queued = await db
+      .select()
+      .from(sourceGarbage)
+      .where(
+        and(
+          gt(sourceGarbage.id, lastId),
+          lte(sourceGarbage.createdAt, retiredBefore),
+        ),
+      )
+      .orderBy(sourceGarbage.id)
+      .limit(garbageBatchSize);
+    if (!queued.length) break;
+    lastId = queued[queued.length - 1]!.id;
     const byProject = new Map<string, string[]>();
-    for (const object of page.objects) {
-      const match =
-        /^projects\/([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})\/sources\/[0-9a-f]{64}$/.exec(
-          object.key,
-        );
-      if (!match?.[1] || object.uploaded > uploadedBefore) continue;
-      const keys = byProject.get(match[1]) ?? [];
-      keys.push(object.key);
-      byProject.set(match[1], keys);
+    for (const row of queued) {
+      const keys = byProject.get(row.projectId) ?? [];
+      keys.push(row.objectKey);
+      byProject.set(row.projectId, keys);
     }
-    for (const [projectId, keys] of byProject) {
-      const claimed = await db.transaction(async (tx) => {
-        const live = await lockProjectForCollection(tx, projectId);
-        const kept = live
-          ? await liveSourceKeys(tx, projectId, keys)
-          : new Set<string | null>();
-        // Queued objects are the hourly collection's.
-        for (const { objectKey } of await tx
-          .select({ objectKey: sourceGarbage.objectKey })
-          .from(sourceGarbage)
-          .where(
-            and(
-              eq(sourceGarbage.projectId, projectId),
-              inArray(sourceGarbage.objectKey, keys),
-              isNull(sourceGarbage.deletedAt),
-            ),
-          ))
-          kept.add(objectKey);
-        const garbage = keys.filter((key) => !kept.has(key));
-        return garbage.length
-          ? tx
-              .insert(sourceGarbage)
-              .values(
-                garbage.map((objectKey) => ({
-                  projectId,
-                  objectKey,
-                  claimedAt: new Date(),
-                })),
-              )
-              .returning({
-                id: sourceGarbage.id,
-                objectKey: sourceGarbage.objectKey,
-              })
-          : [];
-      });
-      await deleteClaimed({ db, bucket }, claimed);
+    const toDelete = new Set<string>();
+    for (const [projectId, projectKeys] of byProject) {
+      const keys = [...new Set(projectKeys)];
+      const kept = await liveSourceKeys(db, projectId, keys);
+      const prefix = sourcePrefix(projectId);
+      for (const key of keys)
+        if (key.startsWith(prefix) && !kept.has(key)) toDelete.add(key);
     }
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
+    if (toDelete.size) await bucket.delete([...toDelete]);
+    await db.delete(sourceGarbage).where(
+      inArray(
+        sourceGarbage.id,
+        queued.map((row) => row.id),
+      ),
+    );
+  }
 }

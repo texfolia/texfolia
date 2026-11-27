@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { compileDeltaSchema, hashSource } from "#/lib/compile";
 import { projectMetadataSchema, projectMetadataVersion } from "#/lib/projects";
+import { sourceHashFromKey } from "#/lib/storage";
 
 import { createProject } from "../src/lib/projects/project.server";
 import {
@@ -485,7 +486,7 @@ try {
   assert(assetVersion?.objectKey);
   assert.equal(
     submissions.at(-1)?.files["asset.bin"]?.hash,
-    assetVersion.objectKey.split("/").at(-1),
+    sourceHashFromKey(assetVersion.objectKey),
   );
   const version = await db.query.projectNode.findFirst({
     where: { id: main.id },

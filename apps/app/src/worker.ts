@@ -4,8 +4,7 @@ import { createDb, type Db } from "@texfolia/db";
 import { gatewayRequestCost } from "#/lib/ai/gateway";
 import { reconcileAiUsage } from "#/lib/billing/server";
 import { handleBuildQueue } from "#/lib/builds/server";
-import { collectGitObjects, collectLegacyHistory } from "#/lib/git/server";
-import { sweepProjectSources } from "#/lib/storage/server";
+import { collectGitObjects } from "#/lib/git/server";
 
 import { aiConfig } from "./lib/ai/ai-config.server";
 import { collectProjectSources } from "./lib/projects/project-source.server";
@@ -15,19 +14,20 @@ import { cspNonceHeader, withSecurityHeaders } from "./lib/security-headers";
 export { CompileUsage, ProjectBuilds } from "./lib/builds/server";
 export { ProjectCollaboration } from "./lib/collaboration/project-collaboration.server";
 
-// Runs each job on its own connection: jobs sharing a pool of one would wait for
-// each other's queries and transactions. One failing does not stop the rest.
-async function runScheduled(env: Env, jobs: ((db: Db) => Promise<unknown>)[]) {
-  const results = await Promise.allSettled(
-    jobs.map(async (job) => {
-      const db = createDb(env.HYPERDRIVE.connectionString);
-      try {
-        await job(db);
-      } finally {
-        await db.$client.end();
-      }
-    }),
-  );
+// Runs a job on its own Postgres connection so concurrent jobs do not contend
+// on a single-connection pool. Jobs that do not need Postgres never open one.
+async function withDb<T>(env: Env, job: (db: Db) => Promise<T>) {
+  const db = createDb(env.HYPERDRIVE.connectionString);
+  try {
+    return await job(db);
+  } finally {
+    await db.$client.end();
+  }
+}
+
+// One failing job does not stop the rest.
+async function runScheduled(jobs: (() => Promise<unknown>)[]) {
+  const results = await Promise.allSettled(jobs.map((job) => job()));
   const failures = results.flatMap((result) =>
     result.status === "rejected" ? [result.reason] : [],
   );
@@ -52,28 +52,32 @@ export default {
     });
   },
   queue: handleBuildQueue,
-  async scheduled(controller, env) {
+  async scheduled(_controller, env) {
     const { SOURCES: bucket, COLLABORATION: collaboration } = env;
-    if (controller.cron === "17 * * * *")
-      await runScheduled(env, [
-        (db) => deleteExpiredProjects({ db, collaboration }),
-        (db) => collectProjectSources({ db, bucket, collaboration }),
-        (db) => collectGitObjects({ db, bucket }),
-        () => collectLegacyHistory(bucket),
-      ]);
-    else if (controller.cron === "41 3 * * *")
-      await runScheduled(env, [(db) => sweepProjectSources({ db, bucket })]);
-    else
-      await runScheduled(env, [
-        async (db) => {
-          if (!process.env.CLOUDFLARE_AI_API_TOKEN) return;
+    const jobs: (() => Promise<unknown>)[] = [
+      () => withDb(env, (db) => deleteExpiredProjects({ db, collaboration })),
+      () =>
+        withDb(env, (db) =>
+          collectProjectSources({ db, bucket, collaboration }),
+        ),
+      () => withDb(env, (db) => collectGitObjects({ db, bucket })),
+    ];
+    if (process.env.CLOUDFLARE_AI_API_TOKEN)
+      jobs.push(() =>
+        withDb(env, async (db) => {
           const config = aiConfig();
-          await reconcileAiUsage({
+          const { retryAfterSeconds } = await reconcileAiUsage({
             db,
             config,
             requestCost: gatewayRequestCost(config),
           });
-        },
-      ]);
+          if (retryAfterSeconds !== null)
+            await env.BACKGROUND.send(
+              { kind: "reconcile-ai-usage" },
+              { delaySeconds: retryAfterSeconds + 5 },
+            );
+        }),
+      );
+    await runScheduled(jobs);
   },
 } satisfies ExportedHandler<Env>;

@@ -55,7 +55,7 @@ import {
 import { transferProject } from "../../src/lib/sharing/project-transfer.server";
 
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
-import { collectProjectSources, sweepProjectSources } from "../collection";
+import { collectProjectSources } from "../collection";
 
 /** The main document is shared, and follows the file that was chosen. */
 async function checkMainFile({
@@ -187,7 +187,6 @@ async function checkLifecycle({
     (await bucket.list({ prefix: `projects/${id}/sources/` })).objects.length;
   const collect = async () => {
     await collectProjectSources({ db, bucket, collaboration });
-    await sweepProjectSources({ db, bucket });
   };
   const listed = async (userId: string, id: string) =>
     (await getProjects({ db, userId })).projects.find((item) => item.id === id);

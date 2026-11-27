@@ -16,7 +16,11 @@ import {
 } from "#/lib/projects";
 import { saveProjectSource } from "#/lib/projects/project-source.functions";
 import type { ProjectDetails } from "#/lib/projects/project.functions";
-import { encodeSource, type SourceFiles } from "#/lib/storage";
+import {
+  encodeSource,
+  sourceHashFromKey,
+  type SourceFiles,
+} from "#/lib/storage";
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState } from "#/providers/workspace-provider";
 
@@ -164,10 +168,11 @@ export function useSourceSave({
     for (const node of nodes) {
       const path = paths.get(node.id);
       if (node.kind !== "text" || !path) continue;
-      const hash = versions[node.id]?.objectKey?.split("/").at(-1);
+      const objectKey = versions[node.id]?.objectKey ?? null;
+      const hash = sourceHashFromKey(objectKey);
       sources[path] = saved
-        ? hash
-          ? { hash }
+        ? hash && objectKey
+          ? { hash, key: objectKey }
           : ""
         : (live.get(node.id)?.text.toString() ??
           drafts.get(node.id)?.value ??
@@ -179,9 +184,11 @@ export function useSourceSave({
     });
     if (saved)
       for (const { id, path } of binaries) {
-        const hash = versions[id]?.objectKey?.split("/").at(-1);
-        if (!hash) throw new Error(`Save ${path} before compiling`);
-        sources[path] = { hash };
+        const objectKey = versions[id]?.objectKey ?? null;
+        const hash = sourceHashFromKey(objectKey);
+        if (!hash || !objectKey)
+          throw new Error(`Save ${path} before compiling`);
+        sources[path] = { hash, key: objectKey };
       }
     else
       await mapLimit(binaries, binaryFetchLimit, async ({ id, path }) => {

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { gitActionSchema } from "#/lib/git";
-import { collectGitObjects, collectLegacyHistory } from "#/lib/git/server";
+import { collectGitObjects } from "#/lib/git/server";
 
 import { createAuth } from "../../src/lib/auth/auth";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
@@ -46,7 +46,6 @@ export default {
           bucket: env.SOURCES,
           uploadedBefore: afterNow(),
         });
-        await collectLegacyHistory(env.SOURCES);
         return Response.json({ ok: true });
       }
       const data = z

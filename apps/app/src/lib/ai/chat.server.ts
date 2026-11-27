@@ -318,6 +318,7 @@ export async function startAssistant({
   waitUntil,
   createAuth,
   workspace,
+  scheduleReconcile,
   userId,
   canWrite,
   organizationId,
@@ -335,6 +336,8 @@ export async function startAssistant({
   waitUntil: (promise: Promise<unknown>) => void;
   createAuth: (db: Db) => Auth;
   workspace: AssistantWorkspace;
+  /** Enqueues a delayed background retry when metering cannot settle immediately. */
+  scheduleReconcile?: (runId: string, delaySeconds: number) => Promise<void>;
   userId: string;
   canWrite: boolean;
   /** The project's organization, which the tools re-check entitlement against. */
@@ -679,12 +682,14 @@ export async function startAssistant({
         .update(aiRun)
         .set({ status: outcome, finishedAt: new Date() })
         .where(and(eq(aiRun.id, runId), eq(aiRun.status, "running")));
-      await reconcileAiUsage({
+      const { retryAfterSeconds } = await reconcileAiUsage({
         db,
         config,
         requestCost: gatewayRequestCost(config),
         runId,
       });
+      if (retryAfterSeconds !== null)
+        await scheduleReconcile?.(runId, retryAfterSeconds + 5);
     };
     const settled = Promise.withResolvers<void>();
     waitUntil(settled.promise);
@@ -700,9 +705,17 @@ export async function startAssistant({
       abort.abort();
       void closing
         .then(settleRun)
-        .catch((error: unknown) => {
-          // The scheduled reconciler settles what is left.
+        .catch(async (error: unknown) => {
           console.error({ event: "ai_run_settle_failed", runId, error });
+          await scheduleReconcile?.(runId, 60).catch(
+            (scheduleError: unknown) => {
+              console.error({
+                event: "ai_reconcile_schedule_failed",
+                runId,
+                error: scheduleError,
+              });
+            },
+          );
         })
         .then(() => db.$client.end())
         .catch((error: unknown) => {

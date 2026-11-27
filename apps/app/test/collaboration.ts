@@ -29,6 +29,7 @@ import {
   type ServerMessage,
 } from "#/lib/collaboration";
 import { hashSource } from "#/lib/compile";
+import { sourceHashFromKey } from "#/lib/storage";
 
 import { createProject } from "../src/lib/projects/project.server";
 import type { BrowserApi } from "./collaboration/browser";
@@ -501,16 +502,18 @@ try {
   const expectedText = await a.page.evaluate(() =>
     window.collaborationTest.value(),
   );
-  const expectedKey = `projects/${projectId}/sources/${await hashSource(new TextEncoder().encode(expectedText))}`;
+  const expectedHash = await hashSource(new TextEncoder().encode(expectedText));
   for (let attempt = 0; attempt < 100; attempt++) {
     const row = await db.query.projectNode.findFirst({ where: { id: nodeId } });
-    if (row?.objectKey === expectedKey) break;
+    if (sourceHashFromKey(row?.objectKey) === expectedHash) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert.equal(
-    (await db.query.projectNode.findFirst({ where: { id: nodeId } }))
-      ?.objectKey,
-    expectedKey,
+    sourceHashFromKey(
+      (await db.query.projectNode.findFirst({ where: { id: nodeId } }))
+        ?.objectKey,
+    ),
+    expectedHash,
     "Alarm must persist merged text without Save",
   );
   const saved = await a.page.evaluate(() => window.collaborationTest.save());

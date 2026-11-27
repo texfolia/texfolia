@@ -38,6 +38,7 @@ export const sourceDeltaSchema = z
       sourcePathSchema,
       z.object({
         hash: sourceHashSchema,
+        key: z.string().optional(),
         content: contentSchema.optional(),
         size: sizeSchema.optional(),
       }),
@@ -195,7 +196,16 @@ export async function applySourceDelta(options: {
       const draft =
         drafts.get(file.hash)?.length ?? sources.drafts.size(file.hash);
       if (draft !== null) return [path, { hash: file.hash, size: draft }];
-      const key = savedSourceKey(projectId, file.hash);
+      const key = file.key ?? savedSourceKey(projectId, file.hash);
+      const prefix = `projects/${projectId}/sources/`;
+      const name = key.startsWith(prefix) ? key.slice(prefix.length) : "";
+      if (
+        !/^(?:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-)?[0-9a-f]{64}$/.test(
+          name,
+        ) ||
+        !name.endsWith(file.hash)
+      )
+        throw new SourceResyncError(revision);
       const size = file.size ?? (await sources.saved.size(key));
       if (size === null) throw new SourceResyncError(revision);
       return [path, { hash: file.hash, size, key }];

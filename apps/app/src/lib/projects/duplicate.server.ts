@@ -41,26 +41,36 @@ export async function duplicateProject({
     return { source, nodes };
   });
   const id = crypto.randomUUID();
-  // Nodes with the same content share an object, so copy each one once.
-  const sizes = new Map<string, bigint>();
-  for (const node of nodes)
-    if (node.objectKey) sizes.set(node.objectKey, node.sizeBytes);
-  const keys = new Map(
-    await mapLimit(
-      [...sizes],
-      sourceConcurrency,
-      async ([from, sizeBytes]) =>
-        [
-          from,
-          await copySource({
-            bucket,
-            from,
-            to: `projects/${id}/sources`,
-            sizeBytes: Number(sizeBytes),
-          }),
-        ] as const,
-    ),
+  const sourceNodes = nodes.filter(
+    (node): node is typeof node & { objectKey: string } =>
+      node.objectKey !== null,
   );
+  const copiedKeys: string[] = [];
+  let keys: Map<string, string>;
+  try {
+    keys = new Map(
+      await mapLimit(sourceNodes, sourceConcurrency, async (node) => {
+        const key = await copySource({
+          bucket,
+          from: node.objectKey,
+          to: `projects/${id}/sources`,
+          sizeBytes: Number(node.sizeBytes),
+        });
+        copiedKeys.push(key);
+        return [node.id, key] as const;
+      }),
+    );
+  } catch (error) {
+    if (copiedKeys.length)
+      await bucket.delete(copiedKeys).catch((deleteError: unknown) => {
+        console.error("Failed to clean up aborted project duplicate", {
+          projectId: id,
+          count: copiedKeys.length,
+          error: deleteError,
+        });
+      });
+    throw error;
+  }
   const ids = new Map(nodes.map((node) => [node.id, crypto.randomUUID()]));
   const copies = nodes.map((node) => {
     const copyId = ids.get(node.id);
@@ -73,33 +83,45 @@ export async function duplicateProject({
       parentId,
       name: node.name,
       kind: node.kind,
-      objectKey: node.objectKey ? keys.get(node.objectKey) : null,
+      objectKey: node.objectKey ? keys.get(node.id) : null,
       sizeBytes: node.sizeBytes,
     };
   });
-  return db.transaction(async (tx) => {
-    // Every name allocation locks the owner's row first.
-    await tx
-      .select({ id: user.id })
-      .from(user)
-      .where(eq(user.id, userId))
-      .for("update");
-    const name = await availableProjectName(
-      tx,
-      { ownerId: userId },
-      `${source.name} copy`,
-    );
-    await tx.insert(project).values({
-      id,
-      ownerId: userId,
-      name,
-      formatIndent: source.formatIndent,
-      formatWrap: source.formatWrap,
-      formatWidth: source.formatWidth,
-      spellcheckLanguage: source.spellcheckLanguage,
-      mainFile: source.mainFile,
+  try {
+    return await db.transaction(async (tx) => {
+      // Every name allocation locks the owner's row first.
+      await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.id, userId))
+        .for("update");
+      const name = await availableProjectName(
+        tx,
+        { ownerId: userId },
+        `${source.name} copy`,
+      );
+      await tx.insert(project).values({
+        id,
+        ownerId: userId,
+        name,
+        formatIndent: source.formatIndent,
+        formatWrap: source.formatWrap,
+        formatWidth: source.formatWidth,
+        spellcheckLanguage: source.spellcheckLanguage,
+        mainFile: source.mainFile,
+      });
+      if (copies.length) await tx.insert(projectNode).values(copies);
+      return { id, name };
     });
-    if (copies.length) await tx.insert(projectNode).values(copies);
-    return { id, name };
-  });
+  } catch (error) {
+    if (copiedKeys.length)
+      await bucket.delete(copiedKeys).catch((deleteError: unknown) => {
+        console.error("Failed to clean up rolled-back project duplicate", {
+          projectId: id,
+          count: copiedKeys.length,
+          error: deleteError,
+        });
+      });
+    throw error;
+  }
 }

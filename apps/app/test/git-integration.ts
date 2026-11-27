@@ -472,18 +472,12 @@ try {
       "live edit\ninitial\n",
       "Unlink retains files",
     );
-    await restartedBucket.put(`history/${projectId}/old.yjs`, "old snapshot");
     const collected = await mf.dispatchFetch(
       `${(await mf.ready).origin}/collect`,
     );
     assert.equal(collected.status, 200, await collected.text());
     assert.equal(
       (await restartedBucket.list({ prefix: `git/${projectId}/` })).objects
-        .length,
-      0,
-    );
-    assert.equal(
-      (await restartedBucket.list({ prefix: `history/${projectId}/` })).objects
         .length,
       0,
     );
