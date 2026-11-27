@@ -176,8 +176,8 @@ test("container start distinguishes cold, warm, and prewarmed", () => {
   expect(containerStart(undefined).kind).toBe("unknown");
 });
 
-test("stored texlive engine values parse as unknown", () => {
+test("unsupported engine values are ignored by job timeline parsing", () => {
   expect(
-    parseJobTimeline({ compiler: { engine: "texlive" } }).compiler?.engine,
-  ).toBe("unknown");
+    parseJobTimeline({ compiler: { engine: "unsupported" } }).compiler,
+  ).toBeUndefined();
 });

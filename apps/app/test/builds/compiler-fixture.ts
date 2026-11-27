@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 
 import {
   compileHeaders,
-  CompileManifest,
-  CompileOptions,
+  compileManifestSchema,
+  compileOptionsSchema,
   compileOptionHeaders,
   collectArchive,
   writeArchive,
+  type CompileManifest,
+  type CompileOptions,
 } from "@texfolia/contracts/compiler";
-import { Schema } from "effect";
 
-const decodeOptions = Schema.decodeUnknownSync(CompileOptions);
-const decodeManifest = Schema.decodeUnknownSync(
-  Schema.fromJsonString(CompileManifest),
-);
+const decodeOptions = (input: unknown) => compileOptionsSchema.parse(input);
+const decodeManifest = (text: string) =>
+  compileManifestSchema.parse(JSON.parse(text));
 const encode = (value: string | Uint8Array) =>
   typeof value === "string" ? new TextEncoder().encode(value) : value;
 

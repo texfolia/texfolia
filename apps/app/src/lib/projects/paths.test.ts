@@ -106,39 +106,17 @@ test("creation checks assembled paths, UTF-8 lengths, and reserved roots", () =>
   );
 });
 
-test("legacy names can be repaired one at a time while preserving ids and tree", () => {
-  let nodes: Parameters<typeof projectPaths>[0] = [
+test("invalid paths are detected and rejected before compilation", () => {
+  const nodes: Parameters<typeof projectPaths>[0] = [
     root,
     { ...folder, name: "chapters:1" },
     { ...file, name: "intro:1.tex" },
   ];
   expect(invalidProjectPaths(nodes)).toHaveLength(2);
-  expect(() => assertProjectSourcePaths(nodes)).toThrow(/Repair source paths/);
-  nodes = renamedProjectNodes(nodes, folder.id, "chapters", root.id);
-  expect(invalidProjectPaths(nodes)).toHaveLength(1);
-  nodes = renamedProjectNodes(nodes, file.id, "intro.tex", folder.id);
-  expect(invalidProjectPaths(nodes)).toHaveLength(0);
-  expect(nodes).toEqual([root, folder, file]);
+  expect(() => assertProjectSourcePaths(nodes)).toThrow(/colons/);
 });
 
-test("folder renames check descendants and permit incremental shortening of legacy paths", () => {
-  const nodes = [
-    root,
-    { ...folder, name: "a".repeat(230) },
-    { ...file, name: "b".repeat(20) },
-  ];
-  expect(() =>
-    renamedProjectNodes(nodes, folder.id, "c".repeat(231), root.id),
-  ).toThrow(/240 UTF-8 bytes/);
-  let repaired = renamedProjectNodes(
-    nodes,
-    folder.id,
-    "a".repeat(225),
-    root.id,
-  );
-  expect(invalidProjectPaths(repaired)).toHaveLength(1);
-  repaired = renamedProjectNodes(repaired, file.id, "intro.tex", folder.id);
-  expect(invalidProjectPaths(repaired)).toHaveLength(0);
+test("folder renames check descendants and enforce source path rules", () => {
   const valid = [root, folder, { ...file, name: "a".repeat(230) }];
   expect(() =>
     renamedProjectNodes(valid, folder.id, "long-chapters", root.id),
@@ -149,33 +127,17 @@ test("folder renames check descendants and permit incremental shortening of lega
   expect(() =>
     renamedProjectNodes([root, folder, file], root.id, "renamed", root.id),
   ).toThrow(/not found/);
-});
-
-test("deep legacy paths can move closer to the root without changing ids", () => {
-  const folders: Parameters<typeof projectPaths>[0] = Array.from(
-    { length: 121 },
-    (_, i) => ({
-      id: `folder-${i}`,
-      parentId: i === 0 ? root.id : `folder-${i - 1}`,
-      name: "a",
-      kind: "folder",
-    }),
-  );
-  const nested = { ...file, parentId: "folder-120" };
-  const nodes = [root, ...folders, nested];
-  expect(invalidProjectPaths(nodes).length).toBeGreaterThan(0);
-  const repaired = renamedProjectNodes(
-    nodes,
-    "folder-120",
-    "recovered",
-    root.id,
-  );
-  expect(invalidProjectPaths(repaired)).toHaveLength(0);
-  expect(projectPaths(repaired).get(file.id)).toBe("recovered/intro.tex");
   expect(() =>
     renamedProjectNodes([root, folder, file], folder.id, "chapters", folder.id),
   ).toThrow(/subtree/);
   expect(() =>
     renamedProjectNodes([root, folder, file], file.id, "intro.tex", file.id),
   ).toThrow(/Folder not found/);
+  const moved = renamedProjectNodes(
+    [root, folder, file],
+    file.id,
+    "moved.tex",
+    root.id,
+  );
+  expect(projectPaths(moved).get(file.id)).toBe("moved.tex");
 });

@@ -11,25 +11,30 @@ const timing = {
   outputMs: 3,
 };
 
-test("engine timing reads texlive as unknown", () => {
-  expect(
-    parseEngineTiming(JSON.stringify({ ...timing, engine: "texlive" })).engine,
-  ).toBe("unknown");
+test("engine timing parses tectonic and falls back to unknown on invalid engine", () => {
   expect(
     parseEngineTiming(JSON.stringify({ ...timing, engine: "tectonic" })).engine,
   ).toBe("tectonic");
+  expect(
+    parseEngineTiming(JSON.stringify({ ...timing, engine: "unsupported" }))
+      .engine,
+  ).toBe("unknown");
 });
 
-test("stored job timing with texlive still parses", () => {
-  const parsed = jobTimingSchema.safeParse({
+test("job timing accepts tectonic and rejects unsupported engine names", () => {
+  const base = {
     ...timing,
-    engine: "texlive",
     plan: "free",
     attempt: 1,
     queueWaitMs: null,
     engineRequestMs: 0,
     publishMs: 0,
     backendMs: 0,
-  });
-  expect(parsed.success && parsed.data.engine).toBe("unknown");
+  };
+  expect(
+    jobTimingSchema.safeParse({ ...base, engine: "tectonic" }).success,
+  ).toBe(true);
+  expect(
+    jobTimingSchema.safeParse({ ...base, engine: "unsupported" }).success,
+  ).toBe(false);
 });

@@ -7,10 +7,8 @@ import {
   latex,
   latexTags,
 } from "@texfolia/codemirror-lang-latex";
-import * as uiw from "@uiw/codemirror-themes-all";
 import { EditorState, EditorView, type Extension } from "@uiw/react-codemirror";
 
-import { renderThemeCatalog } from "../../../../scripts/generate-theme-catalog";
 import {
   appearanceSchema,
   defaultAppearance,
@@ -27,22 +25,14 @@ import {
   themeCatalog,
 } from "./themes";
 
-test("generated theme catalog is current", async () => {
-  for (const [path, text] of Object.entries(await renderThemeCatalog()))
-    expect(await Bun.file(path).text()).toBe(text);
-});
-
-test("catalog includes exactly every exported UIW theme with its native settings and mode", async () => {
-  const ids = Object.keys(uiw)
-    .filter((key) => key.endsWith("Init"))
-    .map((key) => key.slice(0, -4))
-    .sort();
-  expect(ids).toEqual(themeCatalog.map((theme) => theme.id).sort());
-  expect(new Set(themeCatalog.map((theme) => theme.id)).size).toBe(ids.length);
+test("catalog has unique themes with matching CodeMirror extensions and modes", async () => {
+  expect(themeCatalog.length).toBeGreaterThanOrEqual(8);
+  expect(new Set(themeCatalog.map((theme) => theme.id)).size).toBe(
+    themeCatalog.length,
+  );
   for (const definition of themeCatalog) {
     const resolved = resolveTheme(definition);
     const loaded = await loadThemeExtension(definition.id);
-    expect(loaded).toBe(uiw[definition.id]);
     expect(loadedThemeExtension(definition.id)).toBe(loaded);
     const extension = editorTheme(resolved, loaded);
     expect(resolved.variables["--background"]).toBe(
@@ -56,23 +46,30 @@ test("catalog includes exactly every exported UIW theme with its native settings
     ).toBe(definition.mode === "dark");
   }
   const dracula = resolveTheme(catalogTheme("dracula"));
-  expect(uiw.defaultSettingsDracula).toEqual(dracula.settings);
-  expect(uiw.defaultSettingsDracula.selection).toBe(
-    dracula.variables["--selection"],
-  );
-  expect(uiw.defaultSettingsDracula.caret).toBe(dracula.variables["--ring"]);
-  expect(dracula.variables["--sidebar"]).toContain(
-    uiw.defaultSettingsDracula.background!,
-  );
-  expect(resolveTheme(catalogTheme("basicDark")).variables["--border"]).toBe(
-    "#ffffff10",
-  );
+  expect(dracula.variables["--selection"]).toBe(dracula.settings.selection!);
+  expect(dracula.variables["--ring"]).toBe(dracula.settings.caret!);
+  expect(dracula.variables["--sidebar"]).toContain(dracula.settings.background);
   expect(
-    resolveTheme(catalogTheme("basicLight")).variables["--border"],
+    resolveTheme({
+      ...catalogTheme("dracula"),
+      settings: {
+        ...catalogTheme("dracula").settings,
+        gutterBorder: "1px solid #ffffff10",
+      },
+    }).variables["--border"],
+  ).toBe("#ffffff10");
+  expect(
+    resolveTheme({
+      ...catalogTheme("githubLight"),
+      settings: {
+        ...catalogTheme("githubLight").settings,
+        gutterBorder: "none",
+      },
+    }).variables["--border"],
   ).not.toBe("none");
 });
 
-test("native UIW highlighting handles the inherited LaTeX tags", async () => {
+test("theme highlighting handles the inherited LaTeX tags", async () => {
   const state = EditorState.create({
     extensions: editorTheme(
       resolveTheme(catalogTheme("dracula")),

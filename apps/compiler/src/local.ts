@@ -2,88 +2,71 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { Effect, Layer, ManagedRuntime, Schedule } from "effect";
-
-import { Background } from "./background";
-import { serve } from "./compile";
-import { PoolConfig } from "./config";
-import type { Containers } from "./containers";
-import { PoolManagerService, PoolStore } from "./pool";
+import { handle } from "./compile";
+import { poolSettings } from "./config";
+import type { ContainerPlatform } from "./containers";
+import { createPoolManager, type PoolStore } from "./pool";
 
 /** Keeps the pool's state across restarts of the local process. */
-export const sqliteStore = (path: string) =>
-  Layer.effect(
-    PoolStore,
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        mkdirSync(dirname(path), { recursive: true });
-        const db = new Database(path, { strict: true });
-        db.run("PRAGMA journal_mode = WAL");
-        db.run(
-          "CREATE TABLE IF NOT EXISTS pool (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
-        );
-        return db;
-      }),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(
-      Effect.map((db) =>
-        PoolStore.of({
-          load: () =>
-            db
-              .query<{ value: string }, []>(
-                "SELECT value FROM pool WHERE id = 1",
-              )
-              .get()?.value ?? null,
-          save: (value) => {
-            db.run("INSERT OR REPLACE INTO pool VALUES (1, ?)", [value]);
-          },
-        }),
-      ),
-    ),
+export function sqliteStore(path: string): PoolStore & { close(): void } {
+  mkdirSync(dirname(path), { recursive: true });
+  const db = new Database(path, { strict: true });
+  db.run("PRAGMA journal_mode = WAL");
+  db.run(
+    "CREATE TABLE IF NOT EXISTS pool (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
   );
+  return {
+    load: () =>
+      db
+        .query<{ value: string }, []>("SELECT value FROM pool WHERE id = 1")
+        .get()?.value ?? null,
+    save: (value) => {
+      db.run("INSERT OR REPLACE INTO pool VALUES (1, ?)", [value]);
+    },
+    close: () => db.close(),
+  };
+}
 
-/** The compiler in one process: the Worker's programs with local services. */
+/** The compiler in one process: the Worker's handlers with local services. */
 export function createLocalCompiler(options: {
   variables: unknown;
-  store: Layer.Layer<PoolStore>;
-  containers: Layer.Layer<Containers>;
+  store: PoolStore & { close?: () => void };
+  containers: ContainerPlatform;
   maintenance?: boolean;
 }) {
-  const manager = PoolManagerService.layer.pipe(
-    Layer.provide(options.store),
-    Layer.provide(PoolConfig.layer(options.variables)),
-  );
-  const maintenance = Layer.effectDiscard(
-    Effect.gen(function* () {
-      const pool = yield* PoolManagerService;
-      yield* pool.maintain.pipe(
-        Effect.repeat(Schedule.spaced("60 seconds")),
-        Effect.forkScoped,
-      );
-    }),
-  );
-  const services = PoolManagerService.poolLayer.pipe(
-    Layer.merge(options.maintenance === false ? Layer.empty : maintenance),
-    Layer.provideMerge(manager),
-    Layer.provideMerge(options.containers),
-    Layer.provideMerge(
-      Layer.succeed(Background, {
-        run: (effect) => {
-          Effect.runFork(effect);
-        },
-      }),
-    ),
-  );
-  const runtime = ManagedRuntime.make(services);
+  const pending = new Set<Promise<unknown>>();
+  const waitUntil = (task: Promise<unknown>) => {
+    const tracked = task.finally(() => {
+      pending.delete(tracked);
+    });
+    pending.add(tracked);
+  };
+  const pool = createPoolManager({
+    settings: poolSettings(options.variables),
+    containers: options.containers,
+    store: options.store,
+    waitUntil,
+  });
+  let interval: ReturnType<typeof setInterval> | undefined;
+  if (options.maintenance !== false) {
+    interval = setInterval(() => {
+      void pool.maintain();
+    }, 60_000);
+  }
   return {
     fetch: (request: Request) =>
-      serve(request, (program, options) =>
-        runtime.runPromiseExit(program, options),
-      ),
-    snapshot: () =>
-      runtime.runPromise(PoolManagerService.use((pool) => pool.snapshot)),
-    maintain: () =>
-      runtime.runPromise(PoolManagerService.use((pool) => pool.maintain)),
-    close: () => runtime.dispose(),
+      handle(request, {
+        pool,
+        containers: options.containers,
+        waitUntil,
+      }),
+    snapshot: () => Promise.resolve(pool.snapshot()),
+    maintain: () => pool.maintain(),
+    close: async () => {
+      if (interval) clearInterval(interval);
+      pool.dispose();
+      await Promise.allSettled(pending);
+      options.store.close?.();
+    },
   };
 }

@@ -3,8 +3,6 @@
   "ignorePatterns": [
     ".agents/skills/*",
     "apps/*/src/routeTree.gen.ts",
-    "apps/app/src/lib/editor/themes/theme-catalog.gen.ts",
-    "apps/app/src/lib/editor/themes/theme-loaders.gen.ts",
     "apps/app/worker-configuration.d.ts",
     "packages/codemirror-lang-latex/src/parser.js",
     "packages/tex-fmt/src/wasm/*"

@@ -1,9 +1,7 @@
-import { useLiveQuery } from "@tanstack/react-db";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { createBrowserSettingsStore } from "#/lib/settings/settings.functions";
-import { defaultShortcuts } from "#/lib/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,
@@ -11,26 +9,9 @@ import {
 
 export function NavigationShortcuts({ userId }: { userId: string }) {
   const [store] = useState(() => createBrowserSettingsStore(window, userId));
-  const [ready, setReady] = useState(false);
-  const { data } = useLiveQuery({
-    query: (q) =>
-      ready ? q.from({ preferences: store.preferences }) : undefined,
-  });
-  useEffect(() => {
-    let active = true;
-    void store
-      .initialize()
-      .then(() => {
-        if (active) setReady(true);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-      void store.preferences.cleanup({ dependents: true });
-    };
-  }, [store]);
+  const settings = useSyncExternalStore(store.subscribe, store.get, store.get);
   return (
-    <ShortcutsProvider map={data?.[0]?.shortcuts ?? defaultShortcuts}>
+    <ShortcutsProvider map={settings.shortcuts}>
       <NavigationActions />
     </ShortcutsProvider>
   );

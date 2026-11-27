@@ -1,16 +1,9 @@
 import { CollaborationConnection } from "./connection";
 import { CollaborativeFile } from "./file";
-import {
-  finishUnmarkedDocuments,
-  unmarkedDocuments,
-  unsyncedDocuments,
-} from "./unsynced";
+import { unsyncedDocuments } from "./unsynced";
 
 type FileOptions = ConstructorParameters<typeof CollaborativeFile>[0];
 type Saved = Parameters<NonNullable<FileOptions["onSaved"]>>[0];
-
-// Unmarked caches are checked a few at a time, since a project may have many.
-const unmarkedLimit = 4;
 
 /**
  * The live documents of one project. A document connects while something holds
@@ -24,7 +17,6 @@ export class CollaborativeDocuments {
   private saving = new Set<string>();
   // Documents held until they synchronize edits cached by an earlier session.
   private recovering = new Set<string>();
-  private unmarked: string[] | undefined;
   private recoveryStarted = false;
   private destroyed = false;
   private connection: CollaborationConnection;
@@ -41,8 +33,6 @@ export class CollaborativeDocuments {
       connection?: CollaborationConnection;
       /** How long a released document stays connected, so reopening is cheap. */
       closeDelayMs?: number;
-      /** False when no document was ever cached without an unsynced marker. */
-      recoverUnmarked?: boolean;
       onChange: (id: string, value: string, local: boolean | undefined) => void;
       onSaved: (id: string, saved: Saved, file: CollaborativeFile) => void;
       /** Called before a document closes, while its text can still be read. */
@@ -68,7 +58,7 @@ export class CollaborativeDocuments {
       file.refreshAccess(project.canWrite);
     for (const id of this.holds.keys()) this.open(id);
     for (const id of project.deleted) {
-      this.recovered(id);
+      this.recovering.delete(id);
       // Keep deleted documents and their panels available for copying/recovery.
       // Retiring stops reconnects without discarding the IndexedDB document.
       this.files.get(id)?.retire();
@@ -76,7 +66,7 @@ export class CollaborativeDocuments {
     }
     if (project.canWrite && !this.recoveryStarted) {
       this.recoveryStarted = true;
-      void this.recover();
+      this.recover();
     }
   }
 
@@ -142,7 +132,6 @@ export class CollaborativeDocuments {
     for (const timer of this.closing.values()) clearTimeout(timer);
     this.closing.clear();
     this.recovering.clear();
-    this.unmarked = undefined;
     this.recoveryStarted = false;
     for (const file of this.files.values()) file.destroy();
     this.files.clear();
@@ -180,7 +169,7 @@ export class CollaborativeDocuments {
           initialized = true;
           this.options.onDocuments();
         }
-        if (file.getStatus().connected) this.recovered(id);
+        if (file.getStatus().connected) this.recovering.delete(id);
         this.scheduleClose(id);
       },
     });
@@ -224,39 +213,11 @@ export class CollaborativeDocuments {
   }
 
   // Merges edits that an earlier session cached but never synchronized.
-  private async recover() {
+  private recover() {
     for (const id of unsyncedDocuments(this.options))
       if (this.project.textIds.has(id)) {
         this.recovering.add(id);
         this.open(id);
       }
-    if (this.options.recoverUnmarked === false) return;
-    try {
-      const unmarked = await unmarkedDocuments(this.options);
-      if (this.destroyed) return;
-      this.unmarked = unmarked.filter((id) => this.project.textIds.has(id));
-      this.recoverUnmarked();
-    } catch (error) {
-      console.error("Cached documents could not be listed", error);
-    }
-  }
-
-  private recoverUnmarked() {
-    if (!this.unmarked) return;
-    while (this.recovering.size < unmarkedLimit) {
-      const id = this.unmarked.pop();
-      if (id === undefined) break;
-      const connected = this.files.get(id)?.getStatus().connected;
-      if (connected || !this.project.textIds.has(id)) continue;
-      this.recovering.add(id);
-      this.open(id);
-    }
-    if (this.unmarked.length || this.recovering.size) return;
-    this.unmarked = undefined;
-    finishUnmarkedDocuments(this.options);
-  }
-
-  private recovered(id: string) {
-    if (this.recovering.delete(id)) this.recoverUnmarked();
   }
 }

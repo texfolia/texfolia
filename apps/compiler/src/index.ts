@@ -1,14 +1,14 @@
 import { assertLocalEnvironment } from "../../../scripts/local-environment.mts";
 import { poolSettings } from "./config";
 import { createLocalCompiler, sqliteStore } from "./local";
-import { dockerLayer } from "./local-containers";
+import { dockerContainers } from "./local-containers";
 
 assertLocalEnvironment(process.env);
 
 const compiler = createLocalCompiler({
   variables: process.env,
   store: sqliteStore(process.env.COMPILER_POOL_PATH ?? ".cache/pool.sqlite"),
-  containers: dockerLayer({
+  containers: dockerContainers({
     socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
     image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
     network: process.env.COMPILER_DOCKER_NETWORK,

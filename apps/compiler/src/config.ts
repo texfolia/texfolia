@@ -1,20 +1,23 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { z } from "zod";
 
-const integer = (fallback: number, minimum: number, maximum: number) =>
-  Schema.FiniteFromString.check(
-    Schema.isInt(),
-    Schema.isBetween({ minimum, maximum }),
-  ).pipe(Schema.withDecodingDefaultKey(Effect.succeed(String(fallback))));
+const envInt = (fallback: number, min: number, max: number) =>
+  z.preprocess(
+    (value) => (value === undefined ? String(fallback) : value),
+    z
+      .string()
+      .regex(/^\d+$/)
+      .transform(Number)
+      .pipe(z.number().int().min(min).max(max)),
+  );
 
 // Each variable is optional. wrangler.jsonc sets the deployed values.
-const Variables = Schema.Struct({
-  POOL_MIN_WARM: integer(0, 0, 100),
-  POOL_MAX_INSTANCES: integer(20, 1, 100),
-  POOL_CONCURRENCY: integer(1, 1, 16),
-  POOL_IDLE_MS: integer(600_000, 1_000, 86_400_000),
-  POOL_MAX_QUEUED: integer(100, 1, 10_000),
+const variablesSchema = z.object({
+  POOL_MIN_WARM: envInt(0, 0, 100),
+  POOL_MAX_INSTANCES: envInt(20, 1, 100),
+  POOL_CONCURRENCY: envInt(1, 1, 16),
+  POOL_IDLE_MS: envInt(600_000, 1_000, 86_400_000),
+  POOL_MAX_QUEUED: envInt(100, 1, 10_000),
 });
-const decodeVariables = Schema.decodeUnknownSync(Variables);
 
 export type PoolSettings = {
   /** Containers kept running at rest. Zero means strict scale-to-zero. */
@@ -41,7 +44,7 @@ export type PoolSettings = {
 };
 
 export function poolSettings(variables: unknown): PoolSettings {
-  const decoded = decodeVariables(variables);
+  const decoded = variablesSchema.parse(variables);
   return {
     minWarm: Math.min(decoded.POOL_MIN_WARM, decoded.POOL_MAX_INSTANCES),
     maxInstances: decoded.POOL_MAX_INSTANCES,
@@ -53,11 +56,4 @@ export function poolSettings(variables: unknown): PoolSettings {
     leaseMarginMs: 240_000,
     windowMs: 60_000,
   };
-}
-
-export class PoolConfig extends Context.Service<PoolConfig, PoolSettings>()(
-  "compiler/PoolConfig",
-) {
-  static layer = (variables: unknown) =>
-    Layer.sync(PoolConfig, () => poolSettings(variables));
 }

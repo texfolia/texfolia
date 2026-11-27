@@ -28,10 +28,6 @@ import { generatedTreeNodes } from "./generated-files";
 import { ProjectExport, type ProjectExportHandle } from "./project-export";
 import { ProjectFileTree } from "./project-file-tree";
 import type { SearchRequest } from "./project-search";
-import {
-  RepairSourcePaths,
-  type RepairSourcePathsHandle,
-} from "./repair-source-paths";
 import { UploadSource, type UploadSourceHandle } from "./upload-source";
 
 const GitPanel = lazyPanel("Git", async () => {
@@ -70,7 +66,6 @@ export function ProjectSidebar({
   createRef,
   uploadRef,
   exportRef,
-  repairRef,
 }: {
   name: string;
   nodes: ProjectNode[];
@@ -86,7 +81,6 @@ export function ProjectSidebar({
   createRef: RefObject<CreateNodeHandle | null>;
   uploadRef: RefObject<UploadSourceHandle | null>;
   exportRef: RefObject<ProjectExportHandle | null>;
-  repairRef: RefObject<RepairSourcePathsHandle | null>;
 }) {
   const files = useProjectFiles();
   const { projectId, drafts } = useWorkspaceActions();
@@ -201,9 +195,6 @@ export function ProjectSidebar({
             onCreated={onOpen}
           />
         </>
-      )}
-      {ready && (
-        <RepairSourcePaths ref={repairRef} nodes={nodes} canWrite={canWrite} />
       )}
       <ProjectExport ref={exportRef} name={name} sources={sources} />
       <Dialog

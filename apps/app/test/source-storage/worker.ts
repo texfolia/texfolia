@@ -182,7 +182,7 @@ export default {
           mainFile: "main.tex",
           sourceRevision: 0,
         }),
-        /Repair source paths/,
+        /colons/,
       );
       const invalidMetadata = await getProjectMetadata({
         db,
@@ -207,7 +207,7 @@ export default {
             },
           },
         }),
-        /Repair source paths/,
+        /colons/,
       );
       await assert.rejects(
         renameProjectNode({
@@ -227,9 +227,9 @@ export default {
         userId: ownerId,
         data: {
           projectId: pathProject.id,
-          nodeId: pathFolder.id,
-          parentId: pathRoot.id,
-          name: "chapters",
+          nodeId: boundary.id,
+          parentId: pathFolder.id,
+          name: "intro.tex",
         },
       });
       await renameProjectNode({
@@ -237,9 +237,9 @@ export default {
         userId: ownerId,
         data: {
           projectId: pathProject.id,
-          nodeId: boundary.id,
-          parentId: pathFolder.id,
-          name: "intro.tex",
+          nodeId: pathFolder.id,
+          parentId: pathRoot.id,
+          name: "chapters",
         },
       });
       const recovered = await db.query.projectNode.findFirst({

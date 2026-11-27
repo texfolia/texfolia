@@ -7,7 +7,7 @@
 // `result.json`, an optional `preview.png`, `artifacts/<index>`, and the next
 // `cache.tar.zst`. A failed compile answers 408, 413 or 422 with `result.json`
 // and its log. Any other failure is a JSON `CompileRejection`.
-import { Schema } from "effect";
+import { z } from "zod";
 
 import {
   collectEntry,
@@ -38,54 +38,54 @@ export const compileHeaders = {
   timing: "X-Compile-Timing",
 } as const;
 
-const Uuid = Schema.String.check(
-  Schema.isPattern(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
-);
-const Token = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9:._-]{1,128}$/));
-const SourceHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+export const compileIdSchema = z
+  .string()
+  .regex(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/);
+const tokenSchema = z.string().regex(/^[A-Za-z0-9:._-]{1,128}$/);
+const sourceHashSchema = z.string().regex(/^[0-9a-f]{64}$/);
+const headerInt = (min: number, max: number) =>
+  z
+    .string()
+    .regex(/^\d+$/)
+    .transform(Number)
+    .pipe(z.number().int().min(min).max(max));
 
 /** Everything the compiler needs besides the archive, carried in headers. */
-export const CompileOptions = Schema.Struct({
-  id: Uuid,
+export const compileOptionsSchema = z.object({
+  id: compileIdSchema,
   /** Opaque. Compiles with one key may reuse a container's retained sources. */
-  affinity: Token,
-  timeoutMs: Schema.FiniteFromString.check(
-    Schema.isInt(),
-    Schema.isBetween({ minimum: 1, maximum: maxCompileTimeoutMs }),
-  ),
+  affinity: tokenSchema,
+  timeoutMs: headerInt(1, maxCompileTimeoutMs),
   /** Only orders waiting compiles; higher goes first. */
-  priority: Schema.FiniteFromString.check(
-    Schema.isInt(),
-    Schema.isBetween({ minimum: 0, maximum: 9 }),
-  ),
+  priority: headerInt(0, 9),
   /**
    * Set for an incremental request: the container that ran this affinity's last
    * compile. The compiler answers `resync` when it is no longer available.
    */
-  container: Schema.optionalKey(Token),
+  container: tokenSchema.optional(),
 });
-export type CompileOptions = typeof CompileOptions.Type;
+export type CompileOptions = z.infer<typeof compileOptionsSchema>;
 
-export const CompileManifest = Schema.Struct({
-  mainFile: Schema.String,
-  files: Schema.Record(Schema.String, SourceHash),
-  clean: Schema.optionalKey(Schema.Boolean),
-  preview: Schema.optionalKey(Schema.Boolean),
-  incremental: Schema.optionalKey(Schema.Boolean),
+export const compileManifestSchema = z.object({
+  mainFile: z.string(),
+  files: z.record(z.string(), sourceHashSchema),
+  clean: z.boolean().optional(),
+  preview: z.boolean().optional(),
+  incremental: z.boolean().optional(),
 });
-export type CompileManifest = typeof CompileManifest.Type;
+export type CompileManifest = z.infer<typeof compileManifestSchema>;
 
-export const CompileResult = Schema.Struct({
-  error: Schema.optionalKey(Schema.String),
-  log: Schema.String,
-  pdf: Schema.optionalKey(Schema.String),
-  files: Schema.Array(Schema.String),
+export const compileResultSchema = z.object({
+  error: z.string().optional(),
+  log: z.string(),
+  pdf: z.string().optional(),
+  files: z.array(z.string()),
 });
-export type CompileResult = typeof CompileResult.Type;
+export type CompileResult = z.infer<typeof compileResultSchema>;
 
-export const CompileRejection = Schema.Struct({
-  error: Schema.String,
-  code: Schema.Literals([
+export const compileRejectionSchema = z.object({
+  error: z.string(),
+  code: z.enum([
     "invalid",
     "resync",
     "cancelled",
@@ -95,29 +95,18 @@ export const CompileRejection = Schema.Struct({
     "unavailable",
     "internal",
   ]),
-  missing: Schema.optionalKey(Schema.Array(SourceHash)),
+  missing: z.array(sourceHashSchema).optional(),
 });
-export type CompileRejection = typeof CompileRejection.Type;
+export type CompileRejection = z.infer<typeof compileRejectionSchema>;
 
 /** Where a compile ran. */
-export const CompilePlacement = Schema.Struct({
-  container: Token,
+export const compilePlacementSchema = z.object({
+  container: tokenSchema,
   /** `affinity` and `spare` found a warm container; `cold` waited for one. */
-  outcome: Schema.Literals(["affinity", "spare", "cold"]),
-  waitMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+  outcome: z.enum(["affinity", "spare", "cold"]),
+  waitMs: z.number().finite().nonnegative(),
 });
-export type CompilePlacement = typeof CompilePlacement.Type;
-
-const decodeResult = Schema.decodeUnknownSync(
-  Schema.fromJsonString(CompileResult),
-);
-const decodeRejection = Schema.decodeUnknownOption(CompileRejection);
-const decodePlacement = Schema.decodeUnknownOption(
-  Schema.fromJsonString(CompilePlacement),
-);
-const encodeManifest = Schema.encodeSync(
-  Schema.fromJsonString(CompileManifest),
-);
+export type CompilePlacement = z.infer<typeof compilePlacementSchema>;
 
 export function encodeCompileHeaders(options: CompileOptions) {
   return {
@@ -153,7 +142,9 @@ export function encodeCompileRequest(request: {
   }[];
   cache?: { size: number; content: ArchiveEntry["content"] };
 }) {
-  const manifest = new TextEncoder().encode(encodeManifest(request.manifest));
+  const manifest = new TextEncoder().encode(
+    JSON.stringify(compileManifestSchema.parse(request.manifest)),
+  );
   return writeArchive([
     { name: "manifest.json", size: manifest.byteLength, content: manifest },
     ...request.blobs.map(({ hash, size, content }) => ({
@@ -166,15 +157,23 @@ export function encodeCompileRequest(request: {
 }
 
 export function readCompilePlacement(headers: Headers) {
-  const placement = decodePlacement(headers.get(compileHeaders.placement));
-  return placement._tag === "Some" ? placement.value : null;
+  const raw = headers.get(compileHeaders.placement);
+  if (!raw) return null;
+  try {
+    const parsed = compilePlacementSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function readCompileRejection(
   response: Response,
 ): Promise<CompileRejection | null> {
-  const rejection = decodeRejection(await response.json().catch(() => null));
-  return rejection._tag === "Some" ? rejection.value : null;
+  const parsed = compileRejectionSchema.safeParse(
+    await response.json().catch(() => null),
+  );
+  return parsed.success ? parsed.data : null;
 }
 
 type OpenSink = (size: number) => ArchiveSink | Promise<ArchiveSink>;
@@ -216,7 +215,9 @@ export async function readCompileArtifacts(
           if (size > maxResultBytes)
             throw new Error("The compiler result exceeds its limit");
           return collectEntry(size, (bytes) => {
-            result = decodeResult(new TextDecoder().decode(bytes));
+            result = compileResultSchema.parse(
+              JSON.parse(new TextDecoder().decode(bytes)),
+            );
             for (const index of result.files.keys())
               missing.add(`artifacts/${index}`);
           });

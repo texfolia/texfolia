@@ -250,11 +250,7 @@ try {
     .click();
   assert.equal(await font.inputValue(), "20");
   await button("Apply").click();
-  assert.equal(
-    JSON.parse((await preferencesStorage())!)["s:preferences"].data.editor
-      .fontSize,
-    20,
-  );
+  assert.equal(JSON.parse((await preferencesStorage())!).editor.fontSize, 20);
   assert.equal(await button("Apply").isDisabled(), true);
   await font.fill("18");
   await overlay.click({ position: { x: 5, y: 5 } });
@@ -263,11 +259,7 @@ try {
     .getByRole("button", { name: "Discard" })
     .click();
   await settings.waitFor({ state: "detached" });
-  assert.equal(
-    JSON.parse((await preferencesStorage())!)["s:preferences"].data.editor
-      .fontSize,
-    20,
-  );
+  assert.equal(JSON.parse((await preferencesStorage())!).editor.fontSize, 20);
   await open();
   await button("Keyboard shortcuts").click();
   const recordSidebar = settings.getByRole("button", {
@@ -283,8 +275,7 @@ try {
     .waitFor();
   await button("Apply").click();
   assert.equal(
-    JSON.parse((await preferencesStorage())!)["s:preferences"].data.shortcuts
-      .sidebar,
+    JSON.parse((await preferencesStorage())!).shortcuts.sidebar,
     "Mod+Alt+B",
     "Conflicting draft remains uncommitted",
   );

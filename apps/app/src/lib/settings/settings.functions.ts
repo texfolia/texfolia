@@ -1,61 +1,62 @@
 import {
-  createCollection,
-  localStorageCollectionOptions,
-  type StorageApi,
-  type StorageEventApi,
-} from "@tanstack/react-db";
-import { z } from "zod";
-
-import {
   addPersonalWord,
   defaultSettings,
-  editorSettingsSchema,
   settingsSchema,
+  type Settings,
 } from "./settings.schema";
+
+export type StorageApi = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+export type StorageEventApi = {
+  addEventListener(
+    type: "storage",
+    listener: (event: StorageEvent) => void,
+  ): void;
+  removeEventListener(
+    type: "storage",
+    listener: (event: StorageEvent) => void,
+  ): void;
+};
 
 export const userSettingsStorageKey = (userId: string) =>
   `texfolia.settings.v2:${userId}`;
-const storedSettingsSchema = z.record(
-  z.string(),
-  z.object({
-    versionKey: z.string(),
-    data: settingsSchema,
-  }),
-);
 
-function readLegacy<T>(
-  storage: StorageApi,
-  key: string,
-  schema: z.ZodType<T>,
-  fallback: T,
-): T {
-  try {
-    const result = schema.safeParse(JSON.parse(storage.getItem(key) ?? "null"));
-    return result.success ? result.data : fallback;
-  } catch {
-    return fallback;
+const loadErrorMessage =
+  "Browser preferences could not be loaded. Editor and shortcut controls are unavailable; reload to try again. Appearance and project settings are still available.";
+
+// Shares same-tab updates between independent stores backed by the same storage.
+const storageListeners = new WeakMap<
+  StorageApi,
+  Map<string, Set<() => void>>
+>();
+
+function listenersFor(storage: StorageApi, key: string) {
+  let byKey = storageListeners.get(storage);
+  if (!byKey) {
+    byKey = new Map();
+    storageListeners.set(storage, byKey);
   }
+  let listeners = byKey.get(key);
+  if (!listeners) {
+    listeners = new Set();
+    byKey.set(key, listeners);
+  }
+  return listeners;
 }
 
-function readLegacyEditor(storage: StorageApi) {
-  const legacy = readLegacy(
-    storage,
-    "texfolia.settings.v1",
-    z.record(
-      z.string(),
-      z.object({ data: z.object({ editor: editorSettingsSchema }) }),
-    ),
-    {},
-  );
-  return (
-    (legacy["s:preferences"] ?? legacy.preferences)?.data.editor ??
-    readLegacy(
-      storage,
-      "texfolia.editor",
-      editorSettingsSchema,
-      defaultSettings.editor,
-    )
-  );
+function readSettings(
+  storage: StorageApi,
+  key: string,
+): { value: Settings; loadError: string | null } {
+  try {
+    const raw = storage.getItem(key);
+    if (raw === null) return { value: defaultSettings, loadError: null };
+    return {
+      value: settingsSchema.parse(JSON.parse(raw)),
+      loadError: null,
+    };
+  } catch {
+    return { value: defaultSettings, loadError: loadErrorMessage };
+  }
 }
 
 export function createSettingsStore({
@@ -67,63 +68,64 @@ export function createSettingsStore({
   userId: string;
   storageEventApi: StorageEventApi;
 }) {
-  const preferences = createCollection(
-    localStorageCollectionOptions({
-      storageKey: userSettingsStorageKey(userId),
-      storage,
-      storageEventApi,
-      schema: settingsSchema,
-      getKey: (row) => row.id,
-      gcTime: Infinity,
-      parser: {
-        parse: (text) => storedSettingsSchema.parse(JSON.parse(text)),
-        stringify: JSON.stringify,
-      },
-    }),
-  );
+  const key = userSettingsStorageKey(userId);
+  const listeners = new Set<() => void>();
+  let snapshot = readSettings(storage, key);
 
-  async function initialize() {
-    await preferences.preload();
-    if (!preferences.has("preferences")) {
-      await preferences
-        .insert({
-          ...defaultSettings,
-          editor: readLegacyEditor(storage),
-        })
-        .when("settled");
-    }
+  function refresh() {
+    snapshot = readSettings(storage, key);
+    for (const listener of listeners) listener();
   }
 
+  function onStorageEvent(event: StorageEvent) {
+    if (event.key === key || event.key === null) refresh();
+  }
+
+  function notifyPeers() {
+    for (const notify of listenersFor(storage, key)) notify();
+  }
+
+  function write(next: Settings) {
+    if (snapshot.loadError) throw new Error(snapshot.loadError);
+    const parsed = settingsSchema.parse(next);
+    storage.setItem(key, JSON.stringify(parsed));
+    snapshot = { value: parsed, loadError: null };
+    notifyPeers();
+  }
+
+  const peerListeners = listenersFor(storage, key);
+
   return {
-    preferences,
-    initialize,
-    async updateEditor(editor: typeof defaultSettings.editor) {
-      await preferences
-        .update("preferences", (draft) => {
-          draft.editor = editor;
-        })
-        .when("settled");
+    get: () => snapshot.value,
+    getLoadError: () => snapshot.loadError,
+    subscribe(listener: () => void) {
+      if (listeners.size === 0) {
+        peerListeners.add(refresh);
+        storageEventApi.addEventListener("storage", onStorageEvent);
+      }
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          peerListeners.delete(refresh);
+          storageEventApi.removeEventListener("storage", onStorageEvent);
+        }
+      };
+    },
+    updateEditor(editor: Settings["editor"]) {
+      write({ ...snapshot.value, editor });
     },
     /** Adds a word to the personal dictionary immediately. */
-    async addWord(word: string) {
-      await preferences
-        .update("preferences", (draft) => {
-          draft.spelling = {
-            words: addPersonalWord(draft.spelling?.words ?? [], word),
-          };
-        })
-        .when("settled");
+    addWord(word: string) {
+      write({
+        ...snapshot.value,
+        spelling: {
+          words: addPersonalWord(snapshot.value.spelling.words, word),
+        },
+      });
     },
-    async save(settings: typeof defaultSettings) {
-      const next = settingsSchema.parse(settings);
-      await preferences
-        .update("preferences", (draft) => {
-          draft.editor = next.editor;
-          draft.compile = next.compile;
-          draft.shortcuts = next.shortcuts;
-          draft.spelling = next.spelling;
-        })
-        .when("settled");
+    save(settings: Settings) {
+      write(settings);
     },
   };
 }

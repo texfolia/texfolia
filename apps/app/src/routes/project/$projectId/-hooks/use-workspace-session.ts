@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { stopDocumentCaching } from "#/lib/collaboration/browser";
 import { getGitBranch } from "#/lib/git/git.functions";
 
-/** Clearing the project's cached drafts or layout in another tab signs out here. */
+/** Clearing the project's cached layout in another tab signs out here. */
 export function useExitWhenStorageCleared(keys: string[]) {
   const watched = keys.join("\n");
   useEffect(() => {

@@ -16,8 +16,8 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { hashSource } from "#/lib/compile";
 
 import { createLocalCompiler } from "../../compiler/src/local";
-import { dockerLayer } from "../../compiler/src/local-containers";
-import { PoolStore } from "../../compiler/src/pool";
+import { dockerContainers } from "../../compiler/src/local-containers";
+import { memoryPoolStore } from "../../compiler/src/pool";
 import { buildsBindings } from "./builds/miniflare";
 
 // Real build coordinators in workerd, the real compiler, Docker, and Tectonic.
@@ -25,8 +25,8 @@ import { buildsBindings } from "./builds/miniflare";
 const directory = await mkdtemp(join(tmpdir(), "texfolia-compile-engine-"));
 const compiler = createLocalCompiler({
   variables: { POOL_MAX_INSTANCES: "2" },
-  store: PoolStore.memory,
-  containers: dockerLayer({
+  store: memoryPoolStore(),
+  containers: dockerContainers({
     socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
     image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
     concurrency: 1,

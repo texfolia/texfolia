@@ -39,7 +39,6 @@ export function WorkspaceMenu({
   onCreate,
   onUpload,
   onExport,
-  onRepair,
   onSettings,
   onEditor,
   onSearch,
@@ -66,7 +65,6 @@ export function WorkspaceMenu({
   onCreate: (kind: "text" | "folder") => void;
   onUpload: () => void;
   onExport: () => void;
-  onRepair?: () => void;
   onSettings: () => void;
   onEditor: (command: EditorCommand) => void;
   onSearch: () => void;
@@ -144,11 +142,6 @@ export function WorkspaceMenu({
               </ShortcutMenuItem>
               <MenubarSeparator />
               <MenubarItem onClick={onExport}>Export project</MenubarItem>
-              {onRepair && (
-                <MenubarItem onClick={onRepair}>
-                  Repair source paths
-                </MenubarItem>
-              )}
               <ShortcutMenuItem action="settings" onClick={onSettings}>
                 Settings
               </ShortcutMenuItem>

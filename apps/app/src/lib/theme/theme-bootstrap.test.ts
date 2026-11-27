@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
 
-import * as uiw from "@uiw/codemirror-themes-all";
-
 import {
   appearanceStorageKey,
   catalogTheme,
@@ -14,6 +12,9 @@ import {
   isAppPath,
   themeBootstrap,
 } from "./theme-bootstrap";
+
+const githubLightBackground = catalogTheme("githubLight").settings.background;
+const githubDarkBackground = catalogTheme("githubDark").settings.background;
 
 function boot({
   raw,
@@ -110,9 +111,7 @@ test("bootstrap shows a preview saved before newer variables existed", () => {
       preview: { mode: "dark", variables: { "--border": "#fff" } },
     },
   });
-  expect(result.values.get("--background")).toBe(
-    uiw.defaultSettingsGithubLight.background,
-  );
+  expect(result.values.get("--background")).toBe(githubLightBackground);
 });
 
 test("bootstrap rejects unsafe CSS, unknown selections, and invalid snapshots", () => {
@@ -139,9 +138,7 @@ test("bootstrap rejects unsafe CSS, unknown selections, and invalid snapshots", 
         },
       },
     });
-    expect(result.values.get("--background")).toBe(
-      uiw.defaultSettingsGithubLight.background,
-    );
+    expect(result.values.get("--background")).toBe(githubLightBackground);
     expect(result.values.has("--arbitrary")).toBe(false);
   }
   for (const selection of [
@@ -153,14 +150,14 @@ test("bootstrap rejects unsafe CSS, unknown selections, and invalid snapshots", 
       boot({
         raw: { selection, preview: appearanceSnapshot(theme) },
       }).values.get("--background"),
-    ).toBe(uiw.defaultSettingsGithubLight.background);
+    ).toBe(githubLightBackground);
   }
   expect(boot({ raw: null, dark: true }).values.get("--background")).toBe(
-    uiw.defaultSettingsGithubDark.background,
+    githubDarkBackground,
   );
   expect(
     boot({ raw: null, unavailable: true }).values.get("--background"),
-  ).toBe(uiw.defaultSettingsGithubLight.background);
+  ).toBe(githubLightBackground);
   expect(
     boot({
       raw: {
@@ -169,7 +166,7 @@ test("bootstrap rejects unsafe CSS, unknown selections, and invalid snapshots", 
       },
       userId: "bob",
     }).values.get("--background"),
-  ).toBe(uiw.defaultSettingsGithubLight.background);
+  ).toBe(githubLightBackground);
   expect(themeBootstrap(null)).toBe("");
   expect(themeBootstrap("</script><script>alert(1)</script>")).not.toContain(
     "</script>",

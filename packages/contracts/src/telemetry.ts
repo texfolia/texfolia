@@ -6,12 +6,7 @@ const instant = z.iso.datetime({ offset: true });
 
 export const planSchema = z.enum(["free", "pro", "team", "unknown"]);
 export type Plan = z.infer<typeof planSchema>;
-// Only Tectonic is installed. Older records may still say "texlive"; read
-// those as "unknown" so nothing can report TeX Live as the engine.
-export const engineSchema = z.preprocess(
-  (value) => (value === "texlive" ? "unknown" : value),
-  z.enum(["tectonic", "unknown"]),
-);
+export const engineSchema = z.enum(["tectonic", "unknown"]);
 export const temperatureSchema = z.enum(["cold", "warm", "unknown"]);
 export const archiveStatusSchema = z.enum([
   "restored",

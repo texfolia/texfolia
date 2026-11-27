@@ -2,20 +2,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { documentCachingStopped } from "#/lib/collaboration/browser";
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
-import {
-  reconcileSourceDrafts,
-  serializeSourceDrafts,
-  type SourceDraft,
-} from "#/lib/collaboration/browser";
 import type { CompileSources } from "#/lib/compile";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import {
-  projectMetadataVersion,
   assertProjectSourcePaths,
+  projectMetadataVersion,
   projectPaths,
 } from "#/lib/projects";
-import { saveProjectSource } from "#/lib/projects/project-source.functions";
-import type { ProjectDetails } from "#/lib/projects/project.functions";
 import {
   encodeSource,
   sourceHashFromKey,
@@ -24,17 +17,14 @@ import {
 import type { useProjectFiles } from "#/providers/project-files-provider";
 import type { FileState } from "#/providers/workspace-provider";
 
-export const sourceDraftsKey = (projectId: string) =>
-  `texfolia.project.${projectId}.sources`;
-
 type Saved = Awaited<ReturnType<CollaborativeFile["save"]>>;
 
 /**
- * Saves collaborative documents to the server, snapshots sources for compiles
- * and exports, and migrates or recovers drafts cached by older versions.
+ * Saves collaborative documents to the server and snapshots sources for
+ * compiles and exports.
  */
 export function useSourceSave({
-  project,
+  projectId,
   canWrite,
   ready,
   files,
@@ -43,7 +33,7 @@ export function useSourceSave({
   refreshSaved,
   refreshTitle,
 }: {
-  project: Pick<ProjectDetails, "id" | "sourceContents" | "sourceVersions">;
+  projectId: string;
   canWrite: boolean;
   ready: boolean;
   files: ReturnType<typeof useProjectFiles>;
@@ -56,15 +46,9 @@ export function useSourceSave({
   /** Updates a tab title after its saved value changes. */
   refreshTitle: (id: string) => void;
 }) {
-  const projectId = project.id;
-  const storageKey = sourceDraftsKey(projectId);
-  // Drafts still cached in this browser, keyed by node.
-  const localDrafts = useRef<Record<string, SourceDraft>>({});
-  const [recovery, setRecovery] = useState<Record<string, SourceDraft>>({});
   const [sourceError, setSourceError] = useState("");
   const [saving, setSaving] = useState(false);
   const saveInProgress = useRef(false);
-  const recovering = Object.keys(recovery).length > 0;
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -78,20 +62,6 @@ export function useSourceSave({
     return () => window.removeEventListener("beforeunload", warn);
   }, [drafts]);
 
-  function cacheDrafts() {
-    if (documentCachingStopped()) return;
-    try {
-      localStorage.setItem(
-        storageKey,
-        serializeSourceDrafts(localDrafts.current),
-      );
-    } catch {
-      setSourceError(
-        "Offline drafts could not be cached. Save to the server before closing this page.",
-      );
-    }
-  }
-
   /** Records a save the server acknowledged and returns the live value. */
   function recordSaved(id: string, saved: Saved, value: string) {
     if (!files.recordSourceVersion(id, saved)) return false;
@@ -101,8 +71,7 @@ export function useSourceSave({
   }
 
   async function saveSources() {
-    if (!canWrite || !ready || recovering || saveInProgress.current)
-      return false;
+    if (!canWrite || !ready || saveInProgress.current) return false;
     saveInProgress.current = true;
     setSaving(true);
     setSourceError("");
@@ -122,18 +91,15 @@ export function useSourceSave({
           )
             return;
           const saved = await file.save();
-          const value = file.text.toString();
-          recordSaved(id, saved, value);
-          if (value === saved.value) delete localDrafts.current[id];
+          recordSaved(id, saved, file.text.toString());
         }),
       );
-      cacheDrafts();
       return true;
     } catch (error) {
       setSourceError(
         error instanceof Error
           ? error.message
-          : "Sources could not be saved. Your local draft is still available.",
+          : "Sources could not be saved. Your local edits are still cached.",
       );
       return false;
     } finally {
@@ -216,114 +182,12 @@ export function useSourceSave({
     return exported;
   }
 
-  /**
-   * Saves drafts cached by older versions of the editor, and offers any that
-   * can't be saved for recovery. Returns false when `isCurrent` stops holding
-   * part-way, meaning the workspace was replaced.
-   */
-  async function restoreBrowserDrafts({
-    isCurrent,
-    onMigrated,
-  }: {
-    isCurrent: () => boolean;
-    onMigrated: (id: string, value: string) => void;
-  }) {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      const contents = { ...project.sourceContents };
-      if (raw) {
-        const parsed: unknown = JSON.parse(raw);
-        const draftMap =
-          parsed &&
-          typeof parsed === "object" &&
-          "drafts" in parsed &&
-          parsed.drafts &&
-          typeof parsed.drafts === "object"
-            ? parsed.drafts
-            : parsed;
-        if (draftMap && typeof draftMap === "object") {
-          const missing = Object.keys(draftMap).filter(
-            (id) =>
-              !Object.hasOwn(contents, id) &&
-              Object.hasOwn(project.sourceVersions, id),
-          );
-          await mapLimit(missing, binaryFetchLimit, async (id) => {
-            const objectKey = project.sourceVersions[id]?.objectKey;
-            if (!objectKey) {
-              contents[id] = "";
-              return;
-            }
-            const response = await fetch(`/api/sources/${projectId}/${id}`);
-            if (!response.ok) return;
-            contents[id] = await response.text();
-          });
-          if (!isCurrent()) return false;
-        }
-      }
-      const { migrate, recover } = reconcileSourceDrafts({
-        raw,
-        contents,
-        versions: project.sourceVersions,
-      });
-      localDrafts.current = { ...migrate, ...recover };
-      for (const [id, draft] of Object.entries(migrate)) {
-        if (!isCurrent()) return false;
-        if (!canWrite) {
-          recover[id] = draft;
-          continue;
-        }
-        try {
-          const version = await saveProjectSource({
-            data: {
-              projectId,
-              nodeId: id,
-              expectedObjectKey: null,
-              content: encodeSource(new TextEncoder().encode(draft.value)),
-            },
-          });
-          files.recordSourceVersion(id, version);
-          drafts.set(id, { value: draft.value, savedValue: draft.value });
-          onMigrated(id, draft.value);
-          delete localDrafts.current[id];
-        } catch {
-          recover[id] = draft;
-          setSourceError(
-            "Some browser drafts could not be migrated. Recover them below and save when online.",
-          );
-        }
-      }
-      if (!isCurrent()) return false;
-      setRecovery(recover);
-      cacheDrafts();
-    } catch {
-      setSourceError(
-        "Browser drafts could not be read. The server copy is open; the original browser cache has not been changed.",
-      );
-    }
-    return true;
-  }
-
-  /** Applies or discards the drafts offered for recovery. */
-  function resolveRecovery(apply?: (id: string, value: string) => void) {
-    for (const [id, draft] of Object.entries(recovery)) {
-      apply?.(id, draft.value);
-      delete localDrafts.current[id];
-    }
-    cacheDrafts();
-    setRecovery({});
-  }
-
   return {
     saving,
     sourceError,
-    recovery,
-    /** True while browser drafts wait for recovery; editing is paused. */
-    recovering,
     saveInProgress: () => saveInProgress.current,
     saveSources,
     sourceFiles,
     recordSaved,
-    restoreBrowserDrafts,
-    resolveRecovery,
   };
 }
