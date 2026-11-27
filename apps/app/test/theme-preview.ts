@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import * as Y from "yjs";
 
-import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
+import {
+  decodeClientMessage,
+  decodeMultiplexClientMessage,
+  encodeMultiplexServerMessage,
+  encodeServerMessage,
+  multiplexCollaborationProtocol,
+  protocolSearchParam,
+} from "#/lib/collaboration";
 import {
   appearanceStorageKey,
   legacyAppearanceStorageKey,
@@ -53,7 +60,7 @@ const backend = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   websocket: {
-    data: { events: false },
+    data: { events: false, multiplex: false },
     open(socket) {
       if (socket.data.events)
         socket.send(
@@ -63,6 +70,23 @@ const backend = Bun.serve({
     message(socket, raw) {
       if (raw === "ping") {
         socket.send("pong");
+        return;
+      }
+      if (socket.data.multiplex) {
+        const message = decodeMultiplexClientMessage(raw);
+        if (message.type === "sync")
+          socket.send(
+            encodeMultiplexServerMessage({
+              type: "sync",
+              nodeId: message.nodeId,
+              update: Y.encodeStateAsUpdate(doc),
+              vector: Y.encodeStateVector(doc),
+              dirty: true,
+              objectKey: null,
+              canWrite: true,
+              user: { name: "Theme test", color: "#123456" },
+            }),
+          );
         return;
       }
       const message = decodeClientMessage(raw);
@@ -95,7 +119,11 @@ const backend = Bun.serve({
       return Response.json(data.formatting);
     }
     if (url.pathname.startsWith("/api/collaboration/")) {
-      if (server.upgrade(request, { data: { events: false } })) return;
+      const multiplex =
+        url.searchParams.get(protocolSearchParam) ===
+        multiplexCollaborationProtocol;
+      if (server.upgrade(request, { data: { events: false, multiplex } }))
+        return;
       return new Response(null, { status: 400 });
     }
     if (
@@ -104,7 +132,9 @@ const backend = Bun.serve({
     )
       return Response.json(project);
     if (url.searchParams.has("events"))
-      return server.upgrade(request, { data: { events: true } })
+      return server.upgrade(request, {
+        data: { events: true, multiplex: false },
+      })
         ? undefined
         : new Response(null, { status: 426 });
     if (url.searchParams.has("changed"))

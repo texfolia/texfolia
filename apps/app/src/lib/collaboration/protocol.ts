@@ -52,15 +52,16 @@ const clientControlSchema = z.strictObject({
   type: z.literal("save"),
   id: z.uuid(),
 });
+const multiplexNodeIdSchema = z.string().min(1).max(64);
 const multiplexClientControlSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("save"),
-    nodeId: documentIdSchema,
+    nodeId: multiplexNodeIdSchema,
     id: z.uuid(),
   }),
   z.strictObject({
     type: z.literal("close"),
-    nodeId: documentIdSchema,
+    nodeId: multiplexNodeIdSchema,
   }),
 ]);
 const serverControlSchema = z.discriminatedUnion("type", [
@@ -92,7 +93,7 @@ const serverControlSchema = z.discriminatedUnion("type", [
 const multiplexServerControlSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("saved"),
-    nodeId: documentIdSchema,
+    nodeId: multiplexNodeIdSchema,
     id: z.uuid(),
     value: z.string(),
     objectKey: z.string().nullable(),
@@ -100,13 +101,13 @@ const multiplexServerControlSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("error"),
-    nodeId: documentIdSchema.optional(),
+    nodeId: multiplexNodeIdSchema.optional(),
     message: z.string(),
     id: z.uuid().optional(),
   }),
   z.object({
     type: z.literal("closed"),
-    nodeId: documentIdSchema,
+    nodeId: multiplexNodeIdSchema,
     reason: z.string(),
   }),
   z.object({
@@ -115,7 +116,7 @@ const multiplexServerControlSchema = z.discriminatedUnion("type", [
       z.object({
         name: z.string(),
         color: z.string(),
-        nodeId: documentIdSchema.optional(),
+        nodeId: multiplexNodeIdSchema.optional(),
       }),
     ),
   }),
@@ -288,7 +289,7 @@ export function decodeMultiplexClientMessage(
     throw new Error("Invalid collaboration message");
   const bytes = asBytes(data);
   const decoder = decoding.createDecoder(bytes.subarray(1));
-  const nodeId = documentIdSchema.parse(decoding.readVarString(decoder));
+  const nodeId = multiplexNodeIdSchema.parse(decoding.readVarString(decoder));
   switch (bytes[0]) {
     case frameType.sync: {
       const clientId = z
@@ -356,7 +357,7 @@ export function decodeMultiplexServerMessage(
   const bytes = asBytes(data);
   if (bytes.byteLength < 1) throw new Error("Invalid collaboration response");
   const decoder = decoding.createDecoder(bytes.subarray(1));
-  const nodeId = documentIdSchema.parse(decoding.readVarString(decoder));
+  const nodeId = multiplexNodeIdSchema.parse(decoding.readVarString(decoder));
   switch (bytes[0]) {
     case frameType.sync: {
       const update = decoding.readVarUint8Array(decoder);

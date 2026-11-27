@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import * as Y from "yjs";
 
-import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
+import {
+  decodeClientMessage,
+  decodeMultiplexClientMessage,
+  encodeMultiplexServerMessage,
+  encodeServerMessage,
+  multiplexCollaborationProtocol,
+  protocolSearchParam,
+} from "#/lib/collaboration";
 import { compileDeltaSchema, hashSource } from "#/lib/compile";
 import {
   createNodeSchema,
@@ -105,7 +112,7 @@ const backend = Bun.serve({
   port: 0,
   idleTimeout: 120,
   websocket: {
-    data: { nodeId: "", events: false },
+    data: { nodeId: "", events: false, multiplex: false },
     open(socket) {
       if (!socket.data.events) return;
       subscribers.add(socket);
@@ -117,6 +124,48 @@ const backend = Bun.serve({
     async message(socket, raw) {
       if (raw === "ping") {
         socket.send("pong");
+        return;
+      }
+      if (socket.data.multiplex) {
+        const message = decodeMultiplexClientMessage(raw);
+        if (message.type === "close") return;
+        const { nodeId } = message;
+        const doc = documents.get(nodeId);
+        assert(doc);
+        if (message.type === "sync")
+          socket.send(
+            encodeMultiplexServerMessage({
+              type: "sync",
+              nodeId,
+              update: Y.encodeStateAsUpdate(doc),
+              vector: Y.encodeStateVector(doc),
+              dirty: true,
+              objectKey: null,
+              canWrite: true,
+              user: { name: "Upload test", color: "#123456" },
+            }),
+          );
+        if (message.type === "update") Y.applyUpdate(doc, message.update);
+        if (message.type === "save") {
+          const value = doc.getText("source").toString();
+          const bytes = new TextEncoder().encode(value);
+          const hash = await hashSource(bytes);
+          sourceObjects.set(hash, bytes);
+          project.sourceVersions[nodeId] = {
+            objectKey: `projects/${projectId}/sources/${hash}`,
+            updatedAt: Date.now(),
+          };
+          socket.send(
+            encodeMultiplexServerMessage({
+              type: "saved",
+              nodeId,
+              id: message.id,
+              value,
+              objectKey: `projects/${projectId}/sources/${hash}`,
+              updatedAt: Date.now(),
+            }),
+          );
+        }
         return;
       }
       const message = decodeClientMessage(raw);
@@ -159,11 +208,15 @@ const backend = Bun.serve({
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/collaboration/")) {
+      const multiplex =
+        url.searchParams.get(protocolSearchParam) ===
+        multiplexCollaborationProtocol;
       if (
         server.upgrade(request, {
           data: {
-            nodeId: url.pathname.split("/").at(-1) ?? "",
+            nodeId: multiplex ? "" : (url.pathname.split("/").at(-1) ?? ""),
             events: false,
+            multiplex,
           },
         })
       )
@@ -219,7 +272,9 @@ const backend = Bun.serve({
         : new Response(null, { status: 404 });
     }
     if (url.searchParams.has("events")) {
-      return server.upgrade(request, { data: { nodeId: "", events: true } })
+      return server.upgrade(request, {
+        data: { nodeId: "", events: true, multiplex: false },
+      })
         ? undefined
         : new Response(null, { status: 426 });
     }

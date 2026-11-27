@@ -4,7 +4,14 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import * as Y from "yjs";
 
-import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
+import {
+  decodeClientMessage,
+  decodeMultiplexClientMessage,
+  encodeMultiplexServerMessage,
+  encodeServerMessage,
+  multiplexCollaborationProtocol,
+  protocolSearchParam,
+} from "#/lib/collaboration";
 
 import type { CacheTestApi } from "./collaboration-cache/browser";
 
@@ -54,8 +61,9 @@ const backend = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
   websocket: {
-    data: { nodeId: "" },
+    data: { nodeId: "", multiplex: false, docs: new Set<string>() },
     open(socket) {
+      if (socket.data.multiplex) return;
       opened.push(socket.data.nodeId);
       connected.set(
         socket.data.nodeId,
@@ -63,6 +71,12 @@ const backend = Bun.serve({
       );
     },
     close(socket) {
+      if (socket.data.multiplex) {
+        for (const nodeId of socket.data.docs)
+          connected.set(nodeId, (connected.get(nodeId) ?? 1) - 1);
+        socket.data.docs.clear();
+        return;
+      }
       connected.set(
         socket.data.nodeId,
         (connected.get(socket.data.nodeId) ?? 1) - 1,
@@ -71,6 +85,51 @@ const backend = Bun.serve({
     message(socket, raw) {
       if (raw === "ping") {
         socket.send("pong");
+        return;
+      }
+      if (socket.data.multiplex) {
+        const message = decodeMultiplexClientMessage(raw);
+        const { nodeId } = message;
+        if (message.type === "close") {
+          if (socket.data.docs.delete(nodeId))
+            connected.set(nodeId, (connected.get(nodeId) ?? 1) - 1);
+          return;
+        }
+        const source = sourceOf(nodeId);
+        if (message.type === "update" && nodeId !== "node") {
+          updates.push(nodeId);
+          Y.applyUpdate(source, message.update);
+        }
+        if (message.type === "save")
+          socket.send(
+            encodeMultiplexServerMessage({
+              type: "saved",
+              nodeId,
+              id: message.id,
+              value: source.getText("source").toString(),
+              objectKey: "saved",
+              updatedAt: Date.now(),
+            }),
+          );
+        if (message.type === "sync") {
+          if (!socket.data.docs.has(nodeId)) {
+            socket.data.docs.add(nodeId);
+            opened.push(nodeId);
+            connected.set(nodeId, (connected.get(nodeId) ?? 0) + 1);
+          }
+          socket.send(
+            encodeMultiplexServerMessage({
+              type: "sync",
+              nodeId,
+              update: Y.encodeStateAsUpdate(source),
+              vector: Y.encodeStateVector(source),
+              dirty: true,
+              objectKey: null,
+              canWrite: true,
+              user: { name: "Cache test", color: "#123456" },
+            }),
+          );
+        }
         return;
       }
       const message = decodeClientMessage(raw);
@@ -105,11 +164,19 @@ const backend = Bun.serve({
     },
   },
   fetch(request, server) {
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
     if (pathname.startsWith("/api/collaboration/")) {
+      const multiplex =
+        url.searchParams.get(protocolSearchParam) ===
+        multiplexCollaborationProtocol;
       if (
         server.upgrade(request, {
-          data: { nodeId: pathname.split("/").at(-1) ?? "" },
+          data: {
+            nodeId: multiplex ? "" : (pathname.split("/").at(-1) ?? ""),
+            multiplex,
+            docs: new Set<string>(),
+          },
         })
       )
         return;

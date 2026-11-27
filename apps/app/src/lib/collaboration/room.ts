@@ -1151,6 +1151,7 @@ export abstract class CollaborationRoom<
       let data: MultiplexClientMessage;
       try {
         data = decodeMultiplexClientMessage(message);
+        documentIdSchema.parse(data.nodeId);
       } catch (error) {
         await this.reportError(ws, error);
         return;

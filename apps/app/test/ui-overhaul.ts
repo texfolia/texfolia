@@ -20,6 +20,12 @@ import { Miniflare } from "miniflare";
 import { chromium, type Page } from "playwright";
 
 import {
+  decodeMultiplexClientMessage,
+  multiplexCollaborationProtocol,
+  protocolSearchParam,
+} from "#/lib/collaboration";
+
+import {
   createProject,
   getProjects,
   setProjectTags,
@@ -809,9 +815,35 @@ try {
     .waitFor();
   const sockets = new Map<string, number>();
   owner.on("websocket", (socket) => {
-    const { pathname } = new URL(socket.url());
-    if (!pathname.startsWith("/api/collaboration/")) return;
-    const nodeId = pathname.split("/").at(-1) ?? "";
+    const url = new URL(socket.url());
+    if (!url.pathname.startsWith("/api/collaboration/")) return;
+    if (
+      url.searchParams.get(protocolSearchParam) ===
+      multiplexCollaborationProtocol
+    ) {
+      const open = new Set<string>();
+      socket.on("framesent", ({ payload }) => {
+        if (payload === "ping") return;
+        try {
+          const message = decodeMultiplexClientMessage(payload);
+          if (message.type === "sync" && !open.has(message.nodeId)) {
+            open.add(message.nodeId);
+            sockets.set(message.nodeId, (sockets.get(message.nodeId) ?? 0) + 1);
+          } else if (message.type === "close" && open.delete(message.nodeId)) {
+            sockets.set(message.nodeId, (sockets.get(message.nodeId) ?? 1) - 1);
+          }
+        } catch {
+          // Ignore non-collaboration frames.
+        }
+      });
+      socket.on("close", () => {
+        for (const nodeId of open)
+          sockets.set(nodeId, (sockets.get(nodeId) ?? 1) - 1);
+        open.clear();
+      });
+      return;
+    }
+    const nodeId = url.pathname.split("/").at(-1) ?? "";
     sockets.set(nodeId, (sockets.get(nodeId) ?? 0) + 1);
     socket.on("close", () =>
       sockets.set(nodeId, (sockets.get(nodeId) ?? 1) - 1),
