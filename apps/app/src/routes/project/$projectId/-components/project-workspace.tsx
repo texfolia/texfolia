@@ -274,7 +274,12 @@ export function ProjectWorkspace({
 
   function observeChange(id: string, value: string, local?: boolean) {
     const previous = drafts.get(id) ?? { value: "", savedValue: "" };
-    drafts.set(id, { value, savedValue: previous.savedValue });
+    const savedValue =
+      !local &&
+      collaboration.get(id)?.isSaved(files.sourceVersions[id]?.objectKey)
+        ? value
+        : previous.savedValue;
+    drafts.set(id, { value, savedValue });
     panels.showMarkdownSource(id, value);
     const path = paths.get(id);
     if (path && previous.value !== value) {

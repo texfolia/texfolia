@@ -18,6 +18,7 @@ import { isOrgAdmin } from "#/lib/auth/roles";
 import type { SourceBucket } from "#/lib/storage/server";
 
 import type { LockProject, ProjectTransaction } from "./access";
+import { projectMainFile } from "./main-file";
 import { projectPaths } from "./paths";
 import type {
   createProjectSchema,
@@ -447,12 +448,9 @@ export async function getProject<
         updatedAt: node.updatedAt.getTime(),
       };
   // Only preload the main text file on open; other files load on demand.
-  const paths = projectPaths(result.nodes);
-  const mainNode = result.mainFile
-    ? result.nodes.find(
-        (node) =>
-          node.kind === "text" && paths.get(node.id) === result.mainFile,
-      )
+  const main = projectMainFile(projectPaths(result.nodes), result.mainFile);
+  const mainNode = main
+    ? result.nodes.find((node) => node.id === main.id && node.kind === "text")
     : undefined;
   const sourceContents: Record<string, string> = {};
   if (mainNode) {
