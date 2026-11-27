@@ -3,6 +3,9 @@ import { createDb } from "@texfolia/db";
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
+import { aiConfig } from "#/lib/ai/ai-config.server";
+import { gatewayRequestCost } from "#/lib/ai/gateway";
+import { reconcileAiUsage } from "#/lib/billing/server";
 import { sendEmail } from "#/lib/email";
 import {
   lockProject,
@@ -277,6 +280,29 @@ export async function handleBuildQueue(batch: MessageBatch, env: Env) {
           attempts: message.attempts,
           coordinator: (projectId) => env.BUILDS.getByName(projectId),
           deliverEmail: (email) => sendEmail(env, email),
+          reconcileAiUsage: async (runId) => {
+            if (!process.env.CLOUDFLARE_AI_API_TOKEN) return;
+            const db = createDb(env.HYPERDRIVE.connectionString);
+            try {
+              const config = aiConfig();
+              const { retryAfterSeconds } = await reconcileAiUsage({
+                db,
+                config,
+                requestCost: gatewayRequestCost(config),
+                runId,
+              });
+              if (retryAfterSeconds !== null)
+                await env.BACKGROUND.send(
+                  {
+                    kind: "reconcile-ai-usage",
+                    ...(runId ? { runId } : {}),
+                  },
+                  { delaySeconds: retryAfterSeconds + 5 },
+                );
+            } finally {
+              await db.$client.end();
+            }
+          },
         })
       )
         message.ack();

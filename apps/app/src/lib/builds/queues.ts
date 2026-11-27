@@ -17,9 +17,17 @@ const maintenanceMessageSchema = z.object({
   at: z.number().int().nonnegative(),
 });
 export type MaintenanceMessage = z.infer<typeof maintenanceMessageSchema>;
+const reconcileAiUsageMessageSchema = z.object({
+  kind: z.literal("reconcile-ai-usage"),
+  runId: z.uuid().optional(),
+});
+export type ReconcileAiUsageMessage = z.infer<
+  typeof reconcileAiUsageMessageSchema
+>;
 const backgroundMessageSchema = z.discriminatedUnion("kind", [
   maintenanceMessageSchema,
   emailJobSchema,
+  reconcileAiUsageMessageSchema,
 ]);
 export const deadLetterError =
   "Compilation service failed after one queue retry; moved to compile-dlq. Recompile to try again.";
@@ -36,6 +44,7 @@ export async function processQueueMessage(options: {
     projectId: string,
   ) => Pick<ProjectCoordinatorCore, "consume" | "fail" | "maintain">;
   deliverEmail: DeliverEmail;
+  reconcileAiUsage?: (runId?: string) => Promise<void>;
 }) {
   const { body, attempts, coordinator } = options;
   const queue = options.queue.replace(/-local$/, "");
@@ -52,6 +61,8 @@ export async function processQueueMessage(options: {
     // A failed delivery throws, so the queue retries it.
     if (task.data.kind === "email")
       await options.deliverEmail(task.data.message);
+    else if (task.data.kind === "reconcile-ai-usage")
+      await options.reconcileAiUsage?.(task.data.runId);
     else await coordinator(task.data.projectId).maintain(task.data.at);
     return true;
   }

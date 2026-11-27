@@ -155,11 +155,10 @@ export const projectCollaboration = pgTable(
 );
 
 // Source object keys that a node stopped referencing. Like the registry above,
-// it has no foreign key, so pending cleanup survives owner cascades. Rows are
-// candidates: collection deletes an object only when no live node uses it. It
-// claims the row first and deletes the object outside any transaction, so writers
-// storing the same content check for claims before they commit (see
-// `commitSources`). A deleted row stays a while for writers that started earlier.
+// it has no foreign key, so pending cleanup survives owner cascades. Every
+// upload writes to a unique key, so a retired key is never reused; collection
+// waits out in-flight readers, skips any key still referenced by a live node,
+// deletes the objects, and removes the rows.
 export const sourceGarbage = pgTable(
   "source_garbage",
   {
@@ -171,8 +170,6 @@ export const sourceGarbage = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    claimedAt: timestamp("claimed_at", { withTimezone: true }),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
     index("source_garbage_project_id_idx").on(t.projectId, t.objectKey),

@@ -363,6 +363,7 @@ export async function reconcileAiUsage({
     )
     .orderBy(aiRequest.nextAttemptAt)
     .limit(50);
+  let retryAfterSeconds: number | null = rows.length === 50 ? 0 : null;
   for (const row of rows) {
     // Claim a short lease; never hold a database transaction across provider calls.
     const current = await db.transaction(async (tx) => {
@@ -451,15 +452,21 @@ export async function reconcileAiUsage({
         error instanceof Error ? error.message : "AI metering failed";
       const needsReview =
         attempts >= 12 || error instanceof MeteringReviewRequired;
+      const delaySeconds = Math.min(3600, 30 * 2 ** attempts);
       await db
         .update(aiRequest)
         .set({
           attempts,
           error: message,
           ...(needsReview ? { status: "needs_review" } : {}),
-          nextAttemptAt: sql`now() + ${Math.min(3600, 30 * 2 ** attempts)} * interval '1 second'`,
+          nextAttemptAt: sql`now() + ${delaySeconds} * interval '1 second'`,
         })
         .where(eq(aiRequest.id, current.id));
+      if (!needsReview)
+        retryAfterSeconds =
+          retryAfterSeconds === null
+            ? delaySeconds
+            : Math.min(retryAfterSeconds, delaySeconds);
       console.error({
         event: "ai_metering_retry",
         requestId: current.id,
@@ -470,4 +477,5 @@ export async function reconcileAiUsage({
       });
     }
   }
+  return { retryAfterSeconds };
 }

@@ -171,7 +171,10 @@ export async function persistMergedSource(options: {
         .where(eq(project.id, projectId))
         .for("update");
       const node = live && (await readNode(tx));
-      if (!node) return null;
+      if (!node) {
+        await retireSources(tx, projectId, [objectKey]);
+        return null;
+      }
       await checkProjectQuota(tx, projectId, {
         previousSize: node.sizeBytes,
         sizeBytes,

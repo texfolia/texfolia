@@ -4,42 +4,39 @@ Source-object storage for the product app: the R2 objects that hold project
 file contents, their keys and size limits, and the garbage-collection queue
 that deletes objects no live node references.
 
-| Entry point             | Contents                                                                                                                                                                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#/lib/storage`         | Client-safe contracts: file and project size limits, `sourceContentSchema`, `saveSourceSchema`, base64 encoding, file kinds, path checks                                                                                                                                                                |
-| `#/lib/storage/server`  | `SourceBucket`, `prepareSource` (hash and check), `storeSource` (upload one ahead of the commit), `commitSources` (upload, then commit), `checkProjectQuota`, `copySource` (verified copy under another prefix), `retireSources` (queue), `collectSourceGarbage`, `sweepProjectSources`, `deletePrefix` |
-| `#/lib/storage/zip`     | `zipStream` and `createZip`, an uncompressed ZIP writer used for project and account downloads                                                                                                                                                                                                          |
-| `#/lib/storage/browser` | DOM helpers: reading dropped files and folders, and `downloadFile`                                                                                                                                                                                                                                      |
+| Entry point             | Contents                                                                                                                                                                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#/lib/storage`         | Client-safe contracts: file and project size limits, `sourceContentSchema`, `saveSourceSchema`, `sourceHashFromKey`, base64 encoding, file kinds, path checks                                                                                                                                             |
+| `#/lib/storage/server`  | `SourceBucket`, `prepareSource` (hash and check), `storeSource` (upload one ahead of the commit), `commitSources` (upload, then commit, cleaning up on rollback), `checkProjectQuota`, `copySource` (verified copy under another prefix), `retireSources` (queue), `collectSourceGarbage`, `deletePrefix` |
+| `#/lib/storage/zip`     | `zipStream` and `createZip`, an uncompressed ZIP writer used for project and account downloads                                                                                                                                                                                                            |
+| `#/lib/storage/browser` | DOM helpers: reading dropped files and folders, and `downloadFile`                                                                                                                                                                                                                                        |
 
 Other features import only these entry points; the remaining files are private.
 
 ## Object keys
 
-Sources are stored at `projects/<projectId>/sources/<sha256>`. Identical
-content in one project shares one object, so a replaced or deleted node does
-not delete its object directly. Instead `retireSources` queues the key in
+Sources are stored at `projects/<projectId>/sources/<uuid>-<sha256>`. Every
+upload writes to a unique UUID-prefixed key (while still embedding the SHA-256
+content hash so compilers and Git can read it without fetching bytes). When a
+node is replaced or deleted, `retireSources` queues the old key in
 `source_garbage` inside the same transaction as the node change, and
 `collectSourceGarbage` later deletes queued keys that no live node still
 references. Projects in the trash keep their sources; only a deleted project row
-releases them. `sweepProjectSources` lists the whole prefix as a daily safety net
-for uploads whose transaction rolled back and for projects removed by cascades.
+releases them. Account and organization deletions queue owned project sources in
+`source_garbage` via `deletionNotice`.
 
 ## Collection
 
-Transactions never stay open during R2 calls, so collection and writes cannot rely
-on one lock:
+Transactions never stay open during R2 calls, and unique per-upload keys ensure
+collection can never race with a concurrent upload:
 
 - Collection waits an hour after a key is retired. Readers look keys up in a
   transaction and read the objects afterward, well within that time.
-- Collection marks the rows it will act on as claimed, under the project lock and
-  only while no live node uses the key. It deletes the objects afterward, and then
-  records that they are gone. Rows stay for another hour.
-- `commitSources` uploads first, then runs its transaction under the same lock. If
-  that finds a claim on one of its keys, the object may be gone: it rolls back,
-  waits for the delete to finish, uploads again, and retries. A claim that is not
-  finished after five minutes was abandoned.
-- The sweep skips objects uploaded in the last day, which covers new projects
-  whose row does not exist yet, and claims the others the same way.
+- Because a retired key is never reused by a new upload, `collectSourceGarbage`
+  deletes unreferenced keys directly and removes their `source_garbage` rows
+  without taking a project lock or running a two-phase claim.
+- `commitSources` uploads first, then runs its transaction. If the transaction
+  fails or rolls back, it deletes the newly uploaded unique keys immediately.
 
 ## Boundaries
 

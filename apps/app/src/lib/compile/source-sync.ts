@@ -11,6 +11,7 @@ export const compileDeltaSchema = z.object({
     z.string(),
     z.object({
       hash: z.string().regex(/^[0-9a-f]{64}$/),
+      key: z.string().optional(),
       content: z
         .union([z.string(), z.object({ base64: sourceContentSchema })])
         .optional(),
@@ -20,7 +21,7 @@ export const compileDeltaSchema = z.object({
 });
 export type CompileSources = Record<
   string,
-  string | { base64: string } | { hash: string }
+  string | { base64: string } | { hash: string; key?: string }
 >;
 
 export async function hashSource(bytes: Uint8Array<ArrayBuffer>) {
@@ -43,22 +44,25 @@ export class ProjectSourceSync {
     const hashes = new Map<string, string>();
     const files: z.infer<typeof compileDeltaSchema>["files"] = {};
     for (const [path, content] of Object.entries(sources)) {
-      const hash =
-        typeof content === "object" && "hash" in content
-          ? content.hash
-          : await hashSource(
-              typeof content === "string"
-                ? new TextEncoder().encode(content)
-                : decodeSource(content.base64),
-            );
-      hashes.set(path, hash);
-      if (previousHashes.get(path) !== hash)
+      const saved = typeof content === "object" && "hash" in content;
+      const hash = saved
+        ? content.hash
+        : await hashSource(
+            typeof content === "string"
+              ? new TextEncoder().encode(content)
+              : decodeSource(content.base64),
+          );
+      const token = saved && content.key ? content.key : hash;
+      hashes.set(path, token);
+      if (previousHashes.get(path) !== token)
         Object.defineProperty(files, path, {
           enumerable: true,
           value: {
             hash,
-            ...(typeof content === "object" && "hash" in content
-              ? {}
+            ...(saved
+              ? content.key
+                ? { key: content.key }
+                : {}
               : { content }),
           },
         });

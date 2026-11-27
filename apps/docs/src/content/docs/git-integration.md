@@ -120,7 +120,7 @@ Unlink keeps files and discards local git history and branches. Push first to ke
 commits on the host. The hourly sweep deletes superseded and abandoned git objects
 after an hour. Permanently deleting a project removes local git data; the trash keeps it. Neither deletes the remote.
 Prelaunch document snapshots are removed without migration: the room drops its
-history tables and the hourly sweep deletes legacy `history/` R2 objects.
+history tables have been removed.
 Live Yjs persistence remains.
 
 ## Assistant

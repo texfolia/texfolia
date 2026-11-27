@@ -13,10 +13,13 @@ import { isOrgAdmin } from "#/lib/auth/roles";
 import { ByteBudget } from "#/lib/map-limit";
 import { projectPaths } from "#/lib/projects";
 import type { LockProject, ProjectTransaction } from "#/lib/projects/server";
-import { maxSourceFileBytes, maxSourceProjectBytes } from "#/lib/storage";
+import {
+  maxSourceFileBytes,
+  maxSourceProjectBytes,
+  sourceHashFromKey,
+} from "#/lib/storage";
 import {
   commitSources,
-  deletePrefix,
   prepareSourceBytes,
   sourceBytesInFlight,
   sourceConcurrency,
@@ -113,7 +116,7 @@ class MissingObjectError extends Error {}
 type ProjectFile = GitFile & { source: StoredSource };
 
 function sourceHash(objectKey: string | null) {
-  return objectKey?.slice(objectKey.lastIndexOf("/") + 1) ?? "";
+  return sourceHashFromKey(objectKey) ?? "";
 }
 
 // The project's files as a working tree, read from R2 one at a time and only
@@ -583,11 +586,6 @@ export async function runGit({
       );
     throw error;
   }
-}
-
-// Snapshots of the version history that Git replaced. Nothing writes them now.
-export function collectLegacyHistory(bucket: SourceBucket) {
-  return deletePrefix(bucket, "history/");
 }
 
 // Long enough for any saved clone whose transaction has yet to commit.

@@ -97,7 +97,7 @@
       "simple": { "limit": 2, "period": 10 },
     },
   ],
-  "triggers": { "crons": ["17 * * * *", "41 3 * * *", "* * * * *"] },
+  "triggers": { "crons": ["17 * * * *"] },
   "services": [
     {
       "binding": "COMPILER",

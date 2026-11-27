@@ -2,6 +2,8 @@ import type { Db } from "@texfolia/db";
 import type { projectNode } from "@texfolia/db/schema";
 import type { z } from "zod";
 
+import { sourceHashFromKey } from "#/lib/storage";
+
 import { compileDeltaSchema, hashSource } from "./source-sync";
 
 // A transaction on the app database.
@@ -93,18 +95,19 @@ export function createCompileSources(project: CompileProject) {
     for (const node of saved) {
       const path = paths.get(node.id);
       if (!path) continue;
-      // Saved objects are content addressed, so no bytes are read here.
+      // Saved objects embed their content hash in the key, so no bytes are read here.
       const prefix = `projects/${projectId}/sources/`;
       const hash = node.objectKey?.startsWith(prefix)
-        ? node.objectKey.slice(prefix.length)
+        ? sourceHashFromKey(node.objectKey)
         : null;
-      if (node.objectKey && (!hash || !/^[0-9a-f]{64}$/.test(hash)))
+      if (node.objectKey && !hash)
         throw new Error("Saved source hash mismatch");
       Object.defineProperty(files, path, {
         enumerable: true,
-        value: hash
-          ? { hash, size: Number(node.sizeBytes) }
-          : { hash: await hashSource(new Uint8Array()), content: "" },
+        value:
+          hash && node.objectKey
+            ? { hash, key: node.objectKey, size: Number(node.sizeBytes) }
+            : { hash: await hashSource(new Uint8Array()), content: "" },
       });
     }
     return {

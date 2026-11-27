@@ -17,6 +17,7 @@ import {
   maxSourceFileBytes,
   maxSourceProjectBytes,
   sourceContentSchema,
+  sourceHashFromKey,
 } from "#/lib/storage";
 import { collectSourceGarbage, type SourceBucket } from "#/lib/storage/server";
 
@@ -39,7 +40,7 @@ import {
 } from "../../src/lib/projects/project.server";
 
 export { ProjectCollaboration } from "../../src/lib/collaboration/project-collaboration.server";
-import { collectProjectSources, sweepProjectSources } from "../collection";
+import { collectProjectSources } from "../collection";
 
 async function deleteForever(db: Db, userId: string, projectId: string) {
   await trashProject({ db, userId, projectId });
@@ -258,7 +259,8 @@ export default {
         sourceRevision: 0,
       });
       assert.deepEqual(recoveredSources.files["chapters/intro.tex"], {
-        hash: boundary.sourceVersion.objectKey?.split("/").at(-1),
+        hash: sourceHashFromKey(boundary.sourceVersion.objectKey),
+        key: boundary.sourceVersion.objectKey,
         size: "preserved source".length,
       });
       await renameProjectNode({
@@ -321,11 +323,13 @@ export default {
       });
       assert.match(
         saved.objectKey,
-        new RegExp(`^projects/${projectId}/sources/[0-9a-f]{64}$`),
+        new RegExp(
+          `^projects/${projectId}/sources/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-[0-9a-f]{64}$`,
+        ),
       );
       assert.equal(
-        saved.objectKey,
-        `projects/${projectId}/sources/${createHash("sha256").update("é 🦉").digest("hex")}`,
+        sourceHashFromKey(saved.objectKey),
+        createHash("sha256").update("é 🦉").digest("hex"),
       );
       const row = await db.query.projectNode.findFirst({
         where: { id: main.id },
@@ -412,13 +416,11 @@ export default {
       // Operations read sources after their transaction, so collection waits.
       await collectSourceGarbage({ db, bucket });
       assert(await bucket.get(saved.objectKey));
-      // Collection deletes the retired object outside its transaction, between
-      // another save's upload of the same bytes and that save's commit.
+      // Saving the same bytes again writes to a fresh unique key, so concurrent
+      // collection of the retired key cannot race with the new save.
       {
         const deleting = Promise.withResolvers<void>();
         const releaseDelete = Promise.withResolvers<void>();
-        const uploaded = Promise.withResolvers<void>();
-        const releaseSave = Promise.withResolvers<void>();
         let uploads = 0;
         const slowDelete: SourceBucket = {
           get: bucket.get.bind(bucket),
@@ -430,22 +432,25 @@ export default {
             await bucket.delete(keys);
           },
         };
-        const slowUpload: SourceBucket = {
+        const countingUpload: SourceBucket = {
           get: bucket.get.bind(bucket),
           list: bucket.list.bind(bucket),
           delete: bucket.delete.bind(bucket),
           put: async (...args: Parameters<SourceBucket["put"]>) => {
-            const result = await bucket.put(...args);
-            if (++uploads === 1) {
-              uploaded.resolve();
-              await releaseSave.promise;
-            }
-            return result;
+            uploads++;
+            return bucket.put(...args);
           },
         };
-        const saving = saveProjectSource({
+        const collectorDb = createDb(env.HYPERDRIVE.connectionString);
+        const collecting = collectProjectSources({
+          db: collectorDb,
+          bucket: slowDelete,
+          collaboration: env.COLLABORATION,
+        }).finally(() => void collectorDb.$client.end());
+        await deleting.promise;
+        const restored = await saveProjectSource({
           db,
-          bucket: slowUpload,
+          bucket: countingUpload,
           userId: ownerId,
           data: {
             projectId,
@@ -454,32 +459,13 @@ export default {
             content: source("é 🦉"),
           },
         });
-        await uploaded.promise;
-        const collectorDb = createDb(env.HYPERDRIVE.connectionString);
-        const collecting = collectProjectSources({
-          db: collectorDb,
-          bucket: slowDelete,
-          collaboration: env.COLLABORATION,
-        }).finally(() => void collectorDb.$client.end());
-        await deleting.promise;
-        releaseSave.resolve();
-        // The save finds the claim, and waits for the delete it cannot stop.
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        assert.equal(uploads, 1);
+        assert.notEqual(restored.objectKey, saved.objectKey);
+        assert.equal(uploads, 1, "No retry needed with unique upload keys");
         releaseDelete.resolve();
         await collecting;
-        const restored = await saving;
-        assert.equal(restored.objectKey, saved.objectKey);
-        assert.equal(uploads, 2, "The deleted object is uploaded again");
-        assert(await bucket.get(saved.objectKey));
-        // Used again, it outlives both the old claim and the next collection.
-        await collectProjectSources({
-          db,
-          bucket,
-          collaboration: env.COLLABORATION,
-        });
-        assert(await bucket.get(saved.objectKey));
-        await saveProjectSource({
+        assert.equal(await bucket.get(saved.objectKey), null);
+        assert(await bucket.get(restored.objectKey));
+        const restoredEdited = await saveProjectSource({
           db,
           bucket,
           userId: ownerId,
@@ -490,6 +476,8 @@ export default {
             content: source("editor saved"),
           },
         });
+        edited.objectKey = restoredEdited.objectKey;
+        edited.updatedAt = restoredEdited.updatedAt;
       }
       await collectProjectSources({
         db,
@@ -526,9 +514,13 @@ export default {
           content: encodeSource(binaryBytes),
         },
       });
-      assert.equal(
+      assert.notEqual(
         binary.sourceVersion.objectKey,
         duplicate.sourceVersion.objectKey,
+      );
+      assert.equal(
+        sourceHashFromKey(binary.sourceVersion.objectKey),
+        sourceHashFromKey(duplicate.sourceVersion.objectKey),
       );
       const resync = await compileResync({
         db,
@@ -542,11 +534,16 @@ export default {
       assert.equal(resync.resync, true);
       assert.equal(
         resync.files["main.tex"]?.hash,
-        edited.objectKey.split("/").at(-1),
+        sourceHashFromKey(edited.objectKey),
       );
+      assert.equal(resync.files["main.tex"]?.key, edited.objectKey);
       assert.equal(
         resync.files["image.png"]?.hash,
-        binary.sourceVersion.objectKey?.split("/").at(-1),
+        sourceHashFromKey(binary.sourceVersion.objectKey),
+      );
+      assert.equal(
+        resync.files["image.png"]?.key,
+        binary.sourceVersion.objectKey,
       );
       assert.equal(resync.files["image.png"]?.size, binaryBytes.length);
       await assert.rejects(
@@ -618,6 +615,9 @@ export default {
       assert.equal(await bucket.get(binaryEdit.objectKey), null);
       assert(await bucket.get(duplicate.sourceVersion.objectKey ?? ""));
 
+      const beforeFailedCreate = await bucket.list({
+        prefix: `projects/${projectId}/sources/`,
+      });
       await assert.rejects(
         createProjectNode({
           db,
@@ -633,25 +633,12 @@ export default {
           },
         }),
       );
-      const beforeSweep = await bucket.list({
-        prefix: `projects/${projectId}/sources/`,
-      });
-      // A rolled-back write never reaches the queue, so only the sweep sees it.
-      await collectProjectSources({
-        db,
-        bucket,
-        collaboration: env.COLLABORATION,
-      });
+      // A rolled-back write cleans up its unique upload immediately.
       assert.equal(
         (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
           .objects.length,
-        beforeSweep.objects.length,
+        beforeFailedCreate.objects.length,
       );
-      await sweepProjectSources({ db, bucket });
-      const afterSweep = await bucket.list({
-        prefix: `projects/${projectId}/sources/`,
-      });
-      assert.equal(beforeSweep.objects.length - afterSweep.objects.length, 1);
       assert.equal(
         (await getProject({ db, bucket, ownerId, projectId })).sourceContents[
           main.id
@@ -811,14 +798,7 @@ export default {
           ),
         );
       assert.equal(BigInt(usage?.total ?? 0), BigInt(maxSourceProjectBytes));
-      await Promise.all(
-        Array.from({ length: 105 }, (_, index) => {
-          const text = `orphan-${index}`;
-          const hash = createHash("sha256").update(text).digest("hex");
-          return bucket.put(`projects/${projectId}/sources/${hash}`, text);
-        }),
-      );
-      // Normal collection touches only queued keys, never the rest of the bucket.
+      // Normal collection touches only queued keys, never lists the bucket.
       const listing: SourceBucket = {
         get: bucket.get.bind(bucket),
         put: bucket.put.bind(bucket),
@@ -832,17 +812,6 @@ export default {
         bucket: listing,
         collaboration: env.COLLABORATION,
       });
-      assert.equal(
-        (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
-          .objects.length,
-        107,
-      );
-      await sweepProjectSources({ db, bucket });
-      assert.equal(
-        (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
-          .objects.length,
-        2,
-      );
       const competingSaves = await Promise.allSettled(
         ["race-a", "race-b"].map((text) =>
           saveProjectSource({
@@ -881,17 +850,11 @@ export default {
           await db
             .select()
             .from(sourceGarbage)
-            .where(
-              and(
-                eq(sourceGarbage.projectId, projectId),
-                isNull(sourceGarbage.deletedAt),
-              ),
-            )
+            .where(eq(sourceGarbage.projectId, projectId))
         ).length,
         0,
       );
-      // The losing save uploaded its source before it found the conflict.
-      await sweepProjectSources({ db, bucket });
+      // Both losing saves and deleted projects leave no orphaned objects.
       assert.equal(
         (await bucket.list({ prefix: `projects/${projectId}/sources/` }))
           .objects.length,

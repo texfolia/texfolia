@@ -26,7 +26,7 @@ invalidation, collaboration cleanup, and review-comment versions.
 
 Saved text and binary files live in the web Worker's `SOURCES` R2 bucket, indexed
 by `project_node.object_key` and `size_bytes`. Keys are
-`projects/{projectId}/sources/{sha256}`. Object keys, uploads, limits, and the garbage
+`projects/{projectId}/sources/{uuid}-{sha256}`. Object keys, uploads, limits, and the garbage
 queue live in [`#/lib/storage`](src/lib/storage/README.md); access
 checks, build invalidation, and collaboration cleanup live in `#/lib/projects`. Collaborative text edits persist automatically.
 **Save** (Cmd/Ctrl+S) waits for merged text to reach R2, then submits the
@@ -60,19 +60,14 @@ writes and collection stay apart without sharing a lock across R2 calls.
 
 Each write that replaces or deletes a source also records the old key in the
 `source_garbage` table, in the same transaction. This covers saves, collaboration
-saves, Git checkouts and pulls, node deletion, and permanent project deletion. The web
-Worker's hourly scheduled handler reads only that table. It claims keys queued for
-over an hour that no live node references, under the project lock, and then
-deletes their objects. The run's cost depends on recent changes, not bucket size.
-Shared hashes are retained while any live node references them.
-
-A daily sweep (`41 3 * * *`) lists the whole `projects/` prefix as a safety net.
-It removes objects the queue cannot see: uploads whose SQL transaction rolled
-back, and projects removed by account or organization cascades. It skips objects
-uploaded in the last day, whose transactions may still commit. Both passes use
-SQL references, not an age-based bucket lifecycle that could erase old but
-still-current files. Reads look up keys in a short transaction and read the
-objects afterward; the hour before collection keeps replaced versions readable.
+saves, Git checkouts and pulls, node deletion, permanent project deletion, and
+account/organization cascades (via `deletionNotice`). Rolled-back uploads delete
+their unique keys immediately. The web Worker's hourly scheduled handler
+(`17 * * * *`) reads only `source_garbage`: it deletes keys queued for over an
+hour that no live node references, and removes the queue rows. The run's cost
+depends on recent changes, not bucket size. Reads look up keys in a short
+transaction and read the objects afterward; the hour before collection keeps
+replaced versions readable.
 
 On open, sources come from the server. Legacy local-storage drafts are uploaded
 automatically only for text nodes without a server object. Other differing drafts

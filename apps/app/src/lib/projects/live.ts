@@ -4,12 +4,14 @@ import {
   project,
   projectCollaboration,
   projectCollaborator,
+  projectNode,
   projectShareGrant,
   projectTeam,
 } from "@texfolia/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 import { mapLimit } from "#/lib/map-limit";
+import { retireSources } from "#/lib/storage/server";
 
 type LiveChannel = {
   getByName(projectId: string): {
@@ -112,8 +114,10 @@ export async function invalidateOrganizationAccess({
 
 /**
  * Tells live channels about projects an account or organization is about to lose
- * or take with it. Cascades remove the rows that name them, so `before` collects
- * them and `after` notifies. A failure never blocks the deletion.
+ * or take with it, and queues sources of projects removed by the cascade for
+ * garbage collection. Cascades remove the rows that name them, so `before`
+ * collects them and `after` notifies and retires. A failure never blocks the
+ * deletion.
  */
 export function deletionNotice({
   db,
@@ -124,41 +128,73 @@ export function deletionNotice({
 }) {
   // Undefined when everyone loses access, because the project is deleted.
   const affected = new Map<string, string[] | undefined>();
+  // Sources of owned projects that the cascade will delete.
+  const ownedSources = new Map<string, string[]>();
   return {
     async before(deleted: { userId: string } | { organizationId: string }) {
-      if (!live) return;
       affected.clear();
+      ownedSources.clear();
       try {
+        const ownedIds: string[] = [];
         if ("organizationId" in deleted) {
           for (const { id } of await db
             .select({ id: project.id })
             .from(project)
-            .where(eq(project.organizationId, deleted.organizationId)))
+            .where(eq(project.organizationId, deleted.organizationId))) {
             affected.set(id, undefined);
-          return;
+            ownedIds.push(id);
+          }
+        } else {
+          const { userId } = deleted;
+          if (live) {
+            for (const { id } of await db
+              .select({ id: projectCollaborator.projectId })
+              .from(projectCollaborator)
+              .where(eq(projectCollaborator.userId, userId)))
+              affected.set(id, [userId]);
+            for (const { id } of await db
+              .select({ id: projectShareGrant.projectId })
+              .from(projectShareGrant)
+              .where(eq(projectShareGrant.userId, userId)))
+              affected.set(id, [userId]);
+            for (const { id } of await db
+              .select({ id: project.id })
+              .from(project)
+              .innerJoin(
+                member,
+                eq(member.organizationId, project.organizationId),
+              )
+              .where(eq(member.userId, userId)))
+              affected.set(id, [userId]);
+          }
+          for (const { id } of await db
+            .select({ id: project.id })
+            .from(project)
+            .where(eq(project.ownerId, userId))) {
+            affected.set(id, undefined);
+            ownedIds.push(id);
+          }
         }
-        const { userId } = deleted;
-        for (const { id } of await db
-          .select({ id: projectCollaborator.projectId })
-          .from(projectCollaborator)
-          .where(eq(projectCollaborator.userId, userId)))
-          affected.set(id, [userId]);
-        for (const { id } of await db
-          .select({ id: projectShareGrant.projectId })
-          .from(projectShareGrant)
-          .where(eq(projectShareGrant.userId, userId)))
-          affected.set(id, [userId]);
-        for (const { id } of await db
-          .select({ id: project.id })
-          .from(project)
-          .innerJoin(member, eq(member.organizationId, project.organizationId))
-          .where(eq(member.userId, userId)))
-          affected.set(id, [userId]);
-        for (const { id } of await db
-          .select({ id: project.id })
-          .from(project)
-          .where(eq(project.ownerId, userId)))
-          affected.set(id, undefined);
+        if (ownedIds.length) {
+          const nodes = await db
+            .select({
+              projectId: projectNode.projectId,
+              objectKey: projectNode.objectKey,
+            })
+            .from(projectNode)
+            .where(
+              and(
+                inArray(projectNode.projectId, ownedIds),
+                isNull(projectNode.deletedAt),
+              ),
+            );
+          for (const node of nodes) {
+            if (!node.objectKey) continue;
+            const keys = ownedSources.get(node.projectId) ?? [];
+            keys.push(node.objectKey);
+            ownedSources.set(node.projectId, keys);
+          }
+        }
       } catch (error) {
         console.error("Deleted projects could not be listed", {
           ...deleted,
@@ -167,9 +203,20 @@ export function deletionNotice({
       }
     },
     async after() {
-      await mapLimit([...affected], organizationConcurrency, ([id, userIds]) =>
-        invalidateProjectAccess(live, id, userIds),
-      );
+      for (const [projectId, keys] of ownedSources)
+        await retireSources(db, projectId, keys).catch((error: unknown) => {
+          console.error("Deleted project sources could not be retired", {
+            projectId,
+            error,
+          });
+        });
+      ownedSources.clear();
+      if (live)
+        await mapLimit(
+          [...affected],
+          organizationConcurrency,
+          ([id, userIds]) => invalidateProjectAccess(live, id, userIds),
+        );
       affected.clear();
     },
   };

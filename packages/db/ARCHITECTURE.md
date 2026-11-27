@@ -50,11 +50,12 @@ The `db:generate` and `db:migrate` commands remain available when reviewed migra
 Keep transactions limited to related database operations. Call email, billing, and compiler services outside transactions. Hyperdrive uses transaction pooling, so do not depend on session-level advisory locks, `SET` state across transactions, or a persistent connection identity.
 
 No transaction stays open during R2, Durable Object, or other network calls. Source
-storage uploads immutable objects first and then commits under the project row
-lock, which serializes byte quotas, source versions, and deletion. The daily source
-sweep removes objects left by rolled-back SQL transactions. Replaced and deleted
-sources are queued in `source_garbage` for the hourly collection, which claims rows
-before it deletes their objects. See
+storage uploads immutable objects to unique per-upload keys first and then commits
+under the project row lock, which serializes byte quotas, source versions, and
+deletion. A rolled-back SQL transaction deletes its uploaded keys immediately.
+Replaced and deleted sources are queued in `source_garbage` for the hourly
+collection, which deletes unreferenced objects directly without project locks or
+two-phase claims. See
 [the product app architecture](../../apps/app/ARCHITECTURE.md#project-source-storage) for storage
 behavior and verification. For an existing database,
 prepare and review an upgrade against its actual schema before deploying.

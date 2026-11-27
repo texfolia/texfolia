@@ -297,14 +297,52 @@ test("saved sources are read from the app's bucket by hash and never copied", as
     });
     expect(f.drafts()).toEqual([await hashOf("draft")]);
 
+    // UUID-prefixed saved keys work and cross-project/mismatched keys are rejected.
+    const uuidImage = new Uint8Array([4, 5, 6]);
+    const uuidHash = await hashOf(uuidImage);
+    const uuidKey = `projects/${f.projectId}/sources/${crypto.randomUUID()}-${uuidHash}`;
+    f.save(uuidKey, uuidImage);
+    expect(
+      (
+        await f.submit({
+          mainFile: "main.tex",
+          baseRevision: 1,
+          revision: 2,
+          files: {
+            "other.png": {
+              hash: uuidHash,
+              key: `projects/${crypto.randomUUID()}/sources/${crypto.randomUUID()}-${uuidHash}`,
+            },
+          },
+          deleted: [],
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await f.submit({
+          mainFile: "main.tex",
+          baseRevision: 1,
+          revision: 2,
+          files: { "uuid.png": { hash: uuidHash, key: uuidKey } },
+          deleted: [],
+        })
+      ).status,
+    ).toBe(202);
+    await f.settle();
+    expect(f.built[1]).toMatchObject({
+      "main.tex": "draft",
+      "uuid.png": "\u0004\u0005\u0006",
+    });
+
     // Server resyncs carry sizes, so a missing object surfaces at compile time.
     const gone = await hashOf("gone");
     expect(
       (
         await f.submit({
           ...delta,
-          baseRevision: 1,
-          revision: 2,
+          baseRevision: 2,
+          revision: 3,
           files: {
             "main.tex": await text("draft"),
             "gone.tex": { hash: gone, size: 4 },
@@ -320,8 +358,8 @@ test("saved sources are read from the app's bucket by hash and never copied", as
     // The broken manifest is dropped, so the next delta resyncs from zero.
     const retry = await f.submit({
       ...delta,
-      baseRevision: 2,
-      revision: 3,
+      baseRevision: 3,
+      revision: 4,
       resync: false,
     });
     expect(retry.status).toBe(409);

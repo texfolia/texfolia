@@ -171,6 +171,7 @@ test.each([
           bindings: z.array(z.object({ name: z.string() })),
         }),
         migrations: z.array(z.object({ tag: z.string() })),
+        triggers: z.object({ crons: z.array(z.string()) }),
         ratelimits: z.array(
           z.object({
             name: z.string(),
@@ -223,6 +224,7 @@ test.each([
       "v1-collaboration",
       "v2-builds",
     ]);
+    expect(config.triggers.crons).toEqual(["17 * * * *"]);
     expect(config.ratelimits).toContainEqual({
       name: "COMPILE_LIMIT",
       namespace_id: env ? "243" : "244",
@@ -287,6 +289,9 @@ test.each(["", "-local"])(
             throw new Error("email unavailable");
           calls.push(["email", message.to]);
         },
+        async reconcileAiUsage(runId) {
+          calls.push(["reconcile-ai-usage", runId]);
+        },
         coordinator: (projectId) => ({
           async consume(revision) {
             calls.push(["consume", projectId, revision]);
@@ -325,6 +330,19 @@ test.each(["", "-local"])(
     await expect(
       deliver("background", email("down@example.com")),
     ).rejects.toThrow("email unavailable");
+
+    calls.length = 0;
+    const runId = crypto.randomUUID();
+    expect(
+      await deliver("background", { kind: "reconcile-ai-usage", runId }),
+    ).toBe(true);
+    expect(await deliver("background", { kind: "reconcile-ai-usage" })).toBe(
+      true,
+    );
+    expect(calls).toEqual([
+      ["reconcile-ai-usage", runId],
+      ["reconcile-ai-usage", undefined],
+    ]);
   },
 );
 
