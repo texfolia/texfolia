@@ -10,9 +10,9 @@ import { gitVersion, runGit } from "./actions";
 import { GitRepository } from "./repository";
 import {
   archiveBody,
-  legacyArchive,
   memoryFiles,
   provideFixedLengthStream,
+  repositoryArchive,
 } from "./testing";
 
 provideFixedLengthStream();
@@ -189,11 +189,11 @@ async function seedRepo(content: string) {
   await repo.init(remoteUrl);
   repo.overlay(memoryFiles({ "main.tex": content }));
   await repo.commit("Initial commit", user);
-  return legacyArchive(repo);
+  return repositoryArchive(repo);
 }
 
 test("runGit releases the project database lock before R2 reads for status, diff, and commit", async () => {
-  const repoKey = `git/${projectId}/initial.json`;
+  const repoKey = `git/${projectId}/initial.bin`;
   const sourceKey = `projects/${projectId}/sources/v1`;
   const objects = new Map<string, Uint8Array | string>([
     [repoKey, await seedRepo("before\n")],
@@ -277,7 +277,7 @@ test("runGit releases the project database lock before R2 reads for status, diff
 });
 
 test("runGit status retries once when an object is retired and collected between snapshot and R2 read", async () => {
-  const repoKey = `git/${projectId}/initial.json`;
+  const repoKey = `git/${projectId}/initial.bin`;
   const staleKey = `projects/${projectId}/sources/stale`;
   const freshKey = `projects/${projectId}/sources/fresh`;
   const objects = new Map<string, Uint8Array | string>([
@@ -337,7 +337,7 @@ test("runGit status retries once when an object is retired and collected between
 });
 
 test("runGit reports missing R2 objects when DB pointers have not changed", async () => {
-  const repoKey = `git/${projectId}/missing.json`;
+  const repoKey = `git/${projectId}/missing.bin`;
   const harness = createHarness({
     initialLinked: {
       projectId,
@@ -364,7 +364,7 @@ test("runGit reports missing R2 objects when DB pointers have not changed", asyn
 });
 
 test("runGit mutating actions report concurrent change instead of missing object when collected", async () => {
-  const repoKey = `git/${projectId}/initial.json`;
+  const repoKey = `git/${projectId}/initial.bin`;
   const staleKey = `projects/${projectId}/sources/stale`;
   const freshKey = `projects/${projectId}/sources/fresh`;
   const objects = new Map<string, Uint8Array | string>([

@@ -223,11 +223,11 @@ export function meteredGatewayFetch({
   userId: string;
   payer: AiPayer;
   model: AiModel;
-  checkAccess: () => Promise<void>;
+  checkAccess?: () => Promise<void> | void;
   fetcher?: AiFetch;
 }) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
-    await checkAccess();
+    await checkAccess?.();
     if (typeof init?.body !== "string")
       throw new Error("Expected an AI JSON request");
     const request = z
@@ -321,7 +321,6 @@ export async function startAssistant({
   scheduleReconcile,
   userId,
   canWrite,
-  organizationId,
   payer,
   body,
   purpose,
@@ -340,14 +339,28 @@ export async function startAssistant({
   scheduleReconcile?: (runId: string, delaySeconds: number) => Promise<void>;
   userId: string;
   canWrite: boolean;
-  /** The project's organization, which the tools re-check entitlement against. */
-  organizationId: string | null;
+  organizationId?: string | null;
   payer: AiPayer;
   body: unknown;
 }) {
-  if (purpose === "commit-message") {
-    const db = createDb(connectionString);
-    try {
+  const db = createDb(connectionString);
+  // Saves and closes the run once it has started.
+  let finish: (() => Promise<void>) | undefined;
+  let claimedThread: string | undefined;
+  let claimedRunId: string | undefined;
+  const releaseClaim = (client: Db, threadId: string, activeRunId: string) =>
+    client
+      .update(aiThread)
+      .set({ activeRunId: null, activeRunAt: null })
+      .where(
+        and(
+          threadOwner(projectId, userId, threadId),
+          eq(aiThread.activeRunId, activeRunId),
+        ),
+      );
+  let history: StoredMessage[] = [];
+  try {
+    if (purpose === "commit-message") {
       const [identity] = await db
         .select()
         .from(userTable)
@@ -372,58 +385,40 @@ export async function startAssistant({
           },
         ],
       };
-    } finally {
-      await db.$client.end();
     }
-  }
-  const chatInput = z
-    .looseObject({
-      messages: z
-        .array(
-          z.looseObject({
-            role: z.enum(["user", "assistant", "tool", "reasoning"]),
-            content: z.string().optional(),
-          }),
-        )
-        .min(1)
-        .max(200),
-    })
-    .safeParse(body);
-  if (!chatInput.success)
-    throw new AiError(
-      "Only text conversations are supported. Start a new chat.",
-      400,
-    );
-  let params;
-  try {
-    params = await chatParamsFromRequestBody(body);
-  } catch {
-    throw new AiError("Invalid chat request. Start a new chat.", 400);
-  }
-  // Client system instructions and tools never grant capabilities or provider options.
-  if (params.messages.some((m) => m.role === "system"))
-    throw new AiError("Invalid message role", 400);
-  const parsedOverride = z
-    .object({ model: z.string().max(200).optional() })
-    .safeParse(params.forwardedProps);
-  if (!parsedOverride.success) throw new AiError("Choose a valid model.", 400);
-  const override = parsedOverride.data;
-  const db = createDb(connectionString);
-  // Saves and closes the run once it has started.
-  let finish: (() => Promise<void>) | undefined;
-  let claimedThread: string | undefined;
-  const releaseClaim = (client: Db, threadId: string) =>
-    client
-      .update(aiThread)
-      .set({ activeRunId: null, activeRunAt: null })
-      .where(
-        and(
-          threadOwner(projectId, userId, threadId),
-          eq(aiThread.activeRunId, params.runId),
-        ),
+    const chatInput = z
+      .looseObject({
+        messages: z
+          .array(
+            z.looseObject({
+              role: z.enum(["user", "assistant", "tool", "reasoning"]),
+              content: z.string().optional(),
+            }),
+          )
+          .min(1)
+          .max(200),
+      })
+      .safeParse(body);
+    if (!chatInput.success)
+      throw new AiError(
+        "Only text conversations are supported. Start a new chat.",
+        400,
       );
-  let history: StoredMessage[] = [];
-  try {
+    let params;
+    try {
+      params = await chatParamsFromRequestBody(body);
+    } catch {
+      throw new AiError("Invalid chat request. Start a new chat.", 400);
+    }
+    // Client system instructions and tools never grant capabilities or provider options.
+    if (params.messages.some((m) => m.role === "system"))
+      throw new AiError("Invalid message role", 400);
+    const parsedOverride = z
+      .object({ model: z.string().max(200).optional() })
+      .safeParse(params.forwardedProps);
+    if (!parsedOverride.success)
+      throw new AiError("Choose a valid model.", 400);
+    const override = parsedOverride.data;
     const threadIdentifier = z.uuid().safeParse(params.threadId);
     if (!purpose && !threadIdentifier.success)
       throw new AiError("Invalid chat identifier.", 400);
@@ -557,6 +552,7 @@ export async function startAssistant({
           })
           .where(eq(aiThread.id, thread.id));
         claimedThread = thread.id;
+        claimedRunId = params.runId;
       });
       params.messages = history;
     }
@@ -586,23 +582,9 @@ export async function startAssistant({
     request.signal.addEventListener("abort", disconnect, { once: true });
     if (request.signal.aborted) abort.abort();
     const timeout = setTimeout(() => abort.abort(), 4 * 60 * 1000);
-    const auth = createAuth(db);
-    const checkAccess = async () => {
+    // Session, project access, and entitlement were verified before starting the run.
+    const checkAccess = () => {
       abort.signal.throwIfAborted();
-      const access = await aiAccess({
-        request,
-        projectId,
-        db,
-        auth,
-        lock: workspace.lock,
-      });
-      if (
-        access.userId !== userId ||
-        access.canWrite !== canWrite ||
-        access.organizationId !== organizationId ||
-        access.payer.subscriptionId !== payer.subscriptionId
-      )
-        throw new AiError("Your access changed. Refresh the project.", 403);
     };
     let outcome: typeof run.status = "aborted";
     const transcript = new StreamProcessor({ initialMessages: history });
@@ -670,10 +652,16 @@ export async function startAssistant({
       } catch (error) {
         // A reply that cannot be saved must not block the thread too.
         console.error({ event: "ai_thread_save_failed", runId, error });
-        if (claimedThread)
-          await releaseClaim(db, claimedThread).catch((error: unknown) => {
-            console.error({ event: "ai_thread_release_failed", runId, error });
-          });
+        if (claimedThread && claimedRunId)
+          await releaseClaim(db, claimedThread, claimedRunId).catch(
+            (error: unknown) => {
+              console.error({
+                event: "ai_thread_release_failed",
+                runId,
+                error,
+              });
+            },
+          );
       }
     };
     // After the thread is free, the rest is no concern of the client's.
@@ -804,12 +792,11 @@ export async function startAssistant({
           ? []
           : projectTools({
               db,
-              auth,
+              auth: createAuth(db),
               workspace,
               projectId,
               userId,
               canWrite,
-              organizationId,
               headers: request.headers,
               signal: abort.signal,
             }),
@@ -852,7 +839,8 @@ export async function startAssistant({
   } catch (error) {
     if (finish) await finish();
     else {
-      if (claimedThread) await releaseClaim(db, claimedThread);
+      if (claimedThread && claimedRunId)
+        await releaseClaim(db, claimedThread, claimedRunId);
       await db.$client.end();
     }
     throw error;

@@ -39,17 +39,35 @@ export const organizationRoles = {
 
 export const maxTeamsPerOrganization = 100;
 
-async function findMembers(
+async function findMember(
   ctx: AuthContext,
-  field: "organizationId" | "userId",
-  value: string,
+  organizationId: string,
+  userId: string,
 ) {
-  return ctx.context.adapter.findMany<Member>({
+  return ctx.context.adapter.findOne<Member>({
     model: "member",
-    where: [{ field, value }],
-    // Better Auth reads 100 rows by default.
-    limit: 10_000,
+    where: [
+      { field: "organizationId", value: organizationId },
+      { field: "userId", value: userId },
+    ],
   });
+}
+
+async function hasOtherOwner(
+  ctx: AuthContext,
+  organizationId: string,
+  userId: string,
+) {
+  const candidates = await ctx.context.adapter.findMany<Member>({
+    model: "member",
+    where: [
+      { field: "organizationId", value: organizationId },
+      { field: "userId", operator: "ne", value: userId },
+      { field: "role", operator: "contains", value: "owner" },
+    ],
+    limit: 10,
+  });
+  return candidates.some(isOwner);
 }
 
 function isOwner(member: Pick<Member, "role"> | undefined | null) {
@@ -84,8 +102,7 @@ export async function assertOrganizationPolicy(ctx: AuthContext) {
   const organizationId =
     body.data.organizationId ?? session.session.activeOrganizationId;
   if (typeof organizationId !== "string") return;
-  const members = await findMembers(ctx, "organizationId", organizationId);
-  const actor = members.find((member) => member.userId === session.user.id);
+  const actor = await findMember(ctx, organizationId, session.user.id);
   if (!actor || isOwner(actor)) return;
   if ("role" in body.data) {
     const roles = [body.data.role].flat().flatMap((role) => role.split(","));
@@ -96,14 +113,24 @@ export async function assertOrganizationPolicy(ctx: AuthContext) {
     return;
   }
   const { memberIdOrEmail } = body.data;
-  let target = members.find((member) => member.id === memberIdOrEmail);
+  let target: Member | null;
   if (memberIdOrEmail.includes("@")) {
     const found =
       await ctx.context.internalAdapter.findUserByEmail(memberIdOrEmail);
-    target = members.find((member) => member.userId === found?.user.id);
+    target = found
+      ? await findMember(ctx, organizationId, found.user.id)
+      : null;
+  } else {
+    target = await ctx.context.adapter.findOne<Member>({
+      model: "member",
+      where: [
+        { field: "organizationId", value: organizationId },
+        { field: "id", value: memberIdOrEmail },
+      ],
+    });
   }
   // Admins may still remove themselves.
-  if (target && target !== actor && !isPlainMember(target))
+  if (target && target.id !== actor.id && !isPlainMember(target))
     throw new APIError("FORBIDDEN", {
       message: "Only an organization owner can remove owners and admins.",
     });
@@ -115,12 +142,18 @@ function isPlainMember(member: Pick<Member, "role">) {
 
 /** The organizations that would have no owner without this user. */
 async function solelyOwned(ctx: AuthContext, userId: string) {
-  const owned = (await findMembers(ctx, "userId", userId)).filter(isOwner);
+  const owned = (
+    await ctx.context.adapter.findMany<Member>({
+      model: "member",
+      where: [
+        { field: "userId", value: userId },
+        { field: "role", operator: "contains", value: "owner" },
+      ],
+    })
+  ).filter(isOwner);
   const organizations: Organization[] = [];
   for (const { organizationId } of owned) {
-    const members = await findMembers(ctx, "organizationId", organizationId);
-    if (members.some((member) => member.userId !== userId && isOwner(member)))
-      continue;
+    if (await hasOtherOwner(ctx, organizationId, userId)) continue;
     const organization = await ctx.context.adapter.findOne<Organization>({
       model: "organization",
       where: [{ field: "id", value: organizationId }],
@@ -210,7 +243,10 @@ export async function syncSeats(
 
 /** The organizations this user belongs to. */
 export async function memberOrganizations(ctx: AuthContext, userId: string) {
-  const members = await findMembers(ctx, "userId", userId);
+  const members = await ctx.context.adapter.findMany<Member>({
+    model: "member",
+    where: [{ field: "userId", value: userId }],
+  });
   return members.map(({ organizationId }) => organizationId);
 }
 
@@ -226,8 +262,7 @@ async function assertOwner(ctx: AuthContext) {
     (body.success ? body.data.organizationId : undefined) ??
     session.session.activeOrganizationId;
   if (typeof organizationId !== "string") return;
-  const members = await findMembers(ctx, "organizationId", organizationId);
-  const actor = members.find((member) => member.userId === session.user.id);
+  const actor = await findMember(ctx, organizationId, session.user.id);
   // The endpoint rejects people who are not members.
   if (actor && !isOwner(actor))
     throw new APIError("FORBIDDEN", {

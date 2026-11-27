@@ -2,6 +2,7 @@ export {
   authorizeOrganizationBilling,
   createBillingPlugin,
   enforceBillingScope,
+  getStripeClient,
 } from "./stripe";
 export { aiEntitlement, compilePlan, type AiPayer } from "./entitlements";
 export {

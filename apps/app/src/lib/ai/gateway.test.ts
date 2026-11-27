@@ -79,7 +79,21 @@ describe("AI Gateway catalog", () => {
       });
     };
     expect((await fetchGatewayModels(config, fetcher)).length).toBe(101);
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
+  });
+  test("bounds sequential pagination requests", async () => {
+    let calls = 0;
+    const fetcher: AiFetch = async () => {
+      const page = ++calls;
+      return Response.json({
+        data: Array.from({ length: 100 }, (_, i) => ({
+          ...model,
+          id: `${page}-${i}`,
+        })),
+      });
+    };
+    expect((await fetchGatewayModels(config, fetcher)).length).toBe(500);
+    expect(calls).toBe(5);
   });
   test("never falls back to a hardcoded catalog after an API failure", async () => {
     const fetcher: AiFetch = async () => new Response(null, { status: 401 });

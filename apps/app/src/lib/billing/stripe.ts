@@ -3,11 +3,28 @@
 import { stripe, type SubscriptionOptions } from "@better-auth/stripe";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import type { Member } from "better-auth/plugins/organization";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
 
 import { subscriptionPlans } from "./plans";
+
+const stripeApiVersion = "2026-10-28.endive" as const;
+const stripeClients = new Map<string, Stripe>();
+
+/** Shared Stripe client per API key, reused across auth and AI metering. */
+export function getStripeClient(apiKey: string) {
+  let client = stripeClients.get(apiKey);
+  if (!client) {
+    client = new Stripe(apiKey, {
+      apiVersion: stripeApiVersion,
+      maxNetworkRetries: 0,
+      timeout: 15_000,
+    });
+    stripeClients.set(apiKey, client);
+  }
+  return client;
+}
 
 type BillingRequest = {
   path?: string;

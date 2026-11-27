@@ -61,7 +61,6 @@ export default {
           projectId,
           userId: session.user.id,
           canWrite: true,
-          organizationId: null,
           headers: request.headers,
           signal: request.signal,
         }).find((tool) => tool.name === "compile");

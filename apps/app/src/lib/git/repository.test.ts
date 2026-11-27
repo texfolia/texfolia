@@ -18,7 +18,6 @@ import {
   archiveBody,
   gitCommand as command,
   gitServer,
-  legacyArchive,
   memoryFiles,
   readText,
   repositoryArchive,
@@ -453,23 +452,16 @@ test("refuses to unpack shared deltas into a push over 20 MiB", async () => {
   );
 }, 60_000);
 
-test("restores archives in the old and new formats, and rejects invalid ones", async () => {
+test("restores archives and rejects invalid ones", async () => {
   const repo = new GitRepository();
   await repo.init(remote);
   repo.overlay(memoryFiles({ "main.tex": "saved\n" }));
   const oid = await repo.commit("Saved", author);
-  for (const restored of [
-    await reload(repo),
-    GitRepository.restoreLegacy(legacyArchive(repo)),
-  ]) {
-    restored.overlay(memoryFiles({ "main.tex": "saved\n" }));
-    const status = await restored.status();
-    expect(status.commits[0]?.oid).toBe(oid);
-    expect(status.changes).toEqual([]);
-  }
-  expect(() =>
-    GitRepository.restoreLegacy(JSON.stringify({ ".git/../x": "" })),
-  ).toThrow("Invalid repository data");
+  const restored = await reload(repo);
+  restored.overlay(memoryFiles({ "main.tex": "saved\n" }));
+  const status = await restored.status();
+  expect(status.commits[0]?.oid).toBe(oid);
+  expect(status.changes).toEqual([]);
   const archive = await repositoryArchive(repo);
   for (const invalid of [
     archive.slice(0, -1),
