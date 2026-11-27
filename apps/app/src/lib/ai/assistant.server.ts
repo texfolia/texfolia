@@ -1,7 +1,4 @@
-import {
-  handleCompileGet,
-  handleCompilePost,
-} from "#/lib/compile/compile-route.server";
+import { compileHandlers } from "#/lib/compile/compile-route.server";
 import {
   createProjectNode,
   renameProjectNode,
@@ -30,6 +27,6 @@ export function assistantWorkspace(env: Env): AssistantWorkspace {
       env.COLLABORATION.getByName(options.projectId).readScratchpad(options),
     gitAction: (options) =>
       env.COLLABORATION.getByName(options.projectId).gitAction(options),
-    compile: { POST: handleCompilePost, GET: handleCompileGet },
+    compile: { POST: compileHandlers.POST, GET: compileHandlers.GET },
   };
 }

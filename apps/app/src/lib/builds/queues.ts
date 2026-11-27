@@ -11,12 +11,6 @@ const compileMessageSchema = z.object({
   revision: z.number().int().positive(),
 });
 export type CompileMessage = z.infer<typeof compileMessageSchema>;
-const maintenanceMessageSchema = z.object({
-  kind: z.literal("maintenance"),
-  projectId: jobIdSchema,
-  at: z.number().int().nonnegative(),
-});
-export type MaintenanceMessage = z.infer<typeof maintenanceMessageSchema>;
 const reconcileAiUsageMessageSchema = z.object({
   kind: z.literal("reconcile-ai-usage"),
   runId: z.uuid().optional(),
@@ -25,7 +19,6 @@ export type ReconcileAiUsageMessage = z.infer<
   typeof reconcileAiUsageMessageSchema
 >;
 const backgroundMessageSchema = z.discriminatedUnion("kind", [
-  maintenanceMessageSchema,
   emailJobSchema,
   reconcileAiUsageMessageSchema,
 ]);
@@ -33,8 +26,6 @@ export const deadLetterError =
   "Compilation service failed after one queue retry; moved to compile-dlq. Recompile to try again.";
 export const compileQueue = (plan: z.infer<typeof planSchema>) =>
   isPaid(plan) ? "compile-pro" : "compile-free";
-export const backgroundDelay = (at: number) =>
-  Math.min(86_400, Math.max(0, Math.ceil((at - Date.now()) / 1000)));
 
 export async function processQueueMessage(options: {
   queue: string;
@@ -42,7 +33,7 @@ export async function processQueueMessage(options: {
   attempts: number;
   coordinator: (
     projectId: string,
-  ) => Pick<ProjectCoordinatorCore, "consume" | "fail" | "maintain">;
+  ) => Pick<ProjectCoordinatorCore, "consume" | "fail">;
   deliverEmail: DeliverEmail;
   reconcileAiUsage?: (runId?: string) => Promise<void>;
 }) {
@@ -61,9 +52,7 @@ export async function processQueueMessage(options: {
     // A failed delivery throws, so the queue retries it.
     if (task.data.kind === "email")
       await options.deliverEmail(task.data.message);
-    else if (task.data.kind === "reconcile-ai-usage")
-      await options.reconcileAiUsage?.(task.data.runId);
-    else await coordinator(task.data.projectId).maintain(task.data.at);
+    else await options.reconcileAiUsage?.(task.data.runId);
     return true;
   }
   const parsed = compileMessageSchema.safeParse(body);

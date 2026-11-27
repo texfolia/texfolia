@@ -36,7 +36,8 @@ export const runningJobSchema = z.object({
 export const succeededJobSchema = z.object({
   ...jobFields,
   status: z.literal("succeeded"),
-  artifactUrl: z.string(),
+  artifactUrl: z.string().optional(),
+  objectKey: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().max(maxPdfBytes),
 });
 export const failedJobSchema = z.object({
@@ -80,6 +81,8 @@ const buildStateSchema = z.object({
   id: jobIdSchema,
   revision: z.number().int().nonnegative(),
   status: buildStatusSchema,
+  log: z.string().optional(),
+  error: z.string().optional(),
 });
 // The project build state the compiler publishes on GET and over its event socket.
 export const buildSnapshotSchema = z.object({

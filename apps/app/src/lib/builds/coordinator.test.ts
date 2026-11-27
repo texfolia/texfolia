@@ -114,6 +114,13 @@ test("rapid revisions debounce; cancelled engines settle before replacement; lat
     });
     expect(runs).toEqual(["first", "newest"]);
     expect(maxActive).toBe(1);
+    const supersededJob = (await (
+      await runtime.fetch(request(`/projects/${projectId}/jobs/${ids[0]}`))
+    ).json()) as { status: string; error?: string };
+    expect(supersededJob).toMatchObject({
+      status: "failed",
+      error: "Compilation superseded by a newer revision",
+    });
     expect(
       (
         await runtime.fetch(

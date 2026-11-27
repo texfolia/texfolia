@@ -229,6 +229,8 @@ export function createBuildsRuntime(options: {
         Math.min(24 * 60 * 60_000, Math.max(0, at - Date.now())),
       );
     };
+    const rawEngine = streamed(options.projectEngine(projectId, store));
+    const meteredEngine = withCompileUsage(rawEngine, usageFor);
     const core = new ProjectCoordinatorCore({
       projectId,
       saved: saved?.state ?? null,
@@ -237,14 +239,12 @@ export function createBuildsRuntime(options: {
       },
       schedule,
       overflow: (message, plan) => send(compileQueue(plan), message),
-      background: (message, delaySeconds) =>
-        send("background", message, delaySeconds),
       store,
       sources: sourcesFor(projectId),
-      engine: withCompileUsage(
-        streamed(options.projectEngine(projectId, store)),
-        usageFor,
-      ),
+      engine: (project, context) =>
+        context.userId
+          ? meteredEngine(project, context)
+          : rawEngine(project, context),
     });
     const entry: {
       core: ProjectCoordinatorCore;
@@ -295,7 +295,6 @@ export function createBuildsRuntime(options: {
       ["compile-pro", 4],
       ["compile-free", 1],
       ["compile-dlq", 2],
-      ["background", 1],
     ] satisfies [string, number][]) {
       if (active.has(lane)) continue;
       const work = drain(lane, concurrency)

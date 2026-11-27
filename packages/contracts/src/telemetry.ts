@@ -54,9 +54,7 @@ export const unknownEngineTiming: EngineTiming = {
 export const jobTimingSchema = engineTimingSchema.extend({
   plan: planSchema,
   attempt: z.number().int().positive(),
-  artifactReused: z.boolean(),
   queueWaitMs: duration.nullable(),
-  inputReadMs: duration,
   engineRequestMs: duration,
   publishMs: duration,
   backendMs: duration,

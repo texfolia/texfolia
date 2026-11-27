@@ -2,23 +2,10 @@ import {
   acceptedJobSchema,
   compileJobSchema,
   previewTimingSchema,
-  type JobTiming,
 } from "@texfolia/contracts";
 import type { Db } from "@texfolia/db";
 import { projectJob } from "@texfolia/db/schema";
-import {
-  and,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNotNull,
-  lt,
-  notInArray,
-  or,
-  sql,
-} from "drizzle-orm";
-import type { PgUpdateSetSource } from "drizzle-orm/pg-core";
+import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -28,13 +15,18 @@ import {
   immutableArtifact,
   liveUserHeader,
 } from "#/lib/builds/client";
+import {
+  mergeJobTiming,
+  reconcileProjectJob,
+  updateProjectJob,
+} from "#/lib/builds/job-persistence.server";
 
 import {
   compileHistoryLimit,
+  parseJobTimeline,
   sessionElapsedSchema,
   sessionHistoryLimit,
   sessionHistoryParam,
-  timelineRetentionMs,
 } from "./compile-history";
 import { compileDeltaSchema, hashSource } from "./source-sync";
 import { createCompileSources, type CompileProject } from "./sources";
@@ -137,13 +129,12 @@ function compileRequestDigest({
   );
 }
 
-async function checkProject<Context extends { db: Db }>(
+async function resolveAuthorizedPrincipal<Context extends { db: Db }>(
   request: Request,
   projectId: string,
   context: Context,
-  { principal: resolvePrincipal, project }: CompileRouteOptions<Context>,
+  { principal: resolvePrincipal }: CompileRouteOptions<Context>,
 ) {
-  const { db } = context;
   const principal = await resolvePrincipal({ request, projectId, context });
   if (!principal) return json({ error: "Unauthorized" }, 401);
   if (!idSchema.safeParse(projectId).success)
@@ -151,9 +142,25 @@ async function checkProject<Context extends { db: Db }>(
   // Share links only read builds; they never submit work or report telemetry.
   if (principal.share && request.method !== "GET")
     return json({ error: "Project not found" }, 404);
+  return { userId: principal.userId, name: principal.name };
+}
+
+async function checkProject<Context extends { db: Db }>(
+  request: Request,
+  projectId: string,
+  context: Context,
+  options: CompileRouteOptions<Context>,
+) {
+  const principal = await resolveAuthorizedPrincipal(
+    request,
+    projectId,
+    context,
+    options,
+  );
+  if (principal instanceof Response) return principal;
   try {
-    await db.transaction((tx) =>
-      project.lock({
+    await context.db.transaction((tx) =>
+      options.project.lock({
         tx,
         projectId,
         userId: principal.userId,
@@ -168,7 +175,7 @@ async function checkProject<Context extends { db: Db }>(
       return json({ error: "Project not found" }, 404);
     throw error;
   }
-  return { userId: principal.userId, name: principal.name };
+  return principal;
 }
 
 async function readSources(request: Request) {
@@ -193,75 +200,9 @@ async function readSources(request: Request) {
   }
 }
 
-function updateJob(
-  db: Db,
-  id: string,
-  values: PgUpdateSetSource<typeof projectJob>,
-) {
-  return db
-    .update(projectJob)
-    .set(values)
-    .where(
-      and(
-        eq(projectJob.id, id),
-        inArray(projectJob.status, ["queued", "running"]),
-      ),
-    );
-}
-
-// Adds top-level keys to the job timeline without replacing other parts.
-function mergeTiming(value: Record<string, unknown>) {
-  return sql`coalesce(${projectJob.timing}, '{}'::jsonb) || ${JSON.stringify(value)}::jsonb`;
-}
-
-function compilerTimeline(result: { createdAt?: string; timing?: JobTiming }) {
-  return { compiler: { ...result.timing, acceptedAt: result.createdAt } };
-}
-
-// Recent compiles keep a timeline so the Logs tab can show a whole editing
-// session; older rows remain for accounting.
-async function pruneTimelines(db: Db, projectId: string) {
-  const latest = (limit: number) =>
-    db
-      .select({ id: projectJob.id })
-      .from(projectJob)
-      .where(eq(projectJob.projectId, projectId))
-      .orderBy(desc(projectJob.createdAt))
-      .limit(limit);
-  await db
-    .update(projectJob)
-    .set({ timing: null })
-    .where(
-      and(
-        eq(projectJob.projectId, projectId),
-        isNotNull(projectJob.timing),
-        notInArray(projectJob.id, latest(compileHistoryLimit)),
-        or(
-          lt(projectJob.createdAt, new Date(Date.now() - timelineRetentionMs)),
-          notInArray(projectJob.id, latest(sessionHistoryLimit)),
-        ),
-      ),
-    );
-}
-
 // The job row and the server clock can disagree slightly, so the session
 // includes compiles created just before the editor opened.
 const sessionClockSlackMs = 5_000;
-
-async function finishJob(
-  db: Db,
-  projectId: string,
-  id: string,
-  values: PgUpdateSetSource<typeof projectJob>,
-) {
-  const updated = await updateJob(db, id, values).returning({
-    id: projectJob.id,
-  });
-  if (updated.length)
-    await pruneTimelines(db, projectId).catch((error: unknown) => {
-      console.error("Compile timeline pruning failed", { projectId, error });
-    });
-}
 
 async function readPreviewBody(request: Request) {
   const text = await readLimitedBody(request);
@@ -294,24 +235,10 @@ async function readLimitedBody(request: Request) {
 }
 
 async function readPreviewTiming(request: Request) {
-  const reader = request.body?.getReader();
-  if (!reader) return null;
-  const chunks: Uint8Array<ArrayBuffer>[] = [];
-  let size = 0;
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > 4096) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(new Uint8Array(value));
-  }
+  const text = await readLimitedBody(request);
+  if (text === null) return null;
   try {
-    const parsed = previewTimingSchema.safeParse(
-      JSON.parse(await new Blob(chunks).text()),
-    );
+    const parsed = previewTimingSchema.safeParse(JSON.parse(text));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -323,23 +250,22 @@ async function readPreviewTiming(request: Request) {
 export function createCompileHandlers<Context extends { db: Db }>(
   options: CompileRouteOptions<Context>,
 ) {
-  const { compileSources, sourcesCurrent } = createCompileSources(
-    options.project,
-  );
+  const { buildSnapshot, compileSources, sourcesCurrent } =
+    createCompileSources(options.project);
   type CompileArgs = CompileHandlerArgs<Context>;
   return {
     POST: async ({ request, params, context }: CompileArgs) => {
       const started = performance.now();
       const receivedAt = new Date().toISOString();
       const { db } = context;
-      const denied = await checkProject(
-        request,
-        params.projectId,
-        context,
-        options,
-      );
-      if (denied instanceof Response) return denied;
       if (new URL(request.url).searchParams.get("changed") === "1") {
+        const denied = await checkProject(
+          request,
+          params.projectId,
+          context,
+          options,
+        );
+        if (denied instanceof Response) return denied;
         const body = await readPreviewBody(request);
         if (!body) return json({ error: "Invalid editor revision" }, 400);
         return fetchBuilds(`/projects/${params.projectId}/changed`, {
@@ -348,6 +274,13 @@ export function createCompileHandlers<Context extends { db: Db }>(
           body: JSON.stringify(body),
         });
       }
+      const denied = await resolveAuthorizedPrincipal(
+        request,
+        params.projectId,
+        context,
+        options,
+      );
+      if (denied instanceof Response) return denied;
       if (!request.headers.get("Content-Type")?.startsWith("application/json"))
         return json({ error: "Expected application/json" }, 415);
       const body = await readSources(request);
@@ -362,30 +295,72 @@ export function createCompileHandlers<Context extends { db: Db }>(
         userId: denied.userId,
         body,
       });
-      const plan = await options.compilePlan(db, denied.userId);
-      const [reserved] = await db
-        .insert(projectJob)
-        .values({
-          id,
-          projectId: params.projectId,
-          requestDigest,
-          status: "queued",
-          sizeBytes: 0n,
-          timing: { web: { receivedAt } },
-        })
-        .onConflictDoNothing({ target: projectJob.id })
-        .returning({ id: projectJob.id });
-      if (!reserved) {
-        const existing = await db.query.projectJob.findFirst({
-          columns: { id: true },
-          where: { id, projectId: params.projectId, requestDigest },
+      const clientVersion = request.headers.get("X-Source-Metadata") ?? "";
+      let prep:
+        | { reserved: false; conflict: boolean }
+        | {
+            reserved: true;
+            version: string;
+            nodes: Awaited<
+              ReturnType<Db["query"]["projectNode"]["findMany"]>
+            > | null;
+          };
+      try {
+        prep = await db.transaction(async (tx) => {
+          await options.project.lock({
+            tx,
+            projectId: params.projectId,
+            userId: denied.userId,
+            access: "write",
+          });
+          const [reserved] = await tx
+            .insert(projectJob)
+            .values({
+              id,
+              projectId: params.projectId,
+              requestDigest,
+              status: "queued",
+              sizeBytes: 0n,
+              timing: { web: { receivedAt } },
+            })
+            .onConflictDoNothing({ target: projectJob.id })
+            .returning({ id: projectJob.id });
+          if (!reserved) {
+            const existing = await tx.query.projectJob.findFirst({
+              columns: { id: true },
+              where: { id, projectId: params.projectId, requestDigest },
+            });
+            return { reserved: false as const, conflict: !existing };
+          }
+          const version = await options.project.metadataVersion({
+            tx,
+            projectId: params.projectId,
+            userId: denied.userId,
+          });
+          const nodes =
+            version === clientVersion
+              ? null
+              : await tx.query.projectNode.findMany({
+                  where: {
+                    projectId: params.projectId,
+                    deletedAt: { isNull: true },
+                  },
+                });
+          return { reserved: true as const, version, nodes };
         });
-        if (!existing)
+      } catch (error) {
+        if (error instanceof Error && error.message === "Project not found")
+          return json({ error: "Project not found" }, 404);
+        throw error;
+      }
+      if (!prep.reserved) {
+        if (prep.conflict)
           return json({ error: "Compilation ID already used" }, 409);
         // The reserving request owns submission, even while its response is
         // uncertain. Reconcile through GET without resubmitting newer sources.
         return submissionResponse({ id, projectId: params.projectId });
       }
+      const plan = await options.compilePlan(db, denied.userId);
 
       let submitted = false;
       let revision: number | undefined;
@@ -400,6 +375,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
             headers: {
               "Content-Type": "application/json",
               "X-Compilation-Id": id,
+              "X-Request-Digest": requestDigest,
               "X-Compile-Plan": plan,
               "X-Compile-User": denied.userId,
               "X-Build-User": encodeURIComponent(denied.name),
@@ -422,12 +398,14 @@ export function createCompileHandlers<Context extends { db: Db }>(
           projectId: params.projectId,
           userId: denied.userId,
         };
-        let { sources, version } = await compileSources({
-          ...project,
+        let { sources, version } = await buildSnapshot({
+          projectId: params.projectId,
           mainFile: body.mainFile,
           sourceRevision: body.baseRevision,
+          version: prep.version,
+          nodes: prep.nodes,
           client: {
-            version: request.headers.get("X-Source-Metadata") ?? "",
+            version: clientVersion,
             delta: body,
           },
         });
@@ -465,21 +443,6 @@ export function createCompileHandlers<Context extends { db: Db }>(
             !(await sourcesCurrent({ ...project, version }).catch(() => false))
           )
             await invalidateSourceBuild(params.projectId);
-          if (accepted.supersededId)
-            await db
-              .update(projectJob)
-              .set({
-                status: "failed",
-                error: "Compilation superseded by a newer revision",
-                finishedAt: new Date(),
-              })
-              .where(
-                and(
-                  eq(projectJob.projectId, params.projectId),
-                  eq(projectJob.id, accepted.supersededId),
-                  inArray(projectJob.status, ["queued", "running"]),
-                ),
-              );
         } else if (response.status < 500) {
           const parsed = failure.safeParse(
             await response.json().catch(() => null),
@@ -487,7 +450,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
           const detail = parsed.success
             ? parsed.data
             : { error: "Compilation service failed" };
-          await updateJob(db, id, {
+          await updateProjectJob(db, id, {
             ...detail,
             status: "failed",
             finishedAt: new Date(),
@@ -513,7 +476,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
             error instanceof Error
               ? error.message
               : "Source synchronization failed";
-          await updateJob(db, id, {
+          await updateProjectJob(db, id, {
             status: "failed",
             error: message,
             finishedAt: new Date(),
@@ -558,34 +521,18 @@ export function createCompileHandlers<Context extends { db: Db }>(
       );
       if (!id.success) return json({ error: "Job not found" }, 404);
       const job = await context.db.query.projectJob.findFirst({
-        columns: { id: true, status: true },
+        columns: { id: true, status: true, timing: true },
         where: { id: id.data, projectId: params.projectId },
       });
       if (!job || !["succeeded", "failed"].includes(job.status))
         return json({ error: "Job not found" }, 404);
       const body = await readPreviewTiming(request);
       if (!body) return json({ error: "Invalid preview timing" }, 400);
-      let timing: JobTiming | undefined;
-      try {
-        const response = await fetchBuilds(
-          `/projects/${params.projectId}/jobs/${id.data}`,
-        );
-        const result = compileJobSchema.safeParse(await response.json());
-        if (
-          result.success &&
-          result.data.id === id.data &&
-          (result.data.status === "succeeded" ||
-            result.data.status === "failed")
-        )
-          timing = result.data.timing;
-      } catch {
-        /* Preview reporting must not affect compilation. */
-      }
       // Persist the first report for the Logs timeline. Pruned or older jobs
       // have no timeline to extend.
       await context.db
         .update(projectJob)
-        .set({ timing: mergeTiming({ client: body }) })
+        .set({ timing: mergeJobTiming({ client: body }) })
         .where(
           and(
             eq(projectJob.id, id.data),
@@ -595,7 +542,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
           ),
         );
       console.info({
-        ...timing,
+        ...parseJobTimeline(job.timing).compiler,
         ...body,
         telemetryVersion: 1,
         event: "compile_preview",
@@ -672,17 +619,19 @@ export function createCompileHandlers<Context extends { db: Db }>(
       if (!parsedId.success) return json({ error: "Job not found" }, 404);
       const id = parsedId.data;
       const job = await db.query.projectJob.findFirst({
-        columns: { id: true, status: true, createdAt: true },
+        columns: {
+          id: true,
+          status: true,
+          createdAt: true,
+          log: true,
+          error: true,
+          sizeBytes: true,
+        },
         where: { id, projectId: params.projectId },
       });
       if (!job) return json({ error: "Job not found" }, 404);
-      if (url.searchParams.get("log") === "1") {
-        const row = await db.query.projectJob.findFirst({
-          columns: { log: true },
-          where: { id, projectId: params.projectId },
-        });
-        return json({ id, status: job.status, log: row?.log ?? "" });
-      }
+      if (url.searchParams.get("log") === "1")
+        return json({ id, status: job.status, log: job.log ?? "" });
       const pdfPath = `/projects/${params.projectId}/compilations/${id}.pdf`;
       try {
         if (url.searchParams.get("preview") === "pdf") {
@@ -722,6 +671,23 @@ export function createCompileHandlers<Context extends { db: Db }>(
             },
           });
         }
+        if (job.status === "succeeded") {
+          return json({
+            id,
+            status: "succeeded",
+            log: job.log ?? "",
+            sizeBytes: Number(job.sizeBytes),
+            artifactUrl: `/api/compile/${params.projectId}?job=${id}&artifact=pdf`,
+          });
+        }
+        if (job.status === "failed") {
+          return json({
+            id,
+            status: "failed",
+            error: job.error ?? "Compilation failed",
+            log: job.log ?? "",
+          });
+        }
 
         const response = await fetchBuilds(
           `/projects/${params.projectId}/jobs/${id}`,
@@ -733,7 +699,7 @@ export function createCompileHandlers<Context extends { db: Db }>(
               "Retry-After": "1",
             });
           const error = "The compiler did not receive this job. Try again.";
-          await updateJob(db, id, {
+          await updateProjectJob(db, id, {
             status: "failed",
             error,
             finishedAt: new Date(),
@@ -757,30 +723,14 @@ export function createCompileHandlers<Context extends { db: Db }>(
             }
             return json(result, 200, { ...noStore, "Retry-After": "1" });
           case "succeeded":
-            if (result.artifactUrl !== pdfPath)
-              throw new Error("Invalid compiler artifact URL");
-            await finishJob(db, params.projectId, id, {
-              status: "succeeded",
-              log: result.log,
-              objectKey: pdfPath.slice(1),
-              sizeBytes: BigInt(result.sizeBytes),
-              finishedAt: new Date(),
-              timing: mergeTiming(compilerTimeline(result)),
-            });
+            await reconcileProjectJob(db, params.projectId, result);
             return json({
               ...result,
               artifactUrl: `/api/compile/${params.projectId}?job=${id}&artifact=pdf`,
             });
-          case "failed": {
-            await finishJob(db, params.projectId, id, {
-              status: "failed",
-              error: result.error,
-              log: result.log,
-              finishedAt: new Date(),
-              timing: mergeTiming(compilerTimeline(result)),
-            });
+          case "failed":
+            await reconcileProjectJob(db, params.projectId, result);
             return json(result);
-          }
         }
       } catch (error) {
         console.error("Compile status or artifact fetch failed", {

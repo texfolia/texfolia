@@ -22,12 +22,10 @@ import {
 import { createCoordinatorApp } from "./coordinator-api";
 import { HttpError, MissingSourceError } from "./project";
 import {
-  backgroundDelay,
   compileQueue,
   deadLetterError,
   processQueueMessage,
   type CompileMessage,
-  type MaintenanceMessage,
 } from "./queues";
 import { sourceHash } from "./source-sync";
 
@@ -59,16 +57,13 @@ function harness(engine: TestEngine) {
   const store = memoryStore(objects);
   const drafts = new Map<string, Uint8Array>();
   const messages: { queue: string; body: CompileMessage }[] = [];
-  const background: { body: MaintenanceMessage; delaySeconds: number }[] = [];
   const state: {
     saved: string | null;
     sendFails: boolean;
-    backgroundFails: boolean;
     onSend: (() => void) | undefined;
   } = {
     saved: null,
     sendFails: false,
-    backgroundFails: false,
     onSend: undefined,
   };
   const alarms: number[] = [];
@@ -93,11 +88,6 @@ function harness(engine: TestEngine) {
       messages.push({ queue: compileQueue(plan), body });
       state.onSend?.();
     },
-    async background(body: MaintenanceMessage, delaySeconds: number) {
-      if (state.backgroundFails)
-        throw new Error("Background queue unavailable");
-      background.push({ body, delaySeconds });
-    },
   };
   let core = new ProjectCoordinatorCore(options);
   return {
@@ -108,7 +98,6 @@ function harness(engine: TestEngine) {
     objects,
     drafts,
     messages,
-    background,
     state,
     alarms,
     published,
@@ -300,15 +289,13 @@ test.each(["", "-local"])(
           async fail(revision) {
             calls.push(["fail", projectId, revision]);
           },
-          async maintain(at) {
-            calls.push(["maintain", projectId, at]);
-          },
         }),
       });
     const projectId = crypto.randomUUID();
     for (const lane of ["compile-pro", "compile-free"])
       expect(await deliver(lane, { projectId, revision: 2 })).toBe(true);
     expect(await deliver("compile-dlq", { projectId, revision: 3 })).toBe(true);
+    // Retired maintenance queue messages are acknowledged without touching a coordinator.
     expect(
       await deliver("background", { kind: "maintenance", projectId, at: 5 }),
     ).toBe(true);
@@ -316,7 +303,6 @@ test.each(["", "-local"])(
       ["consume", projectId, 2],
       ["consume", projectId, 2],
       ["fail", projectId, 3],
-      ["maintain", projectId, 5],
     ]);
 
     calls.length = 0;
@@ -363,7 +349,7 @@ test("interactive success stays direct; X-Compile-Plan selects only the overflow
         delivery: "direct",
         debounceMs: expect.any(Number),
       });
-      expect(fixture.background[0]?.delaySeconds).toBeGreaterThan(0);
+      expect(fixture.alarms.at(-1)).toBeGreaterThan(Date.now());
     } finally {
       await fixture.core.close();
     }
@@ -500,33 +486,6 @@ test("malformed and retired message envelopes are acknowledged without touching 
   }
 });
 
-test("DLQ storage failures are retryable and the failed revision stays pending until recorded", async () => {
-  const fixture = harness(async () => {
-    throw new Error("Container unavailable");
-  });
-  try {
-    await fixture.submit();
-    await fixture.core.wake();
-    const body = fixture.messages[0]!.body;
-    const write = fixture.store.write.bind(fixture.store);
-    fixture.store.write = async () => {
-      throw new Error("R2 unavailable");
-    };
-    await expect(fixture.deliver("compile-dlq", body)).rejects.toThrow(
-      "R2 unavailable",
-    );
-    expect(fixture.core.snapshot().current?.status).toBe("queued");
-    fixture.store.write = write;
-    expect(await fixture.deliver("compile-dlq", body, 2)).toBe(true);
-    expect(fixture.core.snapshot().current).toMatchObject({
-      status: "failed",
-      error: deadLetterError,
-    });
-  } finally {
-    await fixture.core.close();
-  }
-});
-
 test("late overflow and DLQ messages cannot fail or compile a newer revision", async () => {
   let runs = 0;
   const fixture = harness(async () => {
@@ -605,9 +564,6 @@ test("maintenance is delayed, capped to daily hops, and a paused sweep does not 
     await fixture.restart((saved) => {
       saved.maintenanceAt = Date.now() - 1;
     });
-    const at = persistedSchema.parse(
-      JSON.parse(fixture.state.saved!),
-    ).maintenanceAt!;
     const originalKeys = fixture.store.keys.bind(fixture.store);
     fixture.store.keys = async function* (prefix, before) {
       if (prefix.endsWith("/builds/")) {
@@ -616,11 +572,7 @@ test("maintenance is delayed, capped to daily hops, and a paused sweep does not 
       }
       yield* originalKeys(prefix, before);
     };
-    const work = fixture.deliver("background", {
-      kind: "maintenance",
-      projectId: fixture.projectId,
-      at,
-    });
+    const work = fixture.core.wake();
     await listing.promise;
     const submit = createCoordinatorApp(fixture.core).fetch(
       new Request(`http://local/projects/${fixture.projectId}/compile`, {
@@ -635,13 +587,11 @@ test("maintenance is delayed, capped to daily hops, and a paused sweep does not 
     ]);
     expect(accepted?.status).toBe(202);
     release.resolve();
-    expect(await work).toBe(true);
+    await work;
     expect(fixture.core.snapshot().current).toMatchObject({
       revision: 2,
       status: "queued",
     });
-    expect(backgroundDelay(Date.now() + 30 * 24 * 60 * 60_000)).toBe(86_400);
-    expect(backgroundDelay(Date.now() - 1000)).toBe(0);
   } finally {
     release.resolve();
     await fixture.core.close();
@@ -652,17 +602,10 @@ test("cleanup removes drafts that no build needs and keeps the current ones", as
   const fixture = harness(async () => output);
   const hash = (text: string) => sourceHash(new TextEncoder().encode(text));
   const maintain = async () => {
-    const at = Date.now() - 1;
     await fixture.restart((saved) => {
-      saved.maintenanceAt = at;
+      saved.maintenanceAt = Date.now() - 1;
     });
-    expect(
-      await fixture.deliver("background", {
-        kind: "maintenance",
-        projectId: fixture.projectId,
-        at,
-      }),
-    ).toBe(true);
+    await fixture.core.maintain();
   };
   const delta = async (text: string, base: number) => ({
     mainFile: "main.tex",
@@ -719,32 +662,22 @@ test("local Pro builds progress while a Free build is blocked", async () => {
     const projectId = crypto.randomUUID();
     const interactiveId = crypto.randomUUID();
     await runtime.fetch(request(projectId, "pro", interactiveId));
-    const database = new Database(join(root, "state.sqlite"), {
-      readonly: true,
-    });
-    try {
-      await waitUntil(() =>
-        Boolean(
-          database
-            .query("SELECT key FROM objects WHERE key = ?")
-            .get(`projects/${projectId}/results/${interactiveId}.json`),
-        ),
-      );
-      expect(
-        await (
-          await runtime.fetch(new Request(`http://local/projects/${projectId}`))
-        ).json(),
-      ).toMatchObject({ current: { status: "succeeded" } });
-      expect(
-        await (
-          await runtime.fetch(
-            new Request(`http://local/projects/${freeProject}`),
-          )
-        ).json(),
-      ).toMatchObject({ current: { status: "running" } });
-    } finally {
-      database.close();
+    const snapshotOf = async (id: string) =>
+      (await (
+        await runtime.fetch(new Request(`http://local/projects/${id}`))
+      ).json()) as { current: { status: string } | null };
+    const deadline = Date.now() + 10_000;
+    while ((await snapshotOf(projectId)).current?.status !== "succeeded") {
+      if (Date.now() >= deadline)
+        throw new Error("Timed out waiting for Pro build");
+      await Bun.sleep(10);
     }
+    expect(await snapshotOf(projectId)).toMatchObject({
+      current: { status: "succeeded" },
+    });
+    expect(await snapshotOf(freeProject)).toMatchObject({
+      current: { status: "running" },
+    });
   } finally {
     release.resolve();
     await runtime.close();
@@ -785,9 +718,6 @@ test("SQLite delivery retries once and routes the failed interactive job through
     const retry = database.query<{ attempts: number }, []>(
       "SELECT attempts FROM deliveries WHERE lane = 'compile-pro'",
     );
-    const result = database.query<{ body: Uint8Array }, [string]>(
-      "SELECT body FROM objects WHERE key = ?",
-    );
     const deliveries = database.query(
       "SELECT id FROM deliveries WHERE lane IN ('compile-pro', 'compile-dlq')",
     );
@@ -795,11 +725,7 @@ test("SQLite delivery retries once and routes the failed interactive job through
     expect(retry.get()?.attempts).toBe(1);
     expect(runs).toBe(2);
     database.exec("UPDATE deliveries SET due = 0 WHERE lane = 'compile-pro'");
-    await waitUntil(
-      () =>
-        Boolean(result.get(`projects/${projectId}/results/${id}.json`)) &&
-        deliveries.all().length === 0,
-    );
+    await waitUntil(() => deliveries.all().length === 0);
     expect(
       await (
         await runtime.fetch(new Request(`http://local/projects/${projectId}`))
@@ -814,9 +740,11 @@ test("SQLite delivery retries once and routes the failed interactive job through
   }
 }, 30_000);
 
-test("retention messages hop without sweeping early and failed background sends leave a durable alarm fallback", async () => {
+test("retention uses a single native alarm without sweeping early; empty coordinators stay idle", async () => {
   const fixture = harness(async () => output);
   try {
+    await fixture.core.wake();
+    expect(fixture.alarms).toEqual([]);
     await fixture.submit();
     await fixture.core.wake();
     const deadline = Date.now() + 30 * 24 * 60 * 60_000;
@@ -824,72 +752,16 @@ test("retention messages hop without sweeping early and failed background sends 
       saved.maintenanceAt = deadline;
     });
     const count = fixture.objects.size;
-    const sent = fixture.background.length;
-    expect(
-      await fixture.deliver("background", {
-        kind: "maintenance",
-        projectId: fixture.projectId,
-        at: deadline,
-      }),
-    ).toBe(true);
-    expect(fixture.objects.size).toBe(count);
-    expect(fixture.background).toHaveLength(sent + 1);
-    expect(fixture.background.at(-1)).toMatchObject({
-      body: { at: deadline },
-      delaySeconds: 86_400,
-    });
     const originalKeys = fixture.store.keys.bind(fixture.store);
     let listed = false;
     fixture.store.keys = async function* (prefix, before) {
       listed = true;
       yield* originalKeys(prefix, before);
     };
-    expect(
-      await fixture.deliver("background", {
-        kind: "maintenance",
-        projectId: fixture.projectId,
-        at: deadline - 1,
-      }),
-    ).toBe(true);
+    await fixture.core.wake();
     expect(listed).toBe(false);
-  } finally {
-    await fixture.core.close();
-  }
-  const blocked = harness(async () => output);
-  try {
-    await blocked.submit();
-    blocked.state.backgroundFails = true;
-    await blocked.core.wake();
-    expect(blocked.core.snapshot().current?.status).toBe("succeeded");
-    expect(blocked.background).toEqual([]);
-    expect(blocked.alarms.at(-1)).toBeGreaterThan(Date.now());
-    await blocked.restart();
-    blocked.state.backgroundFails = false;
-    await blocked.core.wake();
-    expect(blocked.background).toHaveLength(1);
-  } finally {
-    await blocked.core.close();
-  }
-});
-
-test("an overdue maintenance alarm only re-enqueues background work; empty coordinators stay idle", async () => {
-  const fixture = harness(async () => output);
-  try {
-    await fixture.core.wake();
-    expect(fixture.background).toEqual([]);
-    expect(fixture.alarms).toEqual([]);
-    await fixture.submit();
-    await fixture.core.wake();
-    await fixture.restart((saved) => {
-      saved.maintenanceAt = Date.now() - 60_000;
-    });
-    const count = fixture.objects.size;
-    const sent = fixture.background.length;
-    await fixture.core.wake();
-    expect(fixture.background).toHaveLength(sent + 1);
-    expect(fixture.background.at(-1)?.delaySeconds).toBeGreaterThan(0);
     expect(fixture.objects.size).toBe(count);
-    expect(fixture.core.snapshot().current?.status).toBe("succeeded");
+    expect(fixture.alarms.at(-1)).toBe(deadline);
   } finally {
     await fixture.core.close();
   }
@@ -907,16 +779,11 @@ test("template preview builds serve a PNG, survive pruning, expire after a day, 
       ),
     );
   const maintain = async (lastActivity?: number) => {
-    const at = Date.now() - 1;
     await fixture.restart((saved) => {
-      saved.maintenanceAt = at;
+      saved.maintenanceAt = Date.now() - 1;
       if (lastActivity !== undefined) saved.lastActivity = lastActivity;
     });
-    await fixture.deliver("background", {
-      kind: "maintenance",
-      projectId: fixture.projectId,
-      at,
-    });
+    await fixture.core.wake();
   };
   try {
     await fixture.submit("pro", { ...project, preview: true });
@@ -935,9 +802,7 @@ test("template preview builds serve a PNG, survive pruning, expire after a day, 
     const { lastActivity } = persistedSchema.parse(
       JSON.parse(fixture.state.saved ?? "null"),
     );
-    expect(fixture.background.at(-1)?.body).toMatchObject({
-      at: lastActivity + 24 * 60 * 60_000,
-    });
+    expect(fixture.alarms.at(-1)).toBe(lastActivity + 24 * 60 * 60_000);
 
     await maintain(Date.now() - 24 * 60 * 60_000 - 1000);
     expect(
@@ -969,29 +834,22 @@ test("ordinary project builds keep the 30-day retention", async () => {
   try {
     await fixture.submit();
     await fixture.core.wake();
-    const at = Date.now() - 1;
     await fixture.restart((saved) => {
-      saved.maintenanceAt = at;
+      saved.maintenanceAt = Date.now() - 1;
       saved.lastActivity = Date.now() - 24 * 60 * 60_000 - 1000;
     });
-    await fixture.deliver("background", {
-      kind: "maintenance",
-      projectId: fixture.projectId,
-      at,
-    });
+    await fixture.core.wake();
     expect(fixture.core.snapshot().current?.status).toBe("succeeded");
     const { lastActivity } = persistedSchema.parse(
       JSON.parse(fixture.state.saved ?? "null"),
     );
-    expect(fixture.background.at(-1)?.body).toMatchObject({
-      at: lastActivity + 30 * 24 * 60 * 60_000,
-    });
+    expect(fixture.alarms.at(-1)).toBe(lastActivity + 30 * 24 * 60 * 60_000);
   } finally {
     await fixture.core.close();
   }
 });
 
-test("maintenance during a build waits for it instead of re-enqueueing, and changes schedule no immediate cleanup", async () => {
+test("maintenance during a build waits for it instead of re-scheduling, and changes schedule no immediate cleanup", async () => {
   const started = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const fixture = harness(async () => {
@@ -1003,34 +861,28 @@ test("maintenance during a build waits for it instead of re-enqueueing, and chan
     persistedSchema.parse(JSON.parse(fixture.state.saved ?? "null"));
   try {
     await fixture.submit();
-    const at = Date.now() - 1;
     await fixture.restart((saved) => {
-      saved.maintenanceAt = at;
+      saved.maintenanceAt = Date.now() - 1;
     });
     const running = fixture.core.wake();
     await started.promise;
-    const maintain = () =>
-      fixture.deliver("background", {
-        kind: "maintenance",
-        projectId: fixture.projectId,
-        at,
-      });
-    expect(await maintain()).toBe(true);
-    expect(await maintain()).toBe(true);
-    expect(fixture.background).toEqual([]);
+    const alarmsBefore = fixture.alarms.length;
+    await fixture.core.maintain();
+    await fixture.core.maintain();
+    expect(fixture.alarms).toHaveLength(alarmsBefore);
     expect(state().maintenanceAt).toBeNull();
     release.resolve();
     await running;
-    expect(fixture.background).toHaveLength(1);
+    expect(fixture.alarms.length).toBeGreaterThan(alarmsBefore);
+    expect(state().maintenanceAt).toBeGreaterThan(Date.now());
 
     await fixture.restart((saved) => {
       saved.maintenanceAt = null;
     });
+    const alarmsBeforeChanges = fixture.alarms.length;
     for (let change = 0; change < 5; change++) await fixture.core.changed();
-    expect(fixture.background).toHaveLength(2);
-    expect(state().maintenanceAt).toBe(
-      fixture.background.at(-1)?.body.at ?? null,
-    );
+    expect(fixture.alarms).toHaveLength(alarmsBeforeChanges + 1);
+    expect(state().maintenanceAt).toBe(fixture.alarms.at(-1) ?? null);
     expect(state().maintenanceAt).toBeGreaterThan(
       Date.now() + 29 * 24 * 60 * 60_000,
     );

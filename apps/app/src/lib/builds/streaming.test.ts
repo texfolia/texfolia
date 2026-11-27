@@ -17,7 +17,6 @@ import type { Engine } from "./types";
 for (const scenario of [
   "none",
   "artifact",
-  "result",
   "late-artifact",
   "disconnected",
 ] as const) {
@@ -121,15 +120,9 @@ for (const scenario of [
       await submit("baseline");
       const baseline = await terminal();
       const id = await submit("streamed");
-      const saveFails =
-        scenario === "artifact" ||
-        scenario === "late-artifact" ||
-        scenario === "result";
+      const saveFails = scenario === "artifact" || scenario === "late-artifact";
       if (saveFails) {
-        const pattern =
-          scenario === "result"
-            ? `projects/*/results/${id}.json`
-            : "projects/*/builds/*/main.aux";
+        const pattern = "projects/*/builds/*/main.aux";
         db.exec(
           `CREATE TRIGGER fail_save BEFORE INSERT ON objects WHEN NEW.key GLOB '${pattern}' BEGIN SELECT RAISE(FAIL, 'injected save failure'); END`,
         );
