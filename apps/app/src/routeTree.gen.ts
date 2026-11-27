@@ -31,6 +31,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiCompileProjectIdRouteImport } from './routes/api/compile/$projectId'
 import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
 import { Route as ApiReferencesIndexRouteImport } from './routes/api/references/index'
+import { Route as ApiCollaborationProjectIdIndexRouteImport } from './routes/api/collaboration/$projectId/index'
 import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api/collaboration/$projectId/$nodeId'
 import { Route as ApiProjectsProjectIdMetadataRouteImport } from './routes/api/projects/$projectId/metadata'
 import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api/sources/$projectId/$nodeId'
@@ -149,6 +150,12 @@ const ApiReferencesIndexRoute = ApiReferencesIndexRouteImport.update({
   path: '/api/references/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCollaborationProjectIdIndexRoute =
+  ApiCollaborationProjectIdIndexRouteImport.update({
+    id: '/api/collaboration/$projectId/',
+    path: '/api/collaboration/$projectId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCollaborationProjectIdNodeIdRoute =
   ApiCollaborationProjectIdNodeIdRouteImport.update({
     id: '/api/collaboration/$projectId/$nodeId',
@@ -194,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/collaboration/$projectId/': typeof ApiCollaborationProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -220,6 +228,7 @@ export interface FileRoutesByTo {
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/collaboration/$projectId': typeof ApiCollaborationProjectIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -248,6 +257,7 @@ export interface FileRoutesById {
   '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
   '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
   '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/collaboration/$projectId/': typeof ApiCollaborationProjectIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/projects/$projectId/metadata'
     | '/api/sources/$projectId/$nodeId'
+    | '/api/collaboration/$projectId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -303,6 +314,7 @@ export interface FileRouteTypes {
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/projects/$projectId/metadata'
     | '/api/sources/$projectId/$nodeId'
+    | '/api/collaboration/$projectId'
   id:
     | '__root__'
     | '/'
@@ -330,6 +342,7 @@ export interface FileRouteTypes {
     | '/api/collaboration/$projectId/$nodeId'
     | '/api/projects/$projectId/metadata'
     | '/api/sources/$projectId/$nodeId'
+    | '/api/collaboration/$projectId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -350,6 +363,7 @@ export interface RootRouteChildren {
   ApiCollaborationProjectIdNodeIdRoute: typeof ApiCollaborationProjectIdNodeIdRoute
   ApiProjectsProjectIdMetadataRoute: typeof ApiProjectsProjectIdMetadataRoute
   ApiSourcesProjectIdNodeIdRoute: typeof ApiSourcesProjectIdNodeIdRoute
+  ApiCollaborationProjectIdIndexRoute: typeof ApiCollaborationProjectIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -508,6 +522,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiReferencesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/collaboration/$projectId/': {
+      id: '/api/collaboration/$projectId/'
+      path: '/api/collaboration/$projectId'
+      fullPath: '/api/collaboration/$projectId/'
+      preLoaderRoute: typeof ApiCollaborationProjectIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/collaboration/$projectId/$nodeId': {
       id: '/api/collaboration/$projectId/$nodeId'
       path: '/api/collaboration/$projectId/$nodeId'
@@ -577,6 +598,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCollaborationProjectIdNodeIdRoute: ApiCollaborationProjectIdNodeIdRoute,
   ApiProjectsProjectIdMetadataRoute: ApiProjectsProjectIdMetadataRoute,
   ApiSourcesProjectIdNodeIdRoute: ApiSourcesProjectIdNodeIdRoute,
+  ApiCollaborationProjectIdIndexRoute: ApiCollaborationProjectIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

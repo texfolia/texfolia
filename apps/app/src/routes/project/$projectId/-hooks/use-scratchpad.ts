@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 
 import { scratchpadId } from "#/lib/collaboration";
-import { documentCachingStopped } from "#/lib/collaboration/browser";
+import {
+  type CollaborationConnection,
+  documentCachingStopped,
+} from "#/lib/collaboration/browser";
 
 import { useCollaborationFiles } from "./use-collaboration-files";
 
@@ -20,12 +23,14 @@ export function useScratchpad({
   userId,
   canWrite,
   ready,
+  connection,
   onChange,
 }: {
   projectId: string;
   userId: string;
   canWrite: boolean;
   ready: boolean;
+  connection?: CollaborationConnection;
   onChange: (value: string) => void;
 }) {
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -36,6 +41,7 @@ export function useScratchpad({
     ready,
     nodes,
     deleted,
+    connection,
     recoverUnmarked: false,
     onSaved: ignore,
     onClose: ignore,

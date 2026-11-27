@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import type { BuildSnapshot } from "@texfolia/contracts";
 import * as Y from "yjs";
 
-import { decodeClientMessage, encodeServerMessage } from "#/lib/collaboration";
+import {
+  decodeClientMessage,
+  decodeMultiplexClientMessage,
+  encodeMultiplexServerMessage,
+  encodeServerMessage,
+  multiplexCollaborationProtocol,
+  protocolSearchParam,
+} from "#/lib/collaboration";
 import { createNodeSchema } from "#/lib/projects";
 
 import type { ProjectDetails } from "../../src/lib/projects/project.functions";
@@ -134,7 +141,7 @@ export async function startWorkspace({
     hostname: "127.0.0.1",
     port: 0,
     websocket: {
-      data: { nodeId: "", events: false },
+      data: { nodeId: "", events: false, multiplex: false },
       open(socket) {
         if (!socket.data.events) return;
         eventSockets.add(socket);
@@ -145,6 +152,38 @@ export async function startWorkspace({
       },
       message(socket, raw) {
         if (raw === "ping") return void socket.send("pong");
+        if (socket.data.multiplex) {
+          const message = decodeMultiplexClientMessage(raw);
+          if (message.type === "close") return;
+          const doc = documents.get(message.nodeId);
+          assert(doc);
+          if (message.type === "sync")
+            socket.send(
+              encodeMultiplexServerMessage({
+                type: "sync",
+                nodeId: message.nodeId,
+                update: Y.encodeStateAsUpdate(doc, message.vector),
+                vector: Y.encodeStateVector(doc),
+                dirty: true,
+                objectKey: null,
+                canWrite: project.canWrite,
+                user: { name: "Runtime test", color: "#123456" },
+              }),
+            );
+          if (message.type === "update") Y.applyUpdate(doc, message.update);
+          if (message.type === "save")
+            socket.send(
+              encodeMultiplexServerMessage({
+                type: "saved",
+                nodeId: message.nodeId,
+                id: message.id,
+                value: doc.getText("source").toString(),
+                objectKey: null,
+                updatedAt: Date.now(),
+              }),
+            );
+          return;
+        }
         const message = decodeClientMessage(raw);
         const doc = documents.get(socket.data.nodeId);
         assert(doc);
@@ -177,12 +216,20 @@ export async function startWorkspace({
       const url = new URL(request.url);
       const handled = await handle?.(request, url);
       if (handled) return handled;
-      if (url.pathname.startsWith("/api/collaboration/"))
+      if (url.pathname.startsWith("/api/collaboration/")) {
+        const multiplex =
+          url.searchParams.get(protocolSearchParam) ===
+          multiplexCollaborationProtocol;
         return server.upgrade(request, {
-          data: { nodeId: url.pathname.split("/").at(-1) ?? "", events: false },
+          data: {
+            nodeId: multiplex ? "" : (url.pathname.split("/").at(-1) ?? ""),
+            events: false,
+            multiplex,
+          },
         })
           ? undefined
           : new Response(null, { status: 400 });
+      }
       if (
         url.pathname === "/fixture/project" ||
         url.pathname === `/api/projects/${projectId}/metadata`
@@ -197,7 +244,9 @@ export async function startWorkspace({
         return Response.json({ ...input, sourceVersion });
       }
       if (url.searchParams.has("events"))
-        return server.upgrade(request, { data: { nodeId: "", events: true } })
+        return server.upgrade(request, {
+          data: { nodeId: "", events: true, multiplex: false },
+        })
           ? undefined
           : new Response(null, { status: 426 });
       if (url.searchParams.has("file"))

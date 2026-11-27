@@ -23,17 +23,22 @@ import { deletePrefix, prepareSourceBytes } from "#/lib/storage/server";
 import {
   awarenessFrame,
   decodeClientMessage,
+  decodeMultiplexClientMessage,
   documentIdSchema,
+  encodeMultiplexServerMessage,
   encodeServerMessage,
   maxNameLength,
   outdatedClientMessage,
   readAwareness,
   scratchpadId,
+  type MultiplexClientMessage,
+  type MultiplexServerMessage,
   type ServerMessage,
 } from "./protocol";
 import {
   collaborationAccess,
   persistMergedSource,
+  projectCollaborationAccess,
   scratchpadAccess,
   sourceNode,
   type CollaborationLock,
@@ -50,7 +55,8 @@ import {
 import { checkUpdate, measureUsage, type Usage } from "./usage";
 
 // Stored with each socket, which Durable Objects limit to 2 KiB.
-const attachmentSchema = z.object({
+const singleAttachmentSchema = z.object({
+  multiplex: z.literal(false).optional(),
   projectId: z.uuid(),
   nodeId: documentIdSchema,
   userId: z.string(),
@@ -69,8 +75,46 @@ const attachmentSchema = z.object({
   // Whether the tab understands `people` messages.
   people: z.boolean().default(false),
 });
+const multiplexAttachmentSchema = z.object({
+  multiplex: z.literal(true),
+  sessionId: z.uuid(),
+  projectId: z.uuid(),
+  userId: z.string(),
+  name: z.string().transform((name) => name.slice(0, maxNameLength)),
+  people: z.boolean().default(false),
+});
+const attachmentSchema = z.union([
+  multiplexAttachmentSchema,
+  singleAttachmentSchema,
+]);
+type SingleAttachment = z.infer<typeof singleAttachmentSchema>;
+type MultiplexAttachment = z.infer<typeof multiplexAttachmentSchema>;
 type Attachment = z.infer<typeof attachmentSchema>;
-type DocumentInfo = Pick<Attachment, "nodeId" | "projectId">;
+type DocumentInfo = { nodeId: string; projectId: string };
+type SocketDocRow = {
+  session_id: string;
+  node_id: string;
+  client_id: number;
+  awareness_clock: number | null;
+  awareness_cursor: string | null;
+  awareness_at: number | null;
+};
+const multiplexTag = "multiplex";
+
+function isMultiplex(info: Attachment): info is MultiplexAttachment {
+  return info.multiplex === true;
+}
+
+function toMultiplexServerMessage(
+  message: ServerMessage,
+  nodeId?: string,
+): MultiplexServerMessage {
+  if (message.type === "people") return message;
+  if (message.type === "error")
+    return nodeId ? { ...message, nodeId } : message;
+  if (!nodeId) throw new Error(`Missing nodeId for ${message.type} message`);
+  return { ...message, nodeId };
+}
 type DocumentRow = {
   node_id: string;
   project_id: string;
@@ -209,6 +253,15 @@ export abstract class CollaborationRoom<
     sql.exec(
       "CREATE INDEX IF NOT EXISTS updates_by_node ON updates (node_id, id)",
     );
+    // Subscriptions and awareness for multiplexed project sockets, kept in
+    // SQLite so open files are not bounded by the 2 KiB socket attachment limit.
+    sql.exec(`CREATE TABLE IF NOT EXISTS socket_docs (
+      session_id TEXT NOT NULL, node_id TEXT NOT NULL, client_id INTEGER NOT NULL,
+      awareness_clock INTEGER, awareness_cursor TEXT, awareness_at INTEGER,
+      PRIMARY KEY (session_id, node_id))`);
+    sql.exec(
+      "CREATE INDEX IF NOT EXISTS socket_docs_by_node ON socket_docs (node_id)",
+    );
     this.alarms = new DutyAlarm(ctx.storage);
     void ctx.blockConcurrencyWhile(async () => {
       if ((await ctx.storage.getAlarm()) !== null) return;
@@ -291,10 +344,76 @@ export abstract class CollaborationRoom<
       .toArray();
   }
 
-  private openSockets(nodeId?: string) {
+  private openMultiplexSockets() {
     return this.ctx
+      .getWebSockets(multiplexTag)
+      .filter((ws) => ws.readyState === WebSocket.OPEN);
+  }
+
+  private socketDoc(sessionId: string, nodeId: string) {
+    return this.ctx.storage.sql
+      .exec<SocketDocRow>(
+        "SELECT session_id, node_id, client_id, awareness_clock, awareness_cursor, awareness_at FROM socket_docs WHERE session_id = ? AND node_id = ?",
+        sessionId,
+        nodeId,
+      )
+      .toArray()[0];
+  }
+
+  private socketDocsForSession(sessionId: string) {
+    return this.ctx.storage.sql
+      .exec<SocketDocRow>(
+        "SELECT session_id, node_id, client_id, awareness_clock, awareness_cursor, awareness_at FROM socket_docs WHERE session_id = ?",
+        sessionId,
+      )
+      .toArray();
+  }
+
+  private socketDocsForNode(nodeId: string) {
+    return this.ctx.storage.sql
+      .exec<SocketDocRow>(
+        "SELECT session_id, node_id, client_id, awareness_clock, awareness_cursor, awareness_at FROM socket_docs WHERE node_id = ?",
+        nodeId,
+      )
+      .toArray();
+  }
+
+  private pruneSocketDocs() {
+    const active = new Set<string>();
+    for (const ws of this.openMultiplexSockets()) {
+      const info = this.info(ws);
+      if (isMultiplex(info)) active.add(info.sessionId);
+    }
+    const stored = this.ctx.storage.sql
+      .exec<{ session_id: string }>(
+        "SELECT DISTINCT session_id FROM socket_docs",
+      )
+      .toArray();
+    for (const { session_id } of stored)
+      if (!active.has(session_id))
+        this.ctx.storage.sql.exec(
+          "DELETE FROM socket_docs WHERE session_id = ?",
+          session_id,
+        );
+  }
+
+  private openSockets(nodeId?: string) {
+    if (!nodeId)
+      return this.ctx
+        .getWebSockets()
+        .filter((ws) => ws.readyState === WebSocket.OPEN);
+    const legacy = this.ctx
       .getWebSockets(nodeId)
       .filter((ws) => ws.readyState === WebSocket.OPEN);
+    const sessions = new Set(
+      this.socketDocsForNode(nodeId).map((row) => row.session_id),
+    );
+    if (!sessions.size) return legacy;
+    const multiplexed = this.openMultiplexSockets().filter((ws) => {
+      const info = this.info(ws);
+      return isMultiplex(info) && sessions.has(info.sessionId);
+    });
+    return [...legacy, ...multiplexed];
   }
 
   private info(ws: WebSocket) {
@@ -348,9 +467,24 @@ export abstract class CollaborationRoom<
     this.edits.delete(nodeId);
     this.failedSaves.delete(nodeId);
     // Even when storage fails, nobody goes on editing a deleted file.
-    for (const ws of this.openSockets(nodeId)) ws.close(1008, "File removed");
+    const closedFrame = encodeMultiplexServerMessage({
+      type: "closed",
+      nodeId,
+      reason: "File removed",
+    });
+    for (const ws of this.openSockets(nodeId)) {
+      const info = this.info(ws);
+      if (isMultiplex(info)) {
+        try {
+          ws.send(closedFrame);
+        } catch {
+          // Socket already closed.
+        }
+      } else ws.close(1008, "File removed");
+    }
     this.ctx.storage.transactionSync(() => {
       const { sql } = this.ctx.storage;
+      sql.exec("DELETE FROM socket_docs WHERE node_id = ?", nodeId);
       deleteUpdates(sql, nodeId);
       sql.exec("DELETE FROM snapshot_chunks WHERE node_id = ?", nodeId);
       sql.exec("DELETE FROM saves WHERE node_id = ?", nodeId);
@@ -360,12 +494,20 @@ export abstract class CollaborationRoom<
 
   // Every document this room stores or has open.
   private knownDocuments() {
+    const legacy = this.ctx.getWebSockets().flatMap((ws) => {
+      const info = this.info(ws);
+      return isMultiplex(info) ? [] : [info.nodeId];
+    });
     return new Set([
       ...this.ctx.storage.sql
         .exec<Pick<DocumentRow, "node_id">>("SELECT node_id FROM documents")
         .toArray()
         .map((row) => row.node_id),
-      ...this.ctx.getWebSockets().map((ws) => this.info(ws).nodeId),
+      ...this.ctx.storage.sql
+        .exec<{ node_id: string }>("SELECT DISTINCT node_id FROM socket_docs")
+        .toArray()
+        .map((row) => row.node_id),
+      ...legacy,
     ]);
   }
 
@@ -441,7 +583,12 @@ export abstract class CollaborationRoom<
   private async reconcile(projectId: string, nodes: Map<string, ReadNode>) {
     const open = new Set([
       ...this.documents.keys(),
-      ...this.openSockets().map((ws) => this.info(ws).nodeId),
+      ...this.openSockets().flatMap((ws) => {
+        const info = this.info(ws);
+        return isMultiplex(info)
+          ? this.socketDocsForSession(info.sessionId).map((row) => row.node_id)
+          : [info.nodeId];
+      }),
     ]);
     for (const nodeId of open) {
       const node = nodes.get(nodeId);
@@ -705,6 +852,7 @@ export abstract class CollaborationRoom<
   // this room missed, and catches up with files changed or deleted elsewhere.
   private async checkProject() {
     this.releaseIdle();
+    this.pruneSocketDocs();
     const users = new Set<string>();
     let projectId: string | undefined;
     for (const ws of this.openSockets()) {
@@ -726,24 +874,51 @@ export abstract class CollaborationRoom<
     const info = this.info(ws);
     // Outdated tabs cannot read binary frames, and anonymous share-link viewers
     // never see who else is in the project.
+    const supportsBinary = isMultiplex(info) || info.binary;
     return (
-      (info.binary || !binary) && !(presence && this.isAnonymous(info.userId))
+      (supportsBinary || !binary) &&
+      !(presence && this.isAnonymous(info.userId))
     );
   }
 
-  private async deliver(sockets: readonly WebSocket[], message: ServerMessage) {
-    // Encode once for every peer.
-    const frame = encodeServerMessage(message);
-    const recipients = sockets.filter((ws) =>
-      this.receives(ws, isPresence(message), typeof frame !== "string"),
-    );
+  private async deliver(
+    sockets: readonly WebSocket[],
+    message: ServerMessage,
+    nodeId?: string,
+  ) {
+    const presence = isPresence(message);
+    let legacyFrame: string | Uint8Array | undefined;
+    let multiplexFrame: string | Uint8Array | undefined;
+    const legacyRecipients: WebSocket[] = [];
+    const multiplexRecipients: WebSocket[] = [];
+    for (const ws of sockets) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      const info = this.info(ws);
+      if (isMultiplex(info)) {
+        multiplexFrame ??= encodeMultiplexServerMessage(
+          toMultiplexServerMessage(message, nodeId),
+        );
+        if (this.receives(ws, presence, typeof multiplexFrame !== "string"))
+          multiplexRecipients.push(ws);
+      } else {
+        legacyFrame ??= encodeServerMessage(message);
+        if (this.receives(ws, presence, typeof legacyFrame !== "string"))
+          legacyRecipients.push(ws);
+      }
+    }
+    const recipients = [...legacyRecipients, ...multiplexRecipients];
+    if (!recipients.length) return;
     await this.verify(recipients);
-    for (const ws of recipients)
-      if (ws.readyState === WebSocket.OPEN) ws.send(frame);
+    if (legacyFrame !== undefined)
+      for (const ws of legacyRecipients)
+        if (ws.readyState === WebSocket.OPEN) ws.send(legacyFrame);
+    if (multiplexFrame !== undefined)
+      for (const ws of multiplexRecipients)
+        if (ws.readyState === WebSocket.OPEN) ws.send(multiplexFrame);
   }
 
-  private send(ws: WebSocket, message: ServerMessage) {
-    return this.deliver([ws], message);
+  private send(ws: WebSocket, message: ServerMessage, nodeId?: string) {
+    return this.deliver([ws], message, nodeId);
   }
 
   private broadcast(
@@ -754,49 +929,87 @@ export abstract class CollaborationRoom<
     return this.deliver(
       this.openSockets(nodeId).filter((ws) => ws !== except),
       message,
+      nodeId,
     );
   }
 
-  // Signed-in users with an open file, leaving out the `closing` socket.
-  // When a user has several files open, prefer the socket with the most recent
-  // awareness activity so `nodeId` reflects their active file.
-  private present(closing?: WebSocket) {
-    const users = new Map<string, Attachment>();
+  // Signed-in users with an open file, leaving out the `closing` socket (or one
+  // document on it). When a user has several files open, prefer the document
+  // with the most recent awareness activity so `nodeId` reflects their active file.
+  private present(closing?: WebSocket, closingNodeId?: string) {
+    const users = new Map<
+      string,
+      { info: Attachment; nodeId: string; at: number }
+    >();
+    const multiplexSessions = new Map<string, MultiplexAttachment>();
+    let closingSessionId: string | undefined;
     for (const ws of this.openSockets()) {
-      if (ws === closing) continue;
       const info = this.info(ws);
+      if (isMultiplex(info)) {
+        if (ws === closing && !closingNodeId) continue;
+        if (ws === closing && closingNodeId) closingSessionId = info.sessionId;
+        if (!this.isAnonymous(info.userId))
+          multiplexSessions.set(info.sessionId, info);
+        continue;
+      }
+      if (ws === closing) continue;
       if (!info.binary || this.isAnonymous(info.userId)) continue;
+      const at = info.awareness?.at ?? 0;
       const existing = users.get(info.userId);
-      if (
-        !existing ||
-        (info.awareness?.at ?? 0) >= (existing.awareness?.at ?? 0)
-      )
-        users.set(info.userId, info);
+      if (!existing || at >= existing.at)
+        users.set(info.userId, { info, nodeId: info.nodeId, at });
+    }
+    if (multiplexSessions.size) {
+      const rows = this.ctx.storage.sql
+        .exec<Pick<SocketDocRow, "session_id" | "node_id" | "awareness_at">>(
+          "SELECT session_id, node_id, awareness_at FROM socket_docs",
+        )
+        .toArray();
+      for (const row of rows) {
+        if (
+          closingNodeId &&
+          row.session_id === closingSessionId &&
+          row.node_id === closingNodeId
+        )
+          continue;
+        const info = multiplexSessions.get(row.session_id);
+        if (!info) continue;
+        const at = row.awareness_at ?? 0;
+        const existing = users.get(info.userId);
+        if (!existing || at >= existing.at)
+          users.set(info.userId, { info, nodeId: row.node_id, at });
+      }
     }
     return users;
   }
 
-  private people(closing?: WebSocket): ServerMessage {
+  private people(closing?: WebSocket, closingNodeId?: string): ServerMessage {
     return {
       type: "people",
-      people: [...this.present(closing).values()].map((info) => ({
-        ...this.user(info),
-        nodeId: info.nodeId,
-      })),
+      people: [...this.present(closing, closingNodeId).values()].map(
+        ({ info, nodeId }) => ({
+          ...this.user(info),
+          nodeId,
+        }),
+      ),
     };
   }
 
   // Tells every tab who is in the project. Tabs only connect to open files, so
   // awareness alone would miss people working in other files. Lists are sent in
   // the order they were made.
-  private broadcastPeople(except: WebSocket, closing?: WebSocket) {
+  private broadcastPeople(
+    except: WebSocket,
+    closing?: WebSocket,
+    closingNodeId?: string,
+  ) {
     this.ctx.waitUntil(
       this.enqueue(peopleQueue, () =>
         this.deliver(
           this.openSockets().filter(
             (ws) => ws !== except && this.info(ws).people,
           ),
-          this.people(closing),
+          this.people(closing, closingNodeId),
         ),
       ).catch((error: unknown) =>
         console.error("Collaboration presence failed", { error }),
@@ -810,21 +1023,54 @@ export abstract class CollaborationRoom<
     const info = attachmentSchema.parse(
       JSON.parse(request.headers.get("X-Collaboration-Session") ?? "null"),
     );
-    const { nodeId, projectId, userId } = info;
+    const { projectId, userId } = info;
     const started = { generation: this.accessGeneration, at: Date.now() };
-    const seen = this.version(nodeId);
     const access = {
       register: true,
       lock: (request: ProjectAccessRequest) => this.lockProject(request),
     };
-    const { node, canWrite } = await this.withDb(async (db) =>
-      nodeId === scratchpadId
-        ? {
-            node: undefined,
-            ...(await scratchpadAccess(db, projectId, userId, access)),
-          }
-        : collaborationAccess(db, projectId, nodeId, userId, access),
-    );
+    if (isMultiplex(info)) {
+      let canWrite: boolean;
+      try {
+        ({ canWrite } = await this.withDb((db) =>
+          projectCollaborationAccess(db, projectId, userId, access),
+        ));
+      } catch (error) {
+        if (error instanceof Error && error.message === "Project not found")
+          return new Response("Project not found", { status: 404 });
+        throw error;
+      }
+      this.remember([[userId, { canWrite }]], started);
+      if (!this.verified(userId)) await this.checkAccess(projectId, [userId]);
+      if (!this.verified(userId))
+        return new Response("Project not found", { status: 404 });
+      const pair = new WebSocketPair();
+      pair[1].serializeAttachment(info);
+      this.ctx.acceptWebSocket(pair[1], [multiplexTag]);
+      await this.alarms.planBy("access", Date.now() + accessCheckMs);
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
+    const { nodeId } = info;
+    const seen = this.version(nodeId);
+    let node: SourceNode | undefined;
+    let canWrite: boolean;
+    try {
+      ({ node, canWrite } = await this.withDb(async (db) =>
+        nodeId === scratchpadId
+          ? {
+              node: undefined,
+              ...(await scratchpadAccess(db, projectId, userId, access)),
+            }
+          : collaborationAccess(db, projectId, nodeId, userId, access),
+      ));
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        ["Project not found", "File not found"].includes(error.message)
+      )
+        return new Response("File not found", { status: 404 });
+      throw error;
+    }
     return this.edit(nodeId, async () => {
       if (info.binary)
         await this.document(info, node && { source: node, seen });
@@ -901,8 +1147,34 @@ export abstract class CollaborationRoom<
     message: string | ArrayBuffer,
   ) {
     const info = this.info(ws);
+    if (isMultiplex(info)) {
+      let data: MultiplexClientMessage;
+      try {
+        data = decodeMultiplexClientMessage(message);
+        documentIdSchema.parse(data.nodeId);
+      } catch (error) {
+        await this.reportError(ws, error);
+        return;
+      }
+      const saveId = await this.edit(data.nodeId, () =>
+        this.receiveMultiplex(ws, info, data),
+      );
+      if (!saveId) return;
+      try {
+        const saved = await this.save(data.nodeId);
+        if (!saved) throw new Error("File not found");
+        await this.send(
+          ws,
+          { type: "saved", id: saveId, ...saved },
+          data.nodeId,
+        );
+      } catch (error) {
+        await this.reportError(ws, error, saveId, data.nodeId);
+      }
+      return;
+    }
     const saveId = await this.edit(info.nodeId, () =>
-      this.receive(ws, message),
+      this.receive(ws, info, message),
     );
     if (!saveId) return;
     // Saving must not hold up the document's edits.
@@ -915,21 +1187,186 @@ export abstract class CollaborationRoom<
     }
   }
 
-  private reportError(ws: WebSocket, error: unknown, id?: string) {
-    return this.send(ws, {
-      type: "error",
-      message: error instanceof Error ? error.message : "Collaboration failed",
-      ...(id ? { id } : {}),
-    });
+  private reportError(
+    ws: WebSocket,
+    error: unknown,
+    id?: string,
+    nodeId?: string,
+  ) {
+    return this.send(
+      ws,
+      {
+        type: "error",
+        message:
+          error instanceof Error ? error.message : "Collaboration failed",
+        ...(id ? { id } : {}),
+      },
+      nodeId,
+    );
+  }
+
+  private async sendPeerAwareness(ws: WebSocket, nodeId: string) {
+    const cutoff = Date.now() - 30_000;
+    const multiplexSubs = new Map(
+      this.socketDocsForNode(nodeId).map((row) => [row.session_id, row]),
+    );
+    for (const peer of this.openSockets(nodeId)) {
+      if (peer === ws) continue;
+      const other = this.info(peer);
+      if (isMultiplex(other)) {
+        const sub = multiplexSubs.get(other.sessionId);
+        if (
+          sub &&
+          sub.awareness_at !== null &&
+          sub.awareness_at >= cutoff &&
+          sub.awareness_clock !== null
+        )
+          await this.send(
+            ws,
+            this.presenceFor(
+              other,
+              sub.client_id,
+              sub.awareness_clock,
+              sub.awareness_cursor,
+            ),
+            nodeId,
+          );
+      } else if (other.awareness && other.awareness.at >= cutoff)
+        await this.send(ws, this.presence(other), nodeId);
+    }
+  }
+
+  // Handles a multiplexed message in its document's queue.
+  private async receiveMultiplex(
+    ws: WebSocket,
+    info: MultiplexAttachment,
+    data: MultiplexClientMessage,
+  ) {
+    if (ws.readyState !== WebSocket.OPEN) return undefined;
+    const { nodeId } = data;
+    const requestId = data.type === "save" ? data.id : undefined;
+    try {
+      if (data.type === "close") {
+        const sub = this.socketDoc(info.sessionId, nodeId);
+        this.ctx.storage.sql.exec(
+          "DELETE FROM socket_docs WHERE session_id = ? AND node_id = ?",
+          info.sessionId,
+          nodeId,
+        );
+        if (sub) {
+          const update = awarenessFrame(
+            sub.client_id,
+            (sub.awareness_clock ?? 0) + 1,
+            null,
+          );
+          await this.broadcast(nodeId, { type: "awareness", update }, ws);
+          if (!this.isAnonymous(info.userId)) this.broadcastPeople(ws);
+        }
+        return undefined;
+      }
+      await this.verify([ws]);
+      const access = this.verified(info.userId);
+      if (!access) throw new Error("Project not found");
+      if (nodeId === scratchpadId && this.isAnonymous(info.userId))
+        throw new Error("File not found");
+      const docInfo: DocumentInfo = { projectId: info.projectId, nodeId };
+      const doc = await this.document(docInfo);
+      switch (data.type) {
+        case "sync": {
+          const joined =
+            !this.isAnonymous(info.userId) && !this.present().has(info.userId);
+          this.ctx.storage.sql.exec(
+            `INSERT INTO socket_docs (session_id, node_id, client_id) VALUES (?, ?, ?)
+             ON CONFLICT (session_id, node_id) DO UPDATE SET client_id = excluded.client_id`,
+            info.sessionId,
+            nodeId,
+            data.clientId,
+          );
+          const row = this.row(nodeId);
+          await this.send(
+            ws,
+            {
+              type: "sync",
+              update: Y.encodeStateAsUpdate(doc, data.vector),
+              vector: Y.encodeStateVector(doc),
+              dirty: Boolean(row?.dirty),
+              objectKey: row?.object_key ?? null,
+              canWrite: access.canWrite,
+              user: this.user(info),
+            },
+            nodeId,
+          );
+          if (joined) this.broadcastPeople(ws);
+          if (info.people) await this.send(ws, this.people());
+          await this.sendPeerAwareness(ws, nodeId);
+          break;
+        }
+        case "update":
+          if (!access.canWrite)
+            throw new Error("Viewers cannot edit documents");
+          if (!this.socketDoc(info.sessionId, nodeId))
+            throw new Error("File is not synchronized");
+          await this.apply(docInfo, data.update);
+          break;
+        case "save":
+          if (!access.canWrite)
+            throw new Error("Viewers cannot edit documents");
+          if (!this.socketDoc(info.sessionId, nodeId))
+            throw new Error("File is not synchronized");
+          if (nodeId !== scratchpadId) return data.id;
+          await this.send(
+            ws,
+            {
+              type: "saved",
+              id: data.id,
+              value: doc.getText("source").toString(),
+              objectKey: null,
+              updatedAt: Date.now(),
+            },
+            nodeId,
+          );
+          break;
+        case "awareness": {
+          if (this.isAnonymous(info.userId)) break;
+          const sub = this.socketDoc(info.sessionId, nodeId);
+          if (!sub) break;
+          const { clock, cursor } = readAwareness(data.update, sub.client_id);
+          if (sub.awareness_clock !== null && clock < sub.awareness_clock)
+            break;
+          const previousActiveNodeId = this.present().get(info.userId)?.nodeId;
+          this.ctx.storage.sql.exec(
+            "UPDATE socket_docs SET awareness_clock = ?, awareness_cursor = ?, awareness_at = ? WHERE session_id = ? AND node_id = ?",
+            clock,
+            cursor,
+            Date.now(),
+            info.sessionId,
+            nodeId,
+          );
+          await this.broadcast(
+            nodeId,
+            this.presenceFor(info, sub.client_id, clock, cursor),
+            ws,
+          );
+          if (previousActiveNodeId !== nodeId) this.broadcastPeople(ws);
+          break;
+        }
+      }
+    } catch (error) {
+      await this.reportError(ws, error, requestId, nodeId);
+    }
+    return undefined;
   }
 
   // Handles a message in its document's queue, and returns the ID of a save
   // request, which the caller finishes outside it.
-  private async receive(ws: WebSocket, message: string | ArrayBuffer) {
+  private async receive(
+    ws: WebSocket,
+    info: SingleAttachment,
+    message: string | ArrayBuffer,
+  ) {
     if (ws.readyState !== WebSocket.OPEN) return undefined;
     let requestId: string | undefined;
     try {
-      const info = this.info(ws);
       const { nodeId } = info;
       if (!info.binary) {
         // The tab keeps its offline edits and merges them after reloading.
@@ -955,12 +1392,7 @@ export abstract class CollaborationRoom<
             user: this.user(info),
           });
           if (info.people) await this.send(ws, this.people());
-          for (const peer of this.openSockets(nodeId)) {
-            if (peer === ws) continue;
-            const other = this.info(peer);
-            if (other.awareness && Date.now() - other.awareness.at < 30_000)
-              await this.send(ws, this.presence(other));
-          }
+          await this.sendPeerAwareness(ws, nodeId);
           break;
         }
         case "update":
@@ -1000,18 +1432,27 @@ export abstract class CollaborationRoom<
     return undefined;
   }
 
-  private presence(info: Attachment): ServerMessage {
-    const { clock, cursor } = info.awareness ?? { clock: 0, cursor: null };
+  private presenceFor(
+    info: Attachment,
+    clientId: number,
+    clock: number,
+    cursor: string | null,
+  ): ServerMessage {
     return {
       type: "awareness",
       update: awarenessFrame(
-        info.clientId,
+        clientId,
         clock,
         cursor === null
           ? null
           : { cursor: JSON.parse(cursor) as unknown, user: this.user(info) },
       ),
     };
+  }
+
+  private presence(info: SingleAttachment): ServerMessage {
+    const { clock, cursor } = info.awareness ?? { clock: 0, cursor: null };
+    return this.presenceFor(info, info.clientId, clock, cursor);
   }
 
   // Saves a document's current text. Returns null when the file is gone.
@@ -1339,9 +1780,37 @@ export abstract class CollaborationRoom<
 
   override async webSocketClose(ws: WebSocket, code: number, reason: string) {
     const info = this.info(ws);
+    if (isMultiplex(info)) {
+      const subs = this.socketDocsForSession(info.sessionId);
+      this.ctx.storage.sql.exec(
+        "DELETE FROM socket_docs WHERE session_id = ?",
+        info.sessionId,
+      );
+      await Promise.all(
+        subs.map((sub) =>
+          this.edit(sub.node_id, async () => {
+            const update = awarenessFrame(
+              sub.client_id,
+              (sub.awareness_clock ?? 0) + 1,
+              null,
+            );
+            await this.broadcast(
+              sub.node_id,
+              { type: "awareness", update },
+              ws,
+            );
+          }),
+        ),
+      );
+      if (!this.isAnonymous(info.userId) && !this.present(ws).has(info.userId))
+        this.broadcastPeople(ws, ws);
+      ws.close(closeCode(code), reason);
+      return;
+    }
     await this.edit(info.nodeId, async () => {
       if (info.binary) {
-        const { awareness } = this.info(ws);
+        const current = this.info(ws);
+        const awareness = isMultiplex(current) ? null : current.awareness;
         const update = awarenessFrame(
           info.clientId,
           (awareness?.clock ?? 0) + 1,

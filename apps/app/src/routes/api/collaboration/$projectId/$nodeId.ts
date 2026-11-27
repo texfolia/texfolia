@@ -9,13 +9,7 @@ import {
   maxNameLength,
   peopleSearchParam,
   protocolSearchParam,
-  scratchpadId,
 } from "#/lib/collaboration";
-import {
-  collaborationAccess,
-  scratchpadAccess,
-} from "#/lib/collaboration/server";
-import { lockProject } from "#/lib/sharing/project-access.server";
 
 export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
   server: {
@@ -45,31 +39,8 @@ export const Route = createFileRoute("/api/collaboration/$projectId/$nodeId")({
           });
         if (!parsed.success)
           return new Response("File not found", { status: 404 });
-        try {
-          if (parsed.data.nodeId === scratchpadId)
-            await scratchpadAccess(
-              context.db,
-              params.projectId,
-              principal.userId,
-              { lock: lockProject },
-            );
-          else
-            await collaborationAccess(
-              context.db,
-              params.projectId,
-              params.nodeId,
-              principal.userId,
-              { lock: lockProject },
-            );
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            ["Project not found", "File not found"].includes(error.message)
-          )
-            return new Response("File not found", { status: 404 });
-          throw error;
-        }
         // Construct the internal session here; never forward identity headers from clients.
+        // Project and file access is verified once inside the Durable Object.
         const headers = new Headers({ Upgrade: "websocket" });
         headers.set(
           "X-Collaboration-Session",

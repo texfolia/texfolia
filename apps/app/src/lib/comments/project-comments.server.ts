@@ -9,7 +9,7 @@ import { and, asc, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
-import { notifyProjectMetadataChanged } from "#/lib/builds/client";
+import { notifyProjectCommentChanged } from "#/lib/builds/client";
 import type { ProjectTransaction } from "#/lib/projects/server";
 import {
   lockProject,
@@ -184,6 +184,79 @@ export async function listComments({
 export type CommentThreads = Awaited<ReturnType<typeof listComments>>;
 export type CommentThread = CommentThreads["threads"][number];
 
+/** Loads a single comment thread and its comments, or null if deleted. */
+export async function getCommentThread({
+  db,
+  userId,
+  projectId,
+  threadId,
+}: {
+  db: Db;
+  userId: string;
+  projectId: string;
+  threadId: string;
+}): Promise<{
+  userId: string;
+  canComment: boolean;
+  canModerate: boolean;
+  thread: CommentThread | null;
+}> {
+  return db.transaction(async (tx) => {
+    const { canWrite, canComment } = await lockForComments(
+      tx,
+      projectId,
+      userId,
+      "read",
+    );
+    const resolver = alias(user, "resolver");
+    const [thread] = await tx
+      .select({
+        id: projectCommentThread.id,
+        nodeId: projectCommentThread.nodeId,
+        anchorStart: projectCommentThread.anchorStart,
+        anchorEnd: projectCommentThread.anchorEnd,
+        quote: projectCommentThread.quote,
+        createdBy: projectCommentThread.createdBy,
+        createdAt: projectCommentThread.createdAt,
+        resolvedAt: projectCommentThread.resolvedAt,
+        resolvedByName: resolver.name,
+      })
+      .from(projectCommentThread)
+      .innerJoin(projectNode, eq(projectNode.id, projectCommentThread.nodeId))
+      .leftJoin(resolver, eq(resolver.id, projectCommentThread.resolvedBy))
+      .where(
+        and(
+          eq(projectCommentThread.id, threadId),
+          eq(projectCommentThread.projectId, projectId),
+          isNull(projectNode.deletedAt),
+        ),
+      );
+    if (!thread)
+      return { userId, canComment, canModerate: canWrite, thread: null };
+    const comments = await tx
+      .select({
+        id: projectComment.id,
+        threadId: projectComment.threadId,
+        authorId: projectComment.authorId,
+        authorName: user.name,
+        authorImage: user.image,
+        body: projectComment.body,
+        createdAt: projectComment.createdAt,
+        editedAt: projectComment.editedAt,
+      })
+      .from(projectComment)
+      .innerJoin(user, eq(user.id, projectComment.authorId))
+      .where(eq(projectComment.threadId, thread.id))
+      .orderBy(asc(projectComment.createdAt), asc(projectComment.id));
+    return {
+      userId,
+      canComment,
+      canModerate: canWrite,
+      thread: comments.length ? { ...thread, comments } : null,
+    };
+  });
+}
+
 // A version of the project's comments for the workspace metadata poll. Every
 // change bumps a thread's updatedAt or changes the thread count. It also
 // changes with whether the viewer may comment, so the panel reloads when
@@ -261,7 +334,7 @@ export async function createCommentThread({
       .values({ threadId: thread.id, authorId: userId, body: data.body });
     return { threadId: thread.id };
   });
-  await notifyProjectMetadataChanged(data.projectId);
+  await notifyProjectCommentChanged(data.projectId, created.threadId);
   return created;
 }
 
@@ -296,7 +369,7 @@ export async function replyToCommentThread({
       .where(eq(projectCommentThread.id, data.threadId));
     return { commentId: comment?.id };
   });
-  await notifyProjectMetadataChanged(data.projectId);
+  await notifyProjectCommentChanged(data.projectId, data.threadId);
   return created;
 }
 
@@ -325,7 +398,7 @@ export async function resolveCommentThread({
       )
       .where(eq(projectCommentThread.id, data.threadId));
   });
-  await notifyProjectMetadataChanged(data.projectId);
+  await notifyProjectCommentChanged(data.projectId, data.threadId);
 }
 
 // The thread's author, if they can still comment, and project editors can
@@ -348,7 +421,7 @@ export async function deleteCommentThread({
       .delete(projectCommentThread)
       .where(eq(projectCommentThread.id, data.threadId));
   });
-  await notifyProjectMetadataChanged(data.projectId);
+  await notifyProjectCommentChanged(data.projectId, data.threadId);
 }
 
 export async function updateComment({
@@ -360,7 +433,7 @@ export async function updateComment({
   userId: string;
   data: z.infer<typeof updateCommentSchema>;
 }) {
-  await db.transaction(async (tx) => {
+  const threadId = await db.transaction(async (tx) => {
     await lockForComments(tx, data.projectId, userId);
     const { threadId } = await lockComment(
       tx,
@@ -373,8 +446,9 @@ export async function updateComment({
       .set({ body: data.body, editedAt: sql`now()` })
       .where(eq(projectComment.id, data.commentId));
     await touchThread(tx, threadId);
+    return threadId;
   });
-  await notifyProjectMetadataChanged(data.projectId);
+  await notifyProjectCommentChanged(data.projectId, threadId);
 }
 
 // Authors delete their own comments, and editors anyone's. Deleting a thread's
@@ -388,7 +462,7 @@ export async function deleteComment({
   userId: string;
   data: z.infer<typeof deleteCommentSchema>;
 }) {
-  await db.transaction(async (tx) => {
+  const threadId = await db.transaction(async (tx) => {
     const { canWrite } = await lockForComments(tx, data.projectId, userId);
     const { threadId } = await lockComment(
       tx,
@@ -408,6 +482,7 @@ export async function deleteComment({
       await tx
         .delete(projectCommentThread)
         .where(eq(projectCommentThread.id, threadId));
+    return threadId;
   });
-  await notifyProjectMetadataChanged(data.projectId);
+  await notifyProjectCommentChanged(data.projectId, threadId);
 }

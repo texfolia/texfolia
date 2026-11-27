@@ -14,6 +14,24 @@ export async function listComments() {
     key === "createdAt" ? new Date(String(value)) : value,
   ) as unknown;
 }
+export async function getCommentThread({
+  data,
+}: {
+  data: { projectId: string; threadId: string };
+}) {
+  const all = (await listComments()) as {
+    userId: string;
+    canComment: boolean;
+    canModerate: boolean;
+    threads: Array<{ id: string }>;
+  };
+  return {
+    userId: all.userId,
+    canComment: all.canComment,
+    canModerate: all.canModerate,
+    thread: all.threads.find((item) => item.id === data.threadId) ?? null,
+  };
+}
 export async function deleteCommentThread({
   data,
 }: {

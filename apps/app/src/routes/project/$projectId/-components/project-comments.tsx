@@ -289,7 +289,7 @@ function ThreadCard({ thread }: { thread: Located }) {
     setBusy(true);
     setError("");
     try {
-      await run(action);
+      await run(action, thread.id);
       return true;
     } catch (failure) {
       setError(failureMessage(failure));

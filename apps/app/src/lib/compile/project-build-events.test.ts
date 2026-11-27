@@ -114,4 +114,32 @@ describe("ProjectBuildEvents", () => {
 
     events.close();
   });
+
+  test("delivers single-thread comment push events without triggering metadata refresh", () => {
+    const sockets: FakeSocket[] = [];
+    const received: BuildEvent[] = [];
+    const events = new ProjectBuildEvents("project-3", undefined, () => {
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    });
+    events.subscribe((event) => received.push(event));
+
+    const socket = sockets[0];
+    socket?.open();
+    socket?.receive(JSON.stringify({ type: "comment", threadId: "thread-1" }));
+    socket?.receive(JSON.stringify({ type: "comment", threadId: "thread-2" }));
+
+    expect(received).toEqual([
+      { kind: "comment", threadId: "thread-1" },
+      { kind: "comment", threadId: "thread-2" },
+    ]);
+
+    // Comment events are not replayed to late subscribers.
+    const late: BuildEvent[] = [];
+    events.subscribe((event) => late.push(event));
+    expect(late).toEqual([]);
+
+    events.close();
+  });
 });
