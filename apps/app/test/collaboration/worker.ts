@@ -27,6 +27,7 @@ import {
   revokeProjectAccess,
 } from "../../src/lib/sharing/project-sharing.server";
 import { Route as collaborationRoute } from "../../src/routes/api/collaboration/$projectId/$nodeId";
+import { Route as collaborationMultiplexRoute } from "../../src/routes/api/collaboration/$projectId/index";
 import { Route as compileRoute } from "../../src/routes/api/compile/$projectId";
 import { collectProjectSources } from "../collection";
 
@@ -256,6 +257,22 @@ export default {
         throw new Error("Unexpected route chaining");
       };
       if (channel === "collaboration") {
+        if (!nodeId) {
+          const handlers = collaborationMultiplexRoute.options.server?.handlers;
+          if (
+            !handlers ||
+            typeof handlers === "function" ||
+            typeof handlers.GET !== "function"
+          )
+            throw new Error("Missing multiplex collaboration GET route");
+          return await handlers.GET({
+            request,
+            context,
+            params: { projectId },
+            pathname: "/api/collaboration/$projectId",
+            next,
+          });
+        }
         const handlers = collaborationRoute.options.server?.handlers;
         if (
           !handlers ||

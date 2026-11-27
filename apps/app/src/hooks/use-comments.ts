@@ -8,8 +8,15 @@ import {
 } from "react";
 
 import type { CommentAnchor } from "#/lib/comments/anchor";
-import { listComments } from "#/lib/comments/project-comments.functions";
-import { useProjectFiles } from "#/providers/project-files-provider";
+import { mergeCommentThread } from "#/lib/comments/merge";
+import {
+  getCommentThread,
+  listComments,
+} from "#/lib/comments/project-comments.functions";
+import {
+  useProjectBuildEvents,
+  useProjectFiles,
+} from "#/providers/project-files-provider";
 
 export type CommentThreads = Awaited<ReturnType<typeof listComments>>;
 export type CommentThread = CommentThreads["threads"][number];
@@ -26,12 +33,14 @@ export type Comments = {
   startComment: (draft: CommentDraft) => void;
   cancelDraft: () => void;
   selectThread: (id: string | undefined, focus?: boolean) => void;
-  // Runs a mutation, then reloads the threads.
-  run: <T>(action: () => Promise<T>) => Promise<T>;
+  // Runs a mutation, then refreshes only the affected thread when known.
+  run: <T>(action: () => Promise<T>, threadId?: string) => Promise<T>;
 };
 
-// Review comments for the project workspace. Threads reload whenever the
-// metadata poll reports a new comments version and after every mutation.
+// Review comments for the project workspace. Single-thread updates arrive via
+// WebSocket push and fetch only the changed thread; full reloads happen on open
+// and whenever metadata resyncs report a new comments version (e.g. reconnect
+// or role change).
 export function useComments({
   projectId,
   onShow,
@@ -41,6 +50,7 @@ export function useComments({
   onShow: () => void;
 }): Comments {
   const files = useProjectFiles();
+  const buildEvents = useProjectBuildEvents();
   const version = useSyncExternalStore(
     files.subscribe,
     () => files.getStatus().commentsVersion,
@@ -52,6 +62,7 @@ export function useComments({
   const [activeId, setActiveId] = useState<string>();
   const [focusSequence, setFocusSequence] = useState(0);
   const request = useRef(0);
+  const threadRequests = useRef(new Map<string, number>());
   const show = useRef(onShow);
   show.current = onShow;
 
@@ -69,20 +80,66 @@ export function useComments({
     }
   }, [projectId]);
 
-  // The metadata poll reports a new version after anyone changes a comment.
+  const refreshThread = useCallback(
+    async (threadId: string) => {
+      const fullAtStart = request.current;
+      const sequence = (threadRequests.current.get(threadId) ?? 0) + 1;
+      threadRequests.current.set(threadId, sequence);
+      try {
+        const next = await getCommentThread({ data: { projectId, threadId } });
+        if (
+          fullAtStart !== request.current ||
+          threadRequests.current.get(threadId) !== sequence
+        )
+          return;
+        setData((current) =>
+          mergeCommentThread(current, { ...next, threadId }),
+        );
+        setError("");
+      } catch {
+        // Keep existing threads; a reconnect resync will reconcile.
+      }
+    },
+    [projectId],
+  );
+
+  // Full load on open and on metadata resyncs (reconnect, role change, file deletion).
   useEffect(() => {
     void refresh();
   }, [refresh, version]);
 
+  // Incremental single-thread updates pushed over the live WebSocket.
+  useEffect(() => {
+    if (!buildEvents) return;
+    const unsubscribe = buildEvents.subscribe((event) => {
+      if (event.kind === "comment") void refreshThread(event.threadId);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [buildEvents, refreshThread]);
+
   const run = useCallback(
-    async <T>(action: () => Promise<T>) => {
+    async <T>(action: () => Promise<T>, threadId?: string) => {
+      let result: T | undefined;
+      let targetThreadId = threadId;
       try {
-        return await action();
+        result = await action();
+        if (
+          !targetThreadId &&
+          result &&
+          typeof result === "object" &&
+          "threadId" in result &&
+          typeof result.threadId === "string"
+        )
+          targetThreadId = result.threadId;
+        return result;
       } finally {
-        await refresh();
+        if (targetThreadId) await refreshThread(targetThreadId);
+        else await refresh();
       }
     },
-    [refresh],
+    [refresh, refreshThread],
   );
 
   return useMemo<Comments>(

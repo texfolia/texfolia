@@ -19,6 +19,7 @@ import { useComments } from "#/hooks/use-comments";
 import { useStableActions } from "#/hooks/use-stable-callback";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { scratchpadId } from "#/lib/collaboration";
+import { CollaborationConnection } from "#/lib/collaboration/browser";
 import { invalidProjectPaths } from "#/lib/projects";
 import type { ProjectDetails } from "#/lib/projects/project.functions";
 import { FileDrafts } from "#/lib/workspace/file-drafts";
@@ -147,6 +148,14 @@ export function ProjectWorkspace({
   const [openedAt] = useState(() => performance.now());
   const { chrome, updateChrome, togglePanel, persistLayout, initialDock } =
     useWorkspaceChrome({ layoutKey, dock: panels.api, ready });
+  // One multiplexed collaboration WebSocket shared by open files and scratchpad.
+  const [collaborationConnection] = useState(
+    () => new CollaborationConnection(projectId),
+  );
+  useEffect(
+    () => () => collaborationConnection.destroy(),
+    [collaborationConnection],
+  );
   const collaboration = useCollaborationFiles({
     projectId,
     userId,
@@ -154,6 +163,7 @@ export function ProjectWorkspace({
     ready,
     nodes,
     deleted: fileStatus.deleted,
+    connection: collaborationConnection,
     onSaved: (id, saved, file) =>
       sources.recordSaved(id, saved, file.text.toString()),
     onChange: observeChange,
@@ -186,6 +196,7 @@ export function ProjectWorkspace({
     userId,
     canWrite,
     ready,
+    connection: collaborationConnection,
     onChange: panels.showScratchpad,
   });
   // Drafts are recovered into live documents.

@@ -18,6 +18,9 @@ const bodySchema = z
   );
 
 export const commentsSchema = z.object({ projectId: z.uuid() });
+export const commentThreadSchema = commentsSchema.extend({
+  threadId: z.uuid(),
+});
 export const createCommentThreadSchema = commentsSchema.extend({
   nodeId: z.uuid(),
   anchorStart: anchorSchema,

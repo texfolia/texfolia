@@ -1,9 +1,13 @@
 import { jobIdSchema } from "@texfolia/contracts";
 import { createDb } from "@texfolia/db";
 import { DurableObject } from "cloudflare:workers";
+import { z } from "zod";
 
 import { sendEmail } from "#/lib/email";
-import { lockProject } from "#/lib/sharing/project-access.server";
+import {
+  lockProject,
+  shareLinkIdOf,
+} from "#/lib/sharing/project-access.server";
 
 import { liveUserHeader } from "./client";
 import { createCompilerEngine, fetchCompiler } from "./compiler";
@@ -102,6 +106,14 @@ export class ProjectBuilds extends LiveProject {
     this.broadcastFrame(projectId, this.metadataFrame(version), userIds);
   }
 
+  /** Broadcasts a single-thread comment update to signed-in workspace tabs. */
+  notifyComment(projectId: string, threadId: string) {
+    const frame = JSON.stringify({ type: "comment", threadId });
+    this.broadcastFrame(projectId, frame, undefined, (userId) =>
+      userId === null ? false : shareLinkIdOf(userId) === null,
+    );
+  }
+
   private coordinator(projectId: string) {
     if (this.core) return this.core;
     const { sql } = this.ctx.storage;
@@ -174,6 +186,18 @@ export class ProjectBuilds extends LiveProject {
       path === `/projects/${id.data}/metadata-changed`
     ) {
       this.notifyMetadata(id.data);
+      return new Response(null, { status: 204 });
+    }
+    if (
+      request.method === "POST" &&
+      path === `/projects/${id.data}/comment-changed`
+    ) {
+      const parsed = z
+        .object({ threadId: z.uuid() })
+        .safeParse(await request.json().catch(() => null));
+      if (!parsed.success)
+        return Response.json({ error: "Invalid thread ID" }, { status: 400 });
+      this.notifyComment(id.data, parsed.data.threadId);
       return new Response(null, { status: 204 });
     }
     const response = await createCoordinatorApp(

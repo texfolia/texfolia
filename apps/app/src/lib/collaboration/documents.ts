@@ -1,3 +1,4 @@
+import { CollaborationConnection } from "./connection";
 import { CollaborativeFile } from "./file";
 import {
   finishUnmarkedDocuments,
@@ -26,6 +27,8 @@ export class CollaborativeDocuments {
   private unmarked: string[] | undefined;
   private recoveryStarted = false;
   private destroyed = false;
+  private connection: CollaborationConnection;
+  private ownsConnection: boolean;
   private project = {
     textIds: new Set<string>() as ReadonlySet<string>,
     deleted: new Set<string>() as ReadonlySet<string>,
@@ -34,6 +37,8 @@ export class CollaborativeDocuments {
 
   constructor(
     private options: Pick<FileOptions, "projectId" | "userId"> & {
+      /** Shared multiplexed project socket; created automatically when omitted. */
+      connection?: CollaborationConnection;
       /** How long a released document stays connected, so reopening is cheap. */
       closeDelayMs?: number;
       /** False when no document was ever cached without an unsynced marker. */
@@ -45,7 +50,11 @@ export class CollaborativeDocuments {
       /** Called when a document opens, first loads its text, or closes. */
       onDocuments: () => void;
     },
-  ) {}
+  ) {
+    this.ownsConnection = !options.connection;
+    this.connection =
+      options.connection ?? new CollaborationConnection(options.projectId);
+  }
 
   /** Applies the project's files and access, opening held documents. */
   update(project: {
@@ -137,6 +146,7 @@ export class CollaborativeDocuments {
     this.recoveryStarted = false;
     for (const file of this.files.values()) file.destroy();
     this.files.clear();
+    if (this.ownsConnection) this.connection.destroy();
   }
 
   private held(id: string) {
@@ -159,6 +169,7 @@ export class CollaborativeDocuments {
       nodeId: id,
       userId: this.options.userId,
       canWrite: this.project.canWrite,
+      connection: this.connection,
       onSaved: (saved) => {
         this.options.onSaved(id, saved, file);
         this.scheduleClose(id);

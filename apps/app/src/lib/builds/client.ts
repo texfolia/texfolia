@@ -125,3 +125,36 @@ export async function notifyProjectMetadataChanged(
     });
   }
 }
+
+/**
+ * Broadcasts a single-thread comment change over the project's live WebSocket
+ * so open workspace tabs fetch only that thread instead of reloading all
+ * project metadata and comment threads.
+ */
+export async function notifyProjectCommentChanged(
+  projectId: string,
+  threadId: string,
+  builds?: Pick<Fetcher, "fetch">,
+) {
+  const fetcher = builds ?? (await defaultBuildsFetcher());
+  if (!fetcher) return;
+  try {
+    const response = await fetchBuilds(
+      `/projects/${encodeURIComponent(projectId)}/comment-changed`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId }),
+      },
+      fetcher,
+    );
+    if (!response.ok)
+      throw new Error(`Comment notification returned ${response.status}`);
+  } catch (error) {
+    console.error("Comment change committed but notification failed", {
+      projectId,
+      threadId,
+      error,
+    });
+  }
+}

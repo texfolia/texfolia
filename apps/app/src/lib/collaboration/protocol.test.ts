@@ -3,12 +3,18 @@ import { describe, expect, test } from "bun:test";
 import {
   awarenessFrame,
   decodeClientMessage,
+  decodeMultiplexClientMessage,
+  decodeMultiplexServerMessage,
   decodeServerMessage,
   encodeClientMessage,
+  encodeMultiplexClientMessage,
+  encodeMultiplexServerMessage,
   encodeServerMessage,
   maxCollaborationBytes,
   maxNameLength,
   readAwareness,
+  type MultiplexClientMessage,
+  type MultiplexServerMessage,
   type ServerMessage,
 } from "./protocol";
 
@@ -122,6 +128,63 @@ describe("collaboration protocol", () => {
       );
     expect(() => decodeServerMessage(new Blob())).toThrow();
     expect(() => decodeServerMessage(bytes(9).buffer)).toThrow();
+  });
+
+  test("multiplex client messages round-trip with nodeId framing", () => {
+    const nodeId = crypto.randomUUID();
+    const update = bytes(1, 2, 3);
+    for (const message of [
+      { type: "sync", nodeId, clientId: 42, vector: update },
+      { type: "sync", nodeId: "scratchpad", clientId: 7, vector: bytes(0) },
+      { type: "update", nodeId, update },
+      { type: "awareness", nodeId, update },
+      { type: "save", nodeId, id: crypto.randomUUID() },
+      { type: "close", nodeId },
+    ] satisfies MultiplexClientMessage[]) {
+      const frame = encodeMultiplexClientMessage(message);
+      expect(decodeMultiplexClientMessage(buffer(frame))).toEqual(message);
+    }
+    expect(() => decodeMultiplexClientMessage(new ArrayBuffer(0))).toThrow();
+    expect(() => decodeMultiplexClientMessage("x".repeat(2000))).toThrow();
+  });
+
+  test("multiplex server messages round-trip with nodeId framing", () => {
+    const nodeId = crypto.randomUUID();
+    const awareness = awarenessFrame(3, 1, null);
+    for (const message of [
+      {
+        type: "sync",
+        nodeId,
+        update: bytes(4, 5, 6),
+        vector: bytes(0),
+        dirty: true,
+        objectKey: null,
+        canWrite: true,
+        user: { name: "Ada", color: "#123456" },
+      },
+      { type: "update", nodeId, update: bytes(1, 2) },
+      { type: "awareness", nodeId, update: awareness },
+      {
+        type: "saved",
+        nodeId,
+        id: crypto.randomUUID(),
+        value: "text",
+        objectKey: "key",
+        updatedAt: 1,
+      },
+      { type: "error", nodeId, message: "nope" },
+      { type: "error", message: "project error" },
+      { type: "closed", nodeId, reason: "File removed" },
+      {
+        type: "people",
+        people: [{ name: "Ada", color: "#123456", nodeId }],
+      },
+    ] satisfies MultiplexServerMessage[]) {
+      const frame = encodeMultiplexServerMessage(message);
+      expect(decodeMultiplexServerMessage(buffer(frame))).toEqual(message);
+    }
+    expect(() => decodeMultiplexServerMessage(new Blob())).toThrow();
+    expect(() => decodeMultiplexServerMessage(bytes(9).buffer)).toThrow();
   });
 });
 

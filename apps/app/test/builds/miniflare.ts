@@ -25,6 +25,16 @@ export class ProjectBuilds extends DurableObject {
       this.notifyMetadata();
       return new Response(null, { status: 204 });
     }
+    if (request.method === "POST" && pathname.endsWith("/comment-changed")) {
+      const body = await request.json().catch(() => null);
+      if (body && typeof body.threadId === "string") {
+        const frame = JSON.stringify({ type: "comment", threadId: body.threadId });
+        for (const ws of this.sockets) {
+          if (ws.readyState === 1) ws.send(frame);
+        }
+      }
+      return new Response(null, { status: 204 });
+    }
     if (!pathname.endsWith("/events"))
       return this.env.HANDLER.fetch(request);
     // The handler streams one snapshot per line; a viewer gets one per message.

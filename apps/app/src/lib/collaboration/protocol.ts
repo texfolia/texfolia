@@ -27,6 +27,10 @@ const maxControlLength = 1024;
  * still send base64 JSON are told to reload instead of being synchronized.
  */
 export const collaborationProtocol = "2";
+/**
+ * Multiplexed project sockets carry every open file over one WebSocket.
+ */
+export const multiplexCollaborationProtocol = "3";
 export const protocolSearchParam = "protocol";
 /** Clients that understand `people` messages connect with `?people=1`. */
 export const peopleSearchParam = "people";
@@ -48,6 +52,17 @@ const clientControlSchema = z.strictObject({
   type: z.literal("save"),
   id: z.uuid(),
 });
+const multiplexClientControlSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("save"),
+    nodeId: documentIdSchema,
+    id: z.uuid(),
+  }),
+  z.strictObject({
+    type: z.literal("close"),
+    nodeId: documentIdSchema,
+  }),
+]);
 const serverControlSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("saved"),
@@ -63,6 +78,37 @@ const serverControlSchema = z.discriminatedUnion("type", [
     id: z.uuid().optional(),
   }),
   // Everyone with a file open in the project, whichever file it is.
+  z.object({
+    type: z.literal("people"),
+    people: z.array(
+      z.object({
+        name: z.string(),
+        color: z.string(),
+        nodeId: documentIdSchema.optional(),
+      }),
+    ),
+  }),
+]);
+const multiplexServerControlSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("saved"),
+    nodeId: documentIdSchema,
+    id: z.uuid(),
+    value: z.string(),
+    objectKey: z.string().nullable(),
+    updatedAt: z.number(),
+  }),
+  z.object({
+    type: z.literal("error"),
+    nodeId: documentIdSchema.optional(),
+    message: z.string(),
+    id: z.uuid().optional(),
+  }),
+  z.object({
+    type: z.literal("closed"),
+    nodeId: documentIdSchema,
+    reason: z.string(),
+  }),
   z.object({
     type: z.literal("people"),
     people: z.array(
@@ -90,6 +136,22 @@ export type ServerMessage =
   | { type: "update"; update: Uint8Array }
   | { type: "awareness"; update: Uint8Array }
   | z.infer<typeof serverControlSchema>;
+
+export type MultiplexClientMessage =
+  | { type: "sync"; nodeId: string; clientId: number; vector: Uint8Array }
+  | { type: "update"; nodeId: string; update: Uint8Array }
+  | { type: "awareness"; nodeId: string; update: Uint8Array }
+  | z.infer<typeof multiplexClientControlSchema>;
+export type MultiplexServerMessage =
+  | ({
+      type: "sync";
+      nodeId: string;
+      update: Uint8Array;
+      vector: Uint8Array;
+    } & z.infer<typeof syncMetaSchema>)
+  | { type: "update"; nodeId: string; update: Uint8Array }
+  | { type: "awareness"; nodeId: string; update: Uint8Array }
+  | z.infer<typeof multiplexServerControlSchema>;
 
 function asBytes(data: ArrayBuffer | ArrayBufferView) {
   return data instanceof ArrayBuffer
@@ -185,6 +247,137 @@ export function decodeServerMessage(data: unknown): ServerMessage {
       return { type: "update", update: bytes.subarray(1) };
     case frameType.awareness:
       return { type: "awareness", update: bytes.subarray(1) };
+    default:
+      throw new Error("Invalid collaboration response");
+  }
+}
+
+export function encodeMultiplexClientMessage(message: MultiplexClientMessage) {
+  switch (message.type) {
+    case "sync": {
+      const encoder = encoding.createEncoder();
+      encoding.writeUint8(encoder, frameType.sync);
+      encoding.writeVarString(encoder, message.nodeId);
+      encoding.writeVarUint(encoder, message.clientId);
+      encoding.writeUint8Array(encoder, message.vector);
+      return encoding.toUint8Array(encoder);
+    }
+    case "update":
+    case "awareness": {
+      const encoder = encoding.createEncoder();
+      encoding.writeUint8(encoder, frameType[message.type]);
+      encoding.writeVarString(encoder, message.nodeId);
+      encoding.writeUint8Array(encoder, message.update);
+      return encoding.toUint8Array(encoder);
+    }
+    case "save":
+    case "close":
+      return JSON.stringify(message);
+  }
+}
+
+export function decodeMultiplexClientMessage(
+  data: string | ArrayBuffer | ArrayBufferView,
+): MultiplexClientMessage {
+  if (typeof data === "string") {
+    if (data.length > maxControlLength)
+      throw new Error("Invalid collaboration message");
+    return multiplexClientControlSchema.parse(JSON.parse(data));
+  }
+  if (data.byteLength < 1 || data.byteLength > maxCollaborationBytes + 64)
+    throw new Error("Invalid collaboration message");
+  const bytes = asBytes(data);
+  const decoder = decoding.createDecoder(bytes.subarray(1));
+  const nodeId = documentIdSchema.parse(decoding.readVarString(decoder));
+  switch (bytes[0]) {
+    case frameType.sync: {
+      const clientId = z
+        .number()
+        .int()
+        .nonnegative()
+        .max(0xffffffff)
+        .parse(decoding.readVarUint(decoder));
+      const vector = bytes.subarray(1 + decoder.pos);
+      return { type: "sync", nodeId, clientId, vector };
+    }
+    case frameType.update: {
+      const update = bytes.subarray(1 + decoder.pos);
+      if (update.byteLength > maxCollaborationBytes)
+        throw new Error("Invalid collaboration message");
+      return { type: "update", nodeId, update };
+    }
+    case frameType.awareness: {
+      const update = bytes.subarray(1 + decoder.pos);
+      if (update.byteLength > maxAwarenessBytes)
+        throw new Error("Invalid collaboration message");
+      return { type: "awareness", nodeId, update };
+    }
+    default:
+      throw new Error("Invalid collaboration message");
+  }
+}
+
+export function encodeMultiplexServerMessage(message: MultiplexServerMessage) {
+  switch (message.type) {
+    case "sync": {
+      const { nodeId, update, vector, dirty, objectKey, canWrite, user } =
+        message;
+      const encoder = encoding.createEncoder();
+      encoding.writeUint8(encoder, frameType.sync);
+      encoding.writeVarString(encoder, nodeId);
+      encoding.writeVarUint8Array(encoder, update);
+      encoding.writeVarUint8Array(encoder, vector);
+      encoding.writeVarString(
+        encoder,
+        JSON.stringify({ dirty, objectKey, canWrite, user }),
+      );
+      return encoding.toUint8Array(encoder);
+    }
+    case "update":
+    case "awareness": {
+      const encoder = encoding.createEncoder();
+      encoding.writeUint8(encoder, frameType[message.type]);
+      encoding.writeVarString(encoder, message.nodeId);
+      encoding.writeUint8Array(encoder, message.update);
+      return encoding.toUint8Array(encoder);
+    }
+    default:
+      return JSON.stringify(message);
+  }
+}
+
+export function decodeMultiplexServerMessage(
+  data: unknown,
+): MultiplexServerMessage {
+  if (typeof data === "string")
+    return multiplexServerControlSchema.parse(JSON.parse(data));
+  if (!(data instanceof ArrayBuffer) && !ArrayBuffer.isView(data))
+    throw new Error("Invalid collaboration response");
+  const bytes = asBytes(data);
+  if (bytes.byteLength < 1) throw new Error("Invalid collaboration response");
+  const decoder = decoding.createDecoder(bytes.subarray(1));
+  const nodeId = documentIdSchema.parse(decoding.readVarString(decoder));
+  switch (bytes[0]) {
+    case frameType.sync: {
+      const update = decoding.readVarUint8Array(decoder);
+      const vector = decoding.readVarUint8Array(decoder);
+      const meta = syncMetaSchema.parse(
+        JSON.parse(decoding.readVarString(decoder)),
+      );
+      return { type: "sync", nodeId, update, vector, ...meta };
+    }
+    case frameType.update:
+      return {
+        type: "update",
+        nodeId,
+        update: bytes.subarray(1 + decoder.pos),
+      };
+    case frameType.awareness:
+      return {
+        type: "awareness",
+        nodeId,
+        update: bytes.subarray(1 + decoder.pos),
+      };
     default:
       throw new Error("Invalid collaboration response");
   }

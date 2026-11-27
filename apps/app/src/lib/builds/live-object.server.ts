@@ -114,6 +114,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     projectId: string,
     frame: string,
     userIds?: readonly string[],
+    filter?: (userId: string | null) => boolean,
   ) {
     const sockets = this.ctx.getWebSockets();
     if (!sockets.length) return;
@@ -123,6 +124,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     for (const ws of sockets) {
       const { userId } = this.viewer(ws);
       if (target && (userId === null || !target.has(userId))) continue;
+      if (filter && !filter(userId)) continue;
       if (userId === null || access.fresh(userId)) this.send(ws, frame);
       else unverified.add(userId);
     }

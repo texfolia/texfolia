@@ -23,6 +23,28 @@ export type CollaborationLock = (request: ProjectAccessRequest) => Promise<{
   guest: boolean;
 }>;
 
+export async function projectCollaborationAccess(
+  db: Db,
+  projectId: string,
+  userId: string,
+  options: { lock: CollaborationLock; register?: boolean },
+) {
+  return db.transaction(async (tx) => {
+    const access = await options.lock({
+      tx,
+      projectId,
+      userId,
+      access: "read",
+    });
+    if (options.register)
+      await tx
+        .insert(projectCollaboration)
+        .values({ projectId })
+        .onConflictDoNothing();
+    return { canWrite: access.canWrite };
+  });
+}
+
 export async function collaborationAccess(
   db: Db,
   projectId: string,

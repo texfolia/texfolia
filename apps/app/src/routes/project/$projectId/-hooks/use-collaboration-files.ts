@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useStableCallback } from "#/hooks/use-stable-callback";
 import {
+  type CollaborationConnection,
   CollaborativeDocuments,
   type CollaborativeFile,
 } from "#/lib/collaboration/browser";
@@ -20,6 +21,7 @@ export function useCollaborationFiles({
   ready,
   nodes,
   deleted,
+  connection,
   recoverUnmarked,
   onSaved,
   onChange,
@@ -31,6 +33,7 @@ export function useCollaborationFiles({
   ready: boolean;
   nodes: readonly Pick<ProjectNode, "id" | "kind">[];
   deleted: ReadonlySet<string>;
+  connection?: CollaborationConnection;
   recoverUnmarked?: Options["recoverUnmarked"];
   onSaved: Options["onSaved"];
   /** Called for every document change; `local` is true for this tab's edits. */
@@ -51,6 +54,7 @@ export function useCollaborationFiles({
       new CollaborativeDocuments({
         projectId,
         userId,
+        connection,
         recoverUnmarked,
         onSaved: saved,
         onChange: changed,

@@ -13,6 +13,10 @@ import {
   documentCachingStopped,
   stopDocumentCaching,
 } from "./cache";
+import type {
+  CollaborationChannel,
+  CollaborationConnection,
+} from "./connection";
 import {
   collaborationProtocol,
   decodeServerMessage,
@@ -20,6 +24,7 @@ import {
   peopleSearchParam,
   protocolSearchParam,
   type ClientMessage,
+  type MultiplexServerMessage,
   type Person,
   type ServerMessage,
 } from "./protocol";
@@ -59,6 +64,7 @@ export class CollaborativeFile {
   readonly undoManager = new Y.UndoManager(this.text);
   private persistence: IndexeddbPersistence | undefined;
   private socket: WebSocket | undefined;
+  private channel: CollaborationChannel | undefined;
   private stopped = false;
   private destroyed = false;
   private cacheReady = false;
@@ -98,6 +104,8 @@ export class CollaborativeFile {
       nodeId: string;
       userId: string;
       canWrite: boolean;
+      // Shared multiplexed project socket; when omitted, opens a per-file socket.
+      connection?: CollaborationConnection;
       // Anonymous share-link guests have no presence. Their HttpOnly share
       // cookie authenticates the socket.
       anonymous?: boolean;
@@ -116,8 +124,10 @@ export class CollaborativeFile {
     this.awareness.setLocalState(null);
     this.doc.on("update", this.documentChanged);
     this.awareness.on("update", this.awarenessChanged);
-    window.addEventListener("online", this.online);
-    window.addEventListener("offline", this.offline);
+    if (!options.connection) {
+      window.addEventListener("online", this.online);
+      window.addEventListener("offline", this.offline);
+    }
     void this.start();
   }
 
@@ -215,8 +225,13 @@ export class CollaborativeFile {
 
   private offline = () => this.disconnect();
 
-  /** Closes the socket; nothing it still delivers reaches this file. */
+  /** Closes the socket or detaches from the shared connection; nothing reaches this file. */
   private detach() {
+    if (this.channel) {
+      const channel = this.channel;
+      this.channel = undefined;
+      channel.detach();
+    }
     const socket = this.socket;
     this.socket = undefined;
     if (!socket) return;
@@ -227,9 +242,7 @@ export class CollaborativeFile {
     socket.close();
   }
 
-  private disconnect() {
-    this.detach();
-    clearInterval(this.heartbeat);
+  private resetConnectionState() {
     this.synchronized = false;
     this.setStatus({ connected: false, people: [] });
     removeAwarenessStates(
@@ -246,8 +259,14 @@ export class CollaborativeFile {
       );
     }
     this.saves.clear();
+  }
+
+  private disconnect() {
+    this.detach();
+    clearInterval(this.heartbeat);
+    this.resetConnectionState();
     clearTimeout(this.reconnect);
-    if (!this.stopped && navigator.onLine)
+    if (!this.options.connection && !this.stopped && navigator.onLine)
       this.reconnect = setTimeout(
         () => this.connect(),
         Math.min(10_000, 250 * 2 ** this.attempts++) + Math.random() * 250,
@@ -255,7 +274,7 @@ export class CollaborativeFile {
   }
 
   private online = () => {
-    if (!this.cacheReady) return;
+    if (!this.cacheReady || this.options.connection) return;
     if (!this.socket || this.socket.readyState === WebSocket.CLOSED) {
       clearTimeout(this.reconnect);
       this.connect();
@@ -263,13 +282,145 @@ export class CollaborativeFile {
   };
 
   private send(message: ClientMessage) {
+    if (this.channel) {
+      switch (message.type) {
+        case "sync":
+          return this.channel.send({
+            type: "sync",
+            nodeId: this.options.nodeId,
+            clientId: this.doc.clientID,
+            vector: message.vector,
+          });
+        case "update":
+        case "awareness":
+          return this.channel.send({
+            type: message.type,
+            nodeId: this.options.nodeId,
+            update: message.update,
+          });
+        case "save":
+          return this.channel.send({
+            type: "save",
+            nodeId: this.options.nodeId,
+            id: message.id,
+          });
+      }
+    }
     if (this.socket?.readyState !== WebSocket.OPEN) return false;
     this.socket.send(encodeClientMessage(message));
     return true;
   }
 
+  private handleMessage(data: ServerMessage | MultiplexServerMessage) {
+    switch (data.type) {
+      case "sync": {
+        Y.applyUpdate(this.doc, data.update, this);
+        this.synchronized = true;
+        this.attempts = 0;
+        this.setStatus({
+          ready: true,
+          connected: true,
+          canWrite: data.canWrite,
+          error: "",
+        });
+        this.awareness.setLocalState({
+          ...this.awareness.getLocalState(),
+          user: data.user,
+        });
+        let dirty = data.dirty;
+        if (hasUnsentEdits(this.doc, data)) {
+          // Edits from the cache are unacknowledged too.
+          this.localRevision++;
+          if (data.canWrite) {
+            this.send({
+              type: "update",
+              update: Y.encodeStateAsUpdate(this.doc, data.vector),
+            });
+            dirty = true;
+          }
+        } else this.acknowledge(this.localRevision);
+        this.savedRevision = dirty ? -1 : this.revision;
+        this.savedObjectKey = data.objectKey;
+        this.options.onChange(this.text.toString());
+        if (this.persistence)
+          void this.persistence.set("initialized", 1).catch(() => {
+            this.setStatus({
+              error: "Offline collaboration could not be cached.",
+            });
+          });
+        break;
+      }
+      case "update":
+        Y.applyUpdate(this.doc, data.update, this);
+        break;
+      case "awareness":
+        applyAwarenessUpdate(this.awareness, data.update, this);
+        break;
+      case "saved": {
+        this.setStatus({ error: "" });
+        const pending = this.saves.get(data.id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.savedRevision = pending.revision;
+          this.savedObjectKey = data.objectKey;
+          this.acknowledge(pending.localRevision);
+        }
+        this.options.onSaved?.(data);
+        pending?.resolve(data);
+        this.saves.delete(data.id);
+        break;
+      }
+      case "people":
+        this.setStatus({ people: data.people });
+        break;
+      case "error": {
+        this.setStatus({
+          error: data.message,
+          ...(data.message === "Viewers cannot edit documents"
+            ? { canWrite: false }
+            : {}),
+        });
+        const pending = data.id ? this.saves.get(data.id) : undefined;
+        if (pending && data.id) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error(data.message));
+          this.saves.delete(data.id);
+        }
+        break;
+      }
+      case "closed":
+        this.disconnect();
+        break;
+    }
+  }
+
   private connect() {
-    if (this.stopped || this.socket) return;
+    if (this.stopped) return;
+    if (this.options.connection) {
+      if (this.channel) return;
+      const sendSync = () =>
+        this.send({
+          type: "sync",
+          vector: Y.encodeStateVector(this.doc),
+        });
+      this.channel = this.options.connection.attach(this.options.nodeId, {
+        onOpen: () => {
+          if (!this.stopped) sendSync();
+        },
+        onMessage: (data) => {
+          if (!this.stopped) this.handleMessage(data);
+        },
+        onDisconnect: () => {
+          if (!this.stopped) this.resetConnectionState();
+        },
+        onClosed: () => {
+          if (!this.stopped) this.disconnect();
+        },
+      });
+      if (this.channel.isOpen()) sendSync();
+      return;
+    }
+    if (this.socket) return;
     const url = new URL(
       `/api/collaboration/${this.options.projectId}/${this.options.nodeId}`,
       window.location.href,
@@ -304,84 +455,7 @@ export class CollaborativeFile {
         return;
       }
       try {
-        const data = decodeServerMessage(event.data);
-        switch (data.type) {
-          case "sync": {
-            Y.applyUpdate(this.doc, data.update, this);
-            this.synchronized = true;
-            this.attempts = 0;
-            this.setStatus({
-              ready: true,
-              connected: true,
-              canWrite: data.canWrite,
-              error: "",
-            });
-            this.awareness.setLocalState({
-              ...this.awareness.getLocalState(),
-              user: data.user,
-            });
-            let dirty = data.dirty;
-            if (hasUnsentEdits(this.doc, data)) {
-              // Edits from the cache are unacknowledged too.
-              this.localRevision++;
-              if (data.canWrite) {
-                this.send({
-                  type: "update",
-                  update: Y.encodeStateAsUpdate(this.doc, data.vector),
-                });
-                dirty = true;
-              }
-            } else this.acknowledge(this.localRevision);
-            this.savedRevision = dirty ? -1 : this.revision;
-            this.savedObjectKey = data.objectKey;
-            this.options.onChange(this.text.toString());
-            if (this.persistence)
-              void this.persistence.set("initialized", 1).catch(() => {
-                this.setStatus({
-                  error: "Offline collaboration could not be cached.",
-                });
-              });
-            break;
-          }
-          case "update":
-            Y.applyUpdate(this.doc, data.update, this);
-            break;
-          case "awareness":
-            applyAwarenessUpdate(this.awareness, data.update, this);
-            break;
-          case "saved": {
-            this.setStatus({ error: "" });
-            const pending = this.saves.get(data.id);
-            if (pending) {
-              clearTimeout(pending.timer);
-              this.savedRevision = pending.revision;
-              this.savedObjectKey = data.objectKey;
-              this.acknowledge(pending.localRevision);
-            }
-            this.options.onSaved?.(data);
-            pending?.resolve(data);
-            this.saves.delete(data.id);
-            break;
-          }
-          case "people":
-            this.setStatus({ people: data.people });
-            break;
-          case "error": {
-            this.setStatus({
-              error: data.message,
-              ...(data.message === "Viewers cannot edit documents"
-                ? { canWrite: false }
-                : {}),
-            });
-            const pending = data.id ? this.saves.get(data.id) : undefined;
-            if (pending && data.id) {
-              clearTimeout(pending.timer);
-              pending.reject(new Error(data.message));
-              this.saves.delete(data.id);
-            }
-            break;
-          }
-        }
+        this.handleMessage(decodeServerMessage(event.data));
       } catch {
         this.setStatus({
           error: "Could not synchronize this file. Reconnect to try again.",
@@ -566,8 +640,10 @@ export class CollaborativeFile {
     this.destroyed = true;
     // Tells the room before the socket closes.
     this.awareness.setLocalState(null);
-    window.removeEventListener("online", this.online);
-    window.removeEventListener("offline", this.offline);
+    if (!this.options.connection) {
+      window.removeEventListener("online", this.online);
+      window.removeEventListener("offline", this.offline);
+    }
     clearTimeout(this.reconnect);
     clearInterval(this.heartbeat);
     this.detach();

@@ -2,8 +2,13 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 
 import * as Y from "yjs";
 
+import { CollaborationConnection } from "./connection";
 import { CollaborativeFile } from "./file";
-import { encodeServerMessage } from "./protocol";
+import {
+  decodeMultiplexClientMessage,
+  encodeMultiplexServerMessage,
+  encodeServerMessage,
+} from "./protocol";
 
 const sockets: FakeSocket[] = [];
 class FakeSocket {
@@ -11,14 +16,19 @@ class FakeSocket {
   static CLOSED = 3;
   readyState = 1;
   binaryType = "";
+  url: string;
+  sent: unknown[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  constructor() {
+  constructor(url: string | URL) {
+    this.url = String(url);
     sockets.push(this);
   }
-  send() {}
+  send(data: unknown) {
+    this.sent.push(data);
+  }
   close() {
     this.readyState = 3;
   }
@@ -125,4 +135,82 @@ test("a destroyed file is neither connected nor writable", async () => {
   expect(file.getStatus()).toMatchObject({ connected: false, canWrite: false });
   await expect(file.whenConnected()).rejects.toThrow("This file was closed.");
   await expect(file.save()).rejects.toThrow();
+});
+
+test("multiple files multiplex over a single project WebSocket", async () => {
+  const before = sockets.length;
+  const projectId = crypto.randomUUID();
+  const nodeA = crypto.randomUUID();
+  const nodeB = crypto.randomUUID();
+  const connection = new CollaborationConnection(projectId);
+  const changesA: string[] = [];
+  const changesB: string[] = [];
+  const fileA = new CollaborativeFile({
+    projectId,
+    nodeId: nodeA,
+    userId: "user",
+    canWrite: true,
+    connection,
+    onChange: (value) => changesA.push(value),
+  });
+  const fileB = new CollaborativeFile({
+    projectId,
+    nodeId: nodeB,
+    userId: "user",
+    canWrite: true,
+    connection,
+    onChange: (value) => changesB.push(value),
+  });
+  await Promise.resolve();
+  expect(sockets.length - before).toBe(1);
+  const socket = sockets.at(-1)!;
+  expect(socket.url).toContain(`/api/collaboration/${projectId}`);
+  expect(socket.url).toContain("protocol=3");
+
+  const docA = new Y.Doc();
+  docA.getText("source").insert(0, "alpha");
+  const docB = new Y.Doc();
+  docB.getText("source").insert(0, "beta");
+
+  const syncA = encodeMultiplexServerMessage({
+    type: "sync",
+    nodeId: nodeA,
+    update: Y.encodeStateAsUpdate(docA),
+    vector: Y.encodeStateVector(docA),
+    dirty: false,
+    objectKey: null,
+    canWrite: true,
+    user: { name: "User", color: "#123456" },
+  });
+  const syncB = encodeMultiplexServerMessage({
+    type: "sync",
+    nodeId: nodeB,
+    update: Y.encodeStateAsUpdate(docB),
+    vector: Y.encodeStateVector(docB),
+    dirty: false,
+    objectKey: null,
+    canWrite: true,
+    user: { name: "User", color: "#123456" },
+  });
+  if (typeof syncA === "string" || typeof syncB === "string")
+    throw new Error("Sync is binary");
+
+  socket.onmessage?.({ data: syncA.slice().buffer });
+  socket.onmessage?.({ data: syncB.slice().buffer });
+  expect(changesA).toEqual(["alpha"]);
+  expect(changesB).toEqual(["beta"]);
+
+  // Destroying one file sends close for that nodeId and keeps the shared socket open.
+  fileA.destroy();
+  expect(socket.readyState).toBe(FakeSocket.OPEN);
+  const lastMessage = socket.sent.at(-1);
+  expect(
+    decodeMultiplexClientMessage(lastMessage as string | ArrayBuffer),
+  ).toEqual({ type: "close", nodeId: nodeA });
+  expect(fileB.getStatus().connected).toBe(true);
+
+  // Destroying the last file closes the idle shared socket.
+  fileB.destroy();
+  expect(socket.readyState).toBe(FakeSocket.CLOSED);
+  connection.destroy();
 });

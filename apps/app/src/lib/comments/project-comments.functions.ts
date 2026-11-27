@@ -4,6 +4,7 @@ import { ensureSession } from "#/lib/auth/auth.functions";
 
 import {
   commentsSchema,
+  commentThreadSchema,
   createCommentThreadSchema,
   deleteCommentSchema,
   deleteCommentThreadSchema,
@@ -21,6 +22,19 @@ export const listComments = createServerFn({ method: "GET" })
       db: context.db,
       userId: session.user.id,
       projectId: data.projectId,
+    });
+  });
+
+export const getCommentThread = createServerFn({ method: "GET" })
+  .validator(commentThreadSchema)
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const server = await import("./project-comments.server");
+    return server.getCommentThread({
+      db: context.db,
+      userId: session.user.id,
+      projectId: data.projectId,
+      threadId: data.threadId,
     });
   });
 

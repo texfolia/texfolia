@@ -6,9 +6,15 @@ const metadataEventSchema = z.object({
   version: z.number().int().nonnegative(),
 });
 
+const commentEventSchema = z.object({
+  type: z.literal("comment"),
+  threadId: z.string().min(1),
+});
+
 export type BuildEvent =
   | { kind: "snapshot"; snapshot: BuildSnapshot }
   | { kind: "metadata"; version: number }
+  | { kind: "comment"; threadId: string }
   | { kind: "reconnected" }
   | { kind: "access-revoked" }
   | { kind: "disconnected" };
@@ -107,6 +113,13 @@ export class ProjectBuildEvents {
         return;
       this.metadataVersion = metadata.data.version;
       this.emit({ kind: "metadata", version: metadata.data.version });
+      return;
+    }
+    const comment = commentEventSchema.safeParse(parsed);
+    if (comment.success) {
+      this.attempts = 0;
+      this.disconnected = false;
+      this.emit({ kind: "comment", threadId: comment.data.threadId });
       return;
     }
     const result = buildSnapshotSchema.safeParse(parsed);
