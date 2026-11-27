@@ -56,26 +56,16 @@ export type CompileSnapshot = Omit<
 };
 
 export function createCompileSources(project: CompileProject) {
-  // The browser's delta when its metadata is current, or every saved source
-  // otherwise, with the metadata version they belong to. The project is unlocked
-  // again when this resolves, so callers that submit them check the version after.
-  async function compileSources(
-    options: CompileSourceOptions,
-  ): Promise<{ sources: CompileSnapshot; version: string }> {
-    const { db, projectId, userId, mainFile, sourceRevision, client } = options;
-    const { version, nodes } = await db.transaction(async (tx) => {
-      await project.lock({ tx, projectId, userId });
-      const version = await project.metadataVersion({ tx, projectId, userId });
-      return {
-        version,
-        nodes:
-          version === client?.version
-            ? null
-            : await tx.query.projectNode.findMany({
-                where: { projectId, deletedAt: { isNull: true } },
-              }),
-      };
-    });
+  async function buildSnapshot(options: {
+    projectId: string;
+    mainFile: string;
+    sourceRevision: number;
+    version: string;
+    nodes: (typeof projectNode.$inferSelect)[] | null;
+    client?: { version: string; delta: z.infer<typeof compileDeltaSchema> };
+  }): Promise<{ sources: CompileSnapshot; version: string }> {
+    const { projectId, mainFile, sourceRevision, version, nodes, client } =
+      options;
     if (client && !nodes)
       return { version, sources: { ...client.delta, resync: false } };
     const saved = nodes ?? [];
@@ -123,6 +113,36 @@ export function createCompileSources(project: CompileProject) {
     };
   }
 
+  // The browser's delta when its metadata is current, or every saved source
+  // otherwise, with the metadata version they belong to. The project is unlocked
+  // again when this resolves, so callers that submit them check the version after.
+  async function compileSources(
+    options: CompileSourceOptions,
+  ): Promise<{ sources: CompileSnapshot; version: string }> {
+    const { db, projectId, userId, mainFile, sourceRevision, client } = options;
+    const { version, nodes } = await db.transaction(async (tx) => {
+      await project.lock({ tx, projectId, userId });
+      const version = await project.metadataVersion({ tx, projectId, userId });
+      return {
+        version,
+        nodes:
+          version === client?.version
+            ? null
+            : await tx.query.projectNode.findMany({
+                where: { projectId, deletedAt: { isNull: true } },
+              }),
+      };
+    });
+    return buildSnapshot({
+      projectId,
+      mainFile,
+      sourceRevision,
+      version,
+      nodes,
+      client,
+    });
+  }
+
   // Whether the project still has the metadata a build was submitted with.
   function sourcesCurrent({
     db,
@@ -142,5 +162,5 @@ export function createCompileSources(project: CompileProject) {
     return (await compileSources(options)).sources;
   }
 
-  return { compileSources, sourcesCurrent, compileResync };
+  return { buildSnapshot, compileSources, sourcesCurrent, compileResync };
 }

@@ -143,8 +143,7 @@ export function withCompileUsage(
   usageFor: (userId: string) => CompileUsage,
 ): Engine {
   return async (project, context) => {
-    // Jobs accepted before user accounting shipped retain their original plan.
-    if (!context.userId) return engine(project, context);
+    if (!context.userId) throw new HttpError(400, "Compile user is required");
     const usage = usageFor(context.userId);
     const reservation = await usage.start(context.plan);
     if (!reservation.allowed)

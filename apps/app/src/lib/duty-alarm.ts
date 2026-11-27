@@ -3,11 +3,7 @@
  * object with no duty planned has no alarm, so it can stay asleep.
  */
 export class DutyAlarm<Duty extends string> {
-  constructor(
-    private storage: DurableObjectStorage,
-    /** What an alarm set before duties existed was for. */
-    private legacy?: Duty,
-  ) {
+  constructor(private storage: DurableObjectStorage) {
     storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS alarms (duty TEXT PRIMARY KEY, at INTEGER NOT NULL)",
     );
@@ -25,17 +21,7 @@ export class DutyAlarm<Duty extends string> {
 
   /** Schedules a duty, replacing its earlier time. */
   async plan(duty: Duty, at: number) {
-    const { sql } = this.storage;
-    if (this.legacy && !this.duties().length) {
-      const existing = await this.storage.getAlarm();
-      if (existing !== null)
-        sql.exec(
-          "INSERT OR IGNORE INTO alarms VALUES (?, ?)",
-          this.legacy,
-          existing,
-        );
-    }
-    sql.exec(
+    this.storage.sql.exec(
       "INSERT OR REPLACE INTO alarms VALUES (?, ?)",
       duty,
       Math.ceil(at),

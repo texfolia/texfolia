@@ -149,6 +149,29 @@ function waitForCompletion(options: {
       if (matching?.status === "succeeded" || matching?.status === "failed") {
         if (!terminalNotified) options.onNotified?.();
         terminalNotified = true;
+        if (matching.status === "succeeded" && matching.log !== undefined) {
+          finish({
+            id: jobId,
+            status: "succeeded",
+            revision: matching.revision,
+            log: matching.log,
+            artifactUrl: `${statusUrl}&artifact=pdf`,
+          });
+          return;
+        }
+        if (
+          matching.status === "failed" &&
+          matching.error !== undefined &&
+          matching.log !== undefined
+        ) {
+          finish({
+            id: jobId,
+            status: "failed",
+            error: matching.error,
+            log: matching.log,
+          });
+          return;
+        }
         void check();
       }
     });

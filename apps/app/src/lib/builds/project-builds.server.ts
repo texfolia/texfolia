@@ -16,6 +16,7 @@ import { liveUserHeader } from "./client";
 import { createCompilerEngine, fetchCompiler } from "./compiler";
 import { cacheKey, ProjectCoordinatorCore } from "./coordinator";
 import { createCoordinatorApp } from "./coordinator-api";
+import { reconcileProjectJob } from "./job-persistence.server";
 import {
   checkCompileAdmission,
   CompileUsageCore,
@@ -68,6 +69,7 @@ export class CompileUsage extends DurableObject<Env> {
 /** One project's builds: admission, debounce, history, artifacts, and push. */
 export class ProjectBuilds extends LiveProject {
   private core: ProjectCoordinatorCore | undefined;
+  private app: ReturnType<typeof createCoordinatorApp> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -120,13 +122,16 @@ export class ProjectBuilds extends LiveProject {
   private coordinator(projectId: string) {
     if (this.core) return this.core;
     const { sql } = this.ctx.storage;
-    const saved = [
-      ...sql.exec<{ value: string }>(
-        "SELECT value FROM state_chunks ORDER BY part",
-      ),
-    ]
-      .map((row) => row.value)
-      .join("");
+    const rows = sql
+      .exec<{ part: number; value: string }>(
+        "SELECT part, value FROM state_chunks ORDER BY part",
+      )
+      .toArray();
+    const savedChunks = new Map<number, string>(
+      rows.map((row) => [row.part, row.value]),
+    );
+    let lastSaved = rows.map((row) => row.value).join("");
+    let identitySaved = rows.length > 0;
     const store = artifactStore(this.env.BUILD_ARTIFACTS);
     const compile = createCompilerEngine({
       projectId,
@@ -136,26 +141,51 @@ export class ProjectBuilds extends LiveProject {
     });
     this.core = new ProjectCoordinatorCore({
       projectId,
-      saved: saved || null,
+      saved: lastSaved || null,
       save: (value) => {
-        // Chunk snapshots below SQLite's per-row limit.
+        if (value === lastSaved) return;
+        const nextChunks = new Map<number, string>();
+        for (let offset = 0; offset < value.length;) {
+          let end = Math.min(offset + 64_000, value.length);
+          const last = value.charCodeAt(end - 1);
+          if (last >= 0xd800 && last <= 0xdbff) end--;
+          nextChunks.set(offset, value.slice(offset, end));
+          offset = end;
+        }
+        // Chunk snapshots below SQLite's per-row limit, writing only changed chunks.
         this.ctx.storage.transactionSync(() => {
-          sql.exec("DELETE FROM state_chunks");
-          for (let offset = 0; offset < value.length;) {
-            let end = Math.min(offset + 64_000, value.length);
-            const last = value.charCodeAt(end - 1);
-            if (last >= 0xd800 && last <= 0xdbff) end--;
-            sql.exec(
-              "INSERT INTO state_chunks VALUES (?, ?)",
-              offset,
-              value.slice(offset, end),
-            );
-            offset = end;
+          for (const part of savedChunks.keys()) {
+            if (!nextChunks.has(part))
+              sql.exec("DELETE FROM state_chunks WHERE part = ?", part);
           }
-          sql.exec("INSERT OR IGNORE INTO identity VALUES (?)", projectId);
+          for (const [part, chunk] of nextChunks) {
+            if (savedChunks.get(part) !== chunk)
+              sql.exec(
+                "INSERT OR REPLACE INTO state_chunks VALUES (?, ?)",
+                part,
+                chunk,
+              );
+          }
+          if (!identitySaved) {
+            sql.exec("INSERT OR IGNORE INTO identity VALUES (?)", projectId);
+            identitySaved = true;
+          }
         });
+        savedChunks.clear();
+        for (const [part, chunk] of nextChunks) savedChunks.set(part, chunk);
+        lastSaved = value;
       },
       publish: () => this.publish(projectId),
+      reconcileJob: async (job) => {
+        const connectionString = this.env.HYPERDRIVE?.connectionString;
+        if (!connectionString) return;
+        const db = createDb(connectionString);
+        try {
+          await reconcileProjectJob(db, projectId, job);
+        } finally {
+          await db.$client.end();
+        }
+      },
       schedule: (at) => this.plan("work", at),
       overflow: async (message, plan) => {
         await (
@@ -163,9 +193,6 @@ export class ProjectBuilds extends LiveProject {
             ? this.env.COMPILE_PRO
             : this.env.COMPILE_FREE
         ).send(message);
-      },
-      background: async (message, delaySeconds) => {
-        await this.env.BACKGROUND.send(message, { delaySeconds });
       },
       store,
       sources: {
@@ -175,6 +202,18 @@ export class ProjectBuilds extends LiveProject {
       engine: withCompileUsage(compile, usageFor(this.env)),
     });
     return this.core;
+  }
+
+  private coordinatorApp(projectId: string) {
+    return (this.app ??= createCoordinatorApp(
+      this.coordinator(projectId),
+      (submission) =>
+        checkCompileAdmission(
+          submission,
+          this.env.COMPILE_LIMIT,
+          usageFor(this.env),
+        ),
+    ));
   }
 
   override async fetch(request: Request) {
@@ -203,15 +242,7 @@ export class ProjectBuilds extends LiveProject {
       this.notifyComment(id.data, parsed.data.threadId);
       return new Response(null, { status: 204 });
     }
-    const response = await createCoordinatorApp(
-      this.coordinator(id.data),
-      (submission) =>
-        checkCompileAdmission(
-          submission,
-          this.env.COMPILE_LIMIT,
-          usageFor(this.env),
-        ),
-    ).fetch(request);
+    const response = await this.coordinatorApp(id.data).fetch(request);
     const viewer = request.headers.get(liveUserHeader);
     return viewer === null ? response : this.guard(response, id.data, viewer);
   }
@@ -262,10 +293,6 @@ export class ProjectBuilds extends LiveProject {
 
   async fail(revision: number) {
     await this.project()?.fail(revision);
-  }
-
-  async maintain(at: number) {
-    await this.project()?.maintain(at);
   }
 }
 

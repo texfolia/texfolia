@@ -16,6 +16,3 @@ export const compileHandlers = createCompileHandlers<{
   project: compileProject,
   compilePlan,
 });
-
-export const handleCompilePost = compileHandlers.POST;
-export const handleCompileGet = compileHandlers.GET;

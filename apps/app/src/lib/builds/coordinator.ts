@@ -12,15 +12,11 @@ import {
 import { z } from "zod";
 
 import { createArtifactWriter, logPath, pdfPath } from "./artifacts";
+import type { ReconcilableJob } from "./job-persistence.server";
 import { compilePolicy, compileUserSchema } from "./limits";
 import type { LivePdf } from "./live-pdf";
 import { EngineError, HttpError, MissingSourceError } from "./project";
-import {
-  backgroundDelay,
-  deadLetterError,
-  type MaintenanceMessage,
-  type CompileMessage,
-} from "./queues";
+import { deadLetterError, type CompileMessage } from "./queues";
 import {
   applySnapshot,
   applySourceDelta,
@@ -65,7 +61,6 @@ const savedSchema = coordinatorSnapshotSchema.extend({
   editors: z.record(jobIdSchema, z.number().int().nonnegative()).default({}),
   sources: syncedProjectSchema.nullable().default(null),
   maintenanceAt: z.number().nullable().default(null),
-  maintenanceSent: z.boolean().default(false),
   // Template preview projects are temporary and expire a day after last use.
   preview: z.boolean().default(false),
   pending: z
@@ -112,14 +107,12 @@ export class ProjectCoordinatorCore {
       save: (value: string) => void;
       // Hears about every state change.
       publish?: (snapshot: CoordinatorSnapshot) => void;
+      // Persists terminal job results to the app database directly.
+      reconcileJob?: (job: ReconcilableJob) => Promise<void>;
       schedule: (at: number) => Promise<void>;
       overflow: (
         message: CompileMessage,
         plan: z.infer<typeof planSchema>,
-      ) => Promise<void>;
-      background: (
-        message: MaintenanceMessage,
-        delaySeconds: number,
       ) => Promise<void>;
       store: ObjectStore;
       sources: SourceStore;
@@ -140,7 +133,6 @@ export class ProjectCoordinatorCore {
           editors: {},
           sources: null,
           maintenanceAt: null,
-          maintenanceSent: false,
           preview: false,
         };
     this.trimEditors();
@@ -184,8 +176,24 @@ export class ProjectCoordinatorCore {
 
   private persist() {
     this.options.save(JSON.stringify(this.state));
-    this.options.publish?.(this.snapshot());
-    for (const listener of this.listeners) listener(this.snapshot());
+    if (this.options.publish || this.listeners.size > 0) {
+      const snapshot = this.snapshot();
+      this.options.publish?.(snapshot);
+      for (const listener of this.listeners) listener(snapshot);
+    }
+  }
+
+  private async reconcile(job: ReconcilableJob) {
+    if (!this.options.reconcileJob) return;
+    try {
+      await this.options.reconcileJob(job);
+    } catch (error) {
+      console.error("Compile job reconciliation failed", {
+        projectId: this.options.projectId,
+        jobId: job.id,
+        error,
+      });
+    }
   }
 
   async submit(
@@ -245,14 +253,13 @@ export class ProjectCoordinatorCore {
           ? previous.id
           : undefined;
       if (previous && supersededId) {
-        await this.options.store.write(
-          this.resultKey(previous.id),
-          JSON.stringify({
-            ...previous,
-            status: "failed",
-            error: "Compilation superseded by a newer revision",
-          }),
-        );
+        await this.reconcile({
+          id: previous.id,
+          status: "failed",
+          createdAt: previous.createdAt,
+          error: "Compilation superseded by a newer revision",
+          log: previous.log,
+        });
       }
       this.livePdf = null;
       // Persist the new revision and its wake-up before returning acceptance.
@@ -307,7 +314,7 @@ export class ProjectCoordinatorCore {
       this.persist();
       // A change leaves nothing to clean up now. Builds request their own cleanup.
       if (!this.state.pending && this.state.maintenanceAt === null)
-        await this.requestMaintenance(
+        await this.scheduleMaintenance(
           this.state.lastActivity + this.retention(),
         );
     });
@@ -340,12 +347,6 @@ export class ProjectCoordinatorCore {
     ))
       if (this.state.revision !== revision || this.state.pending) return;
       else if (!keep.has(key)) await this.options.store.remove(key);
-    for await (const key of this.options.store.keys(
-      `projects/${this.options.projectId}/compilations/`,
-      before,
-    ))
-      if (this.state.revision !== revision || this.state.pending) return;
-      else await this.options.store.remove(key);
     this.pruneDrafts();
   }
 
@@ -362,56 +363,33 @@ export class ProjectCoordinatorCore {
   }
 
   // Runs inside `exclusive`, like everything else that changes state or alarms.
-  private async requestMaintenance(at = Date.now() + 1000, redeliver = false) {
+  private async scheduleMaintenance(at = Date.now() + 1000) {
     if (
       this.state.maintenanceAt === null ||
       at < this.state.maintenanceAt ||
-      (!redeliver && this.state.maintenanceAt < Date.now())
+      this.state.maintenanceAt < Date.now()
     ) {
       this.state.maintenanceAt = at;
-      this.state.maintenanceSent = false;
       this.persist();
     }
-    if (this.state.maintenanceSent && !redeliver) return;
-    const maintenanceAt = this.state.maintenanceAt;
-    try {
-      await this.options.background(
-        {
-          kind: "maintenance",
-          projectId: this.options.projectId,
-          at: maintenanceAt,
-        },
-        backgroundDelay(maintenanceAt),
-      );
-      if (this.state.maintenanceAt === maintenanceAt) {
-        this.state.maintenanceSent = true;
-        this.persist();
-        if (!this.state.pending && !this.active)
-          await this.options.schedule(maintenanceAt + 60_000);
-      }
-    } catch (error) {
-      console.error("Background maintenance dispatch failed", {
-        projectId: this.options.projectId,
-        error,
-      });
-      await this.options.schedule(Date.now() + 5000);
-    }
+    if (!this.state.pending && !this.active)
+      await this.options.schedule(this.state.maintenanceAt);
   }
 
   // Storage is cleaned up outside `exclusive`, so a submission never waits for
   // it. Each removal first checks that nothing newer started.
-  async maintain(at: number) {
+  async maintain() {
     const due = await this.exclusive(async () => {
-      if (this.state.maintenanceAt !== at) return null;
-      if (at > Date.now()) {
-        await this.requestMaintenance(at, true);
+      const at = this.state.maintenanceAt;
+      if (at === null) return null;
+      if (this.state.pending || this.active) {
+        // The build schedules maintenance again when it finishes.
+        this.state.maintenanceAt = null;
+        this.persist();
         return null;
       }
-      if (this.state.pending || this.active) {
-        // The build requests maintenance again when it finishes.
-        this.state.maintenanceAt = null;
-        this.state.maintenanceSent = false;
-        this.persist();
+      if (at > Date.now()) {
+        await this.options.schedule(at);
         return null;
       }
       const before = Date.now();
@@ -423,10 +401,10 @@ export class ProjectCoordinatorCore {
         this.state.sources = null;
         this.persist();
       }
-      return { before, expired, revision: this.state.revision };
+      return { at, before, expired, revision: this.state.revision };
     });
     if (!due) return;
-    const { before, revision } = due;
+    const { at, before, revision } = due;
     if (due.expired) {
       for await (const key of this.options.store.keys(
         `projects/${this.options.projectId}/`,
@@ -449,7 +427,7 @@ export class ProjectCoordinatorCore {
       this.state.maintenanceAt = null;
       this.persist();
       if (this.state.current || this.state.sources || this.state.artifacts)
-        await this.requestMaintenance(
+        await this.scheduleMaintenance(
           this.state.lastActivity + this.retention(),
         );
     });
@@ -467,14 +445,11 @@ export class ProjectCoordinatorCore {
         status: "failed",
         error: deadLetterError,
       };
-      await this.options.store.write(
-        this.resultKey(current.id),
-        JSON.stringify(result),
-      );
+      await this.reconcile(result);
       this.state.current = result;
       this.state.pending = null;
       this.persist();
-      await this.requestMaintenance();
+      await this.scheduleMaintenance();
     });
   }
 
@@ -485,12 +460,6 @@ export class ProjectCoordinatorCore {
       : null;
   }
 
-  private resultKey(id: string) {
-    return `projects/${this.options.projectId}/results/${id}.json`;
-  }
-  private pdfKey(id: string) {
-    return `projects/${this.options.projectId}/compilations/${id}.pdf`;
-  }
   // Pruning skips previews; retention and clear() remove them.
   private pngKey(id: string) {
     return `projects/${this.options.projectId}/previews/${id}.png`;
@@ -502,8 +471,9 @@ export class ProjectCoordinatorCore {
   async get(id: string): Promise<Build | null> {
     if (this.state.current?.id === id)
       return structuredClone(this.state.current);
-    const body = await this.options.store.read(this.resultKey(id));
-    return body ? buildSchema.parse(await new Response(body).json()) : null;
+    if (this.state.latestBuild?.id === id)
+      return structuredClone(this.state.latestBuild);
+    return null;
   }
 
   async previewImage(id: string) {
@@ -515,13 +485,7 @@ export class ProjectCoordinatorCore {
 
   async artifact(id: string) {
     const manifest = this.state.artifacts;
-    if (manifest?.id === id)
-      return manifest.pdf ? this.file(manifest.pdf) : null;
-    if (manifest) return null;
-    const build = await this.get(id);
-    return build?.status === "succeeded"
-      ? this.options.store.read(this.pdfKey(id))
-      : null;
+    return manifest?.id === id && manifest.pdf ? this.file(manifest.pdf) : null;
   }
 
   async preview(id: string, signal: AbortSignal): Promise<Response> {
@@ -619,14 +583,15 @@ export class ProjectCoordinatorCore {
       if (revision !== undefined && (!current || current.revision !== revision))
         return null;
       if (!pending || !current) {
-        if (
-          revision === undefined &&
-          (this.state.maintenanceAt !== null ||
-            current ||
-            this.state.artifacts ||
-            this.state.sources)
-        )
-          await this.requestMaintenance();
+        if (revision === undefined && !this.active) {
+          if (this.state.maintenanceAt !== null) {
+            if (this.state.maintenanceAt <= Date.now())
+              return { maintain: true as const };
+            await this.options.schedule(this.state.maintenanceAt);
+          } else if (current || this.state.artifacts || this.state.sources) {
+            await this.scheduleMaintenance();
+          }
+        }
         return null;
       }
       if (this.active) {
@@ -699,7 +664,12 @@ export class ProjectCoordinatorCore {
       };
       return { done };
     });
-    return execution ? execution.done : true;
+    if (!execution) return true;
+    if ("maintain" in execution) {
+      await this.maintain();
+      return true;
+    }
+    return execution.done;
   }
 
   private async execute(
@@ -717,7 +687,7 @@ export class ProjectCoordinatorCore {
           await this.options.schedule(
             Math.max(Date.now() + 1, this.state.pending.due),
           );
-        else if (!this.state.pending) await this.requestMaintenance();
+        else if (!this.state.pending) await this.scheduleMaintenance();
       });
     }
   }
@@ -733,7 +703,7 @@ export class ProjectCoordinatorCore {
     let firstPdfAt: string | undefined;
     const queueWaitMs = Math.max(0, Date.now() - Date.parse(build.createdAt));
     let engineTiming = unknownEngineTiming;
-    let result: Build;
+    let result: Extract<Build, { status: "succeeded" | "failed" }>;
     let output: Awaited<ReturnType<Engine>> | undefined;
     let cacheUsed = false;
     let cleanRetried = false;
@@ -809,7 +779,6 @@ export class ProjectCoordinatorCore {
         status: "succeeded",
         log: output.log,
         sizeBytes: output.sizeBytes,
-        artifactUrl: `/${this.pdfKey(build.id)}`,
       };
     } catch (error) {
       await writer.settled();
@@ -865,15 +834,21 @@ export class ProjectCoordinatorCore {
       if (output && result.status === "succeeded") {
         try {
           // Everything was streamed to storage while the engine answered.
+          const files = await writer.finish(output.log);
+          const pdf = pdfPath(project.mainFile);
           manifest = {
             id: build.id,
             revision: build.revision,
             digest: build.digest,
             builtBy: build.builtBy,
-            files: await writer.finish(output.log),
+            files,
             builtAt: new Date().toISOString(),
             engine: output.timing.engine,
-            pdf: pdfPath(project.mainFile),
+            pdf,
+          };
+          result = {
+            ...result,
+            objectKey: files.find((entry) => entry.path === pdf)?.key,
           };
         } catch (error) {
           console.error("Build artifact persistence failed", {
@@ -921,9 +896,7 @@ export class ProjectCoordinatorCore {
         ...engineTiming,
         plan: build.plan,
         attempt,
-        artifactReused: false,
         queueWaitMs,
-        inputReadMs: 0,
         engineRequestMs,
         publishMs: performance.now() - publishStarted,
         backendMs: Date.now() - Date.parse(build.createdAt),
@@ -934,25 +907,7 @@ export class ProjectCoordinatorCore {
         engineFinishedAt,
         publishedAt: new Date().toISOString(),
       };
-      try {
-        await this.options.store.write(
-          this.resultKey(build.id),
-          JSON.stringify(result),
-        );
-      } catch (error) {
-        console.error("Build result persistence failed", {
-          jobId: build.id,
-          error,
-        });
-        manifest = this.state.artifacts;
-        result = {
-          ...build,
-          status: "failed",
-          log: result.log,
-          timing: result.timing,
-          error: "PDF compiled but could not be saved. Recompile to try again.",
-        };
-      }
+      await this.reconcile(result);
       emitCompileEvent({
         event: "compile_backend",
         jobId: build.id,

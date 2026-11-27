@@ -86,14 +86,25 @@ export function createCoordinatorApp(
         c.req.header("X-Compilation-Id") ?? crypto.randomUUID(),
       );
       if (!id.success) return c.json({ error: "Invalid compilation ID" }, 400);
-      // Hash the bytes as sent rather than encoding the sources again.
-      const bytes = new Uint8Array(await c.req.arrayBuffer());
-      const digest = await sourceHash(bytes);
+      const headerDigest = c.req.header("X-Request-Digest");
+      let digest: string;
       let body: unknown;
-      try {
-        body = JSON.parse(new TextDecoder().decode(bytes));
-      } catch {
-        return c.json({ error: "Invalid JSON" }, 400);
+      if (headerDigest && /^[0-9a-f]{64}$/.test(headerDigest)) {
+        digest = headerDigest;
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: "Invalid JSON" }, 400);
+        }
+      } else {
+        // Hash the bytes as sent when the caller did not supply a request digest.
+        const bytes = new Uint8Array(await c.req.arrayBuffer());
+        digest = await sourceHash(bytes);
+        try {
+          body = JSON.parse(new TextDecoder().decode(bytes));
+        } catch {
+          return c.json({ error: "Invalid JSON" }, 400);
+        }
       }
       const editorId = c.req.header("X-Editor-Id");
       const sequence = c.req.header("X-Editor-Sequence");

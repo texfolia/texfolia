@@ -17,7 +17,7 @@ through the wire in `@texfolia/contracts/compiler`.
 | `live-object.server.ts`    | `LiveProject`: hibernatable viewer sockets, guarded streams, and access revocation                                                |
 | `live-access.ts`           | Cached viewer access, and the check before each delivery                                                                          |
 | `limits.ts`                | Plan timeouts, rolling fair use, and submission admission                                                                         |
-| `queues.ts`                | The Pro and Free overflow lanes, the dead-letter queue, and background work (maintenance and queued email)                        |
+| `queues.ts`                | The Pro and Free overflow lanes, the dead-letter queue, and background work (queued email and AI usage reconciliation)            |
 | `source-sync.ts`           | Source deltas, server resyncs, and snapshots                                                                                      |
 | `storage.ts`               | Workers storage: artifacts in `BUILD_ARTIFACTS`, saved sources read from `SOURCES`, and drafts in the Durable Object's own SQLite |
 

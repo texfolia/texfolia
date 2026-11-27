@@ -45,7 +45,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
 
   constructor(ctx: DurableObjectState, env: E) {
     super(ctx, env);
-    this.alarms = new DutyAlarm(ctx.storage, "work");
+    this.alarms = new DutyAlarm(ctx.storage);
     // Answered without waking the object.
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("ping", "pong"),

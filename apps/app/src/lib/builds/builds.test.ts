@@ -359,7 +359,6 @@ test("publication stays atomic through a storage failure; retention removes aban
     },
     schedule: async () => {},
     overflow: async () => {},
-    background: async () => {},
     store,
     sources: memorySources(new Map(), drafts),
     engine: streamed(async () => output("atomic")),
@@ -398,7 +397,7 @@ test("publication stays atomic through a storage failure; retention removes aban
       ...options,
       saved: JSON.stringify(maintenanceState),
     });
-    await maintenance.maintain(maintenanceState.maintenanceAt);
+    await maintenance.wake();
     await maintenance.close();
     expect(
       [...objects.keys()].filter((key) => key.includes("/builds/")),
@@ -410,7 +409,7 @@ test("publication stays atomic through a storage failure; retention removes aban
       ...options,
       saved: JSON.stringify(saved),
     });
-    await expired.maintain(saved.maintenanceAt);
+    await expired.wake();
     expect(expired.snapshot().artifacts).toBeNull();
     expect(objects.size).toBe(0);
     expect(drafts.size).toBe(0);

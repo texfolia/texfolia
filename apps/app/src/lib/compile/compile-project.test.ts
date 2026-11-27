@@ -624,3 +624,61 @@ for (const status of [429, 503]) {
     });
   });
 }
+
+test("terminal WS snapshots with log/error complete without an extra status GET", async () => {
+  const { events, source } = openEvents();
+  let jobId = "";
+  let statusReads = 0;
+  let pdfDownloads = 0;
+  globalThis.fetch = Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        jobId = new Headers(init.headers).get("X-Compilation-Id")!;
+        return Response.json(
+          {
+            id: jobId,
+            revision: 1,
+            statusUrl: `/api/compile/project?job=${jobId}`,
+            previewUrl: `/api/compile/project?job=${jobId}&preview=pdf`,
+          },
+          { status: 202 },
+        );
+      }
+      if (url.includes("preview=pdf")) {
+        pdfDownloads++;
+        return new Response("%PDF-streamed", {
+          headers: { "Content-Type": "application/pdf" },
+        });
+      }
+      statusReads++;
+      throw new Error(`Unexpected status read: ${url}`);
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  const running = requestCompilation({
+    projectId: "project",
+    events,
+    mainFile: "main.tex",
+    files: {},
+    signal: new AbortController().signal,
+  });
+  await Bun.sleep(0);
+  const build = {
+    id: jobId,
+    revision: 1,
+    status: "succeeded" as const,
+    log: "direct ws log",
+  };
+  source.message({
+    revision: 1,
+    current: build,
+    latestBuild: build,
+    stale: false,
+    artifacts: null,
+  });
+  const final = await running;
+  expect(final).toMatchObject({ jobId, revision: 1, log: "direct ws log" });
+  expect(statusReads).toBe(0);
+  expect(pdfDownloads).toBe(1);
+});
