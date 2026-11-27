@@ -1,19 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
 
 import {
+  collectCompileArtifacts,
   encodeCompileHeaders,
   encodeCompileRequest,
-  collectCompileArtifacts,
   readCompilePlacement,
   type CompileOptions,
   writeArchive,
 } from "@texfolia/contracts/compiler";
-import { Effect, Layer } from "effect";
 
-import { Containers } from "../src/containers";
-import { ContainerError } from "../src/errors";
 import { createLocalCompiler } from "../src/local";
-import { PoolStore } from "../src/pool";
+import { memoryPoolStore } from "../src/pool";
 
 const hash = "a".repeat(64);
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -51,32 +48,35 @@ function harness(engine: Engine, variables: Record<string, string> = {}) {
   const stopped: string[] = [];
   const compiler = createLocalCompiler({
     variables,
-    store: PoolStore.memory,
+    store: memoryPoolStore(),
     maintenance: false,
-    containers: Layer.succeed(Containers, {
-      start: () => Effect.void,
-      probe: () => Effect.void,
-      stop: (name) => Effect.sync(() => void stopped.push(name)),
-      fetch: (container, request) =>
-        Effect.tryPromise({
-          try: (signal) => {
-            requests.push({
-              container,
-              method: request.method,
-              path: new URL(request.url).pathname,
+    containers: {
+      start: async () => {},
+      stop: async (name) => {
+        stopped.push(name);
+      },
+      fetch: (container, request, signal) => {
+        requests.push({
+          container,
+          method: request.method,
+          path: new URL(request.url).pathname,
+        });
+        if (request.method === "DELETE" || !signal)
+          return engine(container, request);
+        return Promise.race([
+          engine(container, request),
+          new Promise<never>((_, reject) => {
+            if (signal.aborted) {
+              reject(signal.reason);
+              return;
+            }
+            signal.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
             });
-            if (request.method === "DELETE") return engine(container, request);
-            return Promise.race([
-              engine(container, request),
-              new Promise<never>((_, reject) =>
-                signal.addEventListener("abort", () => reject(signal.reason)),
-              ),
-            ]);
-          },
-          catch: (cause) =>
-            new ContainerError({ operation: "fetch", container, cause }),
-        }),
-    }),
+          }),
+        ]);
+      },
+    },
   });
   open.push(compiler);
   const post = (

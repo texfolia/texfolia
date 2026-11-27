@@ -12,7 +12,7 @@ hooks that drive it stay in `src/routes` and `src/hooks`.
 | `#/lib/editor/latex/*`            | App-side browser workers (`analysis.worker`, `format.worker`, `formatter`) and SyncTeX           |
 | `#/lib/editor/keymaps/*`          | Vim and Emacs: names, the chords each binds, lazy loading, and the undo hook for Yjs history     |
 | `#/lib/editor/spelling/*`         | The spell checker, its worker, prose extraction, dictionaries, and the CodeMirror lint extension |
-| `#/lib/editor/themes`             | The UIW theme catalog, appearance schema and migration, and lazy theme loading                   |
+| `#/lib/editor/themes`             | The curated theme catalog, appearance schema, and CodeMirror theme extensions                    |
 | `#/lib/editor/theme-editor`       | The CodeMirror extension for the selected theme                                                  |
 
 Workers are created with `new URL("./x.worker.ts", import.meta.url)` inside the
@@ -29,15 +29,10 @@ not part of this feature. It lives in `#/lib/compile`.
 
 ## Theme catalog
 
-`themes/theme-catalog.gen.ts` and `themes/theme-loaders.gen.ts` are generated from
-`@uiw/codemirror-themes-all`. Every page loads `themes.ts` and the catalog to apply
-the theme's colors, so they must import neither CodeMirror nor Zod. Only pages with
-an editor load `theme-extensions.ts` and the loaders; a test checks this. Regenerate
-both files after upgrading the UIW theme packages:
-
-```sh
-bun run --cwd apps/app themes:catalog
-```
+`themes/theme-catalog.ts` holds the curated theme metadata. Every page loads
+`themes.ts` and the catalog to apply the theme's colors, so they must import
+neither CodeMirror nor Zod. Only pages with an editor load
+`theme-extensions.ts`; a test checks this.
 
 ## Checks
 

@@ -20,7 +20,6 @@ import { useStableActions } from "#/hooks/use-stable-callback";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { scratchpadId } from "#/lib/collaboration";
 import { CollaborationConnection } from "#/lib/collaboration/browser";
-import { invalidProjectPaths } from "#/lib/projects";
 import type { ProjectDetails } from "#/lib/projects/project.functions";
 import { FileDrafts } from "#/lib/workspace/file-drafts";
 import { workspaceLayoutKey } from "#/lib/workspace/workspace-layout";
@@ -43,7 +42,7 @@ import { useProjectDocuments } from "../-hooks/use-project-documents";
 import { useReferences } from "../-hooks/use-references";
 import { useSavedSources } from "../-hooks/use-saved-sources";
 import { useScratchpad } from "../-hooks/use-scratchpad";
-import { sourceDraftsKey, useSourceSave } from "../-hooks/use-source-save";
+import { useSourceSave } from "../-hooks/use-source-save";
 import { useWorkspaceChrome } from "../-hooks/use-workspace-chrome";
 import { useWorkspaceProblems } from "../-hooks/use-workspace-problems";
 import { useWorkspaceRequests } from "../-hooks/use-workspace-requests";
@@ -54,10 +53,8 @@ import {
 import { useWorkspaceShortcuts } from "../-hooks/use-workspace-shortcuts";
 import type { CreateNodeHandle } from "./create-node-form";
 import { dockComponents, dockTabComponents, FileTab } from "./dock-panels";
-import { DraftRecovery } from "./draft-recovery";
 import type { ProjectExportHandle } from "./project-export";
 import { ProjectSidebar } from "./project-sidebar";
-import type { RepairSourcePathsHandle } from "./repair-source-paths";
 import { SidebarResize } from "./sidebar-resize";
 import type { UploadSourceHandle } from "./upload-source";
 import { WorkspaceAgentsSidebar } from "./workspace-agents-sidebar";
@@ -116,12 +113,11 @@ export function ProjectWorkspace({
   const createRef = useRef<CreateNodeHandle | null>(null);
   const uploadRef = useRef<UploadSourceHandle | null>(null);
   const exportRef = useRef<ProjectExportHandle | null>(null);
-  const repairRef = useRef<RepairSourcePathsHandle | null>(null);
   // Each file's live and saved text, shared with the editors by reference.
   const [drafts] = useState(() => new FileDrafts());
   const [ready, setReady] = useState(false);
   const layoutKey = workspaceLayoutKey(userId, projectId);
-  useExitWhenStorageCleared([sourceDraftsKey(projectId), layoutKey]);
+  useExitWhenStorageCleared([layoutKey]);
   const git = useGitBranch(projectId, ready);
   const {
     formatting,
@@ -182,7 +178,7 @@ export function ProjectWorkspace({
     },
   });
   const sources = useSourceSave({
-    project,
+    projectId,
     canWrite,
     ready,
     files,
@@ -199,26 +195,19 @@ export function ProjectWorkspace({
     connection: collaborationConnection,
     onChange: panels.showScratchpad,
   });
-  // Drafts are recovered into live documents.
   const { hold } = collaboration;
   const { hold: holdScratchpad } = scratchpad;
   const holdDocument = useCallback(
     (id: string) => (id === scratchpadId ? holdScratchpad(id) : hold(id)),
     [hold, holdScratchpad],
   );
-  const { recovery } = sources;
-  useEffect(() => {
-    const releases = Object.keys(recovery).map(hold);
-    return () => releases.forEach((release) => release());
-  }, [recovery, hold]);
-  const writable = canWrite && !sources.recovering;
+  const writable = canWrite;
   const compilation = useCompilation({
     projectId,
     canWrite,
     main,
     filenames,
     nodes,
-    blocked: sources.recovering,
     revision,
     afterIdle: compileSettings.afterIdle,
     saveSources: sources.saveSources,
@@ -404,21 +393,13 @@ export function ProjectWorkspace({
     [problems, allProblems],
   );
 
-  async function onReady({ api: dock }: DockviewReadyEvent) {
+  function onReady({ api: dock }: DockviewReadyEvent) {
     panels.connect(dock);
     for (const [id, value] of Object.entries(project.sourceContents)) {
       drafts.set(id, { value, savedValue: value });
       const path = paths.get(id);
       if (path) update(path, value);
     }
-    const current = await sources.restoreBrowserDrafts({
-      isCurrent: () => panels.api.current === dock,
-      onMigrated: (id, value) => {
-        const path = paths.get(id);
-        if (path) update(path, value);
-      },
-    });
-    if (!current) return;
     panels.restore(dock, initialDock, persistLayout);
     setReady(true);
   }
@@ -460,11 +441,6 @@ export function ProjectWorkspace({
           onCreate={(kind) => createRef.current?.start(kind)}
           onUpload={() => uploadRef.current?.open()}
           onExport={() => exportRef.current?.open()}
-          onRepair={
-            invalidProjectPaths(nodes).length
-              ? () => repairRef.current?.open()
-              : undefined
-          }
           onSettings={openSettings}
           onEditor={panels.runCommand}
           onSearch={openSearch}
@@ -490,30 +466,12 @@ export function ProjectWorkspace({
           >
             {!ready && (
               <p role="status" className="border-b px-3 py-2 text-sm">
-                Loading server sources and checking browser drafts…
+                Loading server sources…
               </p>
             )}
             <WorkspaceAlert>
               {sources.sourceError || fileStatus.error}
             </WorkspaceAlert>
-            {sources.recovering && (
-              <DraftRecovery
-                name={name}
-                drafts={sources.recovery}
-                canRecover={
-                  canWrite &&
-                  Object.keys(sources.recovery).every(
-                    (id) => collaboration.get(id)?.getStatus().ready,
-                  )
-                }
-                onRecover={() =>
-                  sources.resolveRecovery((id, value) =>
-                    collaboration.get(id)?.replace(value),
-                  )
-                }
-                onDiscard={() => sources.resolveRecovery()}
-              />
-            )}
             <WorkspaceAlert>{mainDocument.error}</WorkspaceAlert>
             <WorkspaceAlert>{compilation.compileError}</WorkspaceAlert>
             <div className="min-h-0 flex-1">
@@ -566,7 +524,6 @@ export function ProjectWorkspace({
               createRef={createRef}
               uploadRef={uploadRef}
               exportRef={exportRef}
-              repairRef={repairRef}
               searchRequest={requests.searchRequest}
             />
           </div>

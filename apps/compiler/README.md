@@ -1,9 +1,9 @@
 # Compiler
 
-The compile service. An [Effect](https://effect.website) Worker
-(`texfolia-compiler`) sits in front of an autoscaled pool of Tectonic containers.
-It takes one archive of sources and options and returns the PDF, SyncTeX data,
-logs and timing. It stores no jobs or PDFs; the product app owns build history.
+The compile service. A Cloudflare Worker (`texfolia-compiler`) sits in front of
+an autoscaled pool of Tectonic containers. It takes one archive of sources and
+options and returns the PDF, SyncTeX data, logs and timing. It stores no jobs or
+PDFs; the product app owns build history.
 
 Locally the same program runs under Bun at `http://localhost:8080` and starts
 engine containers through Docker.

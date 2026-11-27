@@ -1,4 +1,3 @@
-import { useLiveQuery } from "@tanstack/react-db";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormatSettings } from "@texfolia/editor";
 import {
@@ -7,9 +6,10 @@ import {
   useContext,
   useEffect,
   useEffectEvent,
-  useRef,
   useMemo,
+  useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 import { useStableActions } from "#/hooks/use-stable-callback";
@@ -18,22 +18,15 @@ import {
   updateProjectFormatting,
   updateProjectSpelling,
 } from "#/lib/projects/project.functions";
-import {
-  rebaseUserDraft,
-  rebaseFormattingDraft,
-} from "#/lib/settings/settings-draft";
 import { createBrowserSettingsStore } from "#/lib/settings/settings.functions";
-import {
-  defaultSettings,
-  settingsSchema,
-  type Settings,
-} from "#/lib/settings/settings.schema";
+import { type Settings } from "#/lib/settings/settings.schema";
 import { shortcutConflicts } from "#/lib/shortcuts/shortcuts";
 import {
   ShortcutsProvider,
   useAppShortcut,
 } from "#/providers/shortcuts-provider";
 import { useTheme } from "#/providers/theme-provider";
+
 export type SettingsSection =
   | "Appearance"
   | "Editor"
@@ -50,18 +43,18 @@ type SettingsProject = {
 
 function useSettingsState(userId: string, project?: SettingsProject) {
   const [store] = useState(() => createBrowserSettingsStore(window, userId));
-  const [ready, setReady] = useState(false);
-  const [userReady, setUserReady] = useState(false);
-  const [userLoadError, setUserLoadError] = useState<string | null>(null);
-  const { data } = useLiveQuery({
-    query: (q) =>
-      userReady ? q.from({ preferences: store.preferences }) : undefined,
-  });
-  const saved = data?.[0];
-  const preferences = useMemo(
-    () => settingsSchema.parse(saved ?? defaultSettings),
-    [saved],
+  const preferences = useSyncExternalStore(
+    store.subscribe,
+    store.get,
+    store.get,
   );
+  const userLoadError = useSyncExternalStore(
+    store.subscribe,
+    store.getLoadError,
+    store.getLoadError,
+  );
+  const ready = true;
+  const userReady = userLoadError === null;
   const previousUser = useRef(preferences);
   const [draft, setDraft] = useState<Settings | null>(null);
   const [committedFormatting, setCommittedFormatting] = useState(
@@ -88,6 +81,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
   const mainFileDirty = draftMainFile !== undefined;
   const dirty =
     userDirty || projectDirty || spellingDirty || mainFileDirty || theme.dirty;
+
   function begin() {
     if (open) return;
     setDraft(preferences);
@@ -183,7 +177,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
             throw new Error(
               "Browser preferences could not be loaded. Reload to try again.",
             );
-          await store.save(draft);
+          store.save(draft);
         } catch (cause) {
           failures.push(
             `User preferences: ${cause instanceof Error ? cause.message : "could not be saved. Try Apply again."}`,
@@ -214,21 +208,27 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     const previous = previousUser.current;
     previousUser.current = preferences;
     setDraft((current) =>
-      current ? rebaseUserDraft(current, previous, preferences) : null,
+      current
+        ? JSON.stringify(current) === JSON.stringify(previous)
+          ? preferences
+          : current
+        : null,
     );
   }, [preferences]);
-  const rebaseFormatting = useEffectEvent(() => {
+  const syncFormatting = useEffectEvent(() => {
     const next = project?.formatting;
     if (!next) return;
     setDraftFormatting((current) =>
-      current && committedFormatting
-        ? rebaseFormattingDraft(current, committedFormatting, next)
+      current &&
+      committedFormatting &&
+      JSON.stringify(current) !== JSON.stringify(committedFormatting)
+        ? current
         : next,
     );
     setCommittedFormatting(next);
   });
   useEffect(
-    () => rebaseFormatting(),
+    () => syncFormatting(),
     [
       project?.id,
       project?.formatting.indent,
@@ -236,7 +236,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
       project?.formatting.width,
     ],
   );
-  const rebaseSpelling = useEffectEvent(() => {
+  const syncSpelling = useEffectEvent(() => {
     const next = project?.spelling;
     if (!next) return;
     setDraftSpelling((current) =>
@@ -244,31 +244,8 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     );
     setCommittedSpelling(next);
   });
-  useEffect(() => rebaseSpelling(), [project?.id, project?.spelling]);
+  useEffect(() => syncSpelling(), [project?.id, project?.spelling]);
 
-  useEffect(() => {
-    let active = true;
-    void store
-      .initialize()
-      .then(() => {
-        if (active) {
-          setReady(true);
-          setUserReady(true);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setReady(true);
-          setUserLoadError(
-            "Browser preferences could not be loaded. Editor and shortcut controls are unavailable; reload to try again. Appearance and project settings are still available.",
-          );
-        }
-      });
-    return () => {
-      active = false;
-      void store.preferences.cleanup({ dependents: true });
-    };
-  }, [store]);
   async function addWord(word: string) {
     if (!userReady) {
       setError("Browser preferences could not be loaded. Reload to try again.");
@@ -276,7 +253,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     }
     setError(null);
     try {
-      await store.addWord(word);
+      store.addWord(word);
     } catch {
       setError(
         "The word could not be added to your dictionary. Check browser storage and try again.",
@@ -290,7 +267,7 @@ function useSettingsState(userId: string, project?: SettingsProject) {
     }
     setError(null);
     try {
-      await store.updateEditor(editor);
+      store.updateEditor(editor);
     } catch {
       setError(
         "Your preference could not be saved. Check browser storage and try again.",

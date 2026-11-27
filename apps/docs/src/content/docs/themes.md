@@ -3,7 +3,7 @@ title: Themes
 ---
 
 Settings > Appearance controls workspace colors and the CodeMirror editor together.
-The theme list contains every theme exported by `@uiw/codemirror-themes-all`.
+The theme list offers a curated set of light and dark themes.
 Marketing pages retain their brand styling.
 
 The default, **Follow system appearance**, uses GitHub Light or GitHub Dark as
@@ -44,12 +44,15 @@ VS Code theme documents.
 
 ## Implementation and verification
 
-[themes.ts](../../../../app/src/lib/editor/themes/themes.ts) builds the catalog from the package's
-`defaultSettings*` exports and pairs each with its native theme extension. The
-extension's CodeMirror dark-theme facet supplies its light or dark mode. Workspace
-tokens derive from the settings' background, foreground, caret, and selection.
-Supporting surfaces and borders mix foreground with background. Gutter border
-shorthands supply a color when present; otherwise workspace borders use a mix.
+[themes.ts](../../../../app/src/lib/editor/themes/themes.ts) and
+[theme-catalog.ts](../../../../app/src/lib/editor/themes/theme-catalog.ts) define
+the curated theme catalog, and
+[theme-extensions.ts](../../../../app/src/lib/editor/themes/theme-extensions.ts)
+builds each CodeMirror extension using CodeMirror's `EditorView.theme` and
+`HighlightStyle`. Workspace tokens derive from each theme's background,
+foreground, caret, and selection. Supporting surfaces and borders mix foreground
+with background. Gutter border shorthands supply a color when present; otherwise
+workspace borders use a mix.
 
 [theme-editor.ts](../../../../app/src/lib/editor/themes/theme-editor.ts) uses the package's extension
 directly. [LaTeX tags](../../../../../packages/codemirror-lang-latex/src/tags.ts) inherit standard CodeMirror

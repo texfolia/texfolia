@@ -1,15 +1,21 @@
 import { Container, getContainer } from "@cloudflare/containers";
 import { DurableObject } from "cloudflare:workers";
-import { Effect, Layer, ManagedRuntime } from "effect";
 
-import { Background } from "./src/background";
-import { serve } from "./src/compile";
-import { PoolConfig, poolSettings } from "./src/config";
-import { Containers } from "./src/containers";
-import { ContainerError } from "./src/errors";
+import { handle } from "./src/compile";
+import { poolSettings } from "./src/config";
+import type { ContainerPlatform } from "./src/containers";
 import { MaintenanceAlarm } from "./src/maintenance-alarm";
-import { Pool, PoolManagerService, PoolStore } from "./src/pool";
-import { poolClient, serveClaim } from "./src/pool-rpc";
+import {
+  claimRequestSchema,
+  claimResultSchema,
+  createPoolManager,
+  leaseSchema,
+  type ClaimResult,
+  type Lease,
+  type PoolClient,
+  type PoolManagerCore,
+  type PoolStore,
+} from "./src/pool";
 
 /** One compile container. Its pool decides when it runs. */
 export class TectonicContainer extends Container<Env> {
@@ -25,69 +31,72 @@ export class TectonicContainer extends Container<Env> {
   }
 }
 
-const cloudflareContainers = (env: Env) => {
-  const attempt = <A>(
-    operation: string,
-    container: string,
-    run: (signal: AbortSignal) => Promise<A>,
-  ) =>
-    Effect.tryPromise({
-      try: run,
-      catch: (cause) => new ContainerError({ operation, container, cause }),
-    });
+function cloudflareContainers(env: Env): ContainerPlatform {
   const stub = (name: string) => getContainer(env.COMPILER, name);
-  const health = (operation: string, name: string) =>
-    attempt(operation, name, async (signal) => {
+  return {
+    async start(name, signal) {
+      await stub(name).startAndWaitForPorts();
       const response = await stub(name).fetch(
         new Request("http://container/health", { signal }),
       );
       await response.body?.cancel();
       if (!response.ok)
         throw new Error(`Container health returned ${response.status}`);
-    });
-  return Containers.of({
-    start: (name) =>
-      attempt("start", name, () => stub(name).startAndWaitForPorts()).pipe(
-        Effect.andThen(health("start", name)),
-      ),
-    probe: (name) => health("probe", name),
-    stop: (name) => attempt("stop", name, () => stub(name).destroy()),
-    fetch: (name, request) =>
-      attempt("fetch", name, (signal) =>
-        stub(name).fetch(new Request(request, { signal })),
-      ),
-  });
-};
+    },
+    async stop(name) {
+      await stub(name).destroy();
+    },
+    fetch(name, request, signal) {
+      return stub(name).fetch(new Request(request, { signal }));
+    },
+  };
+}
 
-const background = (ctx: Pick<ExecutionContext, "waitUntil">) =>
-  Layer.succeed(Background, {
-    run: (effect) => ctx.waitUntil(Effect.runPromise(effect)),
-  });
+interface PoolRpc {
+  claim(request: unknown): Promise<ClaimResult>;
+  release(id: string, reusable: boolean): Promise<void>;
+  cancel(id: string): Promise<Lease | null>;
+}
 
-const maintain = Effect.fnUntraced(function* (
-  pool: PoolManagerService["Service"],
-) {
-  yield* pool.maintain;
-  const { containers, ...state } = yield* pool.snapshot;
-  const count = (status: (typeof containers)[number]["status"]) =>
-    containers.filter((container) => container.status === status).length;
-  yield* Effect.sync(() =>
-    console.info({
-      event: "compile_pool",
-      telemetryVersion: 2,
-      ...state,
-      starting: count("starting"),
-      ready: count("ready"),
-      draining: count("draining"),
-      stopping: count("stopping"),
-      leased: containers.filter((c) => c.slots.some((s) => s.lease)).length,
-    }),
-  );
-});
+/** The calling side of the PoolManager DO. A lost pool is unavailable, never a throw. */
+function poolClient(rpc: PoolRpc): PoolClient {
+  return {
+    async claim(request) {
+      try {
+        const reply = claimResultSchema.safeParse(await rpc.claim(request));
+        if (reply.success) return reply.data;
+      } catch {
+        // Fall through to unavailable.
+      }
+      return {
+        ok: false,
+        code: "unavailable",
+        message: "The compile pool is unavailable",
+      };
+    },
+    // A release that cannot be delivered is recovered when its lease expires.
+    async release(id, { reusable }) {
+      try {
+        await rpc.release(id, reusable);
+      } catch (cause) {
+        console.error("Compile lease release failed", { id, cause });
+      }
+    },
+    async cancel(id) {
+      try {
+        const parsed = leaseSchema.nullable().safeParse(await rpc.cancel(id));
+        if (parsed.success) return parsed.data;
+      } catch (cause) {
+        console.error("Compile cancellation failed", { id, cause });
+      }
+      return null;
+    },
+  };
+}
 
 /** Owns the container pool: leases, the waiting queue, and autoscaling. */
 export class PoolManager extends DurableObject<Env> {
-  private runtime: ManagedRuntime.ManagedRuntime<PoolManagerService, never>;
+  private pool: PoolManagerCore;
   private maintenance: MaintenanceAlarm;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -96,7 +105,7 @@ export class PoolManager extends DurableObject<Env> {
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS pool (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
     );
-    const store = PoolStore.of({
+    const store: PoolStore = {
       load: () =>
         ctx.storage.sql
           .exec<{ value: string }>("SELECT value FROM pool WHERE id = 1")
@@ -107,59 +116,59 @@ export class PoolManager extends DurableObject<Env> {
           value,
         );
       },
+    };
+    this.pool = createPoolManager({
+      settings: poolSettings(env),
+      containers: cloudflareContainers(env),
+      store,
+      waitUntil: (task) => ctx.waitUntil(task),
     });
-    this.runtime = ManagedRuntime.make(
-      PoolManagerService.layer.pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            PoolConfig.layer(env),
-            Layer.succeed(PoolStore, store),
-            background(ctx),
-            Layer.succeed(Containers, cloudflareContainers(env)),
-          ),
-        ),
-      ),
-    );
   }
 
-  async claim(request: unknown) {
+  async claim(request: unknown): Promise<ClaimResult> {
     return this.maintenance.claim(() =>
-      this.runtime.runPromise(
-        PoolManagerService.use((pool) => serveClaim(pool, request)),
-      ),
+      this.pool.claim(claimRequestSchema.parse(request)),
     );
   }
 
   async release(id: string, reusable: boolean) {
-    await this.runtime.runPromise(
-      PoolManagerService.use((pool) => pool.release(id, { reusable })),
-    );
+    await this.pool.release(id, { reusable });
   }
 
   async cancel(id: string) {
-    return this.runtime.runPromise(
-      PoolManagerService.use((pool) => pool.cancel(id)),
-    );
+    return this.pool.cancel(id);
   }
 
   override async alarm() {
     await this.maintenance.fire(
-      () => this.runtime.runPromise(PoolManagerService.use(maintain)),
-      () => this.runtime.runSync(PoolManagerService.use((pool) => pool.idle)),
+      async () => {
+        await this.pool.maintain();
+        const { containers, ...state } = this.pool.snapshot();
+        const count = (status: (typeof containers)[number]["status"]) =>
+          containers.filter((container) => container.status === status).length;
+        console.info({
+          event: "compile_pool",
+          telemetryVersion: 2,
+          ...state,
+          starting: count("starting"),
+          ready: count("ready"),
+          draining: count("draining"),
+          stopping: count("stopping"),
+          leased: containers.filter((c) => c.slots.some((s) => s.lease)).length,
+        });
+      },
+      () => this.pool.idle(),
     );
   }
 }
 
 export default {
   fetch(request, env, ctx) {
-    const layer = Layer.mergeAll(
-      Layer.succeed(Pool, poolClient(env.POOL.getByName("autoscaler"))),
-      Layer.succeed(Containers, cloudflareContainers(env)),
-      background(ctx),
-    );
-    const served = serve(request, (program, options) =>
-      Effect.runPromiseExit(program.pipe(Effect.provide(layer)), options),
-    );
+    const served = handle(request, {
+      pool: poolClient(env.POOL.getByName("autoscaler")),
+      containers: cloudflareContainers(env),
+      waitUntil: (task) => ctx.waitUntil(task),
+    });
     // A caller that goes away must not stop its own cleanup.
     ctx.waitUntil(served);
     return served;

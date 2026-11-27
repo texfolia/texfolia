@@ -339,15 +339,19 @@ try {
     return tab;
   }
   let tab = await openProject();
-  // A cache from before unsynced markers existed, with an edit to merge.
-  await tab.evaluate(() =>
-    window.cacheTest.seed("texfolia.yjs.demand.project.cached", "Old edit. "),
-  );
+  // A cached edit marked unsynced by an earlier session must merge on open.
+  await tab.evaluate(async () => {
+    await window.cacheTest.seed(
+      "texfolia.yjs.demand.project.cached",
+      "Old edit. ",
+    );
+    localStorage.setItem("texfolia.unsynced.demand.project.cached.1", "1");
+  });
   opened.length = 0;
   await tab.evaluate((ids) => window.cacheTest.openProject("demand", ids), ids);
   await eventually(
     () => sourceOf("cached").getText("source").toString().includes("Old edit"),
-    "An unmarked cache must merge without opening its file",
+    "A marked unsynced cache must merge without opening its file",
   );
   await eventually(
     async () =>
@@ -393,7 +397,7 @@ try {
   );
   assert.deepEqual(
     await tab.evaluate(() => window.cacheTest.markers()),
-    ["texfolia.unsynced.demand.project"],
+    [],
     "Saved edits must leave no unsynced markers",
   );
 
@@ -434,7 +438,7 @@ try {
   await tab.evaluate(() => window.cacheTest.edit("closed", "Offline two"));
   assert.equal(
     (await tab.evaluate(() => window.cacheTest.markers())).length,
-    2,
+    1,
   );
   await tab.close();
   await projectContext.setOffline(false);
@@ -455,9 +459,7 @@ try {
     "Recovered file kept a socket",
   );
   assert.deepEqual(opened, ["closed"]);
-  assert.deepEqual(await tab.evaluate(() => window.cacheTest.markers()), [
-    "texfolia.unsynced.demand.project",
-  ]);
+  assert.deepEqual(await tab.evaluate(() => window.cacheTest.markers()), []);
   await projectContext.close();
   assert.deepEqual(errors, []);
   console.info(

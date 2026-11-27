@@ -1,7 +1,6 @@
-import { Effect, Layer, Schedule, Schema } from "effect";
+import { z } from "zod";
 
-import { Containers } from "./containers";
-import { ContainerError } from "./errors";
+import type { ContainerPlatform } from "./containers";
 
 export type DockerOptions = {
   socket: string;
@@ -10,34 +9,24 @@ export type DockerOptions = {
   concurrency: number;
 };
 
-const Inspection = Schema.Struct({
-  State: Schema.Struct({ Running: Schema.Boolean }),
-  NetworkSettings: Schema.Struct({
-    Ports: Schema.Record(
-      Schema.String,
-      Schema.NullOr(Schema.Array(Schema.Struct({ HostPort: Schema.String }))),
+const inspectionSchema = z.object({
+  State: z.object({ Running: z.boolean() }),
+  NetworkSettings: z.object({
+    Ports: z.record(
+      z.string(),
+      z.array(z.object({ HostPort: z.string() })).nullable(),
     ),
   }),
 });
-const decodeInspection = Schema.decodeUnknownSync(Inspection);
 
 /** Compile containers on the local Docker daemon. */
-export const dockerContainers = (options: DockerOptions) => {
+export function dockerContainers(options: DockerOptions): ContainerPlatform {
   const endpoints = new Map<string, string>();
   const docker = (path: string, init?: RequestInit) =>
     fetch(`http://docker/v1.45${path}`, {
       ...init,
       unix: options.socket,
       signal: AbortSignal.timeout(30_000),
-    });
-  const attempt = <A>(
-    operation: string,
-    container: string,
-    run: (signal: AbortSignal) => Promise<A>,
-  ) =>
-    Effect.tryPromise({
-      try: run,
-      catch: (cause) => new ContainerError({ operation, container, cause }),
     });
   const dockerName = (name: string) => `texfolia-${name}`;
 
@@ -76,14 +65,14 @@ export const dockerContainers = (options: DockerOptions) => {
     }
     if (!response.ok)
       throw new Error(`Cannot inspect compile container (${response.status})`);
-    let info = decodeInspection(await response.json());
+    let info = inspectionSchema.parse(await response.json());
     if (!info.State.Running) {
       const started = await docker(`/containers/${id}/start`, {
         method: "POST",
       });
       if (!started.ok)
         throw new Error(`Cannot start compile container (${started.status})`);
-      info = decodeInspection(
+      info = inspectionSchema.parse(
         await (await docker(`/containers/${id}/json`)).json(),
       );
     }
@@ -95,60 +84,57 @@ export const dockerContainers = (options: DockerOptions) => {
     return url;
   };
 
-  const health = (operation: string, name: string) =>
-    attempt(operation, name, async (signal) => {
-      const url = endpoints.get(name) ?? (await run(name));
-      const response = await fetch(`${url}/health`, {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(1000)]),
-      });
-      await response.body?.cancel();
-      if (!response.ok)
-        throw new Error(`Container health returned ${response.status}`);
+  const healthOnce = async (name: string, signal?: AbortSignal) => {
+    const url = endpoints.get(name) ?? (await run(name));
+    const response = await fetch(`${url}/health`, {
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(1000)])
+        : AbortSignal.timeout(1000),
     });
+    await response.body?.cancel();
+    if (!response.ok)
+      throw new Error(`Container health returned ${response.status}`);
+  };
 
-  return Containers.of({
-    start: (name) =>
-      attempt("start", name, () => run(name)).pipe(
-        Effect.andThen(
-          health("start", name).pipe(
-            Effect.retry({
-              times: 300,
-              schedule: Schedule.spaced("100 millis"),
-            }),
-          ),
-        ),
-      ),
-    probe: (name) => health("probe", name),
-    stop: (name) =>
-      attempt("stop", name, async () => {
-        const response = await docker(
-          `/containers/${dockerName(name)}?force=true`,
-          { method: "DELETE" },
-        );
-        if (!response.ok && response.status !== 404)
-          throw new Error(
-            `Cannot remove compile container (${response.status})`,
-          );
-        endpoints.delete(name);
-      }),
-    fetch: (name, request) =>
-      attempt("fetch", name, async (signal) => {
-        const url = endpoints.get(name) ?? (await run(name));
+  return {
+    async start(name, signal) {
+      await run(name);
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= 300; attempt++) {
+        signal?.throwIfAborted();
         try {
-          return await fetch(
-            new Request(
-              new URL(new URL(request.url).pathname, url).href,
-              request,
-            ),
-            { signal },
-          );
+          await healthOnce(name, signal);
+          return;
         } catch (error) {
-          endpoints.delete(name);
-          throw error;
+          lastError = error;
+          await Bun.sleep(100);
         }
-      }),
-  });
-};
-
-export const dockerLayer = (options: DockerOptions) =>
-  Layer.sync(Containers, () => dockerContainers(options));
+      }
+      throw lastError ?? new Error("Container failed readiness check");
+    },
+    async stop(name) {
+      const response = await docker(
+        `/containers/${dockerName(name)}?force=true`,
+        { method: "DELETE" },
+      );
+      if (!response.ok && response.status !== 404)
+        throw new Error(`Cannot remove compile container (${response.status})`);
+      endpoints.delete(name);
+    },
+    async fetch(name, request, signal) {
+      const url = endpoints.get(name) ?? (await run(name));
+      try {
+        return await fetch(
+          new Request(
+            new URL(new URL(request.url).pathname, url).href,
+            request,
+          ),
+          { signal },
+        );
+      } catch (error) {
+        endpoints.delete(name);
+        throw error;
+      }
+    },
+  };
+}

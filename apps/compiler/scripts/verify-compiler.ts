@@ -12,7 +12,7 @@ import {
 } from "@texfolia/contracts/compiler";
 
 import { createLocalCompiler, sqliteStore } from "../src/local";
-import { dockerLayer } from "../src/local-containers";
+import { dockerContainers } from "../src/local-containers";
 
 // Drives the whole compiler against real Docker containers and real Tectonic.
 const directory = await mkdtemp(join(tmpdir(), "texfolia-compiler-check-"));
@@ -20,7 +20,7 @@ const open = () =>
   createLocalCompiler({
     variables: { POOL_MAX_INSTANCES: "2", POOL_IDLE_MS: "5000" },
     store: sqliteStore(join(directory, "pool.sqlite")),
-    containers: dockerLayer({
+    containers: dockerContainers({
       socket: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
       image: process.env.ENGINE_IMAGE ?? "texfolia-latex-engine:local",
       concurrency: 1,

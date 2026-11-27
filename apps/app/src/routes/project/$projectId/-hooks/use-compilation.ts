@@ -114,7 +114,6 @@ export function useCompilation({
   main,
   filenames,
   nodes,
-  blocked,
   revision,
   afterIdle,
   saveSources,
@@ -126,8 +125,6 @@ export function useCompilation({
   main: string | undefined;
   filenames: string[];
   nodes: ProjectNode[];
-  /** Compiling waits while browser drafts are pending recovery. */
-  blocked: boolean;
   /** The analysis revision, bumped on every source change. */
   revision: RefObject<number>;
   afterIdle: number;
@@ -279,7 +276,6 @@ export function useCompilation({
       !canWrite ||
       !main ||
       autoCompilePaused.current ||
-      blocked ||
       // Path policy errors persist until files are renamed; don't repeat them.
       invalidProjectPaths(nodes).length
     )

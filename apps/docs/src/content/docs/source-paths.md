@@ -28,25 +28,10 @@ The source byte limit keeps accepted components below the engine filesystem's 25
 limit. Accented letters and emoji can use multiple bytes. The `.tex` extension
 counts toward the limit. Source paths have no automatic trimming or renaming.
 
-Creation validates the assembled path under the project lock before writing
-source objects or node metadata. Compilation validates all active nodes,
-including unreferenced files and empty folders.
-
-## Repair existing invalid paths
-
-1. Open the project. The **Repair source paths** form in the Files sidebar lists
-   invalid paths and the reason each path fails.
-2. To keep a backup, open **Export project** and click **Download zip**.
-3. In **Repair source paths**, choose an affected file or parent folder, enter
-   a valid name, and click **Rename**. For deeply nested paths, choose a folder
-   closer to the root in **In folder**. Repeat until the form disappears.
-4. Update LaTeX references to the renamed paths, then compile again.
-
-Renaming requires project write access and preserves node IDs, source object
-keys, file contents, and collaboration documents. Folder renames check descendant
-lengths. Legacy paths that already exceed the limit can be shortened in several
-steps, and unrelated invalid names can be repaired separately. No migration
-silently changes names or LaTeX references.
+Creation, uploads, and renames validate the assembled path under the project
+lock before writing source objects or node metadata. Compilation validates all
+active nodes, including unreferenced files and empty folders. Renaming preserves
+node IDs, source object keys, file contents, and collaboration documents.
 
 ## Run the policy checks
 

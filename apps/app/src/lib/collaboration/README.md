@@ -3,12 +3,12 @@
 Yjs collaboration for project sources: the Durable Object room that syncs,
 persists, and flushes collaborative text, the binary WebSocket protocol, and
 the browser side (the project's live documents, the Yjs document for an open
-file, its IndexedDB cache, and the localStorage draft cache).
+file, and its IndexedDB cache).
 
 | Entry point                   | Contents                                                                                                                                                                                                                                                                                                                             |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `#/lib/collaboration`         | The wire protocol: `encodeClientMessage`, `decodeClientMessage`, `encodeServerMessage`, `decodeServerMessage`, `awarenessFrame`, `readAwareness`, `collaborationProtocol`, `protocolSearchParam`, `peopleSearchParam`, `outdatedClientMessage`, `maxCollaborationBytes`, `scratchpadId`, `documentIdSchema`. Safe to import anywhere |
-| `#/lib/collaboration/browser` | `CollaborativeDocuments`, which connects documents on demand; `CollaborativeFile`; the IndexedDB cache helpers `clearCollaborationCaches`, `collaborationCachePrefix`, `documentCachingStopped`, `stopDocumentCaching`; the draft cache `reconcileSourceDrafts`, `serializeSourceDrafts`, `SourceDraft`                              |
+| `#/lib/collaboration/browser` | `CollaborativeDocuments`, which connects documents on demand; `CollaborativeFile`; the IndexedDB cache helpers `clearCollaborationCaches`, `collaborationCachePrefix`, `documentCachingStopped`, `stopDocumentCaching`                                                                                                               |
 | `#/lib/collaboration/server`  | `collaborationAccess` and `scratchpadAccess` (the `/api/collaboration` access checks), `cleanupDeletedCollaboration`, `collectCollaborationSources`. Does not load the Workers runtime, so Bun tests can import it                                                                                                                   |
 | `#/lib/collaboration/room`    | `CollaborationRoom` (the abstract Durable Object base class) and `CollaborationEnv`. Imports `cloudflare:workers`, so only Worker code loads it                                                                                                                                                                                      |
 

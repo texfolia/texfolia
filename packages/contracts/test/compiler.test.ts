@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { Schema } from "effect";
-
 import { collectArchive, readArchive, writeArchive } from "../src/archive";
 import {
-  CompileOptions,
+  compileOptionsSchema,
   compileOptionHeaders,
   encodeCompileHeaders,
   encodeCompileRequest,
@@ -12,6 +10,7 @@ import {
   readCompileArtifacts,
   readCompilePlacement,
   readCompileRejection,
+  type CompileOptions,
 } from "../src/compiler";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -146,9 +145,8 @@ test("options survive their headers, and invalid ones are refused", () => {
     priority: 1,
     container: "compiler-a",
   };
-  const decode = Schema.decodeUnknownSync(CompileOptions);
   const parse = (headers: Record<string, string>) =>
-    decode(compileOptionHeaders(new Headers(headers)));
+    compileOptionsSchema.parse(compileOptionHeaders(new Headers(headers)));
   expect(parse(encodeCompileHeaders(options))).toEqual(options);
   const { container: _, ...full } = options;
   expect(parse(encodeCompileHeaders(full))).toEqual(full);

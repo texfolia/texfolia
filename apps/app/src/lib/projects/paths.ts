@@ -1,8 +1,4 @@
-import {
-  maxSourcePathBytes,
-  nodeNameSchema,
-  pathBytes,
-} from "@texfolia/contracts";
+import { nodeNameSchema } from "@texfolia/contracts";
 
 import {
   InvalidSourcePathError,
@@ -84,7 +80,7 @@ export function assertProjectSourcePaths(nodes: PathNode[]) {
   const invalid = invalidProjectPaths(nodes)[0];
   if (invalid)
     throw new InvalidSourcePathError(
-      `${JSON.stringify(invalid.path)}: ${invalid.error} Use Repair source paths in the Files sidebar to rename files or folders, then update LaTeX references.`,
+      `${JSON.stringify(invalid.path)}: ${invalid.error}`,
     );
 }
 
@@ -125,28 +121,8 @@ export function renamedProjectNodes(
   );
   const before = projectNodePaths(nodes);
   for (const [id, path] of projectNodePaths(next)) {
-    const previous = before.get(id);
-    if (path === previous || path === "/") continue;
-    if (
-      path.split("/")[0]?.toLowerCase() === "out" &&
-      previous?.split("/")[0]?.toLowerCase() !== "out"
-    )
-      throw new Error(
-        "out/ is reserved for generated build files. Choose another root name.",
-      );
-    if (
-      sourcePathError(path) &&
-      previous !== undefined &&
-      !sourcePathError(previous)
-    )
-      assertSourcePath(path);
-    // Legacy trees can require several renames. Each rename must shorten any
-    // overlong affected paths; unrelated invalid components remain repairable.
-    if (
-      pathBytes(path) > maxSourcePathBytes &&
-      (previous === undefined || pathBytes(path) >= pathBytes(previous))
-    )
-      assertSourcePath(path);
+    if (path === before.get(id) || path === "/") continue;
+    assertSourcePath(path);
   }
   return next;
 }

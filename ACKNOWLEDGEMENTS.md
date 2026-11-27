@@ -18,8 +18,7 @@ license is in `node_modules`, the Go module cache, or the engine image.
 ## Editor and workspace
 
 - [CodeMirror](https://codemirror.net) and
-  [@uiw/react-codemirror](https://github.com/uiwjs/react-codemirror) with its
-  themes (MIT).
+  [@uiw/react-codemirror](https://github.com/uiwjs/react-codemirror) (MIT).
 - [Yjs](https://yjs.dev), `y-protocols` and `y-indexeddb`: real-time
   collaboration and the offline cache (MIT).
 - [PDF.js](https://mozilla.github.io/pdf.js/) (Apache-2.0) and
@@ -39,7 +38,6 @@ license is in `node_modules`, the Go module cache, or the engine image.
   [Tabler Icons](https://tabler.io/icons) (MIT).
 - [Cloudflare Workers](https://workers.cloudflare.com), Wrangler and workerd
   (MIT, Apache-2.0).
-- [Effect](https://effect.website): the compiler service (MIT).
 - [Better Auth](https://better-auth.com): accounts, organizations and Stripe
   billing (MIT).
 - [Drizzle ORM](https://orm.drizzle.team) (Apache-2.0) and

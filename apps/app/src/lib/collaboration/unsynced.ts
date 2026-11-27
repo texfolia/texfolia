@@ -1,4 +1,4 @@
-import { collaborationCachePrefix, unsyncedPrefix } from "./cache";
+import { unsyncedPrefix } from "./cache";
 
 // Names the cached documents holding edits the server has not acknowledged, so
 // a later session can merge them without opening every document's cache. Kept
@@ -45,33 +45,6 @@ export function unsyncedDocuments(project: Omit<DocumentId, "nodeId">) {
       return nodeId ? [nodeId] : [];
     }),
   );
-}
-
-/**
- * Documents cached before markers existed, which may hold unsynced edits. Empty
- * once `finishUnmarkedDocuments` records that they have all been checked.
- */
-export async function unmarkedDocuments(project: Omit<DocumentId, "nodeId">) {
-  if (
-    typeof indexedDB === "undefined" ||
-    keys().includes(`${unsyncedPrefix(project.userId)}${project.projectId}`)
-  )
-    return [];
-  const prefix = `${collaborationCachePrefix(project.userId)}${project.projectId}.`;
-  return (await indexedDB.databases()).flatMap(({ name }) =>
-    name?.startsWith(prefix) ? [name.slice(prefix.length)] : [],
-  );
-}
-
-export function finishUnmarkedDocuments(project: Omit<DocumentId, "nodeId">) {
-  try {
-    localStorage.setItem(
-      `${unsyncedPrefix(project.userId)}${project.projectId}`,
-      "checked",
-    );
-  } catch {
-    // The next session checks them again.
-  }
 }
 
 function keys() {

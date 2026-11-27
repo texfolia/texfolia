@@ -38,7 +38,6 @@ export function addPersonalWord(words: readonly string[], word: string) {
 }
 
 export const settingsSchema = z.object({
-  id: z.literal("preferences"),
   editor: editorSettingsSchema,
   compile: compileSettingsSchema,
   shortcuts: shortcutMapSchema,
@@ -46,7 +45,6 @@ export const settingsSchema = z.object({
 });
 export type Settings = z.infer<typeof settingsSchema>;
 export const defaultSettings: Settings = {
-  id: "preferences",
   editor: { fontSize: 13, wrapLines: true, keymap: "default" },
   compile: { onSave: true, afterIdle: 0 },
   shortcuts: defaultShortcuts,

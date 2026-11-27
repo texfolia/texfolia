@@ -1,52 +1,24 @@
 import type { CompileRejection } from "@texfolia/contracts/compiler";
-import { Schema } from "effect";
-
-/** The request headers or body cannot be a compile. */
-export class InvalidRequest extends Schema.TaggedError<InvalidRequest>()(
-  "InvalidRequest",
-  { message: Schema.String, status: Schema.Literals([400, 413, 415]) },
-) {}
-
-/** An incremental request's container no longer holds its sources. */
-export class ResyncRequired extends Schema.TaggedError<ResyncRequired>()(
-  "ResyncRequired",
-  {},
-) {}
-
-/** The compile was cancelled before a container ran it. */
-export class CompileCancelled extends Schema.TaggedError<CompileCancelled>()(
-  "CompileCancelled",
-  {},
-) {}
-
-/** Too many compiles are already waiting. */
-export class PoolSaturated extends Schema.TaggedError<PoolSaturated>()(
-  "PoolSaturated",
-  {},
-) {}
-
-/** No container became available in time. */
-export class PoolUnavailable extends Schema.TaggedError<PoolUnavailable>()(
-  "PoolUnavailable",
-  { message: Schema.String },
-) {}
-
-/** A container could not be started, stopped, or reached. */
-export class ContainerError extends Schema.TaggedError<ContainerError>()(
-  "ContainerError",
-  {
-    operation: Schema.String,
-    container: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {}
 
 export type ClaimError =
-  | ResyncRequired
-  | CompileCancelled
-  | PoolSaturated
-  | PoolUnavailable;
-export type CompileError = InvalidRequest | ClaimError | ContainerError;
+  | { readonly code: "resync" }
+  | { readonly code: "cancelled" }
+  | { readonly code: "saturated" }
+  | { readonly code: "unavailable"; readonly message: string };
+
+export type CompileError =
+  | ClaimError
+  | {
+      readonly code: "invalid";
+      readonly message: string;
+      readonly status: 400 | 413 | 415;
+    }
+  | {
+      readonly code: "container";
+      readonly operation: string;
+      readonly container: string;
+      readonly cause: unknown;
+    };
 
 const rejection = (
   status: number,
@@ -59,32 +31,32 @@ const rejection = (
   });
 
 export function errorResponse(error: CompileError): Response {
-  switch (error._tag) {
-    case "InvalidRequest":
+  switch (error.code) {
+    case "invalid":
       return rejection(error.status, { error: error.message, code: "invalid" });
-    case "ResyncRequired":
+    case "resync":
       return rejection(409, {
         error: "Source resync required",
         code: "resync",
       });
-    case "CompileCancelled":
+    case "cancelled":
       return rejection(409, {
         error: "Compilation cancelled",
         code: "cancelled",
       });
-    case "PoolSaturated":
+    case "saturated":
       return rejection(
         503,
         { error: "Too many compiles are waiting", code: "saturated" },
         { "Retry-After": "5" },
       );
-    case "PoolUnavailable":
+    case "unavailable":
       return rejection(
         503,
         { error: error.message, code: "unavailable" },
         { "Retry-After": "5" },
       );
-    case "ContainerError":
+    case "container":
       return rejection(
         503,
         { error: "The compile container failed", code: "unavailable" },

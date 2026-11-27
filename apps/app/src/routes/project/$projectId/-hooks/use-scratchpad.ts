@@ -42,7 +42,6 @@ export function useScratchpad({
     nodes,
     deleted,
     connection,
-    recoverUnmarked: false,
     onSaved: ignore,
     onClose: ignore,
     onChange: (_id, value) => {

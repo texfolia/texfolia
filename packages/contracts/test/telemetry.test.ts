@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 
 import { engineSchema, jobTimingSchema, unknownEngineTiming } from "../src";
 
-test("reads the retired texlive engine as unknown", () => {
-  expect(engineSchema.parse("texlive")).toBe("unknown");
+test("accepts tectonic and unknown engines and rejects unsupported names", () => {
   expect(engineSchema.parse("tectonic")).toBe("tectonic");
+  expect(engineSchema.parse("unknown")).toBe("unknown");
+  expect(engineSchema.safeParse("texlive").success).toBe(false);
 });
 
 test("rejects timeline instants that are not ISO 8601", () => {
