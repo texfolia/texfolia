@@ -15,10 +15,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { isOrgAdmin } from "#/lib/auth/roles";
-import { mapLimit } from "#/lib/map-limit";
-import { sourceConcurrency, type SourceBucket } from "#/lib/storage/server";
+import type { SourceBucket } from "#/lib/storage/server";
 
-import type { LockProject } from "./access";
+import type { LockProject, ProjectTransaction } from "./access";
+import { projectMainFile } from "./main-file";
 import { projectPaths } from "./paths";
 import type {
   createProjectSchema,
@@ -393,14 +393,28 @@ export async function setProjectTags({
   });
 }
 
-export async function getProject({
+export async function getProject<
+  Extra extends Record<string, unknown> = Record<never, never>,
+>({
   db,
   ownerId,
   lock,
   projectId,
   bucket,
-}: ProjectOwner & { projectId: string; bucket?: SourceBucket }) {
-  const { result, permissions } = await db.transaction(async (tx) => {
+  extra,
+}: ProjectOwner & {
+  projectId: string;
+  bucket?: SourceBucket;
+  extra?: (
+    tx: ProjectTransaction,
+    permissions: {
+      role: ProjectRole;
+      canWrite: boolean;
+      canComment: boolean;
+    },
+  ) => Promise<Extra>;
+}) {
+  const { result, permissions, extras } = await db.transaction(async (tx) => {
     const { role, canWrite, canComment } = await lock({
       tx,
       projectId,
@@ -419,7 +433,9 @@ export async function getProject({
       },
     });
     if (!result) throw new Error("Project not found");
-    return { result, permissions: { role, canWrite, canComment } };
+    const permissions = { role, canWrite, canComment };
+    const extras = extra ? await extra(tx, permissions) : ({} as Extra);
+    return { result, permissions, extras };
   });
   const sourceVersions: Record<
     string,
@@ -431,19 +447,21 @@ export async function getProject({
         objectKey: node.objectKey,
         updatedAt: node.updatedAt.getTime(),
       };
-  const sourceContents = Object.fromEntries(
-    await mapLimit(
-      result.nodes.filter((node) => node.kind === "text"),
-      sourceConcurrency,
-      async ({ id, objectKey }) => {
-        if (!objectKey) return [id, ""] as const;
-        if (!bucket) throw new Error("Source storage unavailable");
-        const object = await bucket.get(objectKey);
-        if (!object) throw new Error("Saved source is missing from storage");
-        return [id, await object.text()] as const;
-      },
-    ),
-  );
+  // Only preload the main text file on open; other files load on demand.
+  const main = projectMainFile(projectPaths(result.nodes), result.mainFile);
+  const mainNode = main
+    ? result.nodes.find((node) => node.id === main.id && node.kind === "text")
+    : undefined;
+  const sourceContents: Record<string, string> = {};
+  if (mainNode) {
+    if (!mainNode.objectKey) {
+      sourceContents[mainNode.id] = "";
+    } else if (bucket) {
+      const object = await bucket.get(mainNode.objectKey);
+      if (!object) throw new Error("Saved source is missing from storage");
+      sourceContents[mainNode.id] = await object.text();
+    }
+  }
   return {
     ...result,
     nodes: result.nodes.map(({ id, projectId, parentId, name, kind }) => ({
@@ -456,5 +474,6 @@ export async function getProject({
     ...permissions,
     sourceVersions,
     sourceContents,
+    ...extras,
   };
 }

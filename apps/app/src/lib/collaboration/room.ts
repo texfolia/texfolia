@@ -154,8 +154,6 @@ const maxSaveRetryMs = 5 * 60_000;
 // Each save holds a database connection while it uploads. A Worker may have six
 // connections open, so this many can never wait for each other's uploads.
 const saveConcurrency = 3;
-// Checks finish before verified access expires, so deliveries rarely wait for one.
-const accessCheckMs = liveAccessMs - 10_000;
 // How long an open but unused document stays in memory.
 const idleDocumentMs = 5 * 60_000;
 // The queue for messages that no document owns.
@@ -272,8 +270,6 @@ export abstract class CollaborationRoom<
       const now = Date.now();
       if (this.dirtyDocuments().length)
         await this.alarms.planBy("save", now + saveDelayMs);
-      if (ctx.getWebSockets().length)
-        await this.alarms.planBy("access", now + saveDelayMs);
       await this.alarms.setNext();
     });
     ctx.setWebSocketAutoResponse(
@@ -842,9 +838,9 @@ export abstract class CollaborationRoom<
     }
   }
 
-  // Revocation paths call this, possibly inside the revoking transaction, so it
-  // must not wait on Postgres. Later deliveries re-verify behind the revocation's
-  // locks, and the alarm closes revoked sockets that receive nothing.
+  // Revocation paths call this after committing the access change. Later
+  // deliveries re-verify, and the alarm closes revoked sockets that receive
+  // nothing.
   async invalidateAccess(userIds?: string[]) {
     this.accessGeneration++;
     if (userIds) for (const userId of userIds) this.access.delete(userId);
@@ -1053,7 +1049,6 @@ export abstract class CollaborationRoom<
       const pair = new WebSocketPair();
       pair[1].serializeAttachment(info);
       this.ctx.acceptWebSocket(pair[1], [multiplexTag]);
-      await this.alarms.planBy("access", Date.now() + accessCheckMs);
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
     const { nodeId } = info;
@@ -1092,7 +1087,6 @@ export abstract class CollaborationRoom<
       this.ctx.acceptWebSocket(pair[1], [nodeId]);
       // The new socket asks for the list itself, when it synchronizes.
       if (joined) this.broadcastPeople(pair[1]);
-      await this.alarms.planBy("access", Date.now() + accessCheckMs);
       return new Response(null, { status: 101, webSocket: pair[0] });
     });
   }
@@ -1638,7 +1632,7 @@ export abstract class CollaborationRoom<
       run(
         "access",
         () => this.checkProject(),
-        () => (this.openSockets().length ? Date.now() + accessCheckMs : null),
+        () => null,
       ),
     ]);
     await alarms.setNext();

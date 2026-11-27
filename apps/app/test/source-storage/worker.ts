@@ -703,6 +703,19 @@ export default {
         (await getProject({ db, bucket, ownerId, projectId })).sourceContents[
           bib.id
         ],
+        undefined,
+        "Unopened non-main text files are not eagerly downloaded on project open",
+      );
+      assert.equal(
+        new TextDecoder().decode(
+          await readProjectSource({
+            db,
+            bucket,
+            userId: ownerId,
+            projectId,
+            nodeId: bib.id,
+          }),
+        ),
         "@book{é}",
       );
       await deleteProjectNode({

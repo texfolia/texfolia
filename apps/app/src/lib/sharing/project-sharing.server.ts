@@ -175,7 +175,7 @@ export async function grantProjectAccess({
   live?: LiveProjects;
   email?: EmailDelivery;
 }) {
-  const added = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const found = await lockManagedProject(tx, data.projectId, userId);
     const targetEmail = data.email.trim().toLowerCase();
     const [person] = await tx
@@ -225,21 +225,25 @@ export async function grantProjectAccess({
         target: [projectCollaborator.projectId, projectCollaborator.userId],
         set: { role: data.role, updatedAt: new Date() },
       });
-    // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateProjectAccess(live, data.projectId, [person.id]);
-    if (existing) return;
+    if (existing) return { personId: person.id };
     const [inviter] = await tx
       .select({ name: user.name })
       .from(user)
       .where(eq(user.id, userId))
       .limit(1);
     return {
-      recipientEmail: person.email,
-      projectName: found.name,
-      inviterName: inviter?.name ?? "Someone",
+      personId: person.id,
+      added: {
+        recipientEmail: person.email,
+        projectName: found.name,
+        inviterName: inviter?.name ?? "Someone",
+      },
     };
   });
-  if (!added || !email) return;
+  if (!result) return;
+  await invalidateProjectAccess(live, data.projectId, [result.personId]);
+  if (!result.added || !email) return;
+  const { added } = result;
   const url = new URL(
     `/project/${encodeURIComponent(data.projectId)}`,
     email.baseURL,
@@ -280,9 +284,8 @@ export async function revokeProjectAccess({
           eq(projectCollaborator.userId, data.userId),
         ),
       );
-    // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateProjectAccess(live, data.projectId, [data.userId]);
   });
+  await invalidateProjectAccess(live, data.projectId, [data.userId]);
 }
 
 export async function setOrganizationRole({
@@ -303,9 +306,9 @@ export async function setOrganizationRole({
       .update(project)
       .set({ organizationRole: data.role })
       .where(eq(project.id, data.projectId));
-    // Every member may have gained or lost access.
-    await invalidateProjectAccess(live, data.projectId);
   });
+  // Every member may have gained or lost access.
+  await invalidateProjectAccess(live, data.projectId);
 }
 
 export async function grantTeamAccess({
@@ -341,8 +344,8 @@ export async function grantTeamAccess({
         target: [projectTeam.projectId, projectTeam.teamId],
         set: { role: data.role },
       });
-    await invalidateProjectAccess(live, data.projectId);
   });
+  await invalidateProjectAccess(live, data.projectId);
 }
 
 export async function revokeTeamAccess({
@@ -366,6 +369,6 @@ export async function revokeTeamAccess({
           eq(projectTeam.teamId, data.teamId),
         ),
       );
-    await invalidateProjectAccess(live, data.projectId);
   });
+  await invalidateProjectAccess(live, data.projectId);
 }

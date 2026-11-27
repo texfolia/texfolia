@@ -19,7 +19,7 @@ export function useSavedSources({
   drafts,
   onLoaded,
 }: {
-  project: Pick<ProjectDetails, "id" | "sourceVersions">;
+  project: Pick<ProjectDetails, "id" | "sourceContents" | "sourceVersions">;
   ready: boolean;
   files: ReturnType<typeof useProjectFiles>;
   collaboration: {
@@ -30,13 +30,15 @@ export function useSavedSources({
   onLoaded: (id: string, value: string) => void;
 }) {
   const projectId = project.id;
-  // The object each draft's text came from.
+  // The object each draft's text came from. Only files preloaded in
+  // `project.sourceContents` start as loaded; other text files fetch lazily.
   const loaded = useRef(
     new Map(
-      Object.entries(project.sourceVersions).map(([id, version]) => [
-        id,
-        version.objectKey,
-      ]),
+      Object.keys(project.sourceContents).flatMap((id) =>
+        Object.hasOwn(project.sourceVersions, id)
+          ? [[id, project.sourceVersions[id]!.objectKey] as const]
+          : [],
+      ),
     ),
   );
   const queue = useRef(Promise.resolve());

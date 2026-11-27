@@ -2,7 +2,6 @@ import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
 import { DutyAlarm } from "#/lib/duty-alarm";
-import { liveAccessMs } from "#/lib/projects/live-access-interval";
 
 import { liveUserHeader } from "./client";
 import { LiveAccess } from "./live-access";
@@ -79,7 +78,6 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     this.ctx.acceptWebSocket(server, userId === null ? [] : [userId]);
     server.send(this.liveFrame(projectId));
     for (const extra of this.extraLiveFrames(projectId)) server.send(extra);
-    if (userId !== null) await this.planAccessCheck();
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -97,7 +95,6 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
       },
     );
     streams.add(stop);
-    await this.planAccessCheck();
     return new Response(body, response);
   }
 
@@ -178,9 +175,8 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
   }
 
   /**
-   * Revocation paths call this, possibly inside the revoking transaction, so it
-   * must not wait on Postgres. From here on nothing is delivered to these users
-   * until a check, which waits behind the revocation's locks, has passed.
+   * Revocation paths call this after committing the access change. From here on
+   * nothing is delivered to these users until a check has passed.
    */
   async invalidateAccess(userIds?: string[]) {
     this.access?.invalidate(userIds);
@@ -212,11 +208,6 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     return { watching: watching.size, projectId };
   }
 
-  private async planAccessCheck() {
-    if (this.alarms.planned("access") === null)
-      await this.plan("access", Date.now() + liveAccessMs);
-  }
-
   /** Schedules this duty, replacing its earlier time. */
   protected async plan(duty: Duty, at: number) {
     await this.alarms.plan(duty, at);
@@ -229,7 +220,7 @@ export abstract class LiveProject<E = Env> extends DurableObject<E> {
     if (alarms.due("access", now)) {
       alarms.done("access", now);
       this.access?.invalidate();
-      if ((await this.verifyViewers()).watching) await this.planAccessCheck();
+      await this.verifyViewers();
     }
     // A failure keeps the duty due, so the runtime's retry runs it again.
     if (unplanned || alarms.due("work", now)) {

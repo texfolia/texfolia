@@ -191,7 +191,7 @@ export async function revokeShareLink({
   data: z.infer<typeof revokeShareLinkSchema>;
   live?: LiveProjects;
 }) {
-  await db.transaction(async (tx) => {
+  const userIds = await db.transaction(async (tx) => {
     await lockManagedProject(tx, data.projectId, userId);
     // Accounts that redeemed the link lose its grant with it.
     const redeemed = await tx
@@ -206,12 +206,12 @@ export async function revokeShareLink({
           eq(projectShareLink.id, data.linkId),
         ),
       );
-    // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateProjectAccess(live, data.projectId, [
+    return [
       sharePrincipal(data.linkId),
       ...redeemed.map((grant) => grant.userId),
-    ]);
+    ];
   });
+  await invalidateProjectAccess(live, data.projectId, userIds);
 }
 
 export async function resolveShareToken(db: Db, token: string) {
@@ -253,7 +253,7 @@ export async function redeemShareLink({
 }): Promise<RedeemedShareLink | null> {
   if (!shareTokenSchema.safeParse(token).success) return null;
   const tokenHash = await hashShareToken(token);
-  return db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     // Locking the link and project rows orders this after a revocation or
     // deletion in progress.
     const [link] = await tx
@@ -275,19 +275,28 @@ export async function redeemShareLink({
     if (!link) return null;
     if (userId === null)
       return {
-        projectId: link.projectId,
-        role: link.role,
-        signIn: link.role !== "viewer",
+        result: {
+          projectId: link.projectId,
+          role: link.role,
+          signIn: link.role !== "viewer",
+        },
+        invalidate: false,
       };
     const [granted] = await tx
       .insert(projectShareGrant)
       .values({ linkId: link.id, projectId: link.projectId, userId })
       .onConflictDoNothing()
       .returning({ linkId: projectShareGrant.linkId });
-    // A socket opened before may have cached less access.
-    if (granted) await invalidateProjectAccess(live, link.projectId, [userId]);
-    return { projectId: link.projectId, role: link.role, signIn: false };
+    return {
+      result: { projectId: link.projectId, role: link.role, signIn: false },
+      invalidate: Boolean(granted),
+    };
   });
+  if (!outcome) return null;
+  // A socket opened before may have cached less access.
+  if (outcome.invalidate && userId !== null)
+    await invalidateProjectAccess(live, outcome.result.projectId, [userId]);
+  return outcome.result;
 }
 
 // What an anonymous guest's view-only page shows: the file list and main file.
@@ -301,20 +310,31 @@ export async function getSharedProject({
   token: string;
   projectId: string;
 }) {
-  const link = await resolveShareToken(db, token);
-  if (!link || link.projectId !== projectId || link.role !== "viewer")
-    return null;
+  if (!shareTokenSchema.safeParse(token).success) return null;
+  const tokenHash = await hashShareToken(token);
   return db.transaction(async (tx) => {
-    const found = await lockProject({
-      tx,
-      projectId,
-      userId: sharePrincipal(link.id),
-      access: "read",
-    }).catch((error: unknown) => {
-      if (error instanceof Error && error.message === "Project not found")
-        return null;
-      throw error;
-    });
+    const [found] = await tx
+      .select({
+        id: project.id,
+        name: project.name,
+        mainFile: project.mainFile,
+      })
+      .from(projectShareLink)
+      .innerJoin(
+        project,
+        and(
+          eq(project.id, projectShareLink.projectId),
+          isNull(project.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(projectShareLink.tokenHash, tokenHash),
+          eq(projectShareLink.projectId, projectId),
+          eq(projectShareLink.role, "viewer"),
+        ),
+      )
+      .for("share");
     if (!found) return null;
     const nodes = await tx.query.projectNode.findMany({
       columns: { id: true, parentId: true, name: true, kind: true },
