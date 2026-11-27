@@ -5,8 +5,6 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { encodeSource } from "#/lib/storage";
-
 import { saveArchive } from "./archive";
 import type { GitFile, GitRepository } from "./repository";
 
@@ -56,17 +54,6 @@ export async function repositoryArchive(repo: GitRepository) {
   );
   if (!archive) throw new Error("Nothing was saved");
   return new Uint8Array(await archive);
-}
-
-/** The Base64 JSON archive that the app stored before NAT-464. */
-export function legacyArchive(repo: GitRepository) {
-  return JSON.stringify(
-    Object.fromEntries(
-      repo
-        .metadata()
-        .map(([path, value]) => [`.git/${path}`, encodeSource(value)]),
-    ),
-  );
 }
 
 /** Restores a repository as the app does. */

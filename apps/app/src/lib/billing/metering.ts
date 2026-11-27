@@ -7,9 +7,10 @@ import {
   aiSettings,
 } from "@texfolia/db/schema";
 import { and, eq, gt, inArray, lte, sql } from "drizzle-orm";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 
 import type { AiPayer } from "./entitlements";
+import { getStripeClient } from "./stripe";
 import { BillingError, markedUpNanos, nanoDollars } from "./usage";
 
 /** The Stripe side of AI metering. The app's AI config satisfies it. */
@@ -38,14 +39,6 @@ export type RequestCost = (request: {
   gatewayId: string;
 }) => Promise<UsageCost>;
 
-function createAiStripe(config: MeteringConfig) {
-  return new Stripe(config.stripeKey, {
-    apiVersion: "2026-10-28.endive",
-    maxNetworkRetries: 0,
-    timeout: 15_000,
-  });
-}
-
 // A webhook drops an attachment as soon as Stripe changes the subscription, so
 // this only bounds how long a missed webhook goes unnoticed.
 const attachmentMs = 24 * 60 * 60_000;
@@ -58,7 +51,7 @@ export async function ensureAiSubscription({
   db,
   config,
   payer,
-  stripe = createAiStripe(config),
+  stripe,
 }: {
   db: Db;
   config: MeteringConfig;
@@ -86,11 +79,12 @@ export async function ensureAiSubscription({
       ),
     );
   if (known) return;
+  const client = stripe ?? getStripeClient(config.stripeKey);
   // Recorded as of now: a change during the checks is newer than this.
   const checkedAt = new Date();
   const [price, subscription] = await Promise.all([
-    stripe.prices.retrieve(config.priceId),
-    stripe.subscriptions.retrieve(payer.subscriptionId),
+    client.prices.retrieve(config.priceId),
+    client.subscriptions.retrieve(payer.subscriptionId),
   ]);
   const customerId =
     typeof subscription.customer === "string"
@@ -116,7 +110,7 @@ export async function ensureAiSubscription({
       "AI billing is not configured correctly. Try again later.",
       503,
     );
-  const meter = await stripe.billing.meters.retrieve(price.recurring.meter);
+  const meter = await client.billing.meters.retrieve(price.recurring.meter);
   if (
     meter.event_name !== config.meterEventName ||
     meter.default_aggregation.formula !== "sum" ||
@@ -128,7 +122,7 @@ export async function ensureAiSubscription({
   )
     throw new BillingError("AI usage meter is not configured correctly.", 503);
   if (!subscription.items.data.some((item) => item.price.id === price.id))
-    await stripe.subscriptionItems.create(
+    await client.subscriptionItems.create(
       {
         subscription: subscription.id,
         price: price.id,
@@ -329,15 +323,12 @@ export async function reconcileAiUsage({
   userId?: string;
   report?: MeterReporter;
 }) {
-  const stripe = report ? null : createAiStripe(config);
   const send: MeterReporter =
     report ??
-    ((event) => {
-      if (!stripe) throw new Error("Stripe unavailable");
-      return stripe.billing.meterEvents.create(event, {
+    ((event) =>
+      getStripeClient(config.stripeKey).billing.meterEvents.create(event, {
         idempotencyKey: event.identifier,
-      });
-    });
+      }));
   // A dead Worker may never reach its terminal hook. Its durable requests still settle.
   await db
     .update(aiRun)

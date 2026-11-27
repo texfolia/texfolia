@@ -3,7 +3,6 @@ import { user as userTable } from "@texfolia/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { aiEntitlement } from "#/lib/billing/server";
 import { parseCompileLog } from "#/lib/compile";
 import { gitBranchSchema, type GitAction } from "#/lib/git";
 import { mapLimit } from "#/lib/map-limit";
@@ -45,7 +44,6 @@ export function projectTools({
   projectId,
   userId,
   canWrite,
-  organizationId,
   headers,
   signal,
 }: AssistantContext & {
@@ -53,33 +51,31 @@ export function projectTools({
   projectId: string;
   userId: string;
   canWrite: boolean;
-  /** The project's organization: it pays only for its members' usage here. */
-  organizationId: string | null;
   headers: Headers;
   signal: AbortSignal;
 }) {
+  // Access and AI entitlement were verified once when starting the run;
+  // mutating workspace operations still check write access themselves.
   async function files() {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId, organizationId);
-    return db.transaction(async (tx) => {
-      const { mainFile } = await workspace.lock({
-        tx,
-        projectId,
-        userId,
-        access: "read",
-      });
-      const nodes = await tx.query.projectNode.findMany({
+    const [project, nodes] = await Promise.all([
+      db.query.project.findFirst({
+        columns: { mainFile: true },
+        where: { id: projectId, deletedAt: { isNull: true } },
+      }),
+      db.query.projectNode.findMany({
         where: { projectId, deletedAt: { isNull: true } },
-      });
-      const paths = projectPaths(nodes);
-      return {
-        main: projectMainFile(paths, mainFile)?.path,
-        nodes: nodes.flatMap((node) => {
-          const path = paths.get(node.id);
-          return path ? [{ ...node, path }] : [];
-        }),
-      };
-    });
+      }),
+    ]);
+    if (!project) throw new Error("Project not found");
+    const paths = projectPaths(nodes);
+    return {
+      main: projectMainFile(paths, project.mainFile)?.path,
+      nodes: nodes.flatMap((node) => {
+        const path = paths.get(node.id);
+        return path ? [{ ...node, path }] : [];
+      }),
+    };
   }
   function requireMain(main: string | undefined) {
     if (!main) throw new Error("This project has no .tex file to compile.");
@@ -88,14 +84,10 @@ export function projectTools({
   /** Every live node, folders included, with paths keyed by node ID. */
   async function tree() {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId, organizationId);
-    return db.transaction(async (tx) => {
-      await workspace.lock({ tx, projectId, userId, access: "read" });
-      const nodes = await tx.query.projectNode.findMany({
-        where: { projectId, deletedAt: { isNull: true } },
-      });
-      return { nodes, paths: projectNodePaths(nodes) };
+    const nodes = await db.query.projectNode.findMany({
+      where: { projectId, deletedAt: { isNull: true } },
     });
+    return { nodes, paths: projectNodePaths(nodes) };
   }
   function findPath(
     { nodes, paths }: Awaited<ReturnType<typeof tree>>,
@@ -146,15 +138,13 @@ export function projectTools({
   }
   async function readFile(path: string) {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId, organizationId);
-    const node = await db.transaction(async (tx) => {
-      await workspace.lock({ tx, projectId, userId, access: "read" });
-      const nodes = await tx.query.projectNode.findMany({
-        where: { projectId, deletedAt: { isNull: true } },
-      });
-      const paths = projectPaths(nodes);
-      return nodes.find((n) => paths.get(n.id) === path && n.kind === "text");
+    const nodes = await db.query.projectNode.findMany({
+      where: { projectId, deletedAt: { isNull: true } },
     });
+    const paths = projectPaths(nodes);
+    const node = nodes.find(
+      (n) => paths.get(n.id) === path && n.kind === "text",
+    );
     if (!node) throw new Error("Text file not found");
     if (node.sizeBytes > BigInt(maxEditBytes))
       throw new Error("File exceeds the assistant's 64 KiB read limit");
@@ -165,14 +155,19 @@ export function projectTools({
     if (node.objectKey && !object) throw new Error("Saved source is missing");
     return { node, content: object ? await object.text() : "" };
   }
+  let cachedUser: Promise<{ name: string; email: string }> | undefined;
+  const loadUser = () =>
+    (cachedUser ??= db
+      .select({ name: userTable.name, email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.id, userId))
+      .then(([user]) => {
+        if (!user) throw new Error("Sign in again.");
+        return user;
+      }));
   async function gitAction(action: GitAction) {
     signal.throwIfAborted();
-    await aiEntitlement(db, userId, organizationId);
-    const [user] = await db
-      .select()
-      .from(userTable)
-      .where(eq(userTable.id, userId));
-    if (!user) throw new Error("Sign in again.");
+    const user = await loadUser();
     const result = await workspace.gitAction({
       projectId,
       user: { id: userId, name: user.name, email: user.email },
@@ -294,7 +289,6 @@ export function projectTools({
       inputSchema: z.object({}),
     }).server(async () => {
       signal.throwIfAborted();
-      await aiEntitlement(db, userId, organizationId);
       const bytes = new TextEncoder().encode(
         await workspace.readScratchpad({ projectId, userId }),
       );

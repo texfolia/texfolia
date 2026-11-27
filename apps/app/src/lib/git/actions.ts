@@ -256,7 +256,6 @@ async function requireRemoteManager(
 }
 
 // Status bar branch from the cached row; the full status restores the repository.
-// Legacy Texfolia-hosted repositories (no remote) show no branch.
 export async function gitBranch({
   db,
   lock,
@@ -272,10 +271,10 @@ export async function gitBranch({
   return db.transaction(async (tx) => {
     await lock({ tx, projectId, userId, access: "read" });
     const [linked] = await tx
-      .select({ branch: projectGit.branch, url: projectGit.url })
+      .select({ branch: projectGit.branch })
       .from(projectGit)
       .where(eq(projectGit.projectId, projectId));
-    return linked?.url ? linked.branch : null;
+    return linked?.branch ?? null;
   });
 }
 
@@ -289,8 +288,6 @@ export async function gitVersion(tx: ProjectTransaction, projectId: string) {
   return linked?.objectKey ?? "";
 }
 
-// Repositories created by the removed "initialize" action have no remote. They can
-// still be read, linked to an empty remote (keeping history) or unlinked.
 const changedMessage =
   "The project changed while Git was syncing. Nothing was applied; try again.";
 
@@ -300,13 +297,8 @@ async function loadRepository(
 ) {
   const object = await bucket.get(objectKey);
   if (!object) throw new MissingObjectError("Saved git repository is missing.");
-  return objectKey.endsWith(".json")
-    ? GitRepository.restoreLegacy(await object.text())
-    : GitRepository.restore(object.body);
+  return GitRepository.restore(object.body);
 }
-
-const hostedRepositoryMessage =
-  "Texfolia no longer hosts Git repositories. Link an empty repository to push this history, or unlink it.";
 
 export async function runGit({
   db,
@@ -367,22 +359,20 @@ export async function runGit({
   type Snapshot = NonNullable<Awaited<ReturnType<typeof readSnapshot>>>;
   const runSnapshot = async ({ linked, nodes }: Snapshot) => {
     const connecting = action.kind === "link" || action.kind === "import";
-    if (connecting && linked?.url)
+    if (connecting && linked)
       throw new Error(
         "Unlink the current repository before connecting another.",
       );
-    if (!connecting && !linked?.url && !readOnly)
+    if (!connecting && !linked?.url) {
+      if (readOnly) return { status: empty };
       throw new Error(
-        linked
-          ? hostedRepositoryMessage
-          : "Link a repository first, or import one as a new project.",
+        "Link a repository first, or import one as a new project.",
       );
+    }
     const remote = connecting
       ? action.remote
-      : linked?.url
-        ? gitRemoteSchema.parse(linked.url)
-        : null;
-    if (remote) host = gitProvider(remote.provider).label;
+      : gitRemoteSchema.parse(linked!.url);
+    host = gitProvider(remote.provider).label;
     const repo = linked
       ? await loadRepository(bucket, linked.objectKey)
       : new GitRepository();
@@ -540,17 +530,6 @@ export async function runGit({
         break;
     }
     const status = await repo.status();
-    if (readOnly && linked && linked.branch !== status.branch)
-      // Backfill rows saved before the branch was cached.
-      await db
-        .update(projectGit)
-        .set({ branch: status.branch })
-        .where(
-          and(
-            eq(projectGit.projectId, projectId),
-            eq(projectGit.objectKey, linked.objectKey),
-          ),
-        );
     return {
       status: { remote, ...status },
       ...(action.kind === "diff" ? { diff: await repo.diff() } : {}),

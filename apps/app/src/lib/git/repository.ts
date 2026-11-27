@@ -4,7 +4,6 @@ import * as git from "isomorphic-git";
 import { z } from "zod";
 
 import { mapLimit } from "#/lib/map-limit";
-import { decodeSource } from "#/lib/storage";
 
 import { readArchive } from "./archive";
 import { GitFs } from "./git-fs";
@@ -19,7 +18,6 @@ const maxIgnoreBytes = 1024 * 1024;
 const maxDiffFileBytes = 128 * 1024;
 // Trees can name one subtree many times, so a small pack can hold a huge tree.
 const maxTreeEntries = 20_000;
-const legacyArchiveSchema = z.record(z.string(), z.string());
 // Maps each stored source to the Git blob with the same content.
 const blobCache = "texfolia-blobs";
 const blobCacheSchema = z.record(z.string(), z.string());
@@ -123,20 +121,6 @@ function parentFolders(path: string) {
   return ["", ...parts.map((_, index) => parts.slice(0, index + 1).join("/"))];
 }
 
-/** How many bytes a zlib stream of `object` takes. */
-async function deflatedBytes(object: Uint8Array) {
-  const reader = new Blob([object as Uint8Array<ArrayBuffer>])
-    .stream()
-    .pipeThrough(new CompressionStream("deflate"))
-    .getReader();
-  let bytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return bytes;
-    bytes += value.byteLength;
-  }
-}
-
 // A working clone of the linked remote. The remote is the source of truth; this
 // copy only carries branches and commits not yet pushed (NAT-413). It has no
 // index: a commit's tree is HEAD's with the changed files replaced, and the
@@ -174,17 +158,6 @@ export class GitRepository {
     const repo = new GitRepository();
     for await (const [path, value] of readArchive(body, maxRepositoryBytes))
       repo.addMetadata(path, value);
-    return repo;
-  }
-  /** Restores a clone saved as Base64 in JSON. The next save converts it. */
-  static restoreLegacy(serialized: string) {
-    const repo = new GitRepository();
-    for (const [path, value] of Object.entries(
-      legacyArchiveSchema.parse(JSON.parse(serialized)),
-    )) {
-      if (!path.startsWith(".git/")) throw new Error("Invalid repository data");
-      repo.addMetadata(path.slice(".git/".length), decodeSource(value));
-    }
     return repo;
   }
   /** The files to store, checked against the size limit. */
@@ -574,100 +547,7 @@ export class GitRepository {
       remote: "origin",
       ref,
       remoteRef: ref,
-      // The pack is built in memory, so its size has to be known first.
-      onPrePush: async ({ url, localRef, remoteRef }) => {
-        await this.checkPushSize(http, url, localRef.oid, remoteRef.oid);
-        return true;
-      },
     });
-  }
-  // Adds up the objects that isomorphic-git is about to pack, choosing them the
-  // same way: everything in commits the host lacks, less what the merge base and
-  // the host's default branch already contain.
-  private async checkPushSize(
-    http: git.HttpClient,
-    url: string,
-    local: string,
-    remote: string,
-  ) {
-    const refs = await git.listServerRefs({
-      http,
-      url,
-      forPush: true,
-      protocolVersion: 1,
-    });
-    const known = new Set(refs.map(({ oid }) => oid));
-    const bases: string[] = [];
-    if (!/^0+$/.test(remote))
-      bases.push(
-        ...((await git
-          .findMergeBase({ ...this.args(), oids: [local, remote] })
-          .catch(() => [])) as string[]),
-      );
-    for (const base of bases) known.add(base);
-    if (known.has(local)) return;
-    const shallowPath = `${this.gitdir}/shallow`;
-    const shallow = new Set(
-      this.fs.has(shallowPath)
-        ? String(await this.fs.promises.readFile(shallowPath, "utf8"))
-            .trim()
-            .split("\n")
-        : [],
-    );
-    const skipped = new Set<string>();
-    const listTree = async (oid: string, visit: Set<string>) => {
-      const pending = [oid];
-      for (let next = pending.pop(); next; next = pending.pop()) {
-        if (visit.has(next)) continue;
-        visit.add(next);
-        const { tree } = await git.readTree({ ...this.args(), oid: next });
-        for (const entry of tree)
-          if (entry.type === "tree") pending.push(entry.oid);
-          else if (entry.type === "blob") visit.add(entry.oid);
-      }
-    };
-    const treeOf = async (oid: string) =>
-      (await git.readCommit({ ...this.args(), oid })).commit.tree;
-    for (const base of bases) await listTree(await treeOf(base), skipped);
-    try {
-      const branch = await git.resolveRef({
-        ...this.args(),
-        ref: "refs/remotes/origin/HEAD",
-        depth: 2,
-      });
-      const name = branch.replace("refs/remotes/origin/", "refs/heads/");
-      const oid = refs.find(({ ref }) => ref === name)?.oid;
-      if (oid) await listTree(await treeOf(oid), skipped);
-    } catch {
-      // Without a local copy of the default branch, nothing is left out.
-    }
-    const objects = new Set<string>();
-    const commits = [local];
-    const visited = new Set<string>();
-    for (let oid = commits.pop(); oid; oid = commits.pop()) {
-      if (visited.has(oid)) continue;
-      visited.add(oid);
-      const { commit } = await git.readCommit({ ...this.args(), oid });
-      objects.add(oid);
-      await listTree(commit.tree, objects);
-      if (!shallow.has(oid))
-        commits.push(...commit.parent.filter((parent) => !known.has(parent)));
-    }
-    let bytes = 0;
-    for (const oid of objects) {
-      if (skipped.has(oid)) continue;
-      // A loose object is stored deflated already; a packed one may be a delta.
-      const loose = this.fs.size(
-        `${this.gitdir}/objects/${oid.slice(0, 2)}/${oid.slice(2)}`,
-      );
-      bytes +=
-        loose ??
-        (await deflatedBytes(
-          (await git.readObject({ ...this.args(), oid, format: "content" }))
-            .object as Uint8Array,
-        ));
-      if (bytes > maxRepositoryBytes) throw new Error(pushMessage);
-    }
   }
   async requireClean() {
     if ((await this.changes()).length)

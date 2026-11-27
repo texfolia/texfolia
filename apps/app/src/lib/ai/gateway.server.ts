@@ -67,6 +67,8 @@ const catalogModel = z.object({
   }),
 });
 
+const maxCatalogPages = 5;
+
 // Cloudflare exposes the catalog in the documented OpenRouter marketplace format.
 export async function fetchGatewayModels(
   config: Pick<AiConfig, "accountId" | "apiToken">,
@@ -74,7 +76,7 @@ export async function fetchGatewayModels(
 ): Promise<AiModel[]> {
   const models: AiModel[] = [];
   const seen = new Set<string>();
-  for (let page = 1; page <= 20; page++) {
+  for (let page = 1; page <= maxCatalogPages; page++) {
     const json = await cloudflareJson(
       config,
       `ai/models/search?format=openrouter&per_page=100&page=${page}`,
@@ -104,10 +106,9 @@ export async function fetchGatewayModels(
         outputPrice: model.pricing.completion,
       });
     }
-    if (result.data.length < 100 || newModels === 0)
-      return models.sort((a, b) => a.name.localeCompare(b.name));
+    if (result.data.length !== 100 || newModels === 0) break;
   }
-  throw new Error("AI model catalog pagination limit exceeded");
+  return models.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** How long a model's price or removal can take to reach the assistant. */

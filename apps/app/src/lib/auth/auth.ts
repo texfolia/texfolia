@@ -5,11 +5,14 @@ import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { captcha, emailOTP, organization } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import Stripe from "stripe";
 import { z } from "zod";
 
 import { forgetAiSubscription } from "#/lib/billing/metering";
-import { assertBillingScope, createBillingPlugin } from "#/lib/billing/stripe";
+import {
+  assertBillingScope,
+  createBillingPlugin,
+  getStripeClient,
+} from "#/lib/billing/stripe";
 import {
   codeEmail,
   deleteAccountEmail,
@@ -204,12 +207,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
     );
   // Most requests never reach Stripe.
   const stripeKey = process.env.STRIPE_SECRET_KEY!;
-  const stripeClient = lazy(
-    () =>
-      new Stripe(stripeKey, {
-        apiVersion: "2026-10-28.endive",
-      }),
-  );
+  const stripeClient = lazy(() => getStripeClient(stripeKey));
 
   const deleting = deletionNotice({ db, live });
   // The organizations of an account being deleted. An instance serves one request.

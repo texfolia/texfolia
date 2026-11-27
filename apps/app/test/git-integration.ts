@@ -29,12 +29,7 @@ import {
 } from "#/lib/collaboration";
 import { gitProvider, type GitProvider } from "#/lib/git";
 import { GitRepository, gitHttp } from "#/lib/git/server";
-import {
-  gitCommand,
-  gitServer,
-  legacyArchive,
-  memoryFiles,
-} from "#/lib/git/testing";
+import { gitCommand, gitServer, memoryFiles } from "#/lib/git/testing";
 
 import { createProject } from "../src/lib/projects/project.server";
 import { withBuildsFixture } from "./builds/miniflare";
@@ -188,32 +183,6 @@ try {
     action(localProject.id, { kind: "commit", message: "No remote" }),
     /Link a repository first/,
   );
-  // A repository saved by the removed in-app initialize (NAT-413).
-  const legacy = new GitRepository();
-  await legacy.init();
-  legacy.overlay(memoryFiles({ "main.tex": "hosted history\n" }));
-  const localOid = await legacy.commit("Local history before linking", author);
-  const legacyKey = `git/${localProject.id}/${crypto.randomUUID()}.json`;
-  await (await mf.getR2Bucket("SOURCES")).put(legacyKey, legacyArchive(legacy));
-  await db.insert(projectGit).values({
-    projectId: localProject.id,
-    provider: null,
-    url: null,
-    objectKey: legacyKey,
-    branch: "main",
-  });
-  const hosted = await action(localProject.id, { kind: "status" });
-  assert.equal(hosted.status.remote, null);
-  assert.equal(hosted.status.commits[0]?.oid, localOid);
-  for (const blocked of [
-    { kind: "commit", message: "Still hosted" },
-    { kind: "branch", name: "draft" },
-    { kind: "push" },
-  ])
-    await assert.rejects(
-      action(localProject.id, blocked),
-      /no longer hosts Git repositories/,
-    );
   for (const provider of ["github", "gitlab"] satisfies GitProvider[]) {
     const local = await host.create(`owner/${provider}.git`);
     const seed = new GitRepository();
@@ -490,7 +459,13 @@ try {
     kind: "link",
     remote: "https://github.com/owner/local-history.git",
   });
-  assert.equal(attached.status.commits[0]?.oid, localOid);
+  assert.equal(attached.status.branch, "main");
+  const committed = await action(localProject.id, {
+    kind: "commit",
+    message: "Initial linked commit",
+  });
+  const localOid = committed.status.commits[0]?.oid;
+  assert(localOid);
   await action(localProject.id, { kind: "push" });
   assert.equal(
     await gitCommand(
@@ -572,7 +547,7 @@ try {
     "No Git host request runs while the project row is locked",
   );
   console.info(
-    "No-repository status, rejected initialize, read-only legacy hosted history, and its empty-remote link/push passed",
+    "No-repository status, rejected initialize, and empty-remote link/commit/push passed",
   );
 } finally {
   await mf.dispose();
