@@ -61,19 +61,17 @@ export function setProjectTags(
 }
 
 export async function getProject(
-  args: Locked<Parameters<typeof projects.getProject>[0]>,
+  args: Locked<Omit<Parameters<typeof projects.getProject>[0], "extra">>,
 ) {
-  const project = await projects.getProject({ ...args, lock: lockProject });
-  // The versions the metadata poll reports, so a workspace starts with them.
-  const versions = await args.db.transaction(async (tx) => ({
-    commentsVersion: await commentsVersion(
-      tx,
-      args.projectId,
-      project.canComment,
-    ),
-    gitVersion: await gitVersion(tx, args.projectId),
-  }));
-  return { ...project, ...versions };
+  return projects.getProject({
+    ...args,
+    lock: lockProject,
+    // The versions the metadata poll reports, so a workspace starts with them.
+    extra: async (tx, { canComment }) => ({
+      commentsVersion: await commentsVersion(tx, args.projectId, canComment),
+      gitVersion: await gitVersion(tx, args.projectId),
+    }),
+  });
 }
 
 export function duplicateProject(

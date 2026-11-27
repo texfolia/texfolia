@@ -279,10 +279,10 @@ export async function checkRooms({
       "The check connects once for access and once for files",
     );
     assert.equal(viewer.closeCode(), 0);
-    const [planned] = await storage.exec<{ at: number }>(
+    const planned = await storage.exec<{ at: number }>(
       "SELECT at FROM alarms WHERE duty = 'access'",
     );
-    assert(planned && planned.at > Date.now() + 40_000, "The check is rare");
+    assert.equal(planned.length, 0, "No periodic access alarm is scheduled");
 
     console.log("Checking that unused documents leave memory");
     // Hibernation dropped both, and only one has been used since.

@@ -229,9 +229,40 @@ export function useSourceSave({
     onMigrated: (id: string, value: string) => void;
   }) {
     try {
+      const raw = localStorage.getItem(storageKey);
+      const contents = { ...project.sourceContents };
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        const draftMap =
+          parsed &&
+          typeof parsed === "object" &&
+          "drafts" in parsed &&
+          parsed.drafts &&
+          typeof parsed.drafts === "object"
+            ? parsed.drafts
+            : parsed;
+        if (draftMap && typeof draftMap === "object") {
+          const missing = Object.keys(draftMap).filter(
+            (id) =>
+              !Object.hasOwn(contents, id) &&
+              Object.hasOwn(project.sourceVersions, id),
+          );
+          await mapLimit(missing, binaryFetchLimit, async (id) => {
+            const objectKey = project.sourceVersions[id]?.objectKey;
+            if (!objectKey) {
+              contents[id] = "";
+              return;
+            }
+            const response = await fetch(`/api/sources/${projectId}/${id}`);
+            if (!response.ok) return;
+            contents[id] = await response.text();
+          });
+          if (!isCurrent()) return false;
+        }
+      }
       const { migrate, recover } = reconcileSourceDrafts({
-        raw: localStorage.getItem(storageKey),
-        contents: project.sourceContents,
+        raw,
+        contents,
         versions: project.sourceVersions,
       });
       localDrafts.current = { ...migrate, ...recover };

@@ -14,15 +14,14 @@ import {
   type CollaborationCleanup,
 } from "#/lib/collaboration/server";
 import { lockProject } from "#/lib/sharing/project-access.server";
-import type { saveSourceSchema } from "#/lib/storage";
+import { decodeSource, type saveSourceSchema } from "#/lib/storage";
 import {
   checkProjectQuota,
   collectSourceGarbage,
   commitSources,
-  prepareSource,
+  prepareSourceBytes,
   retireSources,
   type SourceBucket,
-  type SourceTransaction,
 } from "#/lib/storage/server";
 
 export async function saveProjectSource({
@@ -37,28 +36,8 @@ export async function saveProjectSource({
   data: z.infer<typeof saveSourceSchema>;
 }) {
   const { projectId } = data;
-  const readNode = async (tx: SourceTransaction) => {
-    await lockProject({ tx, projectId, userId });
-    const node = await tx.query.projectNode.findFirst({
-      where: {
-        id: data.nodeId,
-        projectId,
-        deletedAt: { isNull: true },
-      },
-    });
-    if (!node || node.kind === "folder") throw new Error("File not found");
-    if (node.objectKey !== data.expectedObjectKey)
-      throw new Error(
-        "File changed on the server. Reopen the project before recovering your local draft.",
-      );
-    return { ...node, kind: node.kind };
-  };
-  // Nothing is stored for a caller without access or an unknown file.
-  const { kind } = await db.transaction(readNode);
-  const upload = await prepareSource(projectId, {
-    content: data.content,
-    kind,
-  });
+  const bytes = decodeSource(data.content);
+  const upload = await prepareSourceBytes(projectId, bytes);
   const { objectKey, sizeBytes } = upload;
   const version = await commitSources({
     db,
@@ -66,7 +45,23 @@ export async function saveProjectSource({
     projectId,
     uploads: [upload],
     run: async (tx) => {
-      const node = await readNode(tx);
+      await lockProject({ tx, projectId, userId });
+      const node = await tx.query.projectNode.findFirst({
+        where: {
+          id: data.nodeId,
+          projectId,
+          deletedAt: { isNull: true },
+        },
+      });
+      if (!node || node.kind === "folder") throw new Error("File not found");
+      if (node.objectKey !== data.expectedObjectKey)
+        throw new Error(
+          "File changed on the server. Reopen the project before recovering your local draft.",
+        );
+      if (node.kind === "text")
+        new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
+          bytes,
+        );
       await checkProjectQuota(tx, projectId, {
         previousSize: node.sizeBytes,
         sizeBytes,

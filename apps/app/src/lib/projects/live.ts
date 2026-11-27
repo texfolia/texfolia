@@ -26,7 +26,7 @@ export type LiveProjects = {
   builds: LiveChannel;
 };
 
-// Callers may hold the revoking transaction open, so these stay short.
+// Keep retry delays short because callers await invalidation after committing.
 const retryDelaysMs = [100, 400];
 
 async function invalidate(
@@ -52,9 +52,8 @@ async function invalidate(
 }
 
 // Live channels cache access, so every path that revokes or changes it must
-// call this. Call it before the revoking transaction commits when possible: the
-// channel then re-verifies behind its locks. After a failed call the channel's
-// own periodic check is the backstop.
+// call this after the modifying transaction commits so Postgres locks are never
+// held across Durable Object RPCs.
 export async function invalidateProjectAccess(
   live: LiveProjects | undefined,
   projectId: string,

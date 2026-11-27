@@ -36,7 +36,7 @@ export async function transferProject({
   data: z.infer<typeof transferProjectSchema>;
   live?: LiveProjects;
 }) {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     // Lock users before the project, in a fixed order, as name allocation and
     // tag changes do.
     await tx
@@ -112,8 +112,8 @@ export async function transferProject({
         name,
       })
       .where(eq(project.id, data.projectId));
-    // Invalidate before commit so open sockets re-verify behind this lock.
-    await invalidateProjectAccess(live, data.projectId);
     return { name };
   });
+  await invalidateProjectAccess(live, data.projectId);
+  return result;
 }

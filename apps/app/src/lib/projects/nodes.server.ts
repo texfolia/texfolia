@@ -78,8 +78,6 @@ export async function createProjectNode({
       insert(tx, { objectKey: null, sizeBytes: 0n }),
     );
   if (!bucket) throw new Error("Source storage unavailable");
-  // Nothing is stored for a caller without access or at an invalid path.
-  await db.transaction(check);
   const upload = await prepareSource(projectId, { content, kind });
   const { objectKey, sizeBytes } = upload;
   return commitSources({
