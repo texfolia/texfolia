@@ -17,7 +17,11 @@ import type {
   ProjectAccessRequest,
   ProjectTransaction,
 } from "#/lib/projects/server";
-import { decodeSource, type saveSourceSchema } from "#/lib/storage";
+import {
+  decodeSource,
+  sourceHashFromKey,
+  type saveSourceSchema,
+} from "#/lib/storage";
 import { deletePrefix, prepareSourceBytes } from "#/lib/storage/server";
 
 import {
@@ -709,7 +713,9 @@ export abstract class CollaborationRoom<
   private async recover(row: DocumentRow, doc: Y.Doc, node: SourceNode) {
     const hash = await hashText(doc.getText("source").toString());
     const current =
-      node.objectKey === `projects/${row.project_id}/sources/${hash}`;
+      Boolean(
+        node.objectKey?.startsWith(`projects/${row.project_id}/sources/`),
+      ) && sourceHashFromKey(node.objectKey) === hash;
     if (!current && !this.unfinishedSaves(row.node_id).includes(node.objectKey))
       throw new Error(
         "Source changed outside collaboration. Reopen the project before saving.",

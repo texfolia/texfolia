@@ -299,9 +299,9 @@ const backend = Bun.serve({
       for (const [path, source] of Object.entries(delta.files)) {
         if (path.endsWith(".png")) {
           assert.deepEqual(
-            Object.keys(source),
-            ["hash"],
-            "Binary compile transport must contain only its hash",
+            Object.keys(source).sort(),
+            ["hash", "key"],
+            "Binary compile transport must reference only its saved hash and key",
           );
           const bytes = sourceObjects.get(source.hash);
           assert(bytes, "Compile referenced an unacknowledged object");
