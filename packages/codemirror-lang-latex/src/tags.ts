@@ -12,4 +12,5 @@ export const latexTags = {
   option: Tag.define(tags.attributeName),
   key: Tag.define(tags.propertyName),
   bibField: Tag.define(tags.propertyName),
+  verbatim: Tag.define(tags.monospace),
 };

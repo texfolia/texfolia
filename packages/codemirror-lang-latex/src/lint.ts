@@ -1,8 +1,12 @@
+import { ensureSyntaxTree } from "@codemirror/language";
 import type { Diagnostic } from "@codemirror/lint";
 import type { EditorView } from "@codemirror/view";
+import type { Tree } from "@lezer/common";
+
+import { parser } from "./parser.js";
 
 export type LatexLinterOptions = {
-  /** Optional filename (used to skip linting on `.sty`/`.cls` if desired). */
+  /** Optional filename for caller context. */
   fileName?: string;
   /** Check for unmatched `\begin{...}` and `\end{...}` pairs. Default: `true`. */
   checkEnvironments?: boolean;
@@ -12,22 +16,46 @@ export type LatexLinterOptions = {
   checkMath?: boolean;
 };
 
-const VERBATIM_ENVS = new Set([
-  "verbatim",
-  "verbatim*",
-  "lstlisting",
-  "minted",
-  "Verbatim",
-  "BVerbatim",
-  "LVerbatim",
-  "alltt",
-  "comment",
+type OpenEnv = {
+  name: string;
+  from: number;
+  to: number;
+};
+
+type OpenMath = {
+  delim: "$" | "$$" | "\\(" | "\\[";
+  from: number;
+  to: number;
+};
+
+const SKIP_NODES = new Set([
+  "Comment",
+  "InlineVerbatim",
+  "VerbatimContent",
+  "EscapedChar",
 ]);
 
+function readEnvName(
+  slice: (from: number, to: number) => string,
+  node: { getChild: (name: string) => { from: number; to: number } | null },
+): string | null {
+  const nameNode = node.getChild("EnvName");
+  if (!nameNode || nameNode.from === nameNode.to) return null;
+  return slice(nameNode.from, nameNode.to).trim();
+}
+
+function getTree(view: EditorView): Tree {
+  const existing = ensureSyntaxTree(view.state, view.state.doc.length, 500);
+  if (existing && existing.topNode.name === "Document") {
+    return existing;
+  }
+  return parser.parse(view.state.doc.toString());
+}
+
 /**
- * Clean-room LaTeX syntax linter returning a CodeMirror lint source function.
- * Checks balanced `\begin`/`\end` environments, `{}` braces, and math delimiters
- * while skipping comments, escaped characters, `\verb|...|`, and verbatim blocks.
+ * Syntax linter driven by the Lezer LaTeX syntax tree. Checks balanced
+ * `\begin`/`\end` environments, `{}` braces, and math delimiters while
+ * skipping comments, escapes, `\verb|...|`, and verbatim environments.
  */
 export function latexLinter(
   options: LatexLinterOptions = {},
@@ -39,233 +67,195 @@ export function latexLinter(
   } = options;
 
   return (view: EditorView): Diagnostic[] => {
-    const text = view.state.doc.toString();
+    const tree = getTree(view);
+    const slice = (from: number, to: number) => view.state.sliceDoc(from, to);
     const diagnostics: Diagnostic[] = [];
 
-    const envStack: Array<{ name: string; from: number; to: number }> = [];
+    const envStack: OpenEnv[] = [];
     const braceStack: number[] = [];
-    let mathOpen: {
-      delim: "$" | "$$" | "\\(" | "\\[";
-      from: number;
-      to: number;
-    } | null = null;
+    const mathState: { open: OpenMath | null } = { open: null };
 
-    let i = 0;
-    const len = text.length;
-
-    while (i < len) {
-      const ch = text[i];
-
-      // Line comment: skip to newline
-      if (ch === "%") {
-        const nl = text.indexOf("\n", i + 1);
-        i = nl === -1 ? len : nl + 1;
-        continue;
-      }
-
-      // Backslash command or escape
-      if (ch === "\\") {
-        const next = text[i + 1];
-        if (next === undefined) break;
-
-        // Inline / display math delimiters: \( \) \[ \]
-        if (next === "(" || next === "[") {
-          const delim = next === "(" ? "\\(" : "\\[";
-          if (checkMath) {
-            if (mathOpen) {
-              diagnostics.push({
-                from: i,
-                to: i + 2,
-                severity: "error",
-                message: `Nested math delimiter ${delim} inside unclosed ${mathOpen.delim}`,
-              });
-            } else {
-              mathOpen = { delim, from: i, to: i + 2 };
-            }
-          }
-          i += 2;
-          continue;
-        }
-        if (next === ")" || next === "]") {
-          const expected = next === ")" ? "\\(" : "\\[";
-          if (checkMath) {
-            if (!mathOpen) {
-              diagnostics.push({
-                from: i,
-                to: i + 2,
-                severity: "error",
-                message: `Unexpected closing math delimiter \\${next}`,
-              });
-            } else if (mathOpen.delim !== expected) {
-              diagnostics.push({
-                from: i,
-                to: i + 2,
-                severity: "error",
-                message: `Mismatched math delimiter: expected closing for ${mathOpen.delim}, found \\${next}`,
-              });
-              mathOpen = null;
-            } else {
-              mathOpen = null;
-            }
-          }
-          i += 2;
-          continue;
-        }
-
-        // Single non-letter escape (\\, \{, \}, \%, \$, etc.)
-        if (!/[a-zA-Z@]/.test(next)) {
-          i += 2;
-          continue;
-        }
-
-        // Control word
-        const cmdStart = i;
-        let j = i + 1;
-        while (j < len && /[a-zA-Z@]/.test(text[j] ?? "")) j++;
-        const cmdName = text.slice(cmdStart + 1, j);
-        if (text[j] === "*") j++;
-
-        // \verb|...| or \verb*|...|
-        if (cmdName === "verb" && j < len && !/\s/.test(text[j] ?? "")) {
-          const delimiter = text[j]!;
-          const end = text.indexOf(delimiter, j + 1);
-          const nl = text.indexOf("\n", j + 1);
-          if (end !== -1 && (nl === -1 || end < nl)) {
-            i = end + 1;
-          } else {
-            i = nl === -1 ? len : nl + 1;
-          }
-          continue;
-        }
-
-        // \begin{env} / \end{env}
-        if (cmdName === "begin" || cmdName === "end") {
-          let k = j;
-          while (k < len && (text[k] === " " || text[k] === "\t")) k++;
-          if (text[k] === "{") {
-            const close = text.indexOf("}", k + 1);
-            const nl = text.indexOf("\n", k + 1);
-            if (close !== -1 && (nl === -1 || close < nl)) {
-              const envName = text.slice(k + 1, close).trim();
-              const endPos = close + 1;
-
-              if (cmdName === "begin") {
-                if (VERBATIM_ENVS.has(envName)) {
-                  const endTag = `\\end{${envName}}`;
-                  const endIdx = text.indexOf(endTag, endPos);
-                  if (endIdx === -1) {
-                    if (checkEnvironments) {
-                      diagnostics.push({
-                        from: cmdStart,
-                        to: endPos,
-                        severity: "error",
-                        message: `Unclosed environment “${envName}”`,
-                      });
-                    }
-                    i = len;
-                  } else {
-                    i = endIdx + endTag.length;
-                  }
-                  continue;
-                }
-                if (checkEnvironments) {
-                  envStack.push({ name: envName, from: cmdStart, to: endPos });
-                }
-              } else if (checkEnvironments) {
-                const top = envStack.at(-1);
-                if (!top) {
-                  diagnostics.push({
-                    from: cmdStart,
-                    to: endPos,
-                    severity: "error",
-                    message: `Unexpected \\end{${envName}} without matching \\begin`,
-                  });
-                } else if (top.name === envName) {
-                  envStack.pop();
-                } else {
-                  const matchIdx = envStack.findLastIndex(
-                    (entry) => entry.name === envName,
-                  );
-                  if (matchIdx !== -1) {
-                    while (envStack.length - 1 > matchIdx) {
-                      const unclosed = envStack.pop()!;
-                      diagnostics.push({
-                        from: unclosed.from,
-                        to: unclosed.to,
-                        severity: "error",
-                        message: `Unclosed environment “${unclosed.name}”`,
-                      });
-                    }
-                    envStack.pop();
-                  } else {
-                    diagnostics.push({
-                      from: cmdStart,
-                      to: endPos,
-                      severity: "error",
-                      message: `Mismatched \\end{${envName}}; expected \\end{${top.name}}`,
-                    });
-                  }
-                }
-              }
-              i = endPos;
-              continue;
-            }
-          }
-        }
-
-        i = j;
-        continue;
-      }
-
-      // Math delimiters $ and $$
-      if (ch === "$") {
-        const isDouble = text[i + 1] === "$";
-        const delim = isDouble ? "$$" : "$";
-        const width = isDouble ? 2 : 1;
-        if (checkMath) {
-          if (!mathOpen) {
-            mathOpen = { delim, from: i, to: i + width };
-          } else if (mathOpen.delim === delim) {
-            mathOpen = null;
-          } else {
+    function handleEndEnv(envName: string, from: number, to: number) {
+      if (!checkEnvironments) return;
+      const top = envStack.at(-1);
+      if (!top) {
+        diagnostics.push({
+          from,
+          to,
+          severity: "error",
+          message: `Unexpected \\end{${envName}} without matching \\begin`,
+        });
+      } else if (top.name === envName) {
+        envStack.pop();
+      } else {
+        const matchIdx = envStack.findLastIndex(
+          (entry) => entry.name === envName,
+        );
+        if (matchIdx !== -1) {
+          while (envStack.length - 1 > matchIdx) {
+            const unclosed = envStack.pop()!;
             diagnostics.push({
-              from: i,
-              to: i + width,
+              from: unclosed.from,
+              to: unclosed.to,
               severity: "error",
-              message: `Mismatched math delimiter: expected ${mathOpen.delim}, found ${delim}`,
+              message: `Unclosed environment “${unclosed.name}”`,
             });
-            mathOpen = null;
           }
+          envStack.pop();
+        } else {
+          diagnostics.push({
+            from,
+            to,
+            severity: "error",
+            message: `Mismatched \\end{${envName}}; expected \\end{${top.name}}`,
+          });
         }
-        i += width;
-        continue;
       }
-
-      // Braces { and }
-      if (ch === "{") {
-        if (checkBraces) braceStack.push(i);
-        i++;
-        continue;
-      }
-      if (ch === "}") {
-        if (checkBraces) {
-          if (braceStack.length === 0) {
-            diagnostics.push({
-              from: i,
-              to: i + 1,
-              severity: "error",
-              message: "Unmatched closing brace “}”",
-            });
-          } else {
-            braceStack.pop();
-          }
-        }
-        i++;
-        continue;
-      }
-
-      i++;
     }
+
+    tree.iterate({
+      enter(ref) {
+        if (SKIP_NODES.has(ref.name)) return false;
+        // Skip zero-width synthetic tokens inserted by Lezer error recovery.
+        if (ref.from === ref.to) return;
+
+        switch (ref.name) {
+          case "BeginEnv":
+          case "BeginMathEnv":
+          case "BeginVerbatimEnv": {
+            const envName = readEnvName(slice, ref.node);
+            if (checkEnvironments && envName) {
+              envStack.push({ name: envName, from: ref.from, to: ref.to });
+            }
+            // Braces around the environment name are part of the directive itself.
+            return false;
+          }
+
+          case "EndEnv": {
+            const envName = readEnvName(slice, ref.node);
+            if (envName) {
+              handleEndEnv(envName, ref.from, ref.to);
+            }
+            return false;
+          }
+
+          case "EndCommand": {
+            // Orphan `\end{...}` at top level sits inside an error node rather than EndEnv.
+            const parent = ref.node.parent;
+            if (parent && parent.name !== "EndEnv") {
+              const after = slice(
+                ref.to,
+                Math.min(view.state.doc.length, ref.to + 80),
+              );
+              const match = /^[ \t]*\{([^}\n]+)\}/.exec(after);
+              if (match) {
+                const envName = match[1]!.trim();
+                handleEndEnv(envName, ref.from, ref.to + match[0].length);
+              }
+            }
+            return false;
+          }
+
+          case "{": {
+            if (checkBraces) {
+              const parent = ref.node.parent;
+              const isOrphanEndBrace =
+                parent?.name === "⚠" &&
+                ref.node.prevSibling?.name === "EndCommand";
+              if (!isOrphanEndBrace) {
+                braceStack.push(ref.from);
+              }
+            }
+            return;
+          }
+
+          case "}": {
+            if (checkBraces) {
+              const parent = ref.node.parent;
+              const isOrphanEndBrace =
+                parent?.name === "⚠" &&
+                ref.node.prevSibling?.prevSibling?.prevSibling?.name ===
+                  "EndCommand";
+              if (isOrphanEndBrace) return;
+              if (braceStack.length === 0) {
+                diagnostics.push({
+                  from: ref.from,
+                  to: ref.to,
+                  severity: "error",
+                  message: "Unmatched closing brace “}”",
+                });
+              } else {
+                braceStack.pop();
+              }
+            }
+            return;
+          }
+
+          case "OpenInlineMath":
+          case "OpenDisplayMath": {
+            if (!checkMath) return;
+            const delim = ref.name === "OpenInlineMath" ? "\\(" : "\\[";
+            if (mathState.open) {
+              diagnostics.push({
+                from: ref.from,
+                to: ref.to,
+                severity: "error",
+                message: `Nested math delimiter ${delim} inside unclosed ${mathState.open.delim}`,
+              });
+            } else {
+              mathState.open = { delim, from: ref.from, to: ref.to };
+            }
+            return;
+          }
+
+          case "CloseInlineMath":
+          case "CloseDisplayMath": {
+            if (!checkMath) return;
+            const closeChar = ref.name === "CloseInlineMath" ? ")" : "]";
+            const expected = ref.name === "CloseInlineMath" ? "\\(" : "\\[";
+            if (!mathState.open) {
+              diagnostics.push({
+                from: ref.from,
+                to: ref.to,
+                severity: "error",
+                message: `Unexpected closing math delimiter \\${closeChar}`,
+              });
+            } else if (mathState.open.delim !== expected) {
+              diagnostics.push({
+                from: ref.from,
+                to: ref.to,
+                severity: "error",
+                message: `Mismatched math delimiter: expected closing for ${mathState.open.delim}, found \\${closeChar}`,
+              });
+              mathState.open = null;
+            } else {
+              mathState.open = null;
+            }
+            return;
+          }
+
+          case "SingleDollar":
+          case "DoubleDollar": {
+            if (!checkMath) return;
+            const delim = ref.name === "DoubleDollar" ? "$$" : "$";
+            if (!mathState.open) {
+              mathState.open = { delim, from: ref.from, to: ref.to };
+            } else if (mathState.open.delim === delim) {
+              mathState.open = null;
+            } else {
+              diagnostics.push({
+                from: ref.from,
+                to: ref.to,
+                severity: "error",
+                message: `Mismatched math delimiter: expected ${mathState.open.delim}, found ${delim}`,
+              });
+              mathState.open = null;
+            }
+            return;
+          }
+        }
+      },
+    });
 
     if (checkEnvironments) {
       for (const unclosed of envStack) {
@@ -289,12 +279,12 @@ export function latexLinter(
       }
     }
 
-    if (checkMath && mathOpen) {
+    if (checkMath && mathState.open) {
       diagnostics.push({
-        from: mathOpen.from,
-        to: mathOpen.to,
+        from: mathState.open.from,
+        to: mathState.open.to,
         severity: "error",
-        message: `Unclosed math delimiter ${mathOpen.delim}`,
+        message: `Unclosed math delimiter ${mathState.open.delim}`,
       });
     }
 

@@ -1,0 +1,96 @@
+# Document with commands and math
+
+% A comment
+\documentclass[12pt]{article}
+\begin{document}
+Hello $x^2 + y$ and \[E = mc^2\].
+\end{document}
+
+==>
+
+Document(
+  Comment,
+  Command(CommandName),
+  OptionalArgument(Number, Text),
+  BracedGroup(Text),
+  Environment(
+    BeginEnv(BeginCommand, EnvName(Text)),
+    Text,
+    InlineMath(SingleDollar, Text, MathOperator, Number, MathOperator, Text, SingleDollar),
+    Text,
+    DisplayMath(OpenDisplayMath, Text, MathOperator, Text, MathOperator, Number, CloseDisplayMath),
+    Punctuation,
+    EndEnv(EndCommand, EnvName(Text))
+  )
+)
+
+# Starred math environment
+
+\begin{equation*}
+  a + b = c
+\end{equation*}
+
+==>
+
+Document(
+  MathEnvironment(
+    BeginMathEnv(BeginMathCommand, EnvName(Text, MathOperator)),
+    MathBody(Text, MathOperator, Text, MathOperator, Text),
+    EndEnv(EndCommand, EnvName(Text, MathOperator))
+  )
+)
+
+# Inline verbatim ignores special characters
+
+Use \verb|$a + {b| and \verb*+\%}+ here.
+
+==>
+
+Document(
+  Text,
+  InlineVerbatim,
+  Text,
+  InlineVerbatim,
+  Text,
+  Punctuation
+)
+
+# Verbatim environment preserves comments, braces, and mismatched ends
+
+\begin{verbatim}
+% not a comment
+\begin{unclosed} { $
+\end{other}
+\end{verbatim}
+
+==>
+
+Document(
+  VerbatimEnvironment(
+    BeginVerbatimEnv(BeginVerbatimCommand, EnvName(Text)),
+    VerbatimContent,
+    EndEnv(EndCommand, EnvName(Text))
+  )
+)
+
+# Unclosed inner environment recovers before outer end
+
+\begin{document}
+\begin{itemize}
+\item one
+\end{document}
+
+==>
+
+Document(
+  Environment(
+    BeginEnv(BeginCommand, EnvName(Text)),
+    Environment(
+      BeginEnv(BeginCommand, EnvName(Text)),
+      Command(CommandName),
+      Text,
+      ImplicitEnd
+    ),
+    EndEnv(EndCommand, EnvName(Text))
+  )
+)

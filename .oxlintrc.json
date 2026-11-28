@@ -9,6 +9,9 @@
     "apps/docs/out/**",
     "apps/web/worker-configuration.d.ts",
     "packages/codemirror-lang-latex/src/parser.js",
+    "packages/codemirror-lang-latex/src/parser.terms.js",
+    "packages/codemirror-lang-latex/src/bibtex-parser.js",
+    "packages/codemirror-lang-latex/src/bibtex-parser.terms.js",
     "packages/tex-fmt/src/wasm/*"
   ],
   "options": {
