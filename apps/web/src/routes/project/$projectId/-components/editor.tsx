@@ -1,12 +1,15 @@
 import type { CompletionSource } from "@codemirror/autocomplete";
 import { redoDepth, undoDepth } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
-import type { LatexProblem } from "@texfolia/editor";
-import { defaultFormatSettings, type FormatSettings } from "@texfolia/editor";
+import type { LatexProblem, TableInput } from "@texfolia/editor";
 import {
   addLatexPackage,
+  defaultFormatSettings,
+  type FormatSettings,
   insertLatexSymbol,
+  insertLatexTable,
   packageInsertion,
+  tableToLatex,
 } from "@texfolia/editor";
 import CodeMirror, {
   type EditorState,
@@ -83,6 +86,12 @@ export type { EditorComments, EditorSnapshot };
 // Constants, because a new object makes CodeMirror rebuild its extensions.
 const standaloneSetup = { history: true };
 const collaborativeSetup = { history: false };
+
+const packageReasons: Record<string, string> = {
+  graphicx: "\\includegraphics",
+  booktabs: "\\toprule/\\midrule/\\bottomrule",
+  multirow: "\\multirow",
+};
 
 type EditorProps = {
   onCursorPosition?: (position: { line: number; column: number }) => void;
@@ -179,7 +188,7 @@ export function Editor({
   } = useSettings();
   const [error, setError] = useState("");
   const [uploadingImages, setUploadingImages] = useState(0);
-  const [suggestGraphicx, setSuggestGraphicx] = useState(false);
+  const [suggestedPackages, setSuggestedPackages] = useState<string[]>([]);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [showSymbols, setShowSymbols] = useState(false);
   const [status, setStatus] = useState({ undo: false, redo: false });
@@ -260,21 +269,6 @@ export function Editor({
     addWord,
   });
 
-  const { history, runCommand } = useEditorCommands({
-    editor,
-    undoManager,
-    readOnly,
-    isLatex,
-    canFormat,
-    formatting,
-    format,
-    onToggleWrap: () =>
-      void updateEditor({ ...preferences, wrapLines: !preferences.wrapLines }),
-    onToggleSymbols: () => setShowSymbols((open) => !open),
-    onError: setError,
-    onCommands,
-  });
-
   // Without a main file, packages load in this one.
   const ownPreamble = useMemo<SymbolPreambleSource>(
     () => ({
@@ -299,11 +293,59 @@ export function Editor({
     activePreamble.getSource,
     activePreamble.getSource,
   );
-  const needsGraphicx =
-    isLatex &&
-    !readOnly &&
-    suggestGraphicx &&
-    packageInsertion(preambleSource, "graphicx") !== null;
+  const neededPackages =
+    isLatex && !readOnly
+      ? suggestedPackages.filter(
+          (pkg) => packageInsertion(preambleSource, pkg) !== null,
+        )
+      : [];
+
+  const suggestPackages = useStableCallback((packages: string[]) => {
+    const source = activePreamble.getSource();
+    const missing = packages.filter(
+      (pkg) => packageInsertion(source, pkg) !== null,
+    );
+    if (!missing.length) return;
+    setSuggestedPackages((previous) => [
+      ...previous,
+      ...missing.filter((pkg) => !previous.includes(pkg)),
+    ]);
+  });
+
+  const pasteTable = useStableCallback((input: TableInput) => {
+    if (!isLatex || readOnly) return false;
+    const currentView = createdView.current;
+    if (
+      !currentView ||
+      !currentView.dom.isConnected ||
+      currentView.state.readOnly
+    )
+      return false;
+    const result = tableToLatex(input, {
+      indent: " ".repeat(formatSettings.indent),
+    });
+    if (!result) return false;
+    if (!insertLatexTable(result.latex)(currentView)) return false;
+    currentView.focus();
+    suggestPackages(result.packages);
+    return true;
+  });
+
+  const { history, runCommand } = useEditorCommands({
+    editor,
+    undoManager,
+    readOnly,
+    isLatex,
+    canFormat,
+    formatting,
+    format,
+    onPasteTable: isLatex && !readOnly ? pasteTable : undefined,
+    onToggleWrap: () =>
+      void updateEditor({ ...preferences, wrapLines: !preferences.wrapLines }),
+    onToggleSymbols: () => setShowSymbols((open) => !open),
+    onError: setError,
+    onCommands,
+  });
 
   const insertImages = useStableCallback(
     (imageFiles: File[], dropPos?: number) => {
@@ -336,11 +378,7 @@ export function Editor({
             scrollIntoView: true,
           });
           currentView.focus();
-          if (
-            isLatex &&
-            packageInsertion(activePreamble.getSource(), "graphicx") !== null
-          )
-            setSuggestGraphicx(true);
+          if (isLatex) suggestPackages(["graphicx"]);
         })
         .catch((uploadError: unknown) => {
           setError(
@@ -379,6 +417,7 @@ export function Editor({
       !readOnly && onUploadImages && (isLatex || isMarkdown)
         ? insertImages
         : undefined,
+    onPasteTable: isLatex && !readOnly ? pasteTable : undefined,
     scrollAnchor,
     onError: setError,
   });
@@ -589,14 +628,16 @@ export function Editor({
                 : `Uploading ${uploadingImages} images…`}
             </p>
           )}
-          {needsGraphicx && (
+          {neededPackages.map((packageName) => (
             <div
+              key={packageName}
               role="status"
               className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5 text-xs"
             >
               <span>
-                Load <code>graphicx</code> in {activePreamble.filename} so{" "}
-                <code>\includegraphics</code> compiles.
+                Load <code>{packageName}</code> in {activePreamble.filename} so{" "}
+                <code>{packageReasons[packageName] ?? packageName}</code>{" "}
+                compiles.
               </span>
               <div className="flex items-center gap-1">
                 <Button
@@ -604,24 +645,30 @@ export function Editor({
                   size="sm"
                   className="h-6 px-2 text-xs"
                   onClick={() => {
-                    activePreamble.addPackage("graphicx");
-                    setSuggestGraphicx(false);
+                    activePreamble.addPackage(packageName);
+                    setSuggestedPackages((previous) =>
+                      previous.filter((pkg) => pkg !== packageName),
+                    );
                     editor.current?.view?.focus();
                   }}
                 >
-                  Add <code>\usepackage{"{graphicx}"}</code>
+                  Add <code>{`\\usepackage{${packageName}}`}</code>
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs"
-                  onClick={() => setSuggestGraphicx(false)}
+                  onClick={() =>
+                    setSuggestedPackages((previous) =>
+                      previous.filter((pkg) => pkg !== packageName),
+                    )
+                  }
                 >
                   Dismiss
                 </Button>
               </div>
             </div>
-          )}
+          ))}
           <CodeMirror
             basicSetup={collaboration ? collaborativeSetup : standaloneSetup}
             readOnly={readOnly}

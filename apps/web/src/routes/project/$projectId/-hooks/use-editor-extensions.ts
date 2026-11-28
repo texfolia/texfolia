@@ -5,7 +5,7 @@ import {
 import { indentLess, indentMore } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import { openSearchPanel } from "@codemirror/search";
-import type { LatexProblem } from "@texfolia/editor";
+import type { LatexProblem, TableInput } from "@texfolia/editor";
 import { editorLanguage, projectProblemsChanged } from "@texfolia/editor";
 import {
   Compartment,
@@ -149,6 +149,7 @@ export function useEditorExtensions({
   onFixWithAi,
   onRevealPdf,
   onImageFiles,
+  onPasteTable,
   scrollAnchor,
   onError,
 }: {
@@ -172,6 +173,7 @@ export function useEditorExtensions({
   onFixWithAi?: (problem: { line: number; message: string }) => void;
   onRevealPdf?: (line: number) => void;
   onImageFiles?: (files: File[], dropPos?: number) => void;
+  onPasteTable?: (input: TableInput) => boolean;
   scrollAnchor: RefObject<ScrollAnchor | undefined>;
   onError: (message: string) => void;
 }) {
@@ -181,6 +183,8 @@ export function useEditorExtensions({
   revealPdf.current = onRevealPdf;
   const imageFilesRef = useRef(onImageFiles);
   imageFilesRef.current = onImageFiles;
+  const pasteTableRef = useRef(onPasteTable);
+  pasteTableRef.current = onPasteTable;
   const syntaxCallback = useRef(onSyntaxProblems);
   syntaxCallback.current = onSyntaxProblems;
   const addReferenceRef = useRef(onAddReference);
@@ -310,7 +314,18 @@ export function useEditorExtensions({
           return true;
         },
         paste(event, view) {
-          if (!imageFilesRef.current || view.state.readOnly) return false;
+          if (view.state.readOnly) return false;
+          // Check spreadsheet table data before images: desktop Excel puts a
+          // bitmap PNG alongside HTML/TSV when copying cells.
+          if (pasteTableRef.current && event.clipboardData) {
+            const html = event.clipboardData.getData("text/html");
+            const text = event.clipboardData.getData("text/plain");
+            if (pasteTableRef.current({ html, text })) {
+              event.preventDefault();
+              return true;
+            }
+          }
+          if (!imageFilesRef.current) return false;
           const images = clipboardImageFiles(event.clipboardData);
           if (!images.length) return false;
           event.preventDefault();
