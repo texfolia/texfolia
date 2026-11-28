@@ -44,7 +44,7 @@ license is in `node_modules`, the Go module cache, or the engine image.
   [node-postgres](https://node-postgres.com) (MIT), on
   [PostgreSQL](https://www.postgresql.org).
 - [Hono](https://hono.dev) and [Zod](https://zod.dev) (MIT).
-- [Astro](https://astro.build) and [Starlight](https://starlight.astro.build):
+- [Next.js](https://nextjs.org) and [Fumadocs](https://fumadocs.dev):
   the documentation site (MIT).
 
 ## Tooling

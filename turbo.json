@@ -26,6 +26,11 @@
       "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
       "outputs": ["dist/**", ".wrangler/deploy/**", "public/dictionaries/**"]
     },
+    "docs#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["out/**", ".next/**", "!.next/cache/**"]
+    },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
@@ -33,6 +38,10 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"]
+    },
+    "docs#test": {
+      "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     },
     "typecheck": {

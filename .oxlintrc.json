@@ -3,6 +3,10 @@
   "ignorePatterns": [
     ".agents/skills/*",
     "apps/*/src/routeTree.gen.ts",
+    "apps/docs/.next/**",
+    "apps/docs/.source/**",
+    "apps/docs/next-env.d.ts",
+    "apps/docs/out/**",
     "apps/web/worker-configuration.d.ts",
     "packages/codemirror-lang-latex/src/parser.js",
     "packages/tex-fmt/src/wasm/*"

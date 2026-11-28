@@ -1,0 +1,53 @@
+---
+title: Project path policy
+---
+
+The web app and the compiler API share one TypeScript definition of the source,
+artifact and node name schemas in
+[`packages/contracts`](../../../../packages/contracts/src/paths.ts). The Go engine
+implements the same policy. Both implementations run against the cases in
+[`path-policy.json`](../../../../packages/contracts/fixtures/path-policy.json).
+
+A source path is relative to the project root. The root node's display name is
+not part of the path. Names and paths preserve spaces, Unicode, and Unicode
+normalization exactly as supplied.
+
+The policy has these limits:
+
+- A full path contains 1–240 UTF-8 bytes, including folder names and slashes.
+  A single component therefore also has a maximum of 240 bytes.
+- Colons, backslashes, and U+0000–U+001F control characters are invalid.
+- Components cannot be empty, `.` or `..`. A node name cannot contain a slash.
+- The first component cannot be `out`, ignoring case. Nested names such as
+  `chapters/out/notes.tex` are valid.
+- Artifact paths use the same syntax, allow root `out`, and permit 255 UTF-8
+  bytes. This leaves room for generated suffixes such as `.synctex.gz` when
+  the main source filename reaches 240 bytes.
+
+The source byte limit keeps accepted components below the engine filesystem's 255-byte
+limit. Accented letters and emoji can use multiple bytes. The `.tex` extension
+counts toward the limit. Source paths have no automatic trimming or renaming.
+
+Creation, uploads, and renames validate the assembled path under the project
+lock before writing source objects or node metadata. Compilation validates all
+active nodes, including unreferenced files and empty folders. Renaming preserves
+node IDs, source object keys, file contents, and collaboration documents.
+
+## Run the policy checks
+
+From the repository root, run:
+
+```sh
+bun test apps/app/src/lib/builds/source-sync.test.ts apps/app/src/lib/projects/node.schema.test.ts apps/app/src/lib/projects/paths.test.ts
+(cd apps/compiler/engine && go test -race ./...)
+```
+
+The Go checks also write each accepted fixture path to the filesystem. The web
+source-storage integration suite covers validation before R2 writes,
+legacy-path repair, and content preservation.
+
+To check boundary paths and generated SyncTeX files with a real local engine, run:
+
+```sh
+ENGINE_URL=http://127.0.0.1:8080 bun run apps/compiler/test/path-policy.integration.ts
+```

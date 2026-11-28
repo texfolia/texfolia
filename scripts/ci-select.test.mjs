@@ -21,14 +21,31 @@ function selectedSuites(plan) {
 
 test("documentation keeps repository checks but skips package tests and browsers", () => {
   const plan = selectChecks([
-    "apps/docs/src/content/docs/projects.md",
+    "apps/docs/content/docs/projects.md",
     "apps/web/src/lib/builds/README.md",
   ]);
   for (const key of [
     "full",
     "compiler",
+    "docs",
     "web-checks",
     "package-checks",
+    "production-assets",
+    "postgres",
+    "browser",
+    "engine",
+  ])
+    assert.equal(plan[key], false, key);
+});
+
+test("docs app code changes run docs checks without web, compiler, or browser suites", () => {
+  const plan = selectChecks(["apps/docs/src/app/layout.tsx"]);
+  assert.equal(plan.docs, true);
+  assert.equal(plan["package-checks"], true);
+  for (const key of [
+    "full",
+    "compiler",
+    "web-checks",
     "production-assets",
     "postgres",
     "browser",
@@ -277,6 +294,7 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       ".gitignore",
       "apps/web/package.json",
       "apps/compiler/package.json",
+      "apps/docs/package.json",
       "packages/contracts/package.json",
       "packages/db/package.json",
       "packages/tsconfig/package.json",
@@ -303,7 +321,12 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       turbo().tasks.map((task) => [task.taskId, task.hash]),
     );
     for (const [path, expectedPackages, invalidated] of [
-      ["apps/docs/src/content/docs/ci.md", [], []],
+      ["apps/docs/content/docs/ci.md", [], []],
+      [
+        "apps/docs/src/app/layout.tsx",
+        ["docs"],
+        ["docs#typecheck", "docs#test"],
+      ],
       [
         "apps/compiler/engine/compile.go",
         ["@texfolia/contracts", "@texfolia/db", "compiler"],
@@ -321,28 +344,29 @@ test("real Turbo filtering and hashes cover package and cross-package inputs", (
       ],
       [
         "packages/contracts/fixtures/path-policy.json",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "docs", "web"],
         ["@texfolia/contracts#test", "compiler#test", "web#typecheck"],
       ],
       [
         "packages/db/src/index.ts",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "docs", "web"],
         ["web#test", "compiler#test", "web#typecheck"],
       ],
       [
         "packages/tsconfig/base.json",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "docs", "web"],
         [
           "@texfolia/contracts#typecheck",
           "@texfolia/db#typecheck",
           "web#typecheck",
           "compiler#typecheck",
+          "docs#typecheck",
         ],
       ],
       [
         ".github/workflows/ci.yml",
-        ["@texfolia/contracts", "@texfolia/db", "compiler", "web"],
-        ["web#test", "compiler#test"],
+        ["@texfolia/contracts", "@texfolia/db", "compiler", "docs", "web"],
+        ["web#test", "compiler#test", "docs#test"],
       ],
     ]) {
       git("reset", "--hard", base);

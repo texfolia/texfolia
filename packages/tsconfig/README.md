@@ -4,7 +4,7 @@
 
 | Config                | Used by                                                        |
 | --------------------- | -------------------------------------------------------------- |
-| `base.json`           | The other configs, and `apps/docs` together with Astro's       |
+| `base.json`           | The other configs, and `apps/docs` (Next.js + Fumadocs)        |
 | `bun.json`            | `apps/compiler`, `packages/contracts`, `packages/db`, the root |
 | `react-library.json`  | React workspace libraries                                      |
 | `tanstack-start.json` | `apps/app`, `apps/web`                                         |

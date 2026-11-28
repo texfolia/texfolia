@@ -16,7 +16,7 @@ bun run dev       # every app, including the compiler that builds PDFs
 ```
 
 Secrets live in `apps/web/.env` (copied from `.env.example`). The
-[local development guide](../docs/src/content/docs/local-development.md) covers
+[local development guide](../docs/content/docs/local-development.md) covers
 Stripe, Turnstile and OAuth credentials.
 
 ## Commands

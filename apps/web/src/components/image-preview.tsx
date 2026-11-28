@@ -47,12 +47,18 @@ export function ImagePreview({ file }: { file: File }) {
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [file]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = viewport.current;
     if (!element) return;
-    const observer = new ResizeObserver(() =>
-      setArea({ width: element.clientWidth, height: element.clientHeight }),
-    );
+    const measure = () =>
+      setArea((current) =>
+        current.width === element.clientWidth &&
+        current.height === element.clientHeight
+          ? current
+          : { width: element.clientWidth, height: element.clientHeight },
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -61,13 +67,14 @@ export function ImagePreview({ file }: { file: File }) {
   // A replaced image keeps its predecessor's size until it has loaded.
   const size = image?.size;
   // Fitting shrinks a large image, and leaves a small one at its own size.
-  const fitScale = size
-    ? Math.min(
-        1,
-        Math.max(1, area.width - padding * 2) / size.width,
-        Math.max(1, area.height - padding * 2) / size.height,
-      )
-    : 1;
+  const fitScale =
+    size && area.width > 0 && area.height > 0
+      ? Math.min(
+          1,
+          Math.max(1, area.width - padding * 2) / size.width,
+          Math.max(1, area.height - padding * 2) / size.height,
+        )
+      : 1;
   const scale = zoom === "fit" ? fitScale : zoom;
 
   function zoomTo(next: number, at?: { clientX: number; clientY: number }) {

@@ -43,7 +43,7 @@ Then create a project and press Cmd/Ctrl+S to save and compile.
 Other root commands: `build`, `test`, `typecheck`, `lint`, `format`,
 `db:start`, `db:stop`, and `db:push`. Each delegates to the
 workspace that owns it. Secrets, Stripe webhooks and the rest are covered in the
-[local development guide](apps/docs/src/content/docs/local-development.md).
+[local development guide](apps/docs/content/docs/local-development.md).
 
 ## System design
 

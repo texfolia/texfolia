@@ -1,0 +1,29 @@
+{
+  "title": "Texfolia Docs",
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "local-development",
+    "ci",
+    "---Workspace & Product---",
+    "editor-workspace",
+    "projects",
+    "project-controls",
+    "settings",
+    "themes",
+    "git-integration",
+    "ai-assistant",
+    "billing",
+    "---Architecture & Operations---",
+    "source-paths",
+    "compile-engines",
+    "compile-telemetry",
+    "database-deployment",
+    "auth-abuse-protection",
+    "security-headers",
+    "---Audits---",
+    "audits",
+    "---Release---",
+    "release"
+  ]
+}
