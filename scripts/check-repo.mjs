@@ -79,9 +79,9 @@ for (const file of files) {
 }
 
 for (const file of files.filter(
-  (file) => file.startsWith("apps/app/src/") && file.endsWith(".css"),
+  (file) => file.startsWith("apps/web/src/") && file.endsWith(".css"),
 )) {
-  if (file !== "apps/app/src/styles.css") {
+  if (file !== "apps/web/src/styles.css") {
     errors.push(
       `${file}: put styles in Tailwind classes, theme tokens, or @utility in styles.css`,
     );

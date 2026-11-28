@@ -3,28 +3,29 @@ import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
-// Pages with no request-time data are rendered once at build time and served
-// as static assets.
-const staticPages = ["/", "/pricing", "/privacy", "/terms"];
+import { assertLocalEnvironment } from "../../scripts/local-environment.mts";
+import { dockviewThemes } from "./scripts/vite-dockview-themes";
+import { emacsKeymap } from "./scripts/vite-emacs-keymap";
 
-export default defineConfig({
-  envPrefix: ["PUBLIC_"],
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    devtools(),
-    cloudflare({ viteEnvironment: { name: "ssr" }, remoteBindings: false }),
-    tailwindcss(),
-    tanstackStart({
-      prerender: {
-        enabled: true,
-        crawlLinks: false,
-        autoStaticPathsDiscovery: false,
-        autoSubfolderIndex: false,
-      },
-      pages: staticPages.map((path) => ({ path })),
-    }),
-    viteReact(),
-  ],
+export default defineConfig(({ command, mode }) => {
+  if (command === "serve")
+    assertLocalEnvironment({
+      ...loadEnv(mode, process.cwd(), ""),
+      ...process.env,
+    });
+  return {
+    envPrefix: ["VITE_", "PUBLIC_"],
+    resolve: { tsconfigPaths: true },
+    plugins: [
+      devtools(),
+      cloudflare({ viteEnvironment: { name: "ssr" }, remoteBindings: false }),
+      dockviewThemes(),
+      tailwindcss(),
+      tanstackStart(),
+      viteReact(),
+      emacsKeymap(),
+    ],
+  };
 });

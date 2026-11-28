@@ -6,9 +6,6 @@ import {
   ToBeCompleted,
 } from "#/components/policy-layout";
 import { pageHead } from "#/lib/head";
-import { appPath } from "#/lib/urls";
-
-const accountSettings = appPath("/settings/account");
 
 const sections: PolicySection[] = [
   {
@@ -168,7 +165,7 @@ const sections: PolicySection[] = [
           Project deletion removes access and starts server cleanup, with some
           work handled by background jobs. Account deletion is available through
           an email-confirmed flow in{" "}
-          <a href={accountSettings}>account settings</a>.
+          <Link to="/settings/account">account settings</Link>.
         </p>
         <ToBeCompleted>
           Complete retention and deletion terms, including the handling of saved

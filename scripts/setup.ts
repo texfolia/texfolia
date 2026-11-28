@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
 
-for (const dir of ["apps/app", "apps/web", "packages/db"]) {
+for (const dir of ["apps/web", "packages/db"]) {
   const target = new URL(`${dir}/.env`, root);
   if (existsSync(target)) {
     console.log(`kept    ${dir}/.env`);
@@ -31,7 +31,7 @@ for (const script of ["db:start", "db:push"]) {
 }
 
 console.log(`
-Setup complete. Fill in the Stripe and Turnstile values in apps/app/.env
+Setup complete. Fill in the Stripe and Turnstile values in apps/web/.env
 (see apps/docs/src/content/docs/local-development.md), then run:
 
   bun run dev

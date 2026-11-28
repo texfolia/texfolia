@@ -14,10 +14,8 @@ The product app and the compiler share one server-only entry:
   wire schemas in Zod, with [`archive.ts`](src/archive.ts), its archive codec.
   The Go engine implements the same layout.
 
-The product app and the marketing site share two zod-free entries:
+One zod-free entry holds public plan pricing:
 
-- [`hosts.ts`](src/hosts.ts) (`@texfolia/contracts/hosts`): where each app is
-  served.
 - [`plans.ts`](src/plans.ts) (`@texfolia/contracts/plans`): public plan names and
   monthly prices.
 

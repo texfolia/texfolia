@@ -1,9 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Page } from "#/components/page";
 import { pageHead } from "#/lib/head";
 import { linkButton } from "#/lib/link-button";
-import { appPath } from "#/lib/urls";
 
 export const Route = createFileRoute("/")({
   head: () => pageHead({ title: "Space for your next great paper | Texfolia" }),
@@ -58,13 +57,10 @@ function Home() {
               collaborate, and compile your next paper, right in your browser.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href={appPath("/login")}
-                className={linkButton({ size: "lg" })}
-              >
+              <Link to="/login" className={linkButton({ size: "lg" })}>
                 Start writing
                 <span aria-hidden="true">→</span>
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -134,13 +130,13 @@ function Home() {
           <p className="text-muted-foreground mt-5">
             Start with a blank page, upload your files, or import from Git.
           </p>
-          <a
-            href={appPath("/projects")}
+          <Link
+            to="/projects"
             className={linkButton({ size: "lg", className: "mt-8" })}
           >
             Open your workspace
             <span aria-hidden="true">→</span>
-          </a>
+          </Link>
         </section>
       </main>
     </Page>

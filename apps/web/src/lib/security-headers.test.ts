@@ -1,43 +1,93 @@
 import { expect, test } from "bun:test";
 
-import { securityHeaders, withSecurityHeaders } from "./security-headers";
+import { withSecurityHeaders } from "./security-headers";
 
-test("Worker responses keep their status, headers, and body", async () => {
-  const response = withSecurityHeaders(
-    new Response("missing", {
-      status: 404,
-      headers: { "Content-Type": "text/html" },
-    }),
+test("security headers preserve redirects and separate session cookies", () => {
+  const response = Response.redirect(
+    "https://github.com/login/oauth/authorize",
   );
-  expect(response.status).toBe(404);
-  expect(response.headers.get("Content-Type")).toBe("text/html");
-  for (const [name, value] of Object.entries(securityHeaders))
-    expect(response.headers.get(name)).toBe(value);
-  expect(await response.text()).toBe("missing");
+  const secured = withSecurityHeaders({
+    response,
+    nonce: "test-nonce",
+    url: "https://www.texfolia.com/api/auth/callback/github",
+  });
+  expect(secured.status).toBe(302);
+  expect(secured.headers.get("Location")).toBe(
+    "https://github.com/login/oauth/authorize",
+  );
+  expect(secured.headers.get("Content-Security-Policy")).toContain(
+    "connect-src 'self' wss://www.texfolia.com blob:",
+  );
+
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  headers.append("Set-Cookie", "session=one; HttpOnly; Secure");
+  headers.append("Set-Cookie", "state=two; HttpOnly; Secure");
+  const authenticated = withSecurityHeaders({
+    response: new Response(null, { headers }),
+    nonce: "test-nonce",
+    url: "https://www.texfolia.com/api/auth/get-session",
+  });
+  expect(authenticated.headers.getSetCookie()).toEqual(headers.getSetCookie());
+  expect(authenticated.headers.get("Cache-Control")).toBe("no-store");
+
+  const share = withSecurityHeaders({
+    response: new Response(null, {
+      status: 303,
+      headers: {
+        Location: "/project/123",
+        "Referrer-Policy": "no-referrer",
+      },
+    }),
+    nonce: "test-nonce",
+    url: "https://www.texfolia.com/share/token",
+  });
+  expect(share.headers.get("Referrer-Policy")).toBe("no-referrer");
 });
 
-test("development omits CSP and HSTS", () => {
-  const { headers } = withSecurityHeaders(new Response("dev"), true);
-  expect(headers.has("Content-Security-Policy")).toBe(false);
-  expect(headers.has("Strict-Transport-Security")).toBe(false);
-  expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
+test("API, errors, and PDF streams retain their body, status, and headers", async () => {
+  for (const status of [200, 401, 404, 500]) {
+    const stream = new TransformStream<Uint8Array, Uint8Array>();
+    const response = new Response(stream.readable, {
+      status,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Cache-Control": "no-store",
+      },
+    });
+    const secured = withSecurityHeaders({
+      response,
+      nonce: "test-nonce",
+      url: "https://www.texfolia.com/api/compile/project/pdf",
+    });
+    expect(secured.body).toBe(response.body);
+    expect(secured.status).toBe(status);
+    expect(secured.headers.get("Content-Type")).toBe("application/pdf");
+    expect(secured.headers.get("Cache-Control")).toBe("no-store");
+    expect(secured.headers.get("Strict-Transport-Security")).toBe(
+      "max-age=31536000; includeSubDomains",
+    );
+    expect(secured.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+    expect(secured.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(secured.headers.get("Referrer-Policy")).toBe(
+      "strict-origin-when-cross-origin",
+    );
+    const writer = stream.writable.getWriter();
+    const body = secured.text();
+    await writer.write(new TextEncoder().encode("PDF stream"));
+    await writer.close();
+    expect(await body).toBe("PDF stream");
+  }
 });
 
-test("static assets get the same headers as Worker responses", async () => {
-  const file = await Bun.file(
-    new URL("../../public/_headers", import.meta.url),
-  ).text();
-  const [path, ...rest] = file.trim().split("\n");
-  expect(path).toBe("/*");
-  const lines = rest.slice(
-    0,
-    rest.findIndex((line) => !line.startsWith(" ")),
-  );
-  const headers = Object.fromEntries(
-    lines.map((line) => {
-      const [name = "", ...value] = line.trim().split(": ");
-      return [name, value.join(": ")];
-    }),
-  );
-  expect(headers).toEqual(securityHeaders);
+test("development keeps Vite scripts working and retains baseline headers", () => {
+  const response = withSecurityHeaders({
+    response: new Response("development"),
+    nonce: "test-nonce",
+    url: "http://localhost:3000",
+    development: true,
+  });
+  expect(response.headers.has("Content-Security-Policy")).toBe(false);
+  expect(response.headers.has("Strict-Transport-Security")).toBe(false);
+  expect(response.headers.get("X-Frame-Options")).toBe("SAMEORIGIN");
+  expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
 });

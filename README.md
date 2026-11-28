@@ -31,13 +31,12 @@ bun run setup   # create .env files, start Postgres, apply the schema
 bun run dev     # start every app
 ```
 
-Fill in the Stripe and Turnstile values in `apps/app/.env` before you sign in.
+Fill in the Stripe and Turnstile values in `apps/web/.env` before you sign in.
 Then create a project and press Cmd/Ctrl+S to save and compile.
 
 | App                                  | Run on its own         | URL                                     |
 | ------------------------------------ | ---------------------- | --------------------------------------- |
-| [Product app](apps/app/README.md)    | `bun run dev:app`      | [localhost:3000](http://localhost:3000) |
-| [Marketing site](apps/web/README.md) | `bun run dev:web`      | [localhost:4321](http://localhost:4321) |
+| [Web app](apps/web/README.md)        | `bun run dev:web`      | [localhost:3000](http://localhost:3000) |
 | [Documentation](apps/docs/README.md) | `bun run dev:docs`     | [localhost:4322](http://localhost:4322) |
 | [Compiler](apps/compiler/README.md)  | `bun run dev:compiler` | `http://localhost:8080`                 |
 
@@ -48,10 +47,9 @@ workspace that owns it. Secrets, Stripe webhooks and the rest are covered in the
 
 ## System design
 
-- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `#/lib/editor` (feature code is under `apps/app/src/lib`); the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `#/lib/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `#/lib/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `#/lib/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `#/lib/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `#/lib/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `#/lib/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `#/lib/ai`.
+- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `#/lib/editor` (feature code is under `apps/web/src/lib`); the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `#/lib/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `#/lib/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `#/lib/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `#/lib/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `#/lib/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `#/lib/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `#/lib/ai`.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
-- **Product app:** TanStack Start on Cloudflare Workers (`app.texfolia.com`). PostgreSQL holds accounts, the file tree, and build records.
-- **Marketing site:** TanStack Start + React on Cloudflare Workers (`texfolia.com`). Static pages are prerendered.
+- **Web app:** TanStack Start on Cloudflare Workers (`texfolia.com`). Serves the landing, pricing, and policy pages alongside the authenticated workspace. PostgreSQL holds accounts, the file tree, and build records.
 - **Compiler:** an Effect Worker in front of an autoscaled pool of Tectonic containers that projects share. A container keeps one caller's sources and cache between compiles and wipes them before it serves another. The PDF streams back to the preview.
 
 ### Where editing and storage happen
@@ -103,23 +101,22 @@ sequenceDiagram
     B->>W: Fetch job status or saved PDF
 ```
 
-More detail: [product app architecture](apps/app/ARCHITECTURE.md), [project builds](apps/app/src/lib/builds/README.md), and the [compiler](apps/compiler/README.md).
+More detail: [web app architecture](apps/web/ARCHITECTURE.md), [project builds](apps/web/src/lib/builds/README.md), and the [compiler](apps/compiler/README.md).
 
 ## Repository layout
 
 ```text
 apps/
-  app/                 React product app: auth, projects, and the compile endpoint
+  compiler/            Compile service: Effect Worker, autoscaler, and the Go LaTeX engine
+  docs/                Astro + Starlight documentation site
+  web/                 TanStack Start app: landing, pricing, policies, auth, projects, and the compile endpoint
     src/lib/           App features: ai, auth, billing, builds, collaboration, comments,
                        compile, editor, email, git, projects, references, settings,
                        sharing, shortcuts, storage, theme, workspace
-  compiler/            Compile service: Effect Worker, autoscaler, and the Go LaTeX engine
-  docs/                Astro + Starlight documentation site
-  web/                 React marketing site: landing, pricing, policies
 packages/
-  contracts/           Schemas, hosts, and plan prices shared by the apps
+  contracts/           Schemas and plan prices shared by the apps
   db/                  Drizzle schema, PostgreSQL client, and migrations
-  ui/                  shadcn/Base UI React primitives for the app and the site
+  ui/                  shadcn/Base UI React primitives for the app
   tsconfig/            TypeScript settings every workspace extends
 ```
 

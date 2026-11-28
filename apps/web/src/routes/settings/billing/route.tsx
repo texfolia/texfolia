@@ -10,7 +10,6 @@ import {
   getBilling,
   saveOrganizationCap,
 } from "#/lib/billing/billing.functions";
-import { webPath } from "#/lib/origins";
 
 export const Route = createFileRoute("/settings/billing")({
   ssr: false,
@@ -269,12 +268,9 @@ function BillingPage() {
             )}
             <p className="text-muted-foreground text-sm">
               Subscription changes are confirmed after Stripe processes payment.{" "}
-              <a
-                href={webPath("/pricing")}
-                className="underline underline-offset-4"
-              >
+              <Link to="/pricing" className="underline underline-offset-4">
                 Compare plans
-              </a>
+              </Link>
               {" · "}
               <Link
                 to="/settings/usage"

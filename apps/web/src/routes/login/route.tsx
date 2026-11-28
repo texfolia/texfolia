@@ -1,7 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { webPath } from "#/lib/origins";
-
 import { CodeStep } from "./-components/code-step";
 import { EmailStep } from "./-components/email-step";
 import { ResendCode, SecurityCheck } from "./-components/security-check";
@@ -156,8 +154,8 @@ function RouteComponent() {
           className="text-muted-foreground [&_a]:hover:text-foreground mt-8 max-w-xs text-center text-xs leading-relaxed [&_a]:underline [&_a]:underline-offset-4 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-4"
         >
           <p>
-            Read our <a href={webPath("/privacy")}>Privacy Policy</a> and{" "}
-            <a href={webPath("/terms")}>Terms of Service</a>.
+            Read our <Link to="/privacy">Privacy Policy</Link> and{" "}
+            <Link to="/terms">Terms of Service</Link>.
           </p>
         </nav>
       </main>

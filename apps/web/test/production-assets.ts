@@ -159,7 +159,15 @@ try {
     /<link rel="preload" href="\/assets\/geist-latin-wght-normal-[^"]+\.woff2" as="font"/,
   );
   const nonces = new Set<string>();
-  for (const path of ["/", "/login", "/api/auth/get-session", "/projects"]) {
+  for (const path of [
+    "/",
+    "/pricing",
+    "/privacy",
+    "/terms",
+    "/login",
+    "/api/auth/get-session",
+    "/projects",
+  ]) {
     const response = await runtime.dispatchFetch(new URL(path, origin), {
       redirect: "manual",
       headers: { "x-texfolia-csp-nonce": "attacker-controlled" },
@@ -191,14 +199,6 @@ try {
     );
     assert(!nonces.has(nonce), "Each response must have a fresh nonce");
     nonces.add(nonce);
-    if (path === "/") {
-      assert.equal(response.status, 307, path);
-      assert.equal(
-        new URL(response.headers.get("Location") ?? "", origin).pathname,
-        "/projects",
-      );
-      continue;
-    }
     assert.equal(response.status, 200, path);
     const body = await response.text();
     if (response.headers.get("Content-Type")?.includes("text/html")) {

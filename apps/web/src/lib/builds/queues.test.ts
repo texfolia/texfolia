@@ -193,7 +193,7 @@ test.each([
           env,
         }),
       );
-    expect(config.name).toBe(`texfolia-app${suffix}`);
+    expect(config.name).toBe(`texfolia-web${suffix}`);
     expect(config.r2_buckets).toMatchObject([
       { binding: "SOURCES", bucket_name: `texfolia-sources${suffix}` },
       {

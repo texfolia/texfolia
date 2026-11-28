@@ -18,7 +18,7 @@ Local development and CI continue to use plain Postgres and `db:push`.
 3. Apply `bun run db:migrate` to an empty, isolated local Postgres database with
    `DATABASE_URL` set to that database. Run the integration checks in the
    [database guide](../../../../../packages/db/ARCHITECTURE.md#verify-plain-postgres)
-   and [source-storage guide](../../../../app/ARCHITECTURE.md#local-development-and-rollout).
+   and [source-storage guide](../../../../web/ARCHITECTURE.md#local-development-and-rollout).
 4. On that disposable database, run `bun run db:push` and confirm it reports no
    schema changes. Investigate any difference before proceeding.
 5. Add `db:migrate` to the deployment workflow before either Worker deploys.
@@ -62,7 +62,7 @@ uses loopback Postgres, Docker compiler containers, and local Worker storage.
 Production uses Cloudflare Workers, Containers, R2, queues, Durable Objects, and
 Neon through Hyperdrive. These environments do not share resources or secrets.
 
-Edit `apps/app/wrangler.jsonc` before building the production deployment artifact.
+Edit `apps/web/wrangler.jsonc` before building the production deployment artifact.
 
 1. Replace the existing `env.production.hyperdrive` placeholder ID with the
    cache-disabled production configuration. Keep the binding name `HYPERDRIVE`.
@@ -98,7 +98,7 @@ The local Hyperdrive placeholder is not a cloud configuration ID.
 3. Run `bun run deploy` after the migration succeeds. Turbo builds the web app
    for `env.production` and deploys `texfolia-compiler` before `texfolia-app`.
    Both Worker deploy scripts explicitly pass `--env production`.
-   `bun run --cwd apps/app build` explicitly sets `CLOUDFLARE_ENV=production`.
+   `bun run --cwd apps/web build` explicitly sets `CLOUDFLARE_ENV=production`.
    Inspect the generated Worker name, Hyperdrive ID, source bucket, and compiler
    service before deploying the artifact. Selecting an environment only at deploy
    time does not retarget a Vite build. See

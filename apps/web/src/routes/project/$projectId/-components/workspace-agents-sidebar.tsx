@@ -1,7 +1,6 @@
 import { lazyPanel } from "#/components/lazy-panel";
 import { useHasBeen } from "#/hooks/use-has-been";
 import type { Store } from "#/lib/external-store";
-import { webPath } from "#/lib/origins";
 import type { WorkspaceChrome } from "#/lib/workspace/workspace-layout";
 
 import { useAssistantEditor } from "../-hooks/use-assistant-editor";
@@ -45,7 +44,7 @@ export function WorkspaceAgentsSidebar({
           <AssistantSidebar
             endpoint={`/api/ai/${projectId}`}
             editor={editor}
-            plansUrl={webPath("/pricing")}
+            plansUrl="/pricing"
             open={chrome.agentsOpen}
             onClose={() => onChrome({ agentsOpen: false })}
             historyOpen={chrome.historyOpen}

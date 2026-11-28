@@ -11,7 +11,7 @@ The history button in the bottom-left status bar opens a separate sidebar to
 the left of Agents, hidden by default. Its list creates, renames, deletes, and
 switches conversations. The active chat keeps its own panel beside history.
 
-The implementation lives in [`#/lib/ai`](../../../../app/src/lib/ai/README.md): chat runs,
+The implementation lives in [`#/lib/ai`](../../../../web/src/lib/ai/README.md): chat runs,
 tools, saved threads, skills, and the panel UI. The app keeps the `/api/ai` route,
 the Gateway secrets, and the workspace panel that hosts the UI.
 
@@ -65,7 +65,7 @@ user’s default model for new chats and the existing monthly spending cap.
    reports that the subscription changed, or when the price or meter setting
    changes. Webhooks must include `customer.subscription.updated` and
    `customer.subscription.deleted`, which billing already needs.
-5. Set the following server variables in `apps/app/.env` locally, and as Worker
+5. Set the following server variables in `apps/web/.env` locally, and as Worker
    secrets or variables in each deployed environment:
 
    ```dotenv
@@ -174,7 +174,7 @@ take that long to show. Cached prices only size reservations.
 
 ## Check metering
 
-Metering lives in [`#/lib/billing`](../../../../app/src/lib/billing/README.md). The app
+Metering lives in [`#/lib/billing`](../../../../web/src/lib/billing/README.md). The app
 only binds the Gateway log lookup from `#/lib/ai` that prices each request.
 
 Each model request first creates an `ai_request` row. Its reservation includes
@@ -243,9 +243,9 @@ Use an isolated Postgres database whose name contains `test`:
 
 ```sh
 DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run db:push
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:ai-billing
-bun run --cwd apps/app build
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/app test:ai-assistant
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:ai-billing
+bun run --cwd apps/web build
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run --cwd apps/web test:ai-assistant
 ```
 
 The billing check uses real Postgres transactions and substitutes only external

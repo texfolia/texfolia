@@ -1,14 +1,39 @@
-import { Link } from "@tanstack/react-router";
+import { ClientOnly, Link } from "@tanstack/react-router";
+import { Button, buttonVariants } from "@texfolia/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@texfolia/ui/dropdown-menu";
+import { type ComponentType, lazy, Suspense } from "react";
 
-import { linkButton } from "#/lib/link-button";
-import { appPath } from "#/lib/urls";
+import { NotificationsMenu } from "#/components/notifications-menu";
+import { authClient } from "#/lib/auth/auth-client";
 
-const navLink =
-  "text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-4";
+// Only signed-in visitors have shortcuts, and they bring the settings store.
+const NavigationShortcuts = lazy<ComponentType<{ userId: string }>>(() =>
+  import("#/components/navigation-shortcuts").then(
+    (module) => ({ default: module.NavigationShortcuts }),
+    // The page works without them.
+    () => ({ default: () => null }),
+  ),
+);
 
 export function Header() {
+  const { data: session } = authClient.useSession();
   return (
     <header className="bg-background border-b">
+      <ClientOnly>
+        {session && (
+          <Suspense>
+            <NavigationShortcuts
+              key={session.user.id}
+              userId={session.user.id}
+            />
+          </Suspense>
+        )}
+      </ClientOnly>
       <a
         href="#main-content"
         className="bg-background sr-only z-50 p-3 focus:not-sr-only focus:absolute"
@@ -29,19 +54,46 @@ export function Header() {
           aria-label="Main navigation"
           className="order-last flex w-full items-center justify-center gap-8 text-sm sm:order-0 sm:w-auto"
         >
-          <Link to="/pricing" className={navLink}>
+          {session && (
+            <Link
+              to="/settings/billing"
+              className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+            >
+              Billing
+            </Link>
+          )}
+          <Link
+            to="/pricing"
+            className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
             Pricing
           </Link>
         </nav>
-        <a
-          href={appPath("/login")}
-          className={linkButton({ variant: "outline" })}
+        {session && <NotificationsMenu />}
+        {session && (
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" />}>
+              {session.user.name}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem render={<Link to="/settings/account" />}>
+                Account
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link to="/settings/preferences" />}>
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link to="/settings/billing" />}>
+                Billing
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <Link
+          to={session ? "/projects" : "/login"}
+          className={buttonVariants({ size: "lg" })}
         >
-          Sign in
-        </a>
-        <a href={appPath("/projects")} className={linkButton({ size: "lg" })}>
-          Open app
-        </a>
+          {session ? "Projects" : "Sign in"}
+        </Link>
       </div>
     </header>
   );

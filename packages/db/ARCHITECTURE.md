@@ -57,7 +57,7 @@ deletion. A rolled-back SQL transaction deletes its uploaded keys immediately.
 Replaced and deleted sources are queued in `source_garbage` for the hourly
 collection, which deletes unreferenced objects directly without project locks or
 two-phase claims. See
-[the product app architecture](../../apps/app/ARCHITECTURE.md#project-source-storage) for storage
+[the product app architecture](../../apps/web/ARCHITECTURE.md#project-source-storage) for storage
 behavior and verification. For an existing database,
 prepare and review an upgrade against its actual schema before deploying.
 For a new database at launch, use the baseline described in the deployment guide.
@@ -67,7 +67,7 @@ For a new database at launch, use the baseline described in the deployment guide
 Create an isolated database with `test` in its name, apply the schema to it with `DATABASE_URL` set using `bun run db:push`, and run this command from the repository root:
 
 ```sh
-INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/app/test/postgres.ts
+INTEGRATION_DATABASE_URL=postgres://user:password@127.0.0.1:5432/texfolia_test bun run apps/web/test/postgres.ts
 ```
 
 This check runs the app's database operations against Postgres. It verifies project transactions, collaborator relations, constraint rollback, ownership checks, create/trash/recreate, retained project history, and concurrent duplicate active names. CI applies the schema to a plain Postgres container and runs this check. It does not initialize auth or substitute API credentials.

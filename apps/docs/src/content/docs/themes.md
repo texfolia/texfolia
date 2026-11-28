@@ -44,22 +44,22 @@ VS Code theme documents.
 
 ## Implementation and verification
 
-[themes.ts](../../../../app/src/lib/editor/themes/themes.ts) and
-[theme-catalog.ts](../../../../app/src/lib/editor/themes/theme-catalog.ts) define
+[themes.ts](../../../../web/src/lib/editor/themes/themes.ts) and
+[theme-catalog.ts](../../../../web/src/lib/editor/themes/theme-catalog.ts) define
 the curated theme catalog, and
-[theme-extensions.ts](../../../../app/src/lib/editor/themes/theme-extensions.ts)
+[theme-extensions.ts](../../../../web/src/lib/editor/themes/theme-extensions.ts)
 builds each CodeMirror extension using CodeMirror's `EditorView.theme` and
 `HighlightStyle`. Workspace tokens derive from each theme's background,
 foreground, caret, and selection. Supporting surfaces and borders mix foreground
 with background. Gutter border shorthands supply a color when present; otherwise
 workspace borders use a mix.
 
-[theme-editor.ts](../../../../app/src/lib/editor/themes/theme-editor.ts) uses the package's extension
+[theme-editor.ts](../../../../web/src/lib/editor/themes/theme-editor.ts) uses the package's extension
 directly. [LaTeX tags](../../../../../packages/codemirror-lang-latex/src/tags.ts) inherit standard CodeMirror
 highlight tags. There is no TextMate scope mapper.
-[ThemeProvider](../../../../app/src/providers/theme-provider.tsx) applies workspace
+[ThemeProvider](../../../../web/src/providers/theme-provider.tsx) applies workspace
 variables and separates committed appearance, draft selection, and live preview.
-The [bootstrap](../../../../app/src/lib/theme/theme-bootstrap.ts) accepts cached colors only
+The [bootstrap](../../../../web/src/lib/theme/theme-bootstrap.ts) accepts cached colors only
 for known v2 selections. Its constrained color grammar supports hex, numeric RGB
 and RGBA, transparent, and the derived color mixes. Unknown properties are ignored
 and unsafe snapshots fall back to the system theme.
@@ -69,8 +69,8 @@ The stylesheet and Dockview utility continue to consume the existing CSS variabl
 Run unit checks and the browser test from the repository root:
 
 ```sh
-bun test apps/app/src/lib/editor/themes/themes.test.ts apps/app/src/lib/theme/theme-bootstrap.test.ts
-bun run --cwd apps/app test:themes
+bun test apps/web/src/lib/editor/themes/themes.test.ts apps/web/src/lib/theme/theme-bootstrap.test.ts
+bun run --cwd apps/web test:themes
 ```
 
 The browser test mounts the production workspace with an isolated network fixture
