@@ -8,17 +8,6 @@ import {
   insertLatexSymbol,
   packageInsertion,
 } from "@texfolia/editor";
-import { Button } from "@texfolia/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@texfolia/ui/context-menu";
-import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@texfolia/ui/dropdown-menu";
 import CodeMirror, {
   type EditorState,
   EditorView,
@@ -36,6 +25,17 @@ import {
 } from "react";
 
 import { type Confirmation, ConfirmDialog } from "#/components/confirm-dialog";
+import { Button } from "#/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "#/components/ui/context-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "#/components/ui/dropdown-menu";
 import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { useLatexFormatter } from "#/hooks/use-latex-formatter";
 import { useStableCallback } from "#/hooks/use-stable-callback";

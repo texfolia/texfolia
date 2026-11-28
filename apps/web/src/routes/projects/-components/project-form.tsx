@@ -1,9 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
 import { useId, useState } from "react";
 
+import { Button } from "#/components/ui/button";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import { projectNameSchema } from "#/lib/projects";
 import { useProjects } from "#/providers/projects-provider";
 

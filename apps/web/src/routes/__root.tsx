@@ -9,13 +9,13 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
-import { Button, buttonVariants } from "@texfolia/ui/button";
-import { Toaster } from "@texfolia/ui/toast";
-import { TooltipProvider } from "@texfolia/ui/tooltip";
 import { useLayoutEffect } from "react";
 
 import { Footer } from "#/components/footer";
 import { Header } from "#/components/header";
+import { Button, buttonVariants } from "#/components/ui/button";
+import { Toaster } from "#/components/ui/toast";
+import { TooltipProvider } from "#/components/ui/tooltip";
 import { getSession } from "#/lib/auth/auth.functions";
 import {
   clearAppTheme,

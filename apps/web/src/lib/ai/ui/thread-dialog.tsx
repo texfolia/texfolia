@@ -1,13 +1,14 @@
-import { Button } from "@texfolia/ui/button";
+import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
-import { Input } from "@texfolia/ui/input";
-import { useState } from "react";
+} from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
 
 import type { AssistantThread } from "../threads";
 

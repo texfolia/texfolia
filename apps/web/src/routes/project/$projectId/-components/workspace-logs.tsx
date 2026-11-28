@@ -1,10 +1,13 @@
 import { IconRefresh } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { cn } from "cn";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
+import { Button } from "#/components/ui/button";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import {
   type CompileHistoryEntry,
   compileHistoryLimit,

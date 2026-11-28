@@ -4,16 +4,16 @@ import {
   IconFileText,
   IconFolderPlus,
 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
-import { useState } from "react";
-
+} from "#/components/ui/dialog";
 import { readSession } from "#/lib/session-storage";
 
 import { FilesProjectForm } from "./files-project-form";

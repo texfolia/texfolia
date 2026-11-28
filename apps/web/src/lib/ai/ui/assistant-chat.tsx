@@ -1,13 +1,4 @@
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
-import { Button } from "@texfolia/ui/button";
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from "@texfolia/ui/message-scroller";
 import {
   useCallback,
   useEffect,
@@ -16,6 +7,16 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+
+import { Button } from "#/components/ui/button";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "#/components/ui/message-scroller";
 
 import type { AssistantEditor, RevertOutcome } from "../editor";
 import type { AssistantChange } from "../revert";

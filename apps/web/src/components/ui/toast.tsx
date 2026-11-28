@@ -12,7 +12,7 @@ import {
 import { cn } from "cn";
 import * as React from "react";
 
-import { Button } from "./button.tsx";
+import { Button } from "#/components/ui/button";
 
 const toast = ToastPrimitive.createToastManager();
 

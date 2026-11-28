@@ -1,15 +1,15 @@
 import { IconX } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { useMemo, useState, type RefObject } from "react";
+
+import { lazyPanel } from "#/components/lazy-panel";
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@texfolia/ui/dialog";
-import { useMemo, useState, type RefObject } from "react";
-
-import { lazyPanel } from "#/components/lazy-panel";
+} from "#/components/ui/dialog";
 import { useHasBeen } from "#/hooks/use-has-been";
 import { buildFileUrl } from "#/lib/compile/build";
 import type { ProjectNode } from "#/lib/projects/project.functions";

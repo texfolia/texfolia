@@ -1,10 +1,13 @@
 import { IconRefresh } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Label } from "@texfolia/ui/label";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useId, useState } from "react";
 
 import { GitRemoteForm } from "#/components/git-remote-form";
+import { Button } from "#/components/ui/button";
+import { Label } from "#/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import { gitProvider, gitProviders, type GitStatus } from "#/lib/git";
 import { useWorkspace } from "#/providers/workspace-provider";
 

@@ -1,13 +1,13 @@
-import { Button } from "@texfolia/ui/button";
+import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { Kbd } from "@texfolia/ui/kbd";
-import { useState } from "react";
-
+} from "#/components/ui/item";
+import { Kbd } from "#/components/ui/kbd";
 import { editorKeymapLabels } from "#/lib/editor/keymaps/keymaps";
 import {
   defaultShortcuts,

@@ -6,15 +6,6 @@ import {
   IconMessagePlus,
   IconSearch,
 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { ContextMenuItem } from "@texfolia/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
 import { createContext, type ReactNode, useContext } from "react";
 
 import {
@@ -22,6 +13,15 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import { Button } from "#/components/ui/button";
+import { ContextMenuItem } from "#/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import type { EditorCommand } from "#/lib/editor/editor-command";
 
 import {

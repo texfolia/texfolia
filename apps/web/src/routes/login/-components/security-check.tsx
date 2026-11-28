@@ -1,6 +1,6 @@
-import { Button } from "@texfolia/ui/button";
 import { Turnstile } from "react-turnstile";
 
+import { Button } from "#/components/ui/button";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
 
 import type { Login } from "./use-login";

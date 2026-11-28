@@ -1,16 +1,19 @@
-import { Button } from "@texfolia/ui/button";
+import { useEffect, useId, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
-import { Label } from "@texfolia/ui/label";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { toast } from "@texfolia/ui/toast";
-import { useEffect, useId, useState } from "react";
-
+} from "#/components/ui/dialog";
+import { Label } from "#/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
+import { toast } from "#/components/ui/toast";
 import type { Project } from "#/lib/projects/project.functions";
 import {
   getProjectAccess,

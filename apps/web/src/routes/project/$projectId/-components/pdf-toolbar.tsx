@@ -10,16 +10,6 @@ import {
   IconRotateClockwise,
   IconSearch,
 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { Input } from "@texfolia/ui/input";
 import { useState } from "react";
 
 import {
@@ -27,6 +17,16 @@ import {
   PanelActions,
   PanelHeader,
 } from "#/components/panel-header";
+import { Button } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
+import { Input } from "#/components/ui/input";
 import { ZoomMenu } from "#/components/zoom-menu";
 import { useTheme } from "#/providers/theme-provider";
 

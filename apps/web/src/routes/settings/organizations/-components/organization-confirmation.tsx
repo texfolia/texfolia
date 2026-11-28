@@ -1,15 +1,15 @@
+import { type ReactNode, useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "@texfolia/ui/alert-dialog";
-import { Button } from "@texfolia/ui/button";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
-import { type ReactNode, useState } from "react";
-
+} from "#/components/ui/alert-dialog";
+import { Button } from "#/components/ui/button";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth/auth-client";
 
 import { check, type OrganizationState } from "./use-organization";

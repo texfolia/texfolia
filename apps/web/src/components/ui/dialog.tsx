@@ -3,7 +3,7 @@ import { IconX } from "@tabler/icons-react";
 import { cn } from "cn";
 import * as React from "react";
 
-import { Button } from "./button.tsx";
+import { Button } from "#/components/ui/button";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;

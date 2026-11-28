@@ -1,11 +1,4 @@
 import { type LatexProblem } from "@texfolia/editor";
-import { Button } from "@texfolia/ui/button";
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  ContextMenuContent,
-  ContextMenuItem,
-} from "@texfolia/ui/context-menu";
 import { cn } from "cn";
 import {
   DockviewDefaultTab,
@@ -16,6 +9,13 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
 import { BinaryPreview } from "#/components/binary-preview";
 import { lazyPanel } from "#/components/lazy-panel";
+import { Button } from "#/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "#/components/ui/context-menu";
 import { problemPrompt, selectionPrompt } from "#/lib/ai/editor";
 import type { ProjectNode } from "#/lib/projects/project.functions";
 import { downloadFile } from "#/lib/storage/browser";

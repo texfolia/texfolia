@@ -6,7 +6,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "./collapsible.tsx";
+} from "#/components/ui/collapsible";
 
 function Trace({ className, ...props }: React.ComponentProps<"div">) {
   return (

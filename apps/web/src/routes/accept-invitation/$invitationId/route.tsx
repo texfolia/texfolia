@@ -4,9 +4,9 @@ import {
   redirect,
   useNavigate,
 } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
 import { type ReactNode, useState } from "react";
 
+import { Button } from "#/components/ui/button";
 import { authClient } from "#/lib/auth/auth-client";
 import { getOrganizationInvitation } from "#/lib/auth/organization.functions";
 import { ThemeProvider } from "#/providers/theme-provider";

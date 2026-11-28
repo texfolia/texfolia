@@ -1,15 +1,15 @@
 import { IconDownload } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Checkbox } from "@texfolia/ui/checkbox";
+import { useState, useImperativeHandle, type Ref } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Checkbox } from "#/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@texfolia/ui/dialog";
-import { useState, useImperativeHandle, type Ref } from "react";
-
+} from "#/components/ui/dialog";
 import { buildFileUrl } from "#/lib/compile/build";
 import { binaryFetchLimit, mapLimit } from "#/lib/map-limit";
 import { decodeSource, type SourceFiles } from "#/lib/storage";

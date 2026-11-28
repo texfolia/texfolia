@@ -1,14 +1,15 @@
 import { IconKey } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { z } from "zod";
+
+import { Button } from "#/components/ui/button";
 import {
   Field,
   FieldError,
   FieldGroup,
   FieldLabel,
   FieldSeparator,
-} from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
-import { z } from "zod";
+} from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 
 import { type Login, socialProviders } from "./use-login";
 

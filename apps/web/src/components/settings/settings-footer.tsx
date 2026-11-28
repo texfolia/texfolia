@@ -4,9 +4,8 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "@texfolia/ui/alert-dialog";
-import { Button } from "@texfolia/ui/button";
-
+} from "#/components/ui/alert-dialog";
+import { Button } from "#/components/ui/button";
 import { useSettingsEditing } from "#/providers/settings-provider";
 
 export function SettingsFooter({

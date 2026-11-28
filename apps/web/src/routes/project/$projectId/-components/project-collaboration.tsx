@@ -1,9 +1,12 @@
 import { IconRefresh } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import {
   projectRoleLabels,
   projectRoles,

@@ -18,7 +18,7 @@ Each app and package has a README with its own commands:
 [app](../apps/web/README.md), [web](../apps/web/README.md),
 [docs](../apps/docs/README.md), [compiler](../apps/compiler/README.md),
 [contracts](../packages/contracts/README.md), [db](../packages/db/README.md),
-[ui](../packages/ui/README.md) and [tsconfig](../packages/tsconfig/README.md).
+[tsconfig](../packages/tsconfig/README.md).
 
 ## Before you push
 

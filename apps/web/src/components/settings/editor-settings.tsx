@@ -1,15 +1,18 @@
-import { Checkbox } from "@texfolia/ui/checkbox";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
+import { useId, useState } from "react";
+
+import { Checkbox } from "#/components/ui/checkbox";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { useId, useState } from "react";
-
+} from "#/components/ui/item";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import {
   editorKeymapLabels,
   editorKeymaps,

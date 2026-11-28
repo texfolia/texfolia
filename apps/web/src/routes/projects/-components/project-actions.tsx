@@ -10,26 +10,26 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
+import { useId, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
+} from "#/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { Input } from "@texfolia/ui/input";
-import { Label } from "@texfolia/ui/label";
-import { toast } from "@texfolia/ui/toast";
-import { useId, useState } from "react";
-
+} from "#/components/ui/dropdown-menu";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import { toast } from "#/components/ui/toast";
 import {
   projectPaths,
   projectTagsSchema,

@@ -1,9 +1,9 @@
 import { IconDownload } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
 import CodeMirror from "@uiw/react-codemirror";
 import type { IDockviewPanelProps } from "dockview-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
+import { Button } from "#/components/ui/button";
 import { useEditorTheme } from "#/hooks/use-editor-theme";
 import { buildFileUrl } from "#/lib/compile/build";
 import { downloadFile } from "#/lib/storage/browser";

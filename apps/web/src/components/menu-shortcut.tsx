@@ -1,6 +1,6 @@
-import { MenubarItem, MenubarShortcut } from "@texfolia/ui/menubar";
 import { type ComponentProps, useState } from "react";
 
+import { MenubarItem, MenubarShortcut } from "#/components/ui/menubar";
 import {
   bindingKeyShortcuts,
   bindingLabel,

@@ -2,10 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
-@import "@texfolia/ui/motion.css";
-
-/* @texfolia/ui renders Tailwind classes from outside this app. */
-@source "../../../packages/ui/src";
+@import "./components/ui/motion.css";
 
 @custom-variant dark (&:is(.dark *));
 

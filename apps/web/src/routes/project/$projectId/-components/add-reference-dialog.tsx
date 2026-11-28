@@ -6,8 +6,10 @@ import {
   uniqueEntryKey,
   validEntryKey,
 } from "@texfolia/editor";
-import { Button } from "@texfolia/ui/button";
-import { Checkbox } from "@texfolia/ui/checkbox";
+import { useId, useState } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Checkbox } from "#/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -15,16 +17,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
+} from "#/components/ui/dialog";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { useId, useState } from "react";
+} from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 
 export type AddReferenceRequest = {
   /** An undefined \cite key the new entry should define. */

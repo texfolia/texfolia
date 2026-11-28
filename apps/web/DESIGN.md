@@ -208,7 +208,7 @@ Settings opens as a standard dialog with a dimmed backdrop, User and Project tab
 
 Source files and generated files share preview and pin semantics. A single click opens an italic preview; the next preview replaces it. Double-clicking, editing a source, or choosing **Keep open** pins the tab. PDF viewers open on demand as ordinary file tabs. There is no permanent PDF split or empty PDF panel. Problems is in the bottom panel, not the dock.
 
-The functional reference is [Editor workspace](../docs/src/content/docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, zinc base, CSS variables, Tabler icons) and the primitives in [`packages/ui`](../../packages/ui/README.md).
+The functional reference is [Editor workspace](../docs/src/content/docs/editor-workspace.md). Component authority is `components.json` (`base-nova`, zinc base, CSS variables, Tabler icons) and the primitives in `src/components/ui`.
 
 ## Do's and Don'ts
 

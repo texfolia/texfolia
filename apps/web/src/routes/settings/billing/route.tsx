@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
 import { useRef, useState } from "react";
 
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth/auth-client";
 import { paidPlans } from "#/lib/billing";
 import { billingSearch } from "#/lib/billing/billing-search";

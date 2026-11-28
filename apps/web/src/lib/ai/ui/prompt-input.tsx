@@ -1,4 +1,3 @@
-import { InputGroup, InputGroupTextarea } from "@texfolia/ui/input-group";
 import { cn } from "cn";
 import {
   type ComponentProps,
@@ -10,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { InputGroup, InputGroupTextarea } from "#/components/ui/input-group";
 import { fuzzyFilter } from "#/lib/fuzzy";
 
 import { fileMention, mentionBefore } from "../editor";

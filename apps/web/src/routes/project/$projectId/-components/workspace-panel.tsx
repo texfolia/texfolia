@@ -1,8 +1,8 @@
 import { IconX } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
 
 import { ResizeHandle } from "#/components/resize-handle";
+import { Button } from "#/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import {
   panelHeightBounds,
   type PanelView,

@@ -13,7 +13,6 @@
     "web",
     "@texfolia/contracts",
     "@texfolia/db",
-    "@texfolia/tsconfig",
-    "@texfolia/ui"
+    "@texfolia/tsconfig"
   ]
 }

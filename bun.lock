@@ -61,6 +61,7 @@
         "@lezer/highlight": "^1.2.5",
         "@replit/codemirror-emacs": "^6.1.0",
         "@replit/codemirror-vim": "^6.4.0",
+        "@shadcn/react": "^0.3.1",
         "@tabler/icons-react": "^3.50.0",
         "@tanstack/ai": "^1.4.0",
         "@tanstack/ai-cloudflare": "^1.2.0",
@@ -76,9 +77,9 @@
         "@texfolia/db": "workspace:*",
         "@texfolia/editor": "workspace:*",
         "@texfolia/tex-fmt": "workspace:*",
-        "@texfolia/ui": "workspace:*",
         "@uiw/react-codemirror": "^4.25.12",
         "better-auth": "1.7.15",
+        "class-variance-authority": "^0.7.1",
         "cn": "^0.5.1",
         "dictionary-de": "3.0.0",
         "dictionary-en": "4.0.0",
@@ -231,31 +232,6 @@
     "packages/tsconfig": {
       "name": "@texfolia/tsconfig",
       "version": "0.0.0",
-    },
-    "packages/ui": {
-      "name": "@texfolia/ui",
-      "version": "0.0.0",
-      "dependencies": {
-        "@base-ui/react": "^1.9.0",
-        "@shadcn/react": "^0.3.1",
-        "@tabler/icons-react": "^3.50.0",
-        "class-variance-authority": "^0.7.1",
-        "cn": "^0.5.1",
-        "input-otp": "^1.5.0",
-        "recharts": "^3.11.2",
-      },
-      "devDependencies": {
-        "@texfolia/tsconfig": "workspace:*",
-        "@types/react": "^19.2.0",
-        "@types/react-dom": "^19.2.0",
-        "react": "^19.2.0",
-        "react-dom": "^19.2.0",
-        "typescript": "^6.0.2",
-      },
-      "peerDependencies": {
-        "react": "^19.2.0",
-        "react-dom": "^19.2.0",
-      },
     },
   },
   "packages": {
@@ -1158,8 +1134,6 @@
     "@texfolia/tex-fmt": ["@texfolia/tex-fmt@workspace:packages/tex-fmt"],
 
     "@texfolia/tsconfig": ["@texfolia/tsconfig@workspace:packages/tsconfig"],
-
-    "@texfolia/ui": ["@texfolia/ui@workspace:packages/ui"],
 
     "@ts-morph/common": ["@ts-morph/common@0.27.0", "", { "dependencies": { "fast-glob": "^3.3.3", "minimatch": "^10.0.1", "path-browserify": "^1.0.1" } }, "sha512-Wf29UqxWDpc+i61k3oIOzcUfQt79PIT9y/MWfAGlrkjg6lBC1hwDECLXPVJAhWjiGbfBCxZd65F/LIZF3+jeJQ=="],
 

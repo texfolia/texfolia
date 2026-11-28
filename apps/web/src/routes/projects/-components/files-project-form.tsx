@@ -1,10 +1,10 @@
 import { useNavigate } from "@tanstack/react-router";
 import { sourcePathSchema } from "@texfolia/contracts";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { Label } from "@texfolia/ui/label";
 import { useId, useRef, useState } from "react";
 
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
 import { importProjectFiles } from "#/lib/projects/project.functions";
 import {
   sourceFileKind,

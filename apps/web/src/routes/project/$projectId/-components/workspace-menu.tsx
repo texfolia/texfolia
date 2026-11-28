@@ -1,4 +1,7 @@
 import { Link } from "@tanstack/react-router";
+
+import { ShortcutMenuItem, useMenuShortcut } from "#/components/menu-shortcut";
+import { NotificationsMenu } from "#/components/notifications-menu";
 import {
   Menubar,
   MenubarMenu,
@@ -8,10 +11,7 @@ import {
   MenubarSeparator,
   MenubarGroup,
   MenubarCheckboxItem,
-} from "@texfolia/ui/menubar";
-
-import { ShortcutMenuItem, useMenuShortcut } from "#/components/menu-shortcut";
-import { NotificationsMenu } from "#/components/notifications-menu";
+} from "#/components/ui/menubar";
 import type { EditorCommand } from "#/lib/editor/editor-command";
 import type { ShortcutAction } from "#/lib/shortcuts/shortcuts";
 import type {

@@ -1,13 +1,13 @@
 import { IconDots, IconPlus, IconX } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { type ReactNode, useMemo, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { type ReactNode, useMemo, useState } from "react";
-
+} from "#/components/ui/dropdown-menu";
 import type { Store } from "#/lib/external-store";
 
 import type { AssistantThread } from "../threads";

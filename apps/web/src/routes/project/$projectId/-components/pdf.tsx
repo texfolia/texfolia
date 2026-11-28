@@ -1,7 +1,7 @@
-import { Button } from "@texfolia/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { pdfjs } from "react-pdf";
 
+import { Button } from "#/components/ui/button";
 import { useStableCallback } from "#/hooks/use-stable-callback";
 import {
   pdfToSource,

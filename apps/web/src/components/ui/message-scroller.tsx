@@ -10,7 +10,7 @@ import { IconArrowDown } from "@tabler/icons-react";
 import { cn } from "cn";
 import * as React from "react";
 
-import { Button } from "./button.tsx";
+import { Button } from "#/components/ui/button";
 
 function MessageScrollerProvider(
   props: React.ComponentProps<typeof MessageScrollerPrimitive.Provider>,

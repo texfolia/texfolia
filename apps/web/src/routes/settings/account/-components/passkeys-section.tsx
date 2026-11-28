@@ -1,21 +1,21 @@
+import { useCallback, useEffect, useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "@texfolia/ui/alert-dialog";
-import { Button } from "@texfolia/ui/button";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
+} from "#/components/ui/alert-dialog";
+import { Button } from "#/components/ui/button";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { useCallback, useEffect, useState } from "react";
-
+} from "#/components/ui/item";
 import { authClient } from "#/lib/auth/auth-client";
 
 const authenticatorNames: Record<string, string> = {

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
 
+import { Button } from "#/components/ui/button";
 import { getOrganizations } from "#/lib/auth/organization.functions";
 
 import { OrganizationSettings } from "./-components/organization-settings";

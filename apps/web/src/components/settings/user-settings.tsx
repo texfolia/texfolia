@@ -4,10 +4,10 @@ import {
   IconPalette,
   IconTextSpellcheck,
 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Item, ItemContent } from "@texfolia/ui/item";
 
 import { AppearanceSettings } from "#/components/appearance-settings";
+import { Button } from "#/components/ui/button";
+import { Item, ItemContent } from "#/components/ui/item";
 import {
   type SettingsSection,
   useSettingsEditing,

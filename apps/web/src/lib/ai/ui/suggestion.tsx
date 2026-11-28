@@ -1,4 +1,4 @@
-import { Button } from "@texfolia/ui/button";
+import { Button } from "#/components/ui/button";
 
 export function Suggestion({
   children,

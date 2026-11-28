@@ -1,15 +1,15 @@
 import { IconX } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
+import { useId, useState } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { useId, useState } from "react";
-
+} from "#/components/ui/item";
 import {
   addPersonalWord,
   maxPersonalWords,

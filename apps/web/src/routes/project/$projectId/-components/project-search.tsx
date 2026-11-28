@@ -6,8 +6,6 @@ import {
   IconRegex,
   IconReplace,
 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
 import {
   useDeferredValue,
   useEffect,
@@ -17,6 +15,8 @@ import {
   useState,
 } from "react";
 
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 import { useDraftSources } from "#/hooks/use-draft-sources";
 import { mapLimit } from "#/lib/map-limit";
 import {

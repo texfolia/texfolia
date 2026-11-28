@@ -1,6 +1,7 @@
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
 import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 
 import { aiConfigurationSchema, type AiConfiguration } from "../schema";
 import { failureMessage, responseError } from "./assistant-client";

@@ -47,7 +47,7 @@ workspace that owns it. Secrets, Stripe webhooks and the rest are covered in the
 
 ## System design
 
-- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `#/lib/editor` (feature code is under `apps/web/src/lib`); the shadcn primitives live in `@texfolia/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `#/lib/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `#/lib/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `#/lib/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `#/lib/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `#/lib/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `#/lib/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `#/lib/ai`.
+- **Browser:** a CodeMirror workspace, with workers for analysis, formatting, and spelling and an IndexedDB offline cache. The LaTeX language tooling, spelling, and editor themes live in `#/lib/editor` (feature code is under `apps/web/src/lib`); the shadcn primitives live in `#/components/ui`; R2 source objects (keys, uploads, limits, garbage collection) live in `#/lib/storage`; the project aggregate (CRUD, file-tree nodes, paths, metadata, search, and owner/organization access) lives in `#/lib/projects`; the app's compile client (source deltas, the `/api/compile` handlers, build events, logs, and history) lives in `#/lib/compile`; Yjs collaboration (the room, protocol, browser cache, and drafts) lives in `#/lib/collaboration`; Git integrations (actions against a linked GitHub or GitLab remote, remote URL parsing, and the platform adapters) live in `#/lib/git`; Stripe billing (plans, checkout, the portal and webhooks, entitlements, and AI usage metering) lives in `#/lib/billing`; the AI assistant (chat runs, project tools, saved threads, skills, and the panel UI) lives in `#/lib/ai`.
 - **Collaboration:** edits merge through Yjs in a Durable Object per project, then persist to R2.
 - **Web app:** TanStack Start on Cloudflare Workers (`texfolia.com`). Serves the landing, pricing, and policy pages alongside the authenticated workspace. PostgreSQL holds accounts, the file tree, and build records.
 - **Compiler:** an Effect Worker in front of an autoscaled pool of Tectonic containers that projects share. A container keeps one caller's sources and cache between compiles and wipes them before it serves another. The PDF streams back to the preview.
@@ -116,7 +116,6 @@ apps/
 packages/
   contracts/           Schemas and plan prices shared by the apps
   db/                  Drizzle schema, PostgreSQL client, and migrations
-  ui/                  shadcn/Base UI React primitives for the app
   tsconfig/            TypeScript settings every workspace extends
 ```
 

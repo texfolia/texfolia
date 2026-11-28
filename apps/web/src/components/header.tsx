@@ -1,14 +1,14 @@
 import { ClientOnly, Link } from "@tanstack/react-router";
-import { Button, buttonVariants } from "@texfolia/ui/button";
+import { type ComponentType, lazy, Suspense } from "react";
+
+import { NotificationsMenu } from "#/components/notifications-menu";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { type ComponentType, lazy, Suspense } from "react";
-
-import { NotificationsMenu } from "#/components/notifications-menu";
+} from "#/components/ui/dropdown-menu";
 import { authClient } from "#/lib/auth/auth-client";
 
 // Only signed-in visitors have shortcuts, and they bring the settings store.

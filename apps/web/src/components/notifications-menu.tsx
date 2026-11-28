@@ -1,17 +1,17 @@
 import { IconBell, IconCheck } from "@tabler/icons-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Avatar, AvatarFallback, AvatarImage } from "@texfolia/ui/avatar";
-import { Button } from "@texfolia/ui/button";
+import { cn } from "cn";
+import { useCallback, useEffect, useState } from "react";
+
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { Button } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { cn } from "cn";
-import { useCallback, useEffect, useState } from "react";
-
+} from "#/components/ui/dropdown-menu";
 import {
   listNotifications,
   markAllNotificationsRead,

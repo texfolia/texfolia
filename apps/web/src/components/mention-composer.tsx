@@ -1,4 +1,3 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@texfolia/ui/avatar";
 import { cn } from "cn";
 import {
   type ClipboardEvent,
@@ -10,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { fuzzyFilter } from "#/lib/fuzzy";
 import {
   formatMentionToken,

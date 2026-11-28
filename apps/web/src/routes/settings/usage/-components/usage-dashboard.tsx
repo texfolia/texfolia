@@ -1,14 +1,16 @@
 import { IconDownload, IconExternalLink } from "@tabler/icons-react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
+import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@texfolia/ui/card";
-import { Input } from "@texfolia/ui/input";
+} from "#/components/ui/card";
+import { Input } from "#/components/ui/input";
 import {
   Table,
   TableBody,
@@ -16,10 +18,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@texfolia/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
-import { useState } from "react";
-
+} from "#/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import type { UsageDashboard, UsagePeriod } from "#/lib/billing";
 import { saveOrganizationCap } from "#/lib/billing/billing.functions";
 import { formatBytes } from "#/lib/format-bytes";

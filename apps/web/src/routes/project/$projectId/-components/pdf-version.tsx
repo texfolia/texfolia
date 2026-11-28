@@ -1,7 +1,7 @@
-import { Button } from "@texfolia/ui/button";
 import { type ComponentProps, useMemo } from "react";
 import { Document } from "react-pdf";
 
+import { Button } from "#/components/ui/button";
 import { useStableCallback } from "#/hooks/use-stable-callback";
 import { layoutPages } from "#/lib/pdf/layout";
 

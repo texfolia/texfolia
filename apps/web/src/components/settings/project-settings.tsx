@@ -1,15 +1,18 @@
 import { useLiveQuery } from "@tanstack/react-db";
-import { Field, FieldLabel } from "@texfolia/ui/field";
+import { useId, useSyncExternalStore } from "react";
+
+import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
+import { Field, FieldLabel } from "#/components/ui/field";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { useId, useSyncExternalStore } from "react";
-
-import { LatexFormatSettingsFields } from "#/components/latex-format-settings";
+} from "#/components/ui/item";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import {
   spellingDictionaries,
   spellingLanguages,

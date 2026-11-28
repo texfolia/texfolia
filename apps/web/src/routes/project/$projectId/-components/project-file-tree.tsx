@@ -21,26 +21,26 @@ import {
   IconStarFilled,
   IconTex,
 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { useMemo, useRef, useState, type DragEvent } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@texfolia/ui/collapsible";
+} from "#/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
+} from "#/components/ui/dialog";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@texfolia/ui/sidebar";
-import { useMemo, useRef, useState, type DragEvent } from "react";
-
+} from "#/components/ui/sidebar";
 import {
   isMainFileCandidate,
   projectPaths,

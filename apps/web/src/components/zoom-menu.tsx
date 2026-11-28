@@ -1,5 +1,6 @@
 import { IconZoomIn, IconZoomOut } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+
+import { Button } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,8 +9,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-
+} from "#/components/ui/dropdown-menu";
 import { zoomPercent, zoomPresets } from "#/lib/zoom";
 
 /** The current zoom, with a menu of steps, fits, and fixed scales. */

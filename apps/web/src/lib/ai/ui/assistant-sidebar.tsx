@@ -1,6 +1,7 @@
 import { IconX } from "@tabler/icons-react";
-import { Button, buttonVariants } from "@texfolia/ui/button";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+
+import { Button, buttonVariants } from "#/components/ui/button";
 
 import type { AssistantEditor } from "../editor";
 import { aiConfigurationSchema, type AiConfiguration } from "../schema";

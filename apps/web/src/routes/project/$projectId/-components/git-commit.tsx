@@ -1,7 +1,8 @@
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { Textarea } from "@texfolia/ui/textarea";
 import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Textarea } from "#/components/ui/textarea";
 
 import type { Git } from "../-hooks/use-git";
 

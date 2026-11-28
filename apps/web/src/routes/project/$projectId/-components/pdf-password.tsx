@@ -1,4 +1,6 @@
-import { Button } from "@texfolia/ui/button";
+import { useId, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,10 +8,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
-import { useId, useState } from "react";
+} from "#/components/ui/dialog";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 
 /** Asks for the password of an encrypted PDF. */
 export function PdfPassword({

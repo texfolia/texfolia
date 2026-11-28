@@ -1,8 +1,8 @@
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import { Label } from "@texfolia/ui/label";
 import { useEffect, useState } from "react";
 
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
 import { authClient } from "#/lib/auth/auth-client";
 import {
   gitProvider,

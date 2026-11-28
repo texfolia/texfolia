@@ -1,14 +1,14 @@
-import { Button } from "@texfolia/ui/button";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
+import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { useState } from "react";
-
+} from "#/components/ui/item";
 import { authClient } from "#/lib/auth/auth-client";
 
 import { OrganizationAuditLog } from "./organization-audit-log";

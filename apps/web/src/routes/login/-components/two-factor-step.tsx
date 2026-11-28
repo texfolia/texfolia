@@ -1,15 +1,21 @@
 import { IconArrowLeft } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { z } from "zod";
+
+import { Button } from "#/components/ui/button";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
-} from "@texfolia/ui/input-otp";
-import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { z } from "zod";
+} from "#/components/ui/input-otp";
 
 import type { Login } from "./use-login";
 

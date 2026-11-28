@@ -1,7 +1,7 @@
 import { IconSparkles, IconTrash } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
 import { useState } from "react";
 
+import { Button } from "#/components/ui/button";
 import { problemPrompt } from "#/lib/ai/editor";
 import {
   useWorkspace,

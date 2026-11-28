@@ -1,11 +1,10 @@
-import { Button } from "@texfolia/ui/button";
+import { Button } from "#/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@texfolia/ui/context-menu";
-
+} from "#/components/ui/context-menu";
 import type { GitStatus } from "#/lib/git";
 import { useWorkspaceActions } from "#/providers/workspace-provider";
 

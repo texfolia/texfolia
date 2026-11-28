@@ -4,9 +4,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@texfolia/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@texfolia/ui/tabs";
-
+} from "#/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useSettingsEditing } from "#/providers/settings-provider";
 
 import { ProjectSettings } from "./project-settings";

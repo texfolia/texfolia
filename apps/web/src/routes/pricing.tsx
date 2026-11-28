@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { paidPlans } from "@texfolia/contracts/plans";
+
+import { Page } from "#/components/page";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@texfolia/ui/card";
+} from "#/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,9 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@texfolia/ui/table";
-
-import { Page } from "#/components/page";
+} from "#/components/ui/table";
 import { pageHead } from "#/lib/head";
 import { linkButton } from "#/lib/link-button";
 

@@ -1,13 +1,16 @@
-import { Button } from "@texfolia/ui/button";
+import { useCallback, useEffect, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Item,
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@texfolia/ui/item";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { useCallback, useEffect, useState } from "react";
-
+} from "#/components/ui/item";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import {
   describeAuditEvent,
   organizationAuditCategories,

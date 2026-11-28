@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
 
+import { Button } from "#/components/ui/button";
 import { usagePeriods, type UsagePeriod } from "#/lib/billing";
 import { getUsageDashboard } from "#/lib/billing/billing.functions";
 

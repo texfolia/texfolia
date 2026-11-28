@@ -1,4 +1,3 @@
-import { Button } from "@texfolia/ui/button";
 import {
   Component,
   type ComponentType,
@@ -7,6 +6,8 @@ import {
   Suspense,
   useState,
 } from "react";
+
+import { Button } from "#/components/ui/button";
 
 class LoadError extends Error {}
 

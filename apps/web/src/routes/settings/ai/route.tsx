@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Button } from "@texfolia/ui/button";
+import { useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Item,
   ItemContent,
   ItemTitle,
   ItemDescription,
-} from "@texfolia/ui/item";
-import { useState } from "react";
-
+} from "#/components/ui/item";
 import {
   getAccountAiSettings,
   saveAccountAiSettings,

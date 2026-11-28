@@ -1,4 +1,6 @@
 import { IconRestore, IconTrash } from "@tabler/icons-react";
+import { useEffect, useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -8,18 +10,16 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@texfolia/ui/alert-dialog";
-import { Button } from "@texfolia/ui/button";
+} from "#/components/ui/alert-dialog";
+import { Button } from "#/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@texfolia/ui/empty";
-import { toast } from "@texfolia/ui/toast";
-import { useEffect, useState } from "react";
-
+} from "#/components/ui/empty";
+import { toast } from "#/components/ui/toast";
 import { trashRetentionDays } from "#/lib/projects";
 import {
   deleteTrashedProject,

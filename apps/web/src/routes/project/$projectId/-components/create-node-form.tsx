@@ -1,17 +1,20 @@
 import { IconFilePlus, IconFolderPlus } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { useId, useState, useImperativeHandle, type Ref } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@texfolia/ui/dialog";
-import { Field, FieldError, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
-import { NativeSelect, NativeSelectOption } from "@texfolia/ui/native-select";
-import { useId, useState, useImperativeHandle, type Ref } from "react";
-
+} from "#/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "#/components/ui/native-select";
 import {
   nodeNameSchema,
   newProjectNodePath,

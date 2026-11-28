@@ -1,13 +1,13 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@texfolia/ui/avatar";
+import { cn } from "cn";
+import { Fragment } from "react";
+
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { cn } from "cn";
-import { Fragment } from "react";
-
+} from "#/components/ui/dropdown-menu";
 import { parseMentions, type ResolvedMention } from "#/lib/mentions/tokens";
 
 function initialsOf(name: string) {

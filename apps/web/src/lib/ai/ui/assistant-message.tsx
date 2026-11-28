@@ -2,15 +2,16 @@ import { IconArrowBackUp, IconCopy, IconRefresh } from "@tabler/icons-react";
 import type { ToolCallPart, ToolResultPart } from "@tanstack/ai";
 import type { UIMessage } from "@tanstack/ai-react";
 import { Markdown } from "@tanstack/markdown/react";
-import { Button } from "@texfolia/ui/button";
-import { CodeBlock, CodeBlockContent } from "@texfolia/ui/code-block";
+import type { ComponentProps } from "react";
+
+import { Button } from "#/components/ui/button";
+import { CodeBlock, CodeBlockContent } from "#/components/ui/code-block";
 import {
   Message,
   MessageContent,
   MessageFooter,
   MessageHeader,
-} from "@texfolia/ui/message";
-import type { ComponentProps } from "react";
+} from "#/components/ui/message";
 
 import type { AssistantEditor, RevertOutcome } from "../editor";
 import { type AssistantChange, assistantChange } from "../revert";

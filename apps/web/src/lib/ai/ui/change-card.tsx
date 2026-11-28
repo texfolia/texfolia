@@ -1,5 +1,8 @@
 import { IconArrowBackUp, IconFilePencil } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { cn } from "cn";
+import { useMemo, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   Trace,
   TraceCollapsible,
@@ -9,9 +12,7 @@ import {
   TraceIcon,
   TraceLine,
   TraceTitle,
-} from "@texfolia/ui/trace";
-import { cn } from "cn";
-import { useMemo, useState } from "react";
+} from "#/components/ui/trace";
 
 import { diffCounts, type DiffLine, diffReplacement } from "../diff";
 import type { AssistantEditor, RevertOutcome } from "../editor";

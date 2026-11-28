@@ -5,19 +5,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import * as React from "react";
 
-import { Button } from "./button.tsx";
-import { Input } from "./input.tsx";
-import { Separator } from "./separator.tsx";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Separator } from "#/components/ui/separator";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "./sheet.tsx";
-import { Skeleton } from "./skeleton.tsx";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip.tsx";
-import { useIsMobile } from "./use-mobile.ts";
+} from "#/components/ui/sheet";
+import { Skeleton } from "#/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
+import { useIsMobile } from "#/hooks/use-mobile";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;

@@ -1,5 +1,7 @@
 import { IconEye, IconEyeOff, IconUsers } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { Button } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,9 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@texfolia/ui/dropdown-menu";
-import { useCallback, useEffect, useRef, useState } from "react";
-
+} from "#/components/ui/dropdown-menu";
 import { scratchpadId, type Person } from "#/lib/collaboration";
 import { useWorkspace } from "#/providers/workspace-provider";
 

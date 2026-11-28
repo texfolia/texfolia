@@ -1,5 +1,6 @@
 import { IconTerminal2 } from "@tabler/icons-react";
-import { Button } from "@texfolia/ui/button";
+
+import { Button } from "#/components/ui/button";
 import {
   Empty,
   EmptyContent,
@@ -7,7 +8,7 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@texfolia/ui/empty";
+} from "#/components/ui/empty";
 
 // The Terminal tab. What it runs is still open (NAT-414): for example a
 // read-only stream of compiler output, or an interactive shell in the compile

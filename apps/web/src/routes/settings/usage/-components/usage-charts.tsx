@@ -1,12 +1,4 @@
 import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@texfolia/ui/chart";
-import {
   Area,
   AreaChart,
   Bar,
@@ -19,6 +11,14 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "#/components/ui/chart";
 import type {
   DailyAiPoint,
   DailyCompilePoint,

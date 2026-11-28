@@ -1,8 +1,8 @@
 import { IconCheck } from "@tabler/icons-react";
-import { Checkbox } from "@texfolia/ui/checkbox";
-import { Field, FieldLabel } from "@texfolia/ui/field";
 import { useEffect, useId, useState } from "react";
 
+import { Checkbox } from "#/components/ui/checkbox";
+import { Field, FieldLabel } from "#/components/ui/field";
 import type { Appearance } from "#/lib/editor/themes/appearance";
 import { themeCatalog } from "#/lib/editor/themes/themes";
 import { useTheme } from "#/providers/theme-provider";

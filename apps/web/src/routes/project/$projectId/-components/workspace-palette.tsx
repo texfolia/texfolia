@@ -1,11 +1,3 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@texfolia/ui/dialog";
-import { Input } from "@texfolia/ui/input";
-import { Kbd } from "@texfolia/ui/kbd";
 import { cn } from "cn";
 import {
   type ReactNode,
@@ -16,6 +8,14 @@ import {
   useState,
 } from "react";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
+import { Kbd } from "#/components/ui/kbd";
 import { fuzzyFilter } from "#/lib/fuzzy";
 import {
   bindingLabel,

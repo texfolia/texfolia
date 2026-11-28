@@ -15,9 +15,9 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import type { WordCount } from "@texfolia/editor";
-import { Button } from "@texfolia/ui/button";
 import { useSyncExternalStore } from "react";
 
+import { Button } from "#/components/ui/button";
 import type { Store } from "#/lib/external-store";
 import type {
   PanelView,

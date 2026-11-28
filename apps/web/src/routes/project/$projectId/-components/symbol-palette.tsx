@@ -4,9 +4,10 @@ import {
   type LatexSymbol,
   searchLatexSymbols,
 } from "@texfolia/editor";
-import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
 import { useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 
 /** The file whose preamble loads packages. Its text is followed while open. */
 export type SymbolPreambleSource = {

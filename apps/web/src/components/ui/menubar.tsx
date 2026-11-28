@@ -18,7 +18,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "./dropdown-menu.tsx";
+} from "#/components/ui/dropdown-menu";
 
 function Menubar({ className, ...props }: MenubarPrimitive.Props) {
   return (

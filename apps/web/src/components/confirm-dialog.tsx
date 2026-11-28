@@ -1,3 +1,5 @@
+import { type ComponentProps, type ReactNode, useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogContent,
@@ -5,9 +7,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@texfolia/ui/alert-dialog";
-import { Button } from "@texfolia/ui/button";
-import { type ComponentProps, type ReactNode, useState } from "react";
+} from "#/components/ui/alert-dialog";
+import { Button } from "#/components/ui/button";
 
 export type Confirmation = {
   title: string;

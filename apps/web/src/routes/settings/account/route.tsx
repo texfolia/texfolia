@@ -1,23 +1,23 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
+
 import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-} from "@texfolia/ui/alert-dialog";
-import { Button, buttonVariants } from "@texfolia/ui/button";
-import { Field, FieldLabel } from "@texfolia/ui/field";
-import { Input } from "@texfolia/ui/input";
+} from "#/components/ui/alert-dialog";
+import { Button, buttonVariants } from "#/components/ui/button";
+import { Field, FieldLabel } from "#/components/ui/field";
+import { Input } from "#/components/ui/input";
 import {
   Item,
   ItemContent,
   ItemTitle,
   ItemDescription,
-} from "@texfolia/ui/item";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
-
+} from "#/components/ui/item";
 import { authClient } from "#/lib/auth/auth-client";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
 

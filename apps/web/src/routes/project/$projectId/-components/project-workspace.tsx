@@ -2,7 +2,6 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { ClientOnly } from "@tanstack/react-router";
 
 import "dockview-react/dist/styles/dockview.css";
-import { SidebarProvider } from "@texfolia/ui/sidebar";
 import { cn } from "cn";
 import { DockviewReact, type DockviewReadyEvent } from "dockview-react";
 import {
@@ -15,6 +14,7 @@ import {
 } from "react";
 
 import { lazyPanel } from "#/components/lazy-panel";
+import { SidebarProvider } from "#/components/ui/sidebar";
 import { useComments } from "#/hooks/use-comments";
 import { useMentionCandidates } from "#/hooks/use-mention-candidates";
 import { useStableActions } from "#/hooks/use-stable-callback";
