@@ -391,7 +391,11 @@ try {
     }
   }
   await publicPage.goto(origin);
-  await publicPage.waitForURL(/\/login/);
+  await publicPage
+    .getByRole("heading", { level: 1 })
+    .filter({ hasText: /Good ideas/ })
+    .waitFor();
+  await publicPage.goto(`${origin}/login`);
   const legalNavigation = publicPage.getByRole("navigation", {
     name: "Legal information",
   });
@@ -408,14 +412,9 @@ try {
       .getByRole("link", { name: label, exact: true })
       .getAttribute("href");
     assert(href, `${label} link missing href`);
-    const url = new URL(href);
+    const url = new URL(href, origin);
     assert.equal(url.pathname, path);
-    assert.match(url.protocol, /^https?:$/);
-    assert.notEqual(
-      url.origin,
-      new URL(origin).origin,
-      `${label} must point at the marketing origin`,
-    );
+    assert.equal(url.origin, new URL(origin).origin);
   }
   console.info(
     "Product public routes fit desktop, tablet, and narrow mobile viewports",
@@ -1800,9 +1799,8 @@ try {
   await signOutGuard
     .getByRole("button", { name: "Sign out", exact: true })
     .click();
-  // Sign-out assigns "/" which redirects to /projects then /login when signed out.
-  await owner.waitForURL(/\/login/);
-  await offlineEditor.waitForURL(/\/login/);
+  await owner.waitForURL(`${origin}/`);
+  await offlineEditor.waitForURL(`${origin}/`);
   assert.equal(
     unloadPrompts,
     0,
