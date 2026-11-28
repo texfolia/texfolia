@@ -1,6 +1,7 @@
 import { defineRelations } from "drizzle-orm";
 
 import { organization, team, user } from "../auth-schema";
+import { organizationAuditEvent } from "./audit";
 import { project, projectJob, projectNode, projectTag, tag } from "./projects";
 import {
   projectCollaborator,
@@ -11,6 +12,7 @@ import {
 
 export * from "../auth-schema";
 export * from "./ai";
+export * from "./audit";
 export * from "./comments";
 export * from "./notifications";
 export * from "./projects";
@@ -18,6 +20,7 @@ export * from "./sharing";
 
 export const relations = defineRelations(
   {
+    organizationAuditEvent,
     project,
     projectCollaborator,
     projectJob,
@@ -32,6 +35,16 @@ export const relations = defineRelations(
     user,
   },
   (r) => ({
+    organizationAuditEvent: {
+      organization: r.one.organization({
+        from: r.organizationAuditEvent.organizationId,
+        to: r.organization.id,
+      }),
+      actor: r.one.user({
+        from: r.organizationAuditEvent.actorUserId,
+        to: r.user.id,
+      }),
+    },
     project: {
       collaborators: r.many.projectCollaborator(),
       shareGrants: r.many.projectShareGrant(),

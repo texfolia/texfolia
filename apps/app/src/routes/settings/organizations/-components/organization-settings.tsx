@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { authClient } from "#/lib/auth/auth-client";
 
+import { OrganizationAuditLog } from "./organization-audit-log";
 import { OrganizationConfirmation } from "./organization-confirmation";
 import { OrganizationMembers } from "./organization-members";
 import { OrganizationTeams } from "./organization-teams";
@@ -43,6 +44,12 @@ export function OrganizationSettings({
       {org.canManage && <OrganizationName org={org} />}
       <OrganizationMembers org={org} />
       <OrganizationTeams org={org} />
+      {org.canManage && (
+        <OrganizationAuditLog
+          organizationId={organization.id}
+          refreshKey={`${organization.name}:${organization.members.length}:${organization.invitations.length}:${organization.teams.length}`}
+        />
+      )}
       <Item variant="outline">
         <ItemContent>
           <ItemTitle>Leave organization</ItemTitle>

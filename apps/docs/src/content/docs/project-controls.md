@@ -36,11 +36,33 @@ An organization is created with a Team plan in **Settings → Billing**. **Setti
 | Rename the organization                   | Yes   | Yes   | No     |
 | Invite and remove members                 | Yes   | Yes   | No     |
 | Manage billing and the shared AI cap      | Yes   | Yes   | No     |
+| View organization audit log               | Yes   | Yes   | No     |
 | Invite and remove owners and admins       | Yes   | No    | No     |
 | Change roles                              | Yes   | No    | No     |
 | Delete the organization                   | Yes   | No    | No     |
 
 Anyone can leave, except an organization's only owner, who first makes someone else an owner or deletes the organization. An account cannot be deleted while it is the only owner of an organization. The server enforces these rules in `organization-policy.ts`.
+
+### Audit log
+
+**Settings → Organizations** includes an append-only **Audit log** section for organization owners and admins. Regular members cannot view or query it, and the product UI exposes no edit or delete controls.
+
+Events are stored in `organization_audit_event` with the organization ID, actor user ID (or `null` for system/webhook events and deleted users), action, target, sanitized metadata, and timestamp. Recorded categories:
+
+- **Organization**: renames (`organization.updated`).
+- **Invitations**: created, accepted, declined, canceled, and expired (`invitation.*`).
+- **Members**: added, role changed, removed, and left (`member.*`).
+- **Teams**: created, updated, deleted, and team member added/removed (`team.*`).
+- **Billing**: subscription started, updated, seat quantity updated, cancellation scheduled, subscription ended, payment failed, and shared AI spend cap updated (`billing.*`).
+- **Project sharing** (organization-owned projects only): share link created or revoked, organization-wide project role changed, collaborator granted/updated/revoked, and team access granted/updated/revoked (`project.*`).
+
+Metadata sanitization strips secrets, passwords, webhook secrets, access tokens, and raw share tokens/URLs before persistence. Safe Stripe resource IDs (such as subscription, customer, and invoice IDs) may be recorded for traceability.
+
+Decisions on the open questions in NAT-493:
+
+- **Retention**: audit events are retained indefinitely in v1 (cascading only if the organization itself is deleted).
+- **Scope**: strictly organization-scoped in v1; personal (non-organization) project events are not written to `organization_audit_event`.
+- **Event types**: v1 covers invitations, membership/roles, teams, billing, organization renames, and org-project sharing/share links.
 
 ## Trash
 

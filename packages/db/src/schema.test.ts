@@ -5,6 +5,7 @@ import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 
 import * as schema from "./schema";
 import * as aiSchema from "./schema/ai";
+import * as auditSchema from "./schema/audit";
 import * as commentsSchema from "./schema/comments";
 import * as projectsSchema from "./schema/projects";
 import * as sharingSchema from "./schema/sharing";
@@ -38,6 +39,7 @@ test("feature modules can be imported in isolation and compose into the barrel",
     sharingSchema,
     commentsSchema,
     aiSchema,
+    auditSchema,
   ]) {
     const names = tableNames(feature);
     expect(names.length).toBeGreaterThan(0);

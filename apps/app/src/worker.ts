@@ -2,6 +2,7 @@ import handler from "@tanstack/react-start/server-entry";
 import { createDb, type Db } from "@texfolia/db";
 
 import { gatewayRequestCost } from "#/lib/ai/gateway";
+import { expireOrganizationInvitations } from "#/lib/audit/audit.server";
 import { reconcileAiUsage } from "#/lib/billing/server";
 import { handleBuildQueue } from "#/lib/builds/server";
 import { collectGitObjects } from "#/lib/git/server";
@@ -56,6 +57,7 @@ export default {
     const { SOURCES: bucket, COLLABORATION: collaboration } = env;
     const jobs: (() => Promise<unknown>)[] = [
       () => withDb(env, (db) => deleteExpiredProjects({ db, collaboration })),
+      () => withDb(env, (db) => expireOrganizationInvitations(db)),
       () =>
         withDb(env, (db) =>
           collectProjectSources({ db, bucket, collaboration }),

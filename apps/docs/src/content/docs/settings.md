@@ -187,8 +187,7 @@ there. **Disconnect** deletes the account and its tokens, and needs a sign-in fr
 the last 24 hours. Any account can be disconnected, because everyone can sign in
 with an emailed code.
 
-Organizations manages members, roles, and invitations. See
-[Organizations](/project-controls/#organizations).
+Organizations manages members, roles, teams, invitations, and the organization audit log. Owners and admins can browse the append-only audit log in **Settings → Organizations** (members without admin access cannot read it). It records organization renames, invitations (created, accepted, declined, canceled, and expired), member additions/removals/departures and role changes, team creation/updates/deletions and membership changes, organization billing events (plan starts, seat changes, cancellations, payment failures, and AI spend cap updates), and share-link and access changes on organization-owned projects. Secrets, access tokens, webhook secrets, and raw share tokens are never logged. See [Organizations](/project-controls/#organizations).
 
 AI chooses the existing account-level preferred model for new conversations.
 Usage shows monthly metered AI spend, reserved amounts, pending requests, and
