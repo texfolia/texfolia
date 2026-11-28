@@ -5,6 +5,7 @@ import { EditorState } from "@uiw/react-codemirror";
 import {
   clipboardTargetUnchanged,
   isEditorCommandDisabled,
+  readClipboardPayload,
 } from "./use-editor-commands";
 
 test("blocks mutating commands in read-only mode while allowing read commands", () => {
@@ -83,4 +84,36 @@ test("cut and paste apply only where they started", () => {
       }),
     ),
   ).toBe(false);
+});
+
+test("readClipboardPayload reads HTML and plain text via clipboard.read() and falls back to readText()", async () => {
+  const html =
+    "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>";
+  const text = "A\tB\n1\t2";
+
+  const rich = await readClipboardPayload({
+    read: async () => [
+      {
+        types: ["text/html", "text/plain"],
+        presentationStyle: "unspecified",
+        getType: async (type: string) =>
+          new Blob([type === "text/html" ? html : text], { type }),
+      } as ClipboardItem,
+    ],
+    readText: async () => "fallback",
+  });
+  expect(rich).toEqual({ html, text });
+
+  const fallbackOnReject = await readClipboardPayload({
+    read: async () => {
+      throw new Error("NotAllowedError");
+    },
+    readText: async () => text,
+  });
+  expect(fallbackOnReject).toEqual({ html: "", text });
+
+  const fallbackWithoutRead = await readClipboardPayload({
+    readText: async () => "plain text",
+  });
+  expect(fallbackWithoutRead).toEqual({ html: "", text: "plain text" });
 });

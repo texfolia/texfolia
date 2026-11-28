@@ -54,6 +54,16 @@ export {
   type LatexSymbol,
 } from "./symbols.js";
 export {
+  escapeLatexCell,
+  insertLatexTable,
+  tableToLatex,
+  type TableAlign,
+  type TableInput,
+  type TableOptions,
+  type TableResult,
+  type TableRuleStyle,
+} from "./table.js";
+export {
   countWords,
   emptyWordCount,
   wordEvents,

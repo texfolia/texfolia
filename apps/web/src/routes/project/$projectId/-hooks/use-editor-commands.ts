@@ -1,5 +1,6 @@
 import { redo, undo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
+import type { TableInput } from "@texfolia/editor";
 import type {
   EditorState,
   EditorView,
@@ -54,6 +55,40 @@ export function clipboardTargetUnchanged(
   );
 }
 
+export type ClipboardPayload = {
+  html: string;
+  text: string;
+};
+
+/**
+ * Reads `text/html` and `text/plain` from the Clipboard API when `read()` is
+ * supported, falling back to `readText()` when rich clipboard access is
+ * unavailable or rejected.
+ */
+export async function readClipboardPayload(
+  clipboard: Pick<Clipboard, "readText"> & { read?: Clipboard["read"] },
+): Promise<ClipboardPayload> {
+  if (typeof clipboard.read === "function") {
+    try {
+      const items = await clipboard.read();
+      let html = "";
+      let text = "";
+      for (const item of items) {
+        if (!html && item.types.includes("text/html")) {
+          html = await (await item.getType("text/html")).text();
+        }
+        if (!text && item.types.includes("text/plain")) {
+          text = await (await item.getType("text/plain")).text();
+        }
+      }
+      if (html || text) return { html, text };
+    } catch {
+      // Fall back to readText() below.
+    }
+  }
+  return { html: "", text: await clipboard.readText() };
+}
+
 /**
  * Wires CodeMirror history, clipboard, search, formatting, and palette commands
  * and exposes them to both the editor menus and the workspace command bus.
@@ -66,6 +101,7 @@ export function useEditorCommands({
   canFormat,
   formatting,
   format,
+  onPasteTable,
   onToggleWrap,
   onToggleSymbols,
   onError,
@@ -78,6 +114,7 @@ export function useEditorCommands({
   canFormat: boolean;
   formatting: boolean;
   format: (view: EditorView) => void;
+  onPasteTable?: (input: TableInput) => boolean;
   onToggleWrap: () => void;
   onToggleSymbols: () => void;
   onError: (message: string) => void;
@@ -164,14 +201,14 @@ export function useEditorCommands({
           );
         break;
       case "paste":
-        void navigator.clipboard
-          .readText()
-          .then((text) => {
+        void readClipboardPayload(navigator.clipboard)
+          .then((payload) => {
             if (!clipboardTargetUnchanged(before, view))
               return report(
                 "The selection changed before the text was pasted. Paste again.",
               );
-            view.dispatch(view.state.replaceSelection(text), {
+            if (onPasteTable?.(payload)) return;
+            view.dispatch(view.state.replaceSelection(payload.text), {
               userEvent: "input.paste",
               scrollIntoView: true,
             });
