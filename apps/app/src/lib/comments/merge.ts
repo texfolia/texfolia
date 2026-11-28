@@ -9,6 +9,7 @@ export function mergeCommentThread<
     canComment: boolean;
     canModerate: boolean;
     threads: TThread[];
+    mentions?: Record<string, unknown>;
   },
 >(
   current: TData | undefined,
@@ -18,6 +19,7 @@ export function mergeCommentThread<
     canModerate: boolean;
     threadId: string;
     thread: TThread | null;
+    mentions?: TData["mentions"];
   },
 ): TData | undefined {
   if (!current) return current;
@@ -36,5 +38,8 @@ export function mergeCommentThread<
     canComment: update.canComment,
     canModerate: update.canModerate,
     threads,
+    ...(current.mentions !== undefined || update.mentions !== undefined
+      ? { mentions: { ...current.mentions, ...update.mentions } }
+      : {}),
   };
 }

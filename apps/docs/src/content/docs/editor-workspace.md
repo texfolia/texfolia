@@ -185,12 +185,15 @@ permissions. Find in the Edit menu still searches only the active file.
 
 Comments lists review comment threads anchored to source ranges. Add one from the
 editor toolbar or context menu; commented ranges are highlighted and marked in the
-gutter. See [Review comments](/project-controls/#review-comments).
+gutter. Type `@` in a comment, reply, or edit to mention a collaborator with access
+to the project; mentions appear as clickable user chips and notify the person in
+the **Notifications** menu in the workspace header (and by email). See
+[Review comments](/project-controls/#review-comments).
 
 **Scratchpad** in the status bar or View menu opens the project's shared Markdown
-notes as a tab. It edits like a Markdown file, with live cursors and the same
-preview (Mod+Shift+V), and saves itself. See
-[Scratchpad](/project-controls/#scratchpad).
+notes as a tab. It edits like a Markdown file, with live cursors, `@`-mentions of
+project collaborators rendered as inline chips, and the same preview (Mod+Shift+V),
+and saves itself. See [Scratchpad](/project-controls/#scratchpad).
 
 Chat history is a separate sidebar to the left of Agents, hidden by default.
 The bottom-left history button opens it without embedding a thread list above

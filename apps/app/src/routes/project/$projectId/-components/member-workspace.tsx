@@ -21,10 +21,14 @@ export function MemberWorkspace({
   project,
   files,
   userId,
+  initialThread,
+  initialView,
 }: {
   project: ProjectDetails;
   files: ReturnType<typeof createProjectFilesStore>;
   userId: string;
+  initialThread?: string;
+  initialView?: "scratchpad";
 }) {
   const settings = useMemo(
     () => ({
@@ -46,7 +50,12 @@ export function MemberWorkspace({
     <ThemeProvider userId={userId} editorThemes={editorThemes}>
       <SettingsProvider key={project.id} userId={userId} project={settings}>
         <ProjectFilesProvider store={files}>
-          <ProjectWorkspace project={project} userId={userId} />
+          <ProjectWorkspace
+            project={project}
+            userId={userId}
+            initialThread={initialThread}
+            initialView={initialView}
+          />
         </ProjectFilesProvider>
       </SettingsProvider>
     </ThemeProvider>

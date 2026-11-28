@@ -1,6 +1,7 @@
 import type { Db } from "@texfolia/db";
 import {
   projectComment,
+  projectCommentMention,
   projectCommentThread,
   projectNode,
   user,
@@ -10,6 +11,21 @@ import { alias } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 
 import { notifyProjectCommentChanged } from "#/lib/builds/client";
+import type { EmailDelivery } from "#/lib/email";
+import {
+  listProjectAccessiblePeople,
+  resolveProjectMentions,
+} from "#/lib/mentions/people.server";
+import {
+  extractMentionedUserIds,
+  mentionExcerpt,
+  sanitizeUnauthorizedMentions,
+  type ResolvedMention,
+} from "#/lib/mentions/tokens";
+import {
+  deliverQueuedEmails,
+  recordMentionNotifications,
+} from "#/lib/notifications/notifications.server";
 import type { ProjectTransaction } from "#/lib/projects/server";
 import {
   lockProject,
@@ -110,12 +126,8 @@ export async function listComments({
   projectId: string;
 }) {
   return db.transaction(async (tx) => {
-    const { canWrite, canComment } = await lockForComments(
-      tx,
-      projectId,
-      userId,
-      "read",
-    );
+    const found = await lockForComments(tx, projectId, userId, "read");
+    const { canWrite, canComment } = found;
     const resolver = alias(user, "resolver");
     const threads = await tx
       .select({
@@ -161,6 +173,24 @@ export async function listComments({
           )
           .orderBy(asc(projectComment.createdAt), asc(projectComment.id))
       : [];
+    const mentionedIds = new Set<string>();
+    for (const comment of comments) {
+      for (const id of extractMentionedUserIds(comment.body))
+        mentionedIds.add(id);
+    }
+    if (comments.length) {
+      const storedMentions = await tx
+        .select({ mentionedUserId: projectCommentMention.mentionedUserId })
+        .from(projectCommentMention)
+        .where(
+          inArray(
+            projectCommentMention.commentId,
+            comments.map((comment) => comment.id),
+          ),
+        );
+      for (const row of storedMentions) mentionedIds.add(row.mentionedUserId);
+    }
+    const mentions = await resolveProjectMentions(tx, found, [...mentionedIds]);
     const byThread = new Map<string, typeof comments>();
     for (const comment of comments) {
       const items = byThread.get(comment.threadId);
@@ -171,6 +201,7 @@ export async function listComments({
       userId,
       canComment,
       canModerate: canWrite,
+      mentions,
       // A thread whose every comment was deleted with its author's account
       // has nothing left to show.
       threads: threads.flatMap((thread) => {
@@ -199,15 +230,12 @@ export async function getCommentThread({
   userId: string;
   canComment: boolean;
   canModerate: boolean;
+  mentions: Record<string, ResolvedMention>;
   thread: CommentThread | null;
 }> {
   return db.transaction(async (tx) => {
-    const { canWrite, canComment } = await lockForComments(
-      tx,
-      projectId,
-      userId,
-      "read",
-    );
+    const found = await lockForComments(tx, projectId, userId, "read");
+    const { canWrite, canComment } = found;
     const resolver = alias(user, "resolver");
     const [thread] = await tx
       .select({
@@ -232,7 +260,13 @@ export async function getCommentThread({
         ),
       );
     if (!thread)
-      return { userId, canComment, canModerate: canWrite, thread: null };
+      return {
+        userId,
+        canComment,
+        canModerate: canWrite,
+        mentions: {},
+        thread: null,
+      };
     const comments = await tx
       .select({
         id: projectComment.id,
@@ -248,10 +282,17 @@ export async function getCommentThread({
       .innerJoin(user, eq(user.id, projectComment.authorId))
       .where(eq(projectComment.threadId, thread.id))
       .orderBy(asc(projectComment.createdAt), asc(projectComment.id));
+    const mentionedIds = new Set<string>();
+    for (const comment of comments) {
+      for (const id of extractMentionedUserIds(comment.body))
+        mentionedIds.add(id);
+    }
+    const mentions = await resolveProjectMentions(tx, found, [...mentionedIds]);
     return {
       userId,
       canComment,
       canModerate: canWrite,
+      mentions,
       thread: comments.length ? { ...thread, comments } : null,
     };
   });
@@ -280,18 +321,20 @@ export async function createCommentThread({
   db,
   userId,
   data,
+  email,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof createCommentThreadSchema>;
+  email?: EmailDelivery;
 }) {
   if (
     !decodeCommentPosition(data.anchorStart) ||
     !decodeCommentPosition(data.anchorEnd)
   )
     throw new Error("The comment range is invalid. Select the text again.");
-  const created = await db.transaction(async (tx) => {
-    await lockForComments(tx, data.projectId, userId);
+  const { threadId, emails } = await db.transaction(async (tx) => {
+    const found = await lockForComments(tx, data.projectId, userId);
     const [node] = await tx
       .select({ id: projectNode.id })
       .from(projectNode)
@@ -317,6 +360,11 @@ export async function createCommentThread({
       throw new Error(
         `A project can have at most ${maxCommentThreads} comment threads. Delete resolved threads first.`,
       );
+    const accessiblePeople = await listProjectAccessiblePeople(tx, found);
+    const allowedIds = new Set(accessiblePeople.keys());
+    const sanitizedBody = sanitizeUnauthorizedMentions(data.body, allowedIds);
+    const mentionedIds = extractMentionedUserIds(sanitizedBody);
+
     const [thread] = await tx
       .insert(projectCommentThread)
       .values({
@@ -329,26 +377,60 @@ export async function createCommentThread({
       })
       .returning({ id: projectCommentThread.id });
     if (!thread) throw new Error("Comment could not be created.");
-    await tx
+    const [comment] = await tx
       .insert(projectComment)
-      .values({ threadId: thread.id, authorId: userId, body: data.body });
-    return { threadId: thread.id };
+      .values({ threadId: thread.id, authorId: userId, body: sanitizedBody })
+      .returning({ id: projectComment.id });
+    if (comment && mentionedIds.length) {
+      await tx
+        .insert(projectCommentMention)
+        .values(
+          mentionedIds.map((mentionedUserId) => ({
+            commentId: comment.id,
+            mentionedUserId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    const queuedEmails =
+      comment && mentionedIds.length
+        ? await recordMentionNotifications({
+            tx,
+            actorId: userId,
+            projectId: data.projectId,
+            projectName: found.name,
+            kind: "comment_mention",
+            threadId: thread.id,
+            commentId: comment.id,
+            recipientIds: mentionedIds,
+            accessiblePeople,
+            excerpt: mentionExcerpt(
+              sanitizedBody,
+              (id, fallback) => accessiblePeople.get(id)?.name ?? fallback,
+            ),
+            emailBaseURL: email?.baseURL,
+          })
+        : [];
+    return { threadId: thread.id, emails: queuedEmails };
   });
-  await notifyProjectCommentChanged(data.projectId, created.threadId);
-  return created;
+  await deliverQueuedEmails(email, emails);
+  await notifyProjectCommentChanged(data.projectId, threadId);
+  return { threadId };
 }
 
 export async function replyToCommentThread({
   db,
   userId,
   data,
+  email,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof replyToCommentThreadSchema>;
+  email?: EmailDelivery;
 }) {
-  const created = await db.transaction(async (tx) => {
-    await lockForComments(tx, data.projectId, userId);
+  const { commentId, emails } = await db.transaction(async (tx) => {
+    const found = await lockForComments(tx, data.projectId, userId);
     await lockThread(tx, data.projectId, data.threadId);
     const [existing] = await tx
       .select({ count: count() })
@@ -358,19 +440,59 @@ export async function replyToCommentThread({
       throw new Error(
         `A thread can have at most ${maxThreadComments} comments. Start a new thread.`,
       );
+    const accessiblePeople = await listProjectAccessiblePeople(tx, found);
+    const allowedIds = new Set(accessiblePeople.keys());
+    const sanitizedBody = sanitizeUnauthorizedMentions(data.body, allowedIds);
+    const mentionedIds = extractMentionedUserIds(sanitizedBody);
+
     const [comment] = await tx
       .insert(projectComment)
-      .values({ threadId: data.threadId, authorId: userId, body: data.body })
+      .values({
+        threadId: data.threadId,
+        authorId: userId,
+        body: sanitizedBody,
+      })
       .returning({ id: projectComment.id });
+    if (comment && mentionedIds.length) {
+      await tx
+        .insert(projectCommentMention)
+        .values(
+          mentionedIds.map((mentionedUserId) => ({
+            commentId: comment.id,
+            mentionedUserId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
     // Replying to a resolved thread reopens it.
     await tx
       .update(projectCommentThread)
       .set({ resolvedAt: null, resolvedBy: null, updatedAt: sql`now()` })
       .where(eq(projectCommentThread.id, data.threadId));
-    return { commentId: comment?.id };
+    const queuedEmails =
+      comment && mentionedIds.length
+        ? await recordMentionNotifications({
+            tx,
+            actorId: userId,
+            projectId: data.projectId,
+            projectName: found.name,
+            kind: "comment_mention",
+            threadId: data.threadId,
+            commentId: comment.id,
+            recipientIds: mentionedIds,
+            accessiblePeople,
+            excerpt: mentionExcerpt(
+              sanitizedBody,
+              (id, fallback) => accessiblePeople.get(id)?.name ?? fallback,
+            ),
+            emailBaseURL: email?.baseURL,
+          })
+        : [];
+    return { commentId: comment?.id, emails: queuedEmails };
   });
+  await deliverQueuedEmails(email, emails);
   await notifyProjectCommentChanged(data.projectId, data.threadId);
-  return created;
+  return { commentId };
 }
 
 export async function resolveCommentThread({
@@ -428,26 +550,94 @@ export async function updateComment({
   db,
   userId,
   data,
+  email,
 }: {
   db: Db;
   userId: string;
   data: z.infer<typeof updateCommentSchema>;
+  email?: EmailDelivery;
 }) {
-  const threadId = await db.transaction(async (tx) => {
-    await lockForComments(tx, data.projectId, userId);
+  const { threadId, emails } = await db.transaction(async (tx) => {
+    const found = await lockForComments(tx, data.projectId, userId);
     const { threadId } = await lockComment(
       tx,
       data.projectId,
       data.commentId,
       userId,
     );
+    const existingRows = await tx
+      .select({ mentionedUserId: projectCommentMention.mentionedUserId })
+      .from(projectCommentMention)
+      .where(eq(projectCommentMention.commentId, data.commentId));
+    const existingIds = new Set(existingRows.map((row) => row.mentionedUserId));
+
+    const accessiblePeople = await listProjectAccessiblePeople(tx, found);
+    // Keep previously stored historical mentions intact on edits, while
+    // dropping any newly introduced unauthorized mention IDs.
+    const allowedForStorage = new Set([
+      ...accessiblePeople.keys(),
+      ...existingIds,
+    ]);
+    const sanitizedBody = sanitizeUnauthorizedMentions(
+      data.body,
+      allowedForStorage,
+    );
+    const mentionedIds = extractMentionedUserIds(sanitizedBody);
+    const mentionedSet = new Set(mentionedIds);
+
+    const added = mentionedIds.filter(
+      (id) => !existingIds.has(id) && accessiblePeople.has(id),
+    );
+    const removed = [...existingIds].filter((id) => !mentionedSet.has(id));
+
     await tx
       .update(projectComment)
-      .set({ body: data.body, editedAt: sql`now()` })
+      .set({ body: sanitizedBody, editedAt: sql`now()` })
       .where(eq(projectComment.id, data.commentId));
+    if (removed.length) {
+      await tx
+        .delete(projectCommentMention)
+        .where(
+          and(
+            eq(projectCommentMention.commentId, data.commentId),
+            inArray(projectCommentMention.mentionedUserId, removed),
+          ),
+        );
+    }
+    if (added.length) {
+      await tx
+        .insert(projectCommentMention)
+        .values(
+          added.map((mentionedUserId) => ({
+            commentId: data.commentId,
+            mentionedUserId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
     await touchThread(tx, threadId);
-    return threadId;
+
+    const queuedEmails = added.length
+      ? await recordMentionNotifications({
+          tx,
+          actorId: userId,
+          projectId: data.projectId,
+          projectName: found.name,
+          kind: "comment_mention",
+          threadId,
+          commentId: data.commentId,
+          recipientIds: added,
+          accessiblePeople,
+          excerpt: mentionExcerpt(
+            sanitizedBody,
+            (id, fallback) => accessiblePeople.get(id)?.name ?? fallback,
+          ),
+          emailBaseURL: email?.baseURL,
+        })
+      : [];
+    return { threadId, emails: queuedEmails };
   });
+  await deliverQueuedEmails(email, emails);
   await notifyProjectCommentChanged(data.projectId, threadId);
 }
 

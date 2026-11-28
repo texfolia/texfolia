@@ -69,6 +69,7 @@ type Dynamic = {
   language: Extension;
   spelling: Extension;
   markdown: Extension;
+  extra: Extension;
   font: Extension;
   indent: Extension;
   wrapping: Extension;
@@ -135,6 +136,7 @@ export function useEditorExtensions({
   history,
   commentExtension,
   spellingExtension,
+  extraExtension,
   completion,
   problems,
   onSyntaxProblems,
@@ -156,6 +158,7 @@ export function useEditorExtensions({
   history: Extension;
   commentExtension: Extension;
   spellingExtension: Extension;
+  extraExtension?: Extension;
   completion?: CompletionSource;
   problems?: LatexProblem[];
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
@@ -266,6 +269,7 @@ export function useEditorExtensions({
       language,
       spelling: spellingExtension,
       markdown,
+      extra: extraExtension ?? none,
       font,
       indent: indentation,
       wrapping: wrapLines ? EditorView.lineWrapping : none,

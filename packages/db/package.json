@@ -9,6 +9,7 @@
     "./schema/projects": "./src/schema/projects.ts",
     "./schema/sharing": "./src/schema/sharing.ts",
     "./schema/comments": "./src/schema/comments.ts",
+    "./schema/notifications": "./src/schema/notifications.ts",
     "./schema/ai": "./src/schema/ai.ts"
   },
   "scripts": {

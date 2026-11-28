@@ -12,6 +12,7 @@ import {
 export * from "../auth-schema";
 export * from "./ai";
 export * from "./comments";
+export * from "./notifications";
 export * from "./projects";
 export * from "./sharing";
 

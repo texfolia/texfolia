@@ -100,9 +100,9 @@ Decisions on the open questions in NAT-390:
 
 Decisions on the open questions in NAT-443:
 
-- Project collaborator and share-link emails go through the `background` queue, which retries failed deliveries. A queued share-link email holds the link's token until it is sent. Digests and per-user mute preferences are deferred until higher-volume activity notifications exist.
+- Project collaborator, share-link, and `@mention` emails go through the `background` queue, which retries failed deliveries. A queued share-link email holds the link's token until it is sent. Digests and per-user mute preferences are deferred until higher-volume activity notifications exist.
 - Share links remain copyable bearer URLs by default (sending no email); an email is sent only when the owner specifies a recipient email while creating a link.
-- Comment `@mention` emails are deferred until comment mentions themselves are designed and shipped.
+- Mentioning a collaborator with `@` in review comments or the scratchpad creates an in-app notification and queues a mention email (subject to the shared `sharing_limit` budget); self-mentions and unauthorized users are never notified.
 
 Server-side, a link acts as the principal `share:<linkId>` wherever a user ID is checked. `lockProject` resolves it against `project_share_link`, rejects writes, and rejects PDF-only links unless the caller asks for build content. API requests carry the token in the `share` query parameter, which takes precedence over the session.
 
@@ -116,6 +116,7 @@ menu.
 - It is not a project file. It has no place in the file tree, project search, compiles, Git, ZIP export, or duplicates.
 - It has no review comments. The AI assistant can read it and cannot write it; see [the assistant guide](/ai-assistant/).
 - Edits save as they are made. Offline edits stay in the browser and merge on reconnecting, like edits to files.
+- Typing `@` opens a searchable list of people with access to the project and inserts a structured `@[Name](mention:<userId>)` chip. Newly added mentions notify the mentioned collaborator in-app and by email, tracked in `project_scratchpad_mention` so later edits do not resend notifications.
 
 Server-side, it is the document `scratchpad` in the project's collaboration
 room, and the room's own storage is its only copy. It stays with a project in
@@ -132,6 +133,7 @@ Comments never change sources. Share-link guests cannot read or write comments.
 - **Comments** in the right sidebar lists **Open** and **Resolved** threads by file and position. Selecting a thread scrolls its editor to the range.
 - Anyone who can comment can reply, resolve, and reopen. Replying to a resolved thread reopens it.
 - Authors edit and delete their own comments. Deleting a thread's last comment deletes the thread. A thread's author and project editors can delete the whole thread.
+- Typing `@` in a new comment, reply, or edit opens a searchable list of people with access to the project (excluding share-link guests and without exposing emails) and inserts a structured mention chip stored by stable user ID in `project_comment_mention`. Mentions resolve to the person's current name and avatar, or to a historical **Former collaborator** / **Deleted user** chip if they lose access or delete their account.
 - Limits are 10,000 characters per comment, 200 comments per thread, and 2,000 threads per project.
 
 A thread stores the start and end of its range as Yjs relative positions in the file's collaboration document. Ranges therefore follow everyone's edits, saves, and Git pulls, which merge into the document as diffs. Text typed at either edge stays outside the range. When the commented text is deleted, the thread remains and shows **text deleted**. A thread whose author was offline shows **position unavailable** until their edits synchronize. Threads on deleted files disappear. Deleting a user account deletes that user's comments.
@@ -139,7 +141,7 @@ A thread stores the start and end of its range as Yjs relative positions in the 
 Decisions on the open questions in NAT-386:
 
 - Comments are stored in Postgres (`project_comment_thread` and `project_comment`), not in the collaboration Durable Object. The object rejects document updates from viewers, and viewers must still be able to comment. Postgres also keeps access checks in `lockProject` and cascades deletion with projects, files, and users. Open workspaces notice changes through `commentsVersion` in the existing two-second metadata poll, then reload the threads.
-- Comments send no email notifications in v1.
+- `@`-mentions in review comments and the scratchpad create per-user in-app notifications (`user_notification`) and queue mention emails through the `background` queue using the shared `sharing_limit` budget. Non-mention comment activity sends no email notifications.
 
 ## Release policy content
 

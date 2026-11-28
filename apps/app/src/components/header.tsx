@@ -8,6 +8,7 @@ import {
 } from "@texfolia/ui/dropdown-menu";
 import { type ComponentType, lazy, Suspense } from "react";
 
+import { NotificationsMenu } from "#/components/notifications-menu";
 import { authClient } from "#/lib/auth/auth-client";
 import { webPath } from "#/lib/origins";
 
@@ -69,6 +70,7 @@ export function Header() {
             Pricing
           </a>
         </nav>
+        {session && <NotificationsMenu />}
         {session && (
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" />}>

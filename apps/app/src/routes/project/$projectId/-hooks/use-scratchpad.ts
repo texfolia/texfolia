@@ -5,6 +5,8 @@ import {
   type CollaborationConnection,
   documentCachingStopped,
 } from "#/lib/collaboration/browser";
+import { syncScratchpadMentions } from "#/lib/mentions/mentions.functions";
+import { extractMentionedUserIds } from "#/lib/mentions/tokens";
 
 import { useCollaborationFiles } from "./use-collaboration-files";
 
@@ -34,6 +36,28 @@ export function useScratchpad({
   onChange: (value: string) => void;
 }) {
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const lastMentionKey = useRef<string | null>(null);
+  const canWriteRef = useRef(canWrite);
+  canWriteRef.current = canWrite;
+
+  function syncMentions(value: string) {
+    if (!canWriteRef.current) return;
+    const ids = extractMentionedUserIds(value);
+    const key = [...ids].sort().join(",");
+    if (lastMentionKey.current === null && !ids.length) {
+      lastMentionKey.current = "";
+      return;
+    }
+    if (lastMentionKey.current === key) return;
+    lastMentionKey.current = key;
+    void syncScratchpadMentions({ data: { projectId, body: value } }).catch(
+      () => {
+        // Retry on next edit if offline or transient error.
+        if (lastMentionKey.current === key) lastMentionKey.current = null;
+      },
+    );
+  }
+
   const { snapshot, get, hold } = useCollaborationFiles({
     projectId,
     userId,
@@ -44,9 +68,15 @@ export function useScratchpad({
     connection,
     onSaved: ignore,
     onClose: ignore,
-    onChange: (_id, value) => {
+    onChange: (_id, value, local) => {
       onChange(value);
-      scheduleSave();
+      if (local) scheduleSave();
+      else if (lastMentionKey.current === null) {
+        // Initialize from synced remote state without triggering notifications.
+        lastMentionKey.current = [...extractMentionedUserIds(value)]
+          .sort()
+          .join(",");
+      }
     },
   });
 
@@ -57,9 +87,12 @@ export function useScratchpad({
     saveTimer.current = setTimeout(() => {
       saveTimer.current = undefined;
       const file = get(scratchpadId);
-      if (file?.hasPendingEdits() && file.getStatus().connected)
+      if (file?.hasPendingEdits() && file.getStatus().connected) {
+        const value = file.text.toString();
+        syncMentions(value);
         // Edits that could not be confirmed stay pending until the next change.
         file.save().then(scheduleSave, ignore);
+      }
     }, saveDelayMs);
   }
   useEffect(

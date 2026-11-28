@@ -23,6 +23,15 @@ const GuestWorkspace = lazy(async () => ({
 
 export const Route = createFileRoute("/project/$projectId")({
   ssr: false,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { thread?: string; view?: "scratchpad" } => ({
+    thread:
+      typeof search.thread === "string" && search.thread
+        ? search.thread
+        : undefined,
+    view: search.view === "scratchpad" ? "scratchpad" : undefined,
+  }),
   loader: async ({ params, context, location }) => {
     // Start downloading the likely shell while the project loads.
     void (context.appUser ? loadMember() : loadGuest()).catch(() => {});
@@ -70,6 +79,7 @@ export const Route = createFileRoute("/project/$projectId")({
 
 function ProjectPage() {
   const opened = Route.useLoaderData();
+  const { thread, view } = Route.useSearch();
   if (opened.kind === "revoked") return <LinkNoLongerWorks />;
   if (opened.kind === "guest")
     return <GuestWorkspace project={opened.project} />;
@@ -78,6 +88,8 @@ function ProjectPage() {
       project={opened.project}
       files={opened.files}
       userId={opened.userId}
+      initialThread={thread}
+      initialView={view}
     />
   );
 }
