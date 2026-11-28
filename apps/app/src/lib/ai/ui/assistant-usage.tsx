@@ -59,8 +59,8 @@ export function AssistantUsage({
       </summary>
       <div className="space-y-3 py-3">
         <p>
-          AI is billed monthly at model cost plus 20%. Failed and stopped
-          requests may still incur usage.
+          AI is billed monthly at model cost plus 20%, excluding applicable tax.
+          Failed and stopped requests may still incur usage.
         </p>
         {config.reservedDollars > 0 && (
           <p role="status">
@@ -98,8 +98,8 @@ export function AssistantUsage({
           />
         </label>
         <p>
-          Save to make the selected model your default for new chats. A $0 cap
-          pauses AI.
+          Save to make the selected model your default for new chats. Caps apply
+          to pre-tax usage; a $0 cap pauses AI.
         </p>
         <Button
           size="sm"

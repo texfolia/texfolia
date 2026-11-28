@@ -187,9 +187,9 @@ function BillingPage() {
             <p className="text-muted-foreground leading-7">
               Pro compiles for every organization member and AI in the
               organization's projects, at ${paidPlans.team.monthlyUsd} USD per
-              user per month on one shared bill. Create your organization, then
-              continue to Stripe checkout. Personal and Team subscriptions are
-              billed separately.
+              user per month (excluding applicable tax) on one shared bill.
+              Create your organization, then continue to Stripe checkout.
+              Personal and Team subscriptions are billed separately.
             </p>
             <label htmlFor="team-name" className="block text-sm font-medium">
               Organization name
@@ -215,15 +215,16 @@ function BillingPage() {
             </h2>
             <p className="text-muted-foreground leading-7">
               {selected
-                ? `${selected.seats} ${selected.seats === 1 ? "member" : "members"} × $${paidPlans.team.monthlyUsd} USD/month = $${selected.seats * paidPlans.team.monthlyUsd} USD/month. Every member, including owners and admins, is a paid seat. Seat changes are prorated.`
-                : `$${paidPlans.pro.monthlyUsd} USD/month for your personal account.`}
+                ? `${selected.seats} ${selected.seats === 1 ? "member" : "members"} × $${paidPlans.team.monthlyUsd} USD/month = $${selected.seats * paidPlans.team.monthlyUsd} USD/month, excluding applicable tax. Every member, including owners and admins, is a paid seat. Seat changes are prorated.`
+                : `$${paidPlans.pro.monthlyUsd} USD/month, excluding applicable tax, for your personal account.`}
             </p>
             <p className="text-muted-foreground leading-7">
               AI usage is extra: model cost plus 20%, reported to Stripe after
               each run and invoiced monthly. Each user controls their own
-              monthly spend cap (default $20).{" "}
+              monthly spend cap (default $20, pre-tax; applicable tax is added
+              on the invoice).{" "}
               {selected &&
-                "The organization pays for members' usage in its own projects, up to a shared monthly cap set by its owners and admins. Usage in personal projects needs a personal Pro plan, which is billed separately."}
+                "The organization pays for members' usage in its own projects, up to a shared monthly cap (pre-tax) set by its owners and admins. Usage in personal projects needs a personal Pro plan, which is billed separately."}
             </p>
             {!canManage ? (
               <p>Only an organization owner or admin can manage billing.</p>
@@ -319,6 +320,8 @@ function BillingPage() {
               />
               <p className="text-muted-foreground text-xs">
                 A $0 cap prevents new AI requests billed to the organization.
+                Caps apply to pre-tax usage; applicable tax is added on the
+                invoice.
               </p>
               <Button
                 type="submit"

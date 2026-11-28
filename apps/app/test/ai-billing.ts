@@ -245,12 +245,13 @@ try {
     );
   }
   const stripeCalls: string[] = [];
+  const attachedItems: unknown[] = [];
   let itemPrice = "price_other";
   const call =
-    <T>(name: string, result: () => T) =>
-    async () => {
+    <T>(name: string, result: (...args: unknown[]) => T) =>
+    async (...args: unknown[]) => {
       stripeCalls.push(name);
-      return result();
+      return result(...args);
     };
   const stripe = {
     prices: {
@@ -258,6 +259,7 @@ try {
         id: "price_ai",
         currency: "usd",
         unit_amount_decimal: "0.0000001",
+        tax_behavior: "exclusive",
         recurring: {
           interval: "month",
           interval_count: 1,
@@ -271,6 +273,7 @@ try {
         id: "sub_pro",
         customer: "cus_pro",
         status: "active",
+        automatic_tax: { enabled: true },
         items: { data: [{ price: { id: itemPrice } }] },
       })),
     },
@@ -290,7 +293,8 @@ try {
       },
     },
     subscriptionItems: {
-      create: call("attach", () => {
+      create: call("attach", (params) => {
+        attachedItems.push(params);
         itemPrice = "price_ai";
       }),
     },
@@ -321,6 +325,17 @@ try {
     "meter",
     "attach",
   ]);
+  assert.deepEqual(
+    attachedItems,
+    [
+      {
+        subscription: "sub_pro",
+        price: "price_ai",
+        proration_behavior: "none",
+      },
+    ],
+    "metered AI item attaches cleanly to a tax-enabled subscription without overriding automatic_tax",
+  );
   assert.deepEqual(
     await ensure(),
     [],

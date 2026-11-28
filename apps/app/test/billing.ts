@@ -13,6 +13,7 @@ import {
   compilePlan,
   createBillingPlugin,
   enforceBillingScope,
+  isStripeAutomaticTaxEnabled,
 } from "#/lib/billing/server";
 
 const key = process.env.STRIPE_SECRET_KEY;
@@ -25,12 +26,14 @@ assert(
   connection && new URL(connection).pathname.includes("test"),
   "Use an isolated test database",
 );
-const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
-const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID;
+const rawProPriceId = process.env.STRIPE_PRO_PRICE_ID;
+const rawTeamPriceId = process.env.STRIPE_TEAM_PRICE_ID;
 assert(
-  proPriceId && teamPriceId,
+  rawProPriceId && rawTeamPriceId,
   "Run billing:setup and configure the sandbox price IDs",
 );
+const proPriceId: string = rawProPriceId;
+const teamPriceId: string = rawTeamPriceId;
 const db = createDb(connection);
 const stripe = new Stripe(key, {
   apiVersion: "2026-10-28.endive",
@@ -38,26 +41,31 @@ const stripe = new Stripe(key, {
 });
 const secret = "whsec_billing_integration_fixture";
 const origin = "http://localhost:3000";
-const auth = betterAuth({
-  baseURL: origin,
-  secret: "billing-integration-test-secret-at-least-32-characters",
-  database: drizzleAdapter(db, { provider: "pg", schema }),
-  emailAndPassword: { enabled: true },
-  hooks: { before: enforceBillingScope },
-  plugins: [
-    createOrganizationPlugin({
-      baseURL: origin,
-      sendInvitationEmail: async () => {},
-    }),
-    createBillingPlugin({
-      stripeClient: stripe,
-      webhookSecret: secret,
-      proPriceId,
-      teamPriceId,
-      createCustomerOnSignUp: false,
-    }),
-  ],
-});
+function createBillingAuth(automaticTax: boolean) {
+  return betterAuth({
+    baseURL: origin,
+    secret: "billing-integration-test-secret-at-least-32-characters",
+    database: drizzleAdapter(db, { provider: "pg", schema }),
+    emailAndPassword: { enabled: true },
+    hooks: { before: enforceBillingScope },
+    plugins: [
+      createOrganizationPlugin({
+        baseURL: origin,
+        sendInvitationEmail: async () => {},
+      }),
+      createBillingPlugin({
+        stripeClient: stripe,
+        webhookSecret: secret,
+        proPriceId,
+        teamPriceId,
+        createCustomerOnSignUp: false,
+        automaticTax,
+      }),
+    ],
+  });
+}
+const auth = createBillingAuth(false);
+const taxAuth = isStripeAutomaticTaxEnabled() ? createBillingAuth(true) : null;
 const userIds: string[] = [];
 const orgIds: string[] = [];
 const customerIds = new Set<string>();
@@ -121,8 +129,15 @@ async function checkout(
   scope:
     | { plan: "pro"; customerType: "user" }
     | { plan: "team"; customerType: "organization"; referenceId: string },
+  {
+    instance = auth,
+    automaticTax = false,
+  }: {
+    instance?: typeof auth;
+    automaticTax?: boolean;
+  } = {},
 ) {
-  const result = await auth.api.upgradeSubscription({
+  const result = await instance.api.upgradeSubscription({
     headers,
     body: {
       ...scope,
@@ -159,6 +174,17 @@ async function checkout(
     session.client_reference_id,
     scope.plan === "team" ? scope.referenceId : userIds[0],
   );
+  assert.equal(
+    session.automatic_tax.enabled,
+    automaticTax,
+    automaticTax
+      ? "Stripe Tax is enabled on Checkout when STRIPE_AUTOMATIC_TAX=true"
+      : "Stripe Tax stays off on Checkout when STRIPE_AUTOMATIC_TAX is not true",
+  );
+  if (automaticTax) {
+    assert.equal(session.billing_address_collection, "required");
+    assert.equal(session.tax_id_collection?.enabled, true);
+  }
   return { session, customerId };
 }
 
@@ -338,6 +364,24 @@ try {
   );
   assert.equal(await compilePlan(db, owner.id), "free");
   await assert.rejects(aiEntitlement(db, owner.id, null));
+  if (taxAuth) {
+    // Both owner and org already have Stripe customer IDs from the checks above,
+    // exercising Stripe's existing-customer tax_id_collection + customer_update.name requirement.
+    await checkout(
+      owner.headers,
+      { plan: "pro", customerType: "user" },
+      { instance: taxAuth, automaticTax: true },
+    );
+    await checkout(
+      owner.headers,
+      { plan: "team", customerType: "organization", referenceId: org.id },
+      { instance: taxAuth, automaticTax: true },
+    );
+  } else {
+    console.info(
+      "Skipping live Stripe Tax Checkout check (set STRIPE_AUTOMATIC_TAX=true against a sandbox with Stripe Tax enabled in the Dashboard).",
+    );
+  }
   console.info(
     "Billing passed: real sandbox checkout and subscriptions, signed webhook processing, seat additions/removals, payer isolation, compile/AI entitlement and cancellation.",
   );

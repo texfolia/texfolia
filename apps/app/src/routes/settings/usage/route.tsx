@@ -100,7 +100,8 @@ function UsagePage() {
             />
             <p className="text-muted-foreground text-xs">
               A $0 cap prevents new AI requests. Model cost includes the
-              existing 20% markup.
+              existing 20% markup. Caps apply to pre-tax usage; applicable tax
+              is added on the invoice.
             </p>
             <Button type="submit" disabled={pending || cap === saved}>
               {pending ? "Saving…" : "Save cap"}

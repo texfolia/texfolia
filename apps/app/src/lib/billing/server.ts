@@ -1,8 +1,13 @@
 export {
+  allowedAiTaxCodes,
   authorizeOrganizationBilling,
   createBillingPlugin,
   enforceBillingScope,
   getStripeClient,
+  isStripeAutomaticTaxEnabled,
+  stripeTaxCodes,
+  validateAiPrice,
+  validatePlanPrice,
 } from "./stripe";
 export { aiEntitlement, compilePlan, type AiPayer } from "./entitlements";
 export {

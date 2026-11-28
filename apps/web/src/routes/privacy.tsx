@@ -124,9 +124,15 @@ const sections: PolicySection[] = [
           Account and project metadata use PostgreSQL. Sources, repository
           snapshots, and generated artifacts use server storage. Cloudflare
           services provide application hosting, object storage, collaboration,
-          compilation, and email delivery. Stripe processes checkout and
-          payments; Texfolia stores customer and subscription identifiers and
-          billing state.
+          compilation, and email delivery. Stripe processes checkout, payments,
+          invoicing, and automatic tax calculation through Stripe Tax. To
+          calculate and collect applicable sales tax, VAT, or GST/HST, Stripe
+          collects your billing address and, when provided, your business name
+          and tax identification number (such as a VAT or GST/HST ID), and
+          retains invoice and tax records as required for billing and tax
+          compliance. Texfolia stores Stripe customer and subscription
+          identifiers and billing state, not full payment card details or tax
+          IDs.
         </p>
         <p>
           Operational logs and traces record requests, errors, compile activity,
