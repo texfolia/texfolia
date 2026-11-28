@@ -1,0 +1,43 @@
+# Article entry with nested braces, quoted string, and number
+
+% Bibliography
+@article{knuth1984,
+  title = {A {nested} title},
+  author = "Donald Knuth",
+  year = 1984
+}
+
+==>
+
+BibTeX(
+  Comment,
+  Entry(
+    EntryType,
+    EntryKey(Identifier),
+    Field(FieldName(Identifier), Value(BracedValue(NestedBrace))),
+    Field(FieldName(Identifier), Value(QuotedValue)),
+    Field(FieldName(Identifier), Value(Number))
+  )
+)
+
+# String concatenation, preamble, and comment entries
+
+@comment{ignored {text}}
+@string{j = "Journal"}
+@preamble{"\newcommand{\noop}[1]{}"}
+@book(key2026,
+  journal = j # " of TeX",
+)
+
+==>
+
+BibTeX(
+  CommentEntry(CommentType, BracedValue(NestedBrace)),
+  StringEntry(StringType, Field(FieldName(Identifier), Value(QuotedValue))),
+  PreambleEntry(PreambleType, Value(QuotedValue)),
+  Entry(
+    EntryType,
+    EntryKey(Identifier),
+    Field(FieldName(Identifier), Value(Identifier, QuotedValue))
+  )
+)

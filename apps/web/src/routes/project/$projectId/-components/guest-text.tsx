@@ -1,4 +1,4 @@
-import { bibtexLanguage, latex } from "@texfolia/codemirror-lang-latex";
+import { languageForFilename } from "@texfolia/codemirror-lang-latex";
 import CodeMirror, { EditorState } from "@uiw/react-codemirror";
 import { cn } from "cn";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -35,13 +35,15 @@ export function GuestText({
   const status = useSyncExternalStore(file.subscribe, file.getStatus);
   const extensions = useMemo(() => {
     const extension = extensionOf(node.name);
-    const language = ["tex", "ltx", "sty", "cls"].includes(extension)
-      ? [latex({ enableAutocomplete: false, enableLinting: false })]
+    const texSupport = languageForFilename(node.name, {
+      enableAutocomplete: false,
+      enableLinting: false,
+    });
+    const language = texSupport
+      ? [texSupport]
       : extension === "md"
         ? [markdownSupport()]
-        : extension === "bib"
-          ? [bibtexLanguage]
-          : [];
+        : [];
     return [EditorState.readOnly.of(true), ...language];
   }, [node.name]);
   if (!status.ready)

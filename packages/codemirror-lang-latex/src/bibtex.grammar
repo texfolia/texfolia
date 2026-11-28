@@ -1,0 +1,113 @@
+@top BibTeX { item* }
+
+@skip { space | Comment }
+
+item {
+  CommentEntry |
+  PreambleEntry |
+  StringEntry |
+  Entry
+}
+
+CommentEntry {
+  CommentType (BracedValue | ParenValue)
+}
+
+PreambleEntry {
+  PreambleType ("{" Value "}" | "(" Value ")")
+}
+
+StringEntry {
+  StringType ("{" Field? "}" | "(" Field? ")")
+}
+
+Entry {
+  EntryType (
+    "{" EntryKey ("," Field)* ","? "}" |
+    "(" EntryKey ("," Field)* ","? ")"
+  )
+}
+
+EntryKey {
+  Identifier | Number
+}
+
+Field {
+  FieldName "=" Value
+}
+
+FieldName {
+  Identifier
+}
+
+Value {
+  valuePart ("#" valuePart)*
+}
+
+valuePart {
+  BracedValue |
+  QuotedValue |
+  Number |
+  Identifier
+}
+
+@skip {} {
+  BracedValue {
+    "{" (NestedBrace | bracedText)* bracedEnd
+  }
+
+  NestedBrace {
+    bracedOpen (NestedBrace | bracedText)* bracedEnd
+  }
+
+  ParenValue {
+    "(" (NestedParen | parenText)* parenEnd
+  }
+
+  NestedParen {
+    parenOpen (NestedParen | parenText)* parenEnd
+  }
+}
+
+@local tokens {
+  bracedEnd { "}" }
+  bracedOpen { "{" }
+  @else bracedText
+}
+
+@local tokens {
+  parenEnd { ")" }
+  parenOpen { "(" }
+  @else parenText
+}
+
+@tokens {
+  space { $[ \t\n\r]+ }
+  Comment { "%" ![\n]* }
+
+  CommentType { "@" $[cC]$[oO]$[mM]$[mM]$[eE]$[nN]$[tT] }
+  PreambleType { "@" $[pP]$[rR]$[eE]$[aA]$[mM]$[bB]$[lL]$[eE] }
+  StringType { "@" $[sS]$[tT]$[rR]$[iI]$[nN]$[gG] }
+  EntryType { "@" $[a-zA-Z]$[a-zA-Z0-9_-]* }
+
+  QuotedValue { '"' (!["\\] | "\\" _)* '"' }
+  Number { $[0-9]+ }
+  Identifier { ![ \t\n\r{},()="#%@]+ }
+
+  "{" "}" "(" ")" "=" "#" ","
+
+  @precedence {
+    Comment,
+    CommentType,
+    PreambleType,
+    StringType,
+    EntryType,
+    QuotedValue,
+    Number,
+    Identifier
+  }
+}
+
+@external propSource bibtexHighlighting from "./bibtex-highlight.js"
+
+@detectDelim

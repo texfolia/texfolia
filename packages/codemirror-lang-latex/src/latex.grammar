@@ -2,8 +2,31 @@
 
 @skip { space | Comment }
 
+@context envContext from "./tokens.js"
+
+@external tokens inlineVerbatim from "./tokens.js" {
+  InlineVerbatim
+}
+
+@external tokens beginCommand from "./tokens.js" {
+  BeginCommand,
+  BeginMathCommand,
+  BeginVerbatimCommand
+}
+
+@external tokens verbatimContent from "./tokens.js" {
+  VerbatimContent
+}
+
+@external tokens implicitEnd from "./tokens.js" {
+  ImplicitEnd
+}
+
 content {
+  VerbatimEnvironment |
+  MathEnvironment |
   Environment |
+  InlineVerbatim |
   DisplayMath |
   InlineMath |
   Command |
@@ -16,8 +39,32 @@ content {
   Punctuation
 }
 
+VerbatimEnvironment {
+  BeginVerbatimEnv verbatimBody EndEnv
+}
+
+@skip {} {
+  verbatimBody { VerbatimContent? }
+}
+
+MathEnvironment {
+  BeginMathEnv MathBody (EndEnv | ImplicitEnd)
+}
+
+MathBody {
+  mathContent*
+}
+
 Environment {
-  BeginEnv content* EndEnv
+  BeginEnv content* (EndEnv | ImplicitEnd)
+}
+
+BeginVerbatimEnv {
+  BeginVerbatimCommand "{" EnvName "}"
+}
+
+BeginMathEnv {
+  BeginMathCommand "{" EnvName "}"
 }
 
 BeginEnv {
@@ -25,14 +72,13 @@ BeginEnv {
 }
 
 EndEnv {
-  EndCommand "{" EnvName "}"
+  endCommand "{" EnvName "}"
 }
 
-BeginCommand { @specialize[@name=BeginCommand]<CommandName, "\\begin"> }
-EndCommand { @specialize[@name=EndCommand]<CommandName, "\\end"> }
+endCommand { @specialize[@name=EndCommand]<CommandName, "\\end"> }
 
 EnvName {
-  Text
+  (Text | Number | MathOperator | Punctuation)+
 }
 
 DisplayMath {
@@ -46,7 +92,10 @@ InlineMath {
 }
 
 mathContent {
+  VerbatimEnvironment |
+  MathEnvironment |
   Environment |
+  InlineVerbatim |
   Command |
   OptionalArgument |
   BracedGroup |
@@ -66,6 +115,7 @@ OptionalArgument {
 }
 
 bracketContent {
+  InlineVerbatim |
   Command |
   BracedGroup |
   EscapedChar |
@@ -117,5 +167,7 @@ BracedGroup {
     Text
   }
 }
+
+@external propSource latexHighlighting from "./highlight.js"
 
 @detectDelim

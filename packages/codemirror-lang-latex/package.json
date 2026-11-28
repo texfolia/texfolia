@@ -2,9 +2,10 @@
   "name": "@texfolia/codemirror-lang-latex",
   "version": "0.1.0",
   "private": true,
-  "description": "Clean-room LaTeX and BibTeX language support for CodeMirror 6.",
+  "description": "LaTeX, BibTeX, and BibTeX style language support for CodeMirror 6.",
   "keywords": [
     "bibtex",
+    "bst",
     "codemirror",
     "codemirror6",
     "language",
@@ -38,8 +39,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun run build:grammar && tsc -p tsconfig.build.json && bun -e 'const fs=require(\"node:fs\"); fs.copyFileSync(\"src/parser.js\", \"dist/parser.js\"); fs.copyFileSync(\"src/parser.d.ts\", \"dist/parser.d.ts\");'",
-    "build:grammar": "lezer-generator src/latex.grammar -o src/parser.js --noTerms",
+    "build": "bun run build:grammar && tsc -p tsconfig.build.json && bun -e 'const fs=require(\"node:fs\"); for (const f of [\"parser.js\",\"parser.d.ts\",\"parser.terms.js\",\"bibtex-parser.js\",\"bibtex-parser.d.ts\",\"bibtex-parser.terms.js\"]) fs.copyFileSync(\"src/\" + f, \"dist/\" + f);'",
+    "build:grammar": "lezer-generator src/latex.grammar -o src/parser.js && lezer-generator src/bibtex.grammar -o src/bibtex-parser.js",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",

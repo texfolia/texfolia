@@ -206,10 +206,28 @@ const COMMANDS: readonly CommandDef[] = [
   { label: "\\Phi" },
   { label: "\\Psi" },
   { label: "\\Omega" },
-  // Macros
+  // Macros & package/class/biblatex authoring
   { label: "\\newcommand", args: 2, detail: "Define command" },
   { label: "\\renewcommand", args: 2, detail: "Redefine command" },
   { label: "\\DeclareMathOperator", args: 2, detail: "Define math operator" },
+  { label: "\\NeedsTeXFormat", args: 1, detail: "Required TeX format" },
+  { label: "\\ProvidesPackage", args: 1, detail: "Declare package" },
+  { label: "\\ProvidesClass", args: 1, detail: "Declare document class" },
+  { label: "\\ProvidesFile", args: 1, detail: "Declare TeX file" },
+  { label: "\\RequirePackage", args: 1, detail: "Load package in class/style" },
+  { label: "\\LoadClass", args: 1, detail: "Load base document class" },
+  { label: "\\DeclareOption", args: 2, detail: "Declare class/package option" },
+  { label: "\\ProcessOptions", detail: "Process class/package options" },
+  { label: "\\makeatletter", detail: "Allow @ in command names" },
+  { label: "\\makeatother", detail: "Restore @ catcode" },
+  {
+    label: "\\DeclareBibliographyDriver",
+    args: 2,
+    detail: "BibLaTeX bibliography driver",
+  },
+  { label: "\\newbibmacro", args: 2, detail: "Define BibLaTeX macro" },
+  { label: "\\usebibmacro", args: 1, detail: "Invoke BibLaTeX macro" },
+  { label: "\\DeclareFieldFormat", args: 2, detail: "BibLaTeX field format" },
 ];
 
 function applyBeginEnvironment(
@@ -273,7 +291,7 @@ const endEnvOptions: readonly Completion[] = ENVIRONMENTS.map((name) => ({
 }));
 
 /**
- * Clean-room CodeMirror completion source for standard LaTeX commands and
+ * CodeMirror completion source for standard LaTeX commands and
  * `\begin{...}` / `\end{...}` environments.
  */
 export const latexCompletionSource: CompletionSource = (

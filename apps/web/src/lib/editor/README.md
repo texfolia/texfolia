@@ -6,7 +6,7 @@ hooks that drive it stay in `src/routes` and `src/hooks`.
 
 | Entry point                       | Contents                                                                                         |
 | --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `@texfolia/codemirror-lang-latex` | Clean-room Lezer LaTeX grammar, syntax linter, built-in completions, and BibTeX language         |
+| `@texfolia/codemirror-lang-latex` | Lezer LaTeX and BibTeX grammars, `.bst` support, tree-driven linter, and built-in completions    |
 | `@texfolia/tex-fmt`               | WebAssembly build and TypeScript wrapper for upstream MIT `tex-fmt`                              |
 | `@texfolia/editor`                | Framework-agnostic LaTeX editor extensions, analysis, outline, word count, BibTeX, and symbols   |
 | `#/lib/editor/latex/*`            | App-side browser workers (`analysis.worker`, `format.worker`, `formatter`) and SyncTeX           |

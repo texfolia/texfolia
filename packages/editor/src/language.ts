@@ -6,8 +6,8 @@ import {
   StateEffect,
 } from "@codemirror/state";
 import {
-  bibtexLanguage,
-  latex,
+  isLatexFilename,
+  languageForFilename,
   latexLinter,
 } from "@texfolia/codemirror-lang-latex";
 
@@ -36,22 +36,22 @@ export function editorLanguage({
   addReference,
   fixWithAi,
 }: EditorLanguageOptions): Extension[] {
-  const isLatex = /\.(?:tex|ltx|sty|cls)$/i.test(filename);
-  const support = isLatex
-    ? latex({ enableAutocomplete: true, enableLinting: false })
-    : null;
+  const isLatex = isLatexFilename(filename);
+  const support = languageForFilename(filename, {
+    enableAutocomplete: true,
+    enableLinting: false,
+  });
   const checkSyntax = latexLinter({ fileName: filename });
 
   return [
     ...(support
       ? [
           support,
-          ...(completion
+          ...(isLatex && completion
             ? [support.language.data.of({ autocomplete: completion })]
             : []),
         ]
       : []),
-    ...(/\.bib$/i.test(filename) ? [bibtexLanguage] : []),
     linter(
       (view) => {
         const syntax = isLatex ? checkSyntax(view) : [];
