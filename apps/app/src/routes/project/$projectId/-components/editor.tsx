@@ -3,7 +3,12 @@ import { redoDepth, undoDepth } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import type { LatexProblem } from "@texfolia/editor";
 import { defaultFormatSettings, type FormatSettings } from "@texfolia/editor";
-import { addLatexPackage, insertLatexSymbol } from "@texfolia/editor";
+import {
+  addLatexPackage,
+  insertLatexSymbol,
+  packageInsertion,
+} from "@texfolia/editor";
+import { Button } from "@texfolia/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -21,7 +26,14 @@ import CodeMirror, {
   type ReactCodeMirrorRef,
   type ViewUpdate,
 } from "@uiw/react-codemirror";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { type Confirmation, ConfirmDialog } from "#/components/confirm-dialog";
 import { useEditorTheme } from "#/hooks/use-editor-theme";
@@ -37,6 +49,7 @@ import {
   restoreSnapshot,
 } from "#/lib/editor/position";
 import { selectedLines } from "#/lib/editor/selection";
+import { formatImageSnippet } from "#/lib/projects";
 import { downloadFile } from "#/lib/storage/browser";
 import { hasSourcePreview, imageType } from "#/lib/storage/preview";
 import { useSettings } from "#/providers/settings-provider";
@@ -102,6 +115,8 @@ type EditorProps = {
   /** Asks the assistant about the selection, or the cursor's line. */
   onAskAi?: (selection: ReturnType<typeof selectedLines>) => void;
   onFixWithAi?: (problem: { line: number; message: string }) => void;
+  /** Uploads pasted or dropped image files and returns their project paths. */
+  onUploadImages?: (files: File[]) => Promise<string[]>;
   jump?: EditorJump;
   formatSettings?: FormatSettings;
   preamble?: SymbolPreambleSource;
@@ -134,6 +149,7 @@ export function Editor({
   onAddReference,
   onAskAi,
   onFixWithAi,
+  onUploadImages,
   jump,
   formatSettings = defaultFormatSettings,
   preamble,
@@ -162,6 +178,8 @@ export function Editor({
     spellingLanguage,
   } = useSettings();
   const [error, setError] = useState("");
+  const [uploadingImages, setUploadingImages] = useState(0);
+  const [suggestGraphicx, setSuggestGraphicx] = useState(false);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [showSymbols, setShowSymbols] = useState(false);
   const [status, setStatus] = useState({ undo: false, redo: false });
@@ -257,6 +275,86 @@ export function Editor({
     onCommands,
   });
 
+  // Without a main file, packages load in this one.
+  const ownPreamble = useMemo<SymbolPreambleSource>(
+    () => ({
+      filename: name,
+      subscribe(listener) {
+        docListeners.current.add(listener);
+        return () => {
+          docListeners.current.delete(listener);
+        };
+      },
+      getSource: () => createdView.current?.state.doc.toString() ?? "",
+      addPackage(packageName) {
+        const view = createdView.current;
+        if (view) addLatexPackage(packageName)(view);
+      },
+    }),
+    [name],
+  );
+  const activePreamble = preamble ?? ownPreamble;
+  const preambleSource = useSyncExternalStore(
+    activePreamble.subscribe,
+    activePreamble.getSource,
+    activePreamble.getSource,
+  );
+  const needsGraphicx =
+    isLatex &&
+    !readOnly &&
+    suggestGraphicx &&
+    packageInsertion(preambleSource, "graphicx") !== null;
+
+  const insertImages = useStableCallback(
+    (imageFiles: File[], dropPos?: number) => {
+      if (!onUploadImages || readOnly) return;
+      setError("");
+      setUploadingImages((count) => count + imageFiles.length);
+      void onUploadImages(imageFiles)
+        .then((uploadedPaths) => {
+          if (!uploadedPaths.length) return;
+          const currentView = createdView.current;
+          if (
+            !currentView ||
+            !currentView.dom.isConnected ||
+            currentView.state.readOnly
+          )
+            return;
+          const snippet = formatImageSnippet(uploadedPaths, { isMarkdown });
+          const docLength = currentView.state.doc.length;
+          const range =
+            dropPos !== undefined
+              ? {
+                  from: Math.min(Math.max(0, dropPos), docLength),
+                  to: Math.min(Math.max(0, dropPos), docLength),
+                }
+              : currentView.state.selection.main;
+          currentView.dispatch({
+            changes: { from: range.from, to: range.to, insert: snippet },
+            selection: { anchor: range.from + snippet.length },
+            userEvent: dropPos !== undefined ? "input.drop" : "input.paste",
+            scrollIntoView: true,
+          });
+          currentView.focus();
+          if (
+            isLatex &&
+            packageInsertion(activePreamble.getSource(), "graphicx") !== null
+          )
+            setSuggestGraphicx(true);
+        })
+        .catch((uploadError: unknown) => {
+          setError(
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Image upload failed. Try again when online.",
+          );
+        })
+        .finally(() => {
+          setUploadingImages((count) => Math.max(0, count - imageFiles.length));
+        });
+    },
+  );
+
   const extensions = useEditorExtensions({
     view,
     filename: name,
@@ -277,28 +375,13 @@ export function Editor({
     onAddReference,
     onFixWithAi,
     onRevealPdf,
+    onImageFiles:
+      !readOnly && onUploadImages && (isLatex || isMarkdown)
+        ? insertImages
+        : undefined,
     scrollAnchor,
     onError: setError,
   });
-
-  // Without a main file, packages load in this one.
-  const ownPreamble = useMemo<SymbolPreambleSource>(
-    () => ({
-      filename: name,
-      subscribe(listener) {
-        docListeners.current.add(listener);
-        return () => {
-          docListeners.current.delete(listener);
-        };
-      },
-      getSource: () => createdView.current?.state.doc.toString() ?? "",
-      addPackage(packageName) {
-        const view = createdView.current;
-        if (view) addLatexPackage(packageName)(view);
-      },
-    }),
-    [name],
-  );
 
   const viewCreated = useStableCallback((view: EditorView) => {
     createdView.current = view;
@@ -495,6 +578,49 @@ export function Editor({
             >
               {error || formatError || spellingError}
             </p>
+          )}
+          {uploadingImages > 0 && (
+            <p
+              role="status"
+              className="text-muted-foreground border-b px-3 py-1.5 text-xs"
+            >
+              {uploadingImages === 1
+                ? "Uploading image…"
+                : `Uploading ${uploadingImages} images…`}
+            </p>
+          )}
+          {needsGraphicx && (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5 text-xs"
+            >
+              <span>
+                Load <code>graphicx</code> in {activePreamble.filename} so{" "}
+                <code>\includegraphics</code> compiles.
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => {
+                    activePreamble.addPackage("graphicx");
+                    setSuggestGraphicx(false);
+                    editor.current?.view?.focus();
+                  }}
+                >
+                  Add <code>\usepackage{"{graphicx}"}</code>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setSuggestGraphicx(false)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
           )}
           <CodeMirror
             basicSetup={collaboration ? collaborativeSetup : standaloneSetup}

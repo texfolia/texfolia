@@ -124,6 +124,7 @@ export function FileEditor({
       onFixWithAi={(problem) =>
         actions.askAi(problemPrompt({ path, ...problem }))
       }
+      onUploadImages={actions.uploadImages}
       jump={workspace.jump?.id === params.node.id ? workspace.jump : undefined}
       formatSettings={workspace.formatSettings}
       preamble={preamble}

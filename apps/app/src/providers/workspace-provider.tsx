@@ -46,6 +46,10 @@ export type WorkspaceActions = {
   keepOpen: (id: string) => void;
   openMarkdownPreview: (id: string) => void;
   addSymbolPackage: (packageName: string) => void;
+  /** Uploads pasted or dropped images into the project assets folder and returns their paths. */
+  uploadImages: (files: File[]) => Promise<string[]>;
+  /** Deletes a project node by its project-relative path. */
+  deleteNode: (path: string) => Promise<void>;
   /** Opens Add reference; `key` names an undefined citation to define. */
   addReference: (key?: string) => void;
   /** Opens the assistant with text to send, which the user still sends. */

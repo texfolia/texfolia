@@ -9,13 +9,8 @@ import {
 } from "@texfolia/ui/dialog";
 import { useId, useRef, useState, useImperativeHandle, type Ref } from "react";
 
-import { newProjectNodePath } from "#/lib/projects";
+import { uploadProjectFiles } from "#/lib/projects";
 import type { ProjectNode } from "#/lib/projects/project.functions";
-import {
-  encodeSource,
-  maxSourceFileBytes,
-  sourceFileKind,
-} from "#/lib/storage";
 import { readDroppedFiles, type DroppedFile } from "#/lib/storage/browser";
 import { useProjectFiles } from "#/providers/project-files-provider";
 
@@ -56,74 +51,13 @@ export function UploadSource({
     setPending(true);
     try {
       const dropped = await source;
-      // Validate every path before creating anything, so a bad drop leaves
-      // the tree unchanged. Dropped folders merge into existing ones.
-      const planned: Pick<ProjectNode, "id" | "parentId" | "name" | "kind">[] =
-        [...nodes];
-      const steps: {
-        id: string;
-        parentId: string;
-        name: string;
-        file?: File;
-      }[] = [];
-      for (const { path, file } of dropped) {
-        if (file.size > maxSourceFileBytes)
-          throw new Error(
-            `${path.join("/")} exceeds 10 MiB. Choose a smaller file.`,
-          );
-        let parent = targetParentId;
-        for (const [index, name] of path.entries()) {
-          const last = index === path.length - 1;
-          const existing = planned.find(
-            (node) =>
-              node.parentId === parent &&
-              node.name.toLowerCase() === name.toLowerCase(),
-          );
-          if (existing?.kind === "folder" && !last) {
-            parent = existing.id;
-            continue;
-          }
-          if (existing)
-            throw new Error(
-              `${path.slice(0, index + 1).join("/")}: A file or folder with this name already exists here.`,
-            );
-          newProjectNodePath(planned, parent, name);
-          const id = crypto.randomUUID();
-          planned.push({
-            id,
-            parentId: parent,
-            name,
-            kind: last ? "binary" : "folder",
-          });
-          steps.push({
-            id,
-            parentId: parent,
-            name,
-            file: last ? file : undefined,
-          });
-          parent = id;
-        }
-      }
-      const created = new Map<string, ProjectNode>();
-      for (const step of steps) {
-        const parentId = created.get(step.parentId)?.id ?? step.parentId;
-        const node = await files.create(
-          step.file
-            ? {
-                parentId,
-                name: step.name,
-                kind: sourceFileKind(step.file),
-                content: encodeSource(
-                  new Uint8Array(await step.file.arrayBuffer()),
-                ),
-              }
-            : { parentId, name: step.name, kind: "folder" },
-        );
-        created.set(step.id, node);
-      }
-      const uploaded = steps.filter((step) => step.file);
-      const only = uploaded.length === 1 && created.get(uploaded[0]?.id ?? "");
-      if (only) onCreated(only, true);
+      const uploaded = await uploadProjectFiles({
+        files,
+        nodes,
+        targetParentId,
+        dropped,
+      });
+      if (uploaded.length === 1 && uploaded[0]) onCreated(uploaded[0], true);
     } catch (error) {
       setError(
         error instanceof Error

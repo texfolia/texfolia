@@ -21,6 +21,7 @@ import { useStableActions } from "#/hooks/use-stable-callback";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { scratchpadId } from "#/lib/collaboration";
 import { CollaborationConnection } from "#/lib/collaboration/browser";
+import { projectPaths, uploadProjectAssets } from "#/lib/projects";
 import type { ProjectDetails } from "#/lib/projects/project.functions";
 import { FileDrafts } from "#/lib/workspace/file-drafts";
 import { workspaceLayoutKey } from "#/lib/workspace/workspace-layout";
@@ -365,6 +366,26 @@ export function ProjectWorkspace({
     keepOpen: panels.keepOpen,
     openMarkdownPreview: panels.openMarkdownPreview,
     addSymbolPackage: mainDocument.addSymbolPackage,
+    uploadImages: (imageFiles) => {
+      if (!writable)
+        return Promise.reject(
+          new Error("You do not have permission to edit this project."),
+        );
+      return uploadProjectAssets({
+        files,
+        nodes: files.nodes.toArray,
+        imageFiles,
+      });
+    },
+    deleteNode: async (path) => {
+      if (!writable)
+        throw new Error("You do not have permission to edit this project.");
+      const currentPaths = projectPaths(files.nodes.toArray);
+      const entry = [...currentPaths].find(([, nodePath]) => nodePath === path);
+      if (!entry) return;
+      await files.nodes.delete(entry[0]).when("settled");
+      await files.refresh();
+    },
     addReference,
     registerEditor: panels.registerEditor,
     registerCommands: panels.registerCommands,

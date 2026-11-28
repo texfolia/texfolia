@@ -31,6 +31,11 @@ import {
 
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import {
+  clipboardImageFiles,
+  droppedImageFiles,
+  hasDraggedImages,
+} from "#/lib/editor/image-drop";
+import {
   loadKeymapExtension,
   loadedKeymapExtension,
 } from "#/lib/editor/keymaps/extension";
@@ -143,6 +148,7 @@ export function useEditorExtensions({
   onAddReference,
   onFixWithAi,
   onRevealPdf,
+  onImageFiles,
   scrollAnchor,
   onError,
 }: {
@@ -165,6 +171,7 @@ export function useEditorExtensions({
   onAddReference?: (key?: string) => void;
   onFixWithAi?: (problem: { line: number; message: string }) => void;
   onRevealPdf?: (line: number) => void;
+  onImageFiles?: (files: File[], dropPos?: number) => void;
   scrollAnchor: RefObject<ScrollAnchor | undefined>;
   onError: (message: string) => void;
 }) {
@@ -172,6 +179,8 @@ export function useEditorExtensions({
   problemsRef.current = problems;
   const revealPdf = useRef(onRevealPdf);
   revealPdf.current = onRevealPdf;
+  const imageFilesRef = useRef(onImageFiles);
+  imageFilesRef.current = onImageFiles;
   const syntaxCallback = useRef(onSyntaxProblems);
   syntaxCallback.current = onSyntaxProblems;
   const addReferenceRef = useRef(onAddReference);
@@ -298,6 +307,32 @@ export function useEditorExtensions({
           if (position === null) return false;
           event.preventDefault();
           revealPdf.current(view.state.doc.lineAt(position).number);
+          return true;
+        },
+        paste(event, view) {
+          if (!imageFilesRef.current || view.state.readOnly) return false;
+          const images = clipboardImageFiles(event.clipboardData);
+          if (!images.length) return false;
+          event.preventDefault();
+          imageFilesRef.current(images);
+          return true;
+        },
+        dragover(event, view) {
+          if (!imageFilesRef.current || view.state.readOnly) return false;
+          if (!hasDraggedImages(event.dataTransfer)) return false;
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+          return true;
+        },
+        drop(event, view) {
+          if (!imageFilesRef.current || view.state.readOnly) return false;
+          const images = droppedImageFiles(event.dataTransfer);
+          if (!images.length) return false;
+          event.preventDefault();
+          const pos =
+            view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+            view.state.selection.main.head;
+          imageFilesRef.current(images, pos);
           return true;
         },
       }),

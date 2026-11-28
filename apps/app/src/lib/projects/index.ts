@@ -7,3 +7,4 @@ export * from "./metadata";
 export * from "./paths";
 export * from "./search";
 export * from "./roles";
+export * from "./upload";
