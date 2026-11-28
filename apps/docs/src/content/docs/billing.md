@@ -98,10 +98,35 @@ organization.
 Two monthly caps (UTC, pre-tax) bound each request. Every user has a cap across all of
 their usage, $20 by default, which they control. Every organization has a shared
 cap on all usage billed to it, $100 by default, which only its owners and admins
-change under **AI usage** on the billing page. Applicable tax is added on the
+change under **AI usage** on the billing page (or on **Settings → Usage**). Applicable tax is added on the
 Stripe invoice and is not counted against these caps. The launch markup is 20%. Each run
 retains its original payer. See the
 [AI billing details](/ai-assistant/) for reservations and reconciliation.
+
+## Usage and cost charts
+
+**Settings → Usage** (`/settings/usage`) provides time-series charts, breakdowns,
+invoice history, and CSV export for both personal accounts and Team organizations:
+
+- **Personal view**: available to every signed-in user. Shows daily and cumulative AI
+  spend (charged vs reserved, pre-tax) plotted against the personal monthly cap,
+  breakdowns by model and project, compile job counts (succeeded vs failed) and
+  compile minutes, current source storage by project, and personal Stripe invoices
+  (with subtotal, tax, and total).
+- **Team organization view**: available only to organization **owners and admins**
+  via the account switcher on **Settings → Usage** (or linked from **Settings →
+  Billing**). Shows shared AI spend versus the organization cap, breakdowns by
+  member, model, and project, compile counts and minutes across organization
+  projects, source storage, paid seat history, Stripe meter reconciliation, and
+  organization invoices with tax. Regular members cannot read organization billing
+  or other members' usage.
+- **Pre-tax vs invoiced totals**: all AI usage charts, cap progress bars, and
+  breakdowns report **pre-tax** usage (model cost plus 20% markup). Official
+  Stripe invoices — and the current-period estimated invoice once enabled — show
+  subtotal, applicable tax (when `STRIPE_AUTOMATIC_TAX=true`), and total.
+- **CSV export**: **Export CSV** (`/api/usage/export`) downloads the visible series
+  for the selected scope and period (daily usage, model/project/member breakdowns,
+  compiles, storage, seat history, and invoices) using the same authorization rules.
 
 The pricing page advertises the enforced 10 MiB per source file and 50 MiB per
 project on every plan. It adds no project-count or editor-count caps. Document
