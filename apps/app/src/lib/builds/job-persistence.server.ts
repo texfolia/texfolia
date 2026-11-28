@@ -112,9 +112,19 @@ export async function reconcileProjectJob(
   projectId: string,
   job: ReconcilableJob,
 ) {
+  const finishedAt = new Date();
   const startedAt = job.timing?.startedAt
     ? new Date(job.timing.startedAt)
     : undefined;
+  const compileMs = job.timing?.compileMs;
+  const durationMs =
+    typeof compileMs === "number" &&
+    Number.isFinite(compileMs) &&
+    compileMs >= 0
+      ? Math.round(compileMs)
+      : startedAt
+        ? Math.max(0, Math.round(finishedAt.getTime() - startedAt.getTime()))
+        : undefined;
   const timing = job.timing ? mergeJobTiming(compilerTimeline(job)) : undefined;
   if (job.status === "succeeded") {
     const sizeBytes = job.objectKey ? BigInt(job.sizeBytes) : 0n;
@@ -124,7 +134,8 @@ export async function reconcileProjectJob(
       objectKey: job.objectKey ?? null,
       sizeBytes,
       ...(startedAt ? { startedAt } : {}),
-      finishedAt: new Date(),
+      finishedAt,
+      ...(durationMs !== undefined ? { durationMs } : {}),
       ...(timing ? { timing } : {}),
     });
   } else {
@@ -133,7 +144,8 @@ export async function reconcileProjectJob(
       error: job.error,
       log: job.log,
       ...(startedAt ? { startedAt } : {}),
-      finishedAt: new Date(),
+      finishedAt,
+      ...(durationMs !== undefined ? { durationMs } : {}),
       ...(timing ? { timing } : {}),
     });
   }

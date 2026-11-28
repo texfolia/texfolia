@@ -190,13 +190,26 @@ with an emailed code.
 Organizations manages members, roles, teams, invitations, and the organization audit log. Owners and admins can browse the append-only audit log in **Settings → Organizations** (members without admin access cannot read it). It records organization renames, invitations (created, accepted, declined, canceled, and expired), member additions/removals/departures and role changes, team creation/updates/deletions and membership changes, organization billing events (plan starts, seat changes, cancellations, payment failures, and AI spend cap updates), and share-link and access changes on organization-owned projects. Secrets, access tokens, webhook secrets, and raw share tokens are never logged. See [Organizations](/project-controls/#organizations).
 
 AI chooses the existing account-level preferred model for new conversations.
-Usage shows monthly metered AI spend, reserved amounts, pending requests, and
-the monthly cap. The model and cap save independently. Source storage totals
-exclude deleted sources and compile artifacts. Compile counts cover the current
-UTC month across accessible projects. The page uses stored data and does not
-estimate physical R2 usage or compile CPU time.
+Usage (`/settings/usage`) provides interactive charts and tables across selectable UTC periods
+(this month, last month, last 30 days, and last 90 days) for personal accounts and — for
+organization owners and admins — each Team organization:
 
-Storage totals use binary units, and hovering shows the exact byte count.
+- **AI spend and cap**: daily and cumulative pre-tax spend (separating charged and reserved
+  amounts) plotted against the monthly cap, a cap progress bar, inline cap editor, and
+  breakdowns by model, project, and (for organizations) member.
+- **Compilations**: daily succeeded vs failed compile counts and durable compile minutes
+  (persisted on `project_job.duration_ms` so they survive timeline pruning), plus per-project totals.
+- **Source storage**: current saved source bytes across accessible projects (or organization
+  projects) with a per-project breakdown. Excludes deleted sources and compile artifacts, and does
+  not estimate physical R2 usage.
+- **Team seats**: for organization owners and admins, current paid seats and seat-count history.
+- **Invoices and CSV export**: historical Stripe invoices showing subtotal, tax, total, and PDF
+  links, a current-period estimated invoice section (linking to **Settings → Billing** and the
+  Stripe Customer Portal when a preview is not available), and **Export CSV** (`/api/usage/export`)
+  for the visible series.
+
+All usage charts and caps are pre-tax; applicable tax is shown on invoices.
+The model and cap save independently. Storage totals use binary units, and hovering shows the exact byte count.
 
 ## Account export
 

@@ -275,6 +275,16 @@ function BillingPage() {
               >
                 Compare plans
               </a>
+              {" · "}
+              <Link
+                to="/settings/usage"
+                search={
+                  selected && canManage ? { organizationId: selected.id } : {}
+                }
+                className="underline underline-offset-4"
+              >
+                View usage &amp; cost charts
+              </Link>
             </p>
           </section>
         )}

@@ -20,6 +20,11 @@ import { eq, inArray } from "drizzle-orm";
 import { updateProjectFormattingSchema } from "#/lib/projects";
 
 import {
+  getUsageDashboard,
+  saveOrganizationAiCap,
+} from "../src/lib/billing/server";
+import { formatUsageCsv } from "../src/lib/billing/usage-analytics";
+import {
   createProject,
   getProject,
   updateProjectFormatting,
@@ -165,8 +170,18 @@ try {
     sizeBytes: 123n,
   });
   await db.insert(projectJob).values([
-    { projectId: personalId, status: "succeeded", sizeBytes: 0n },
-    { projectId: personalId, status: "failed", sizeBytes: 0n },
+    {
+      projectId: personalId,
+      status: "succeeded",
+      sizeBytes: 0n,
+      durationMs: 30_000,
+    },
+    {
+      projectId: personalId,
+      status: "failed",
+      sizeBytes: 0n,
+      durationMs: 15_000,
+    },
   ]);
   await saveAccountAiSettings(db, owner, { kind: "cap", dollars: 12.34 });
   const usage = await getAccountUsage(db, owner);
@@ -300,6 +315,71 @@ try {
   for (const text of ["quoted-source", "projects/", "source text", runId])
     assert(!others.includes(text), text);
   assert.equal(closed, 2);
+  // Usage & cost dashboard: personal aggregation, reserved vs charged, org auth, and CSV.
+  await db.insert(aiRequest).values({
+    runId,
+    model: "model",
+    status: "pending",
+    reservedNanos: 250_000_000,
+    chargedNanos: null,
+  });
+  const personalDash = await getUsageDashboard(db, {
+    userId: owner,
+    period: "current_month",
+    stripe: null,
+  });
+  assert.equal(personalDash.scope, "personal");
+  assert.equal(personalDash.ai.spentDollars, 0.75);
+  assert.equal(personalDash.ai.reservedDollars, 0.25);
+  assert.equal(personalDash.ai.byModel[0]?.model, "model");
+  assert.equal(personalDash.ai.byProject[0]?.projectId, personalId);
+  assert.equal(personalDash.compiles.total, 2);
+  assert.equal(personalDash.compiles.totalMinutes, 0.75);
+  assert.equal(personalDash.ai.byMember.length, 0);
+  const personalCsv = formatUsageCsv(personalDash);
+  assert(personalCsv.includes("record_type,date,payer"));
+  assert(
+    personalCsv.includes("ai_by_model,,Personal,,,model,0.750000,0.250000"),
+  );
+  // Regular org member cannot read org usage dashboard (403); outsider gets 404.
+  await assert.rejects(
+    getUsageDashboard(db, {
+      userId: editor,
+      organizationId: orgId,
+      stripe: null,
+    }),
+    /owner or admin/,
+  );
+  await assert.rejects(
+    getUsageDashboard(db, {
+      userId: outsider,
+      organizationId: orgId,
+      stripe: null,
+    }),
+    /Organization not found/,
+  );
+  // Promote viewer to org admin and verify org usage dashboard + cap + tenant isolation.
+  await db.insert(member).values({
+    id: crypto.randomUUID(),
+    userId: viewer,
+    organizationId: orgId,
+    role: "admin",
+    createdAt: new Date(),
+  });
+  await saveOrganizationAiCap(db, {
+    userId: viewer,
+    organizationId: orgId,
+    dollars: 50,
+  });
+  const orgDash = await getUsageDashboard(db, {
+    userId: viewer,
+    organizationId: orgId,
+    stripe: null,
+  });
+  assert.equal(orgDash.scope, "organization");
+  assert.equal(orgDash.ai.monthlyCapDollars, 50);
+  assert.equal(orgDash.ai.spentDollars, 0);
+  assert.equal(orgDash.seats?.memberCount, 2);
   await db.delete(aiRequest).where(eq(aiRequest.runId, runId));
   await db.delete(aiRun).where(eq(aiRun.id, runId));
   console.info(

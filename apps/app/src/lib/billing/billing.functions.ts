@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { ensureSession } from "#/lib/auth/auth.functions";
 
+import { usagePeriods } from "./usage-analytics";
+
 export const getBilling = createServerFn({ method: "GET" })
   .validator(z.object({ organizationId: z.string().min(1).optional() }))
   .handler(async ({ data, context }) => {
@@ -12,6 +14,23 @@ export const getBilling = createServerFn({ method: "GET" })
     return billingOverview(context.db, {
       userId: session.user.id,
       organizationId: data.organizationId,
+    });
+  });
+
+export const getUsageDashboard = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      organizationId: z.string().min(1).optional(),
+      period: z.enum(usagePeriods).optional(),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const session = await ensureSession();
+    const { getUsageDashboard } = await import("./server");
+    return getUsageDashboard(context.db, {
+      userId: session.user.id,
+      organizationId: data.organizationId,
+      period: data.period,
     });
   });
 

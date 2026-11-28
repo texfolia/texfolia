@@ -199,6 +199,8 @@ export const projectJob = pgTable(
       .$onUpdate(() => new Date()),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    // Durable compile duration in milliseconds (survives timeline pruning).
+    durationMs: integer("duration_ms"),
     // User-facing compile timeline: compiler stage timing plus browser preview
     // timing. Only the most recent jobs per project keep it.
     timing: jsonb("timing").$type<unknown>(),
@@ -208,6 +210,10 @@ export const projectJob = pgTable(
     check(
       "project_job_object_size_check",
       sql`${t.sizeBytes} >= 0 AND (${t.objectKey} IS NOT NULL OR ${t.sizeBytes} = 0)`,
+    ),
+    check(
+      "project_job_duration_ms_check",
+      sql`${t.durationMs} IS NULL OR ${t.durationMs} >= 0`,
     ),
   ],
 );

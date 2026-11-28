@@ -1,157 +1,81 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { Button } from "@texfolia/ui/button";
-import { Input } from "@texfolia/ui/input";
-import {
-  Item,
-  ItemContent,
-  ItemTitle,
-  ItemDescription,
-} from "@texfolia/ui/item";
-import { useState } from "react";
 
-import { formatBytes } from "#/lib/format-bytes";
-import {
-  getAccountUsage,
-  saveAccountAiSettings,
-} from "#/lib/settings/account-settings.functions";
+import { usagePeriods, type UsagePeriod } from "#/lib/billing";
+import { getUsageDashboard } from "#/lib/billing/billing.functions";
+
+import { UsageDashboardView } from "./-components/usage-dashboard";
+
+type UsageSearch = {
+  organizationId?: string;
+  period?: UsagePeriod;
+};
+
+function validateUsageSearch(search: Record<string, unknown>): UsageSearch {
+  const organizationId =
+    typeof search.organizationId === "string" && search.organizationId
+      ? search.organizationId
+      : undefined;
+  const period =
+    typeof search.period === "string" &&
+    (usagePeriods as readonly string[]).includes(search.period)
+      ? (search.period as UsagePeriod)
+      : undefined;
+  return { organizationId, period };
+}
+
 export const Route = createFileRoute("/settings/usage")({
-  loader: () => getAccountUsage(),
+  validateSearch: validateUsageSearch,
+  loaderDeps: ({ search }) => ({
+    organizationId: search.organizationId,
+    period: search.period,
+  }),
+  loader: ({ deps }) => getUsageDashboard({ data: deps }),
+  head: () => ({ meta: [{ title: "Usage | Texfolia" }] }),
   component: UsagePage,
+  errorComponent: UsageError,
 });
-const usd = (amount: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(amount);
-function UsagePage() {
-  const usage = Route.useLoaderData();
-  const [cap, setCap] = useState(String(usage.monthlyCapDollars));
-  const [saved, setSaved] = useState(cap);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+
+function UsageError({ error }: { error: unknown }) {
+  const router = useRouter();
+  const message =
+    error instanceof Error
+      ? error.message
+      : "We couldn't load usage data for this account.";
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold">Usage</h2>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Current calendar month in UTC. Refresh this page for the latest
-          totals.
-        </p>
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Usage unavailable</h2>
+      <p className="text-muted-foreground text-sm">{message}</p>
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={() => void router.invalidate()}>Try again</Button>
+        <Button
+          variant="outline"
+          render={<Link to="/settings/usage" search={{}} />}
+        >
+          Open personal usage
+        </Button>
       </div>
-      <Item variant="outline">
-        <ItemContent className="gap-4">
-          <ItemTitle>AI usage</ItemTitle>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <dt>Metered spend</dt>
-            <dd className="text-right tabular-nums">
-              {usd(usage.spentDollars)}
-            </dd>
-            <dt>Reserved for requests</dt>
-            <dd className="text-right tabular-nums">
-              {usd(usage.reservedDollars)}
-            </dd>
-            <dt>Pending requests</dt>
-            <dd className="text-right tabular-nums">{usage.pendingRequests}</dd>
-          </dl>
-          {usage.needsReview && (
-            <p role="status" className="text-sm">
-              Some requests are awaiting billing reconciliation.
-            </p>
-          )}
-          <form
-            className="space-y-3 border-t pt-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setPending(true);
-              setError("");
-              void saveAccountAiSettings({
-                data: { kind: "cap", dollars: Number(cap) },
-              })
-                .then(() => {
-                  setSaved(cap);
-                  setMessage("Monthly cap saved.");
-                })
-                .catch((cause: unknown) =>
-                  setError(
-                    cause instanceof Error
-                      ? cause.message
-                      : "Could not save cap. Try again.",
-                  ),
-                )
-                .finally(() => setPending(false));
-            }}
-          >
-            <label htmlFor="ai-cap" className="text-sm font-medium">
-              Monthly AI spend cap (USD)
-            </label>
-            <Input
-              id="ai-cap"
-              type="number"
-              min={0}
-              max={10000}
-              step="0.01"
-              required
-              value={cap}
-              onChange={(event) => setCap(event.target.value)}
-              disabled={pending}
-            />
-            <p className="text-muted-foreground text-xs">
-              A $0 cap prevents new AI requests. Model cost includes the
-              existing 20% markup. Caps apply to pre-tax usage; applicable tax
-              is added on the invoice.
-            </p>
-            <Button type="submit" disabled={pending || cap === saved}>
-              {pending ? "Saving…" : "Save cap"}
-            </Button>
-          </form>
-          {error && (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
-          )}
-          <p role="status" className="text-muted-foreground text-sm">
-            {message}
-          </p>
-        </ItemContent>
-      </Item>
-      <Item variant="outline">
-        <ItemContent>
-          <ItemTitle>Storage</ItemTitle>
-          <ItemDescription>
-            Current saved source data in {usage.projectCount}{" "}
-            {usage.projectCount === 1 ? "project" : "projects"} you can access,
-            including shared projects. Excludes deleted sources and compile
-            artifacts.
-          </ItemDescription>
-          <p
-            className="mt-3 text-sm tabular-nums"
-            title={`${BigInt(usage.sourceBytes).toLocaleString()} bytes`}
-          >
-            {formatBytes(usage.sourceBytes)}
-          </p>
-        </ItemContent>
-      </Item>
-      <Item variant="outline">
-        <ItemContent>
-          <ItemTitle>Compilations</ItemTitle>
-          <ItemDescription>
-            Compile jobs this month in projects you can access.
-          </ItemDescription>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-            <dt>Total jobs</dt>
-            <dd className="text-right tabular-nums">{usage.compiles.total}</dd>
-            <dt>Succeeded</dt>
-            <dd className="text-right tabular-nums">
-              {usage.compiles.succeeded}
-            </dd>
-            <dt>Failed</dt>
-            <dd className="text-right tabular-nums">{usage.compiles.failed}</dd>
-          </dl>
-        </ItemContent>
-      </Item>
     </div>
+  );
+}
+
+function UsagePage() {
+  const dashboard = Route.useLoaderData();
+  const navigate = Route.useNavigate();
+  const search = Route.useSearch();
+
+  return (
+    <UsageDashboardView
+      key={`${dashboard.organization?.id ?? "personal"}-${dashboard.period.id}`}
+      dashboard={dashboard}
+      onSelectPeriod={(period) => {
+        void navigate({
+          search: {
+            organizationId: search.organizationId,
+            period,
+          },
+        });
+      }}
+    />
   );
 }
