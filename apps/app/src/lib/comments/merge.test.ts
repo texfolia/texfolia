@@ -76,4 +76,45 @@ describe("mergeCommentThread", () => {
     });
     expect(next?.threads.map((t) => t.id)).toEqual(["t-3"]);
   });
+
+  test("merges resolved mention profiles from updated threads", () => {
+    type MentionProfile = {
+      id: string;
+      name: string;
+      image: null;
+      status: "active";
+    };
+    const withMentions: TestComments & {
+      mentions: Record<string, MentionProfile>;
+    } = {
+      ...base,
+      mentions: {
+        "user-1": {
+          id: "user-1",
+          name: "Ada",
+          image: null,
+          status: "active",
+        },
+      },
+    };
+    const next = mergeCommentThread(withMentions, {
+      userId: "user-1",
+      canComment: true,
+      canModerate: true,
+      threadId: "t-2",
+      thread: makeThread("t-2", "2026-01-02T00:00:00Z", "second"),
+      mentions: {
+        "user-2": {
+          id: "user-2",
+          name: "Grace",
+          image: null,
+          status: "active",
+        },
+      },
+    });
+    expect(next?.mentions).toEqual({
+      "user-1": { id: "user-1", name: "Ada", image: null, status: "active" },
+      "user-2": { id: "user-2", name: "Grace", image: null, status: "active" },
+    });
+  });
 });

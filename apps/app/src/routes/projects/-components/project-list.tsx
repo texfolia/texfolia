@@ -53,6 +53,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@texfolia/ui/tooltip";
 import { useEffect, useRef, useState } from "react";
 
+import { NotificationsMenu } from "#/components/notifications-menu";
 import { readSession } from "#/lib/session-storage";
 import {
   useProjects,
@@ -189,7 +190,10 @@ export function ProjectList({
       <SidebarInset className="min-w-0">
         <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 sm:px-6">
           <SidebarTrigger />
-          <span className="text-muted-foreground text-sm">Workspace</span>
+          <span className="text-muted-foreground mr-auto text-sm">
+            Workspace
+          </span>
+          <NotificationsMenu />
         </header>
         <div
           id="main-content"

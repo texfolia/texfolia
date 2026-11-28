@@ -16,6 +16,7 @@ import {
 
 import { lazyPanel } from "#/components/lazy-panel";
 import { useComments } from "#/hooks/use-comments";
+import { useMentionCandidates } from "#/hooks/use-mention-candidates";
 import { useStableActions } from "#/hooks/use-stable-callback";
 import { useSyncTex } from "#/hooks/use-synctex";
 import { scratchpadId } from "#/lib/collaboration";
@@ -96,9 +97,13 @@ function WorkspaceAlert({ children }: { children: string | null | undefined }) {
 export function ProjectWorkspace({
   project,
   userId,
+  initialThread,
+  initialView,
 }: {
   project: ProjectDetails;
   userId: string;
+  initialThread?: string;
+  initialView?: "scratchpad";
 }) {
   const files = useProjectFiles();
   const fileStatus = useSyncExternalStore(
@@ -223,6 +228,20 @@ export function ProjectWorkspace({
     projectId,
     onShow: () => updateChrome({ rightOpen: true, rightView: "comments" }),
   });
+  const mentionCandidates = useMentionCandidates(projectId);
+  const handledDeepLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const key = initialThread
+      ? `thread:${initialThread}`
+      : initialView === "scratchpad"
+        ? "view:scratchpad"
+        : null;
+    if (!key || handledDeepLink.current === key) return;
+    handledDeepLink.current = key;
+    if (initialThread) comments.selectThread(initialThread, true);
+    else if (initialView === "scratchpad") panels.openScratchpad();
+  }, [ready, initialThread, initialView, comments, panels]);
   const synctex = useSyncTex({
     projectId,
     build: compilation.build,
@@ -369,6 +388,7 @@ export function ProjectWorkspace({
       completion,
       jump: panels.jump,
       comments,
+      mentionCandidates,
       formatSettings,
     }),
     [
@@ -380,6 +400,7 @@ export function ProjectWorkspace({
       completion,
       panels.jump,
       comments,
+      mentionCandidates,
       formatSettings,
     ],
   );

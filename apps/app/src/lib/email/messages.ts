@@ -139,3 +139,39 @@ export function deleteAccountEmail({
     html: `<p>Confirm deletion of your Texfolia account and personal projects:</p><p><a href="${escapeHtml(url)}">Delete my account</a></p><p>If you did not request this, ignore this email.</p>`,
   };
 }
+
+export function mentionEmail({
+  to,
+  actorName,
+  projectName,
+  surface,
+  excerpt,
+  url,
+}: {
+  to: string;
+  actorName: string;
+  projectName: string;
+  surface: "comment" | "scratchpad";
+  excerpt: string;
+  url: URL;
+}): EmailMessage {
+  const place =
+    surface === "comment" ? "a review comment" : "the project scratchpad";
+  const safeActorSubject = cleanSubjectText(actorName);
+  const safeProjectSubject = cleanSubjectText(projectName);
+  const safeActor = escapeHtml(actorName);
+  const safeProject = escapeHtml(projectName);
+  const safeExcerpt = escapeHtml(excerpt);
+  const safeUrl = escapeHtml(url.href);
+  const trimmedExcerpt = excerpt.trim();
+  return {
+    to,
+    subject: `${safeActorSubject} mentioned you in ${safeProjectSubject} on Texfolia`,
+    text: trimmedExcerpt
+      ? `${actorName} mentioned you in ${place} on "${projectName}":\n\n"${trimmedExcerpt}"\n\nOpen in Texfolia: ${url.href}`
+      : `${actorName} mentioned you in ${place} on "${projectName}". Open in Texfolia: ${url.href}`,
+    html: trimmedExcerpt
+      ? `<p><strong>${safeActor}</strong> mentioned you in ${place} on <strong>${safeProject}</strong>:</p><blockquote>${safeExcerpt}</blockquote><p><a href="${safeUrl}">Open in Texfolia</a></p>`
+      : `<p><strong>${safeActor}</strong> mentioned you in ${place} on <strong>${safeProject}</strong>.</p><p><a href="${safeUrl}">Open in Texfolia</a></p>`,
+  };
+}

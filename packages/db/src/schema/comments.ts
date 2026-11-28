@@ -1,4 +1,11 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { user } from "../auth-schema";
 import { project, projectNode } from "./projects";
@@ -66,5 +73,51 @@ export const projectComment = pgTable(
       t.createdAt,
     ),
     index("project_comment_author_id_idx").on(t.authorId),
+  ],
+);
+
+// People explicitly mentioned in a review comment, keyed by stable user ID so
+// profile renames stay current and access checks never rely on raw display names.
+export const projectCommentMention = pgTable(
+  "project_comment_mention",
+  {
+    commentId: uuid("comment_id")
+      .notNull()
+      .references(() => projectComment.id, { onDelete: "cascade" }),
+    mentionedUserId: text("mentioned_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.commentId, t.mentionedUserId] }),
+    index("project_comment_mention_user_id_idx").on(t.mentionedUserId),
+  ],
+);
+
+// People currently mentioned in a project's collaborative Markdown scratchpad.
+// Tracks active mentions so edits only notify newly added mentions.
+export const projectScratchpadMention = pgTable(
+  "project_scratchpad_mention",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    mentionedUserId: text("mentioned_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mentionedBy: text("mentioned_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.mentionedUserId] }),
+    index("project_scratchpad_mention_user_id_idx").on(t.mentionedUserId),
+    index("project_scratchpad_mention_by_idx").on(t.mentionedBy),
   ],
 );

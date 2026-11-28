@@ -19,6 +19,7 @@ import {
 } from "../src/lib/projects/project.server";
 import { checkAuthRateLimit } from "./postgres/auth-rate-limit";
 import { checkComments } from "./postgres/comments";
+import { checkMentions } from "./postgres/mentions";
 import { checkProjectReaders } from "./postgres/project-readers";
 import { checkSharingNotifications } from "./postgres/sharing-notifications";
 
@@ -317,6 +318,7 @@ try {
   assert.equal(otherOwnerProject.name, created.name);
 
   await checkComments(db);
+  await checkMentions(db);
   await checkProjectReaders(db);
   await checkSharingNotifications(db);
   await checkAuthRateLimit(connectionString);

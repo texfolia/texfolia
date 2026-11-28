@@ -17,6 +17,7 @@ import {
 import CodeMirror, {
   type EditorState,
   EditorView,
+  type Extension,
   type ReactCodeMirrorRef,
   type ViewUpdate,
 } from "@uiw/react-codemirror";
@@ -93,6 +94,7 @@ type EditorProps = {
   onRevealPdf?: (line: number) => void;
   allowOpenFile?: boolean;
   completion?: CompletionSource;
+  extraExtension?: Extension;
   problems?: LatexProblem[];
   onSyntaxProblems?: (problems: LatexProblem[]) => void;
   /** Opens Add reference, for an undefined citation key when one is given. */
@@ -126,6 +128,7 @@ export function Editor({
   onRevealPdf,
   allowOpenFile = true,
   completion,
+  extraExtension,
   problems,
   onSyntaxProblems,
   onAddReference,
@@ -267,6 +270,7 @@ export function Editor({
     history,
     commentExtension,
     spellingExtension,
+    extraExtension,
     completion,
     problems,
     onSyntaxProblems,

@@ -9,6 +9,7 @@ import type { Comments } from "#/hooks/use-comments";
 import type { CollaborativeFile } from "#/lib/collaboration/browser";
 import type { EditorCommand } from "#/lib/editor/editor-command";
 import type { SyncTexIndex, SyncTexLocation } from "#/lib/editor/latex/synctex";
+import type { MentionCandidate } from "#/lib/mentions/tokens";
 import type { FileDrafts } from "#/lib/workspace/file-drafts";
 
 export type { FileState } from "#/lib/workspace/file-drafts";
@@ -85,6 +86,7 @@ export type Workspace = {
       }
     | undefined;
   comments: Comments;
+  mentionCandidates: readonly MentionCandidate[];
   formatSettings: FormatSettings;
 };
 

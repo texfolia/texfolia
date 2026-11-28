@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
 
 import { ensureSession } from "#/lib/auth/auth.functions";
+import { createEmailDelivery } from "#/lib/email";
 
 import {
   commentsSchema,
@@ -47,6 +49,7 @@ export const createCommentThread = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
+      email: createEmailDelivery(env.BACKGROUND, process.env.BETTER_AUTH_URL),
     });
   });
 
@@ -59,6 +62,7 @@ export const replyToCommentThread = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
+      email: createEmailDelivery(env.BACKGROUND, process.env.BETTER_AUTH_URL),
     });
   });
 
@@ -95,6 +99,7 @@ export const updateComment = createServerFn({ method: "POST" })
       db: context.db,
       userId: session.user.id,
       data,
+      email: createEmailDelivery(env.BACKGROUND, process.env.BETTER_AUTH_URL),
     });
   });
 

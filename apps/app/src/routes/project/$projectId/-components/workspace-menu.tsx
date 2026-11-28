@@ -11,6 +11,7 @@ import {
 } from "@texfolia/ui/menubar";
 
 import { ShortcutMenuItem, useMenuShortcut } from "#/components/menu-shortcut";
+import { NotificationsMenu } from "#/components/notifications-menu";
 import type { EditorCommand } from "#/lib/editor/editor-command";
 import type { ShortcutAction } from "#/lib/shortcuts/shortcuts";
 import type {
@@ -266,7 +267,9 @@ export function WorkspaceMenu({
       >
         {name}
       </h1>
-      <div className="w-24 shrink-0 max-sm:hidden" />
+      <div className="flex w-24 shrink-0 items-center justify-end">
+        <NotificationsMenu size="icon-xs" />
+      </div>
     </header>
   );
 }

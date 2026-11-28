@@ -6,17 +6,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@texfolia/ui/dropdown-menu";
-import { Textarea } from "@texfolia/ui/textarea";
 import { cn } from "cn";
-import {
-  type FormEvent,
-  type KeyboardEvent,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { type Confirmation, ConfirmDialog } from "#/components/confirm-dialog";
+import { MentionText } from "#/components/mention-chip";
+import { MentionComposer } from "#/components/mention-composer";
 import type { CommentThread } from "#/hooks/use-comments";
 import { resolveCommentAnchor } from "#/lib/comments/anchor";
 import {
@@ -28,6 +23,7 @@ import {
   updateComment,
 } from "#/lib/comments/project-comments.functions";
 import { maxCommentLength } from "#/lib/comments/project-comments.schema";
+import type { MentionCandidate, ResolvedMention } from "#/lib/mentions/tokens";
 import {
   useWorkspace,
   useWorkspaceActions,
@@ -49,19 +45,6 @@ function failureMessage(failure: unknown) {
   return failure instanceof Error
     ? failure.message
     : "Comments could not be updated. Try again.";
-}
-
-// Mod+Enter submits; Escape cancels.
-function composerKeys(onSubmit: () => void, onCancel?: () => void) {
-  return (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      onSubmit();
-    } else if (event.key === "Escape" && onCancel) {
-      event.preventDefault();
-      onCancel();
-    }
-  };
 }
 
 export function ProjectComments() {
@@ -112,14 +95,14 @@ export function ProjectComments() {
   const focusSequence = comments.focusSequence;
   useEffect(() => {
     if (!activeId || !focusSequence) return;
-    // The editor gutter shows only open threads.
-    setFilter("open");
+    const target = threads?.find((thread) => thread.id === activeId);
+    setFilter(target?.resolvedAt ? "resolved" : "open");
     requestAnimationFrame(() => {
       const element = document.getElementById(`comment-thread-${activeId}`);
       element?.scrollIntoView({ block: "nearest" });
       element?.focus({ preventScroll: true });
     });
-  }, [activeId, focusSequence]);
+  }, [activeId, focusSequence, threads]);
 
   const open = located.filter((thread) => !thread.resolvedAt);
   const resolved = located.filter((thread) => thread.resolvedAt);
@@ -184,7 +167,7 @@ export function ProjectComments() {
 
 function DraftComposer() {
   const { projectId } = useWorkspaceActions();
-  const { comments, paths } = useWorkspace();
+  const { comments, paths, mentionCandidates } = useWorkspace();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -225,16 +208,18 @@ function DraftComposer() {
         {paths.get(draft.nodeId)}
       </p>
       <Quote text={draft.quote} />
-      <Textarea
+      <MentionComposer
         autoFocus
-        aria-label="Comment"
-        placeholder="Add a comment…"
+        ariaLabel="Comment"
+        placeholder="Add a comment… Type @ to mention someone."
         maxLength={maxCommentLength}
         value={body}
+        candidates={mentionCandidates}
         disabled={busy}
-        className="min-h-16 text-xs md:text-xs"
-        onChange={(event) => setBody(event.target.value)}
-        onKeyDown={composerKeys(() => void submit(), cancelDraft)}
+        className="min-h-16"
+        onValueChange={setBody}
+        onSubmit={() => void submit()}
+        onCancel={cancelDraft}
       />
       {error && (
         <p role="alert" className="text-destructive">
@@ -269,7 +254,7 @@ function Quote({ text }: { text: string }) {
 
 function ThreadCard({ thread }: { thread: Located }) {
   const { projectId, revealRange } = useWorkspaceActions();
-  const { comments } = useWorkspace();
+  const { comments, mentionCandidates } = useWorkspace();
   const [reply, setReply] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -407,6 +392,8 @@ function ThreadCard({ thread }: { thread: Located }) {
           <li key={comment.id}>
             <CommentItem
               comment={comment}
+              mentions={data.mentions}
+              candidates={mentionCandidates}
               canEdit={data.canComment && comment.authorId === data.userId}
               canDelete={
                 data.canModerate ||
@@ -443,19 +430,22 @@ function ThreadCard({ thread }: { thread: Located }) {
           className="space-y-1"
           onSubmit={(event) => void submitReply(event)}
         >
-          <Textarea
-            aria-label="Reply"
-            placeholder={thread.resolvedAt ? "Reply to reopen…" : "Reply…"}
+          <MentionComposer
+            ariaLabel="Reply"
+            placeholder={
+              thread.resolvedAt
+                ? "Reply to reopen… Type @ to mention."
+                : "Reply… Type @ to mention."
+            }
             maxLength={maxCommentLength}
             value={reply}
+            candidates={mentionCandidates}
             disabled={busy}
-            className="min-h-8 py-1 text-xs md:text-xs"
+            className="min-h-8 py-1"
             onFocus={() => selectThread(thread.id)}
-            onChange={(event) => setReply(event.target.value)}
-            onKeyDown={composerKeys(
-              () => void submitReply(),
-              () => setReply(""),
-            )}
+            onValueChange={setReply}
+            onSubmit={() => void submitReply()}
+            onCancel={() => setReply("")}
           />
           {reply.trim() && (
             <div className="flex justify-end gap-1">
@@ -490,6 +480,8 @@ function ThreadCard({ thread }: { thread: Located }) {
 
 function CommentItem({
   comment,
+  mentions,
+  candidates,
   canEdit,
   canDelete,
   busy,
@@ -497,6 +489,8 @@ function CommentItem({
   onDelete,
 }: {
   comment: CommentThread["comments"][number];
+  mentions: Readonly<Record<string, ResolvedMention>>;
+  candidates: readonly MentionCandidate[];
   canEdit: boolean;
   canDelete: boolean;
   busy: boolean;
@@ -547,25 +541,26 @@ function CommentItem({
         )}
       </div>
       {editing === null ? (
-        <p className="wrap-anywhere whitespace-pre-wrap">{comment.body}</p>
+        <p className="wrap-anywhere whitespace-pre-wrap">
+          <MentionText text={comment.body} mentions={mentions} />
+        </p>
       ) : (
         <form
           aria-label="Edit comment"
           className="space-y-1"
           onSubmit={(event) => void save(event)}
         >
-          <Textarea
+          <MentionComposer
             autoFocus
-            aria-label="Comment"
+            ariaLabel="Comment"
             maxLength={maxCommentLength}
             value={editing}
+            candidates={candidates}
             disabled={busy}
-            className="min-h-8 py-1 text-xs md:text-xs"
-            onChange={(event) => setEditing(event.target.value)}
-            onKeyDown={composerKeys(
-              () => void save(),
-              () => setEditing(null),
-            )}
+            className="min-h-8 py-1"
+            onValueChange={setEditing}
+            onSubmit={() => void save()}
+            onCancel={() => setEditing(null)}
           />
           <div className="flex justify-end gap-1">
             <Button
