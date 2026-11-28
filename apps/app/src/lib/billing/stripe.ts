@@ -6,6 +6,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import type { Member } from "better-auth/plugins/organization";
 import Stripe from "stripe";
 
+import type { AuditWriter } from "#/lib/audit/audit.server";
 import { isOrgAdmin } from "#/lib/auth/roles";
 
 import { subscriptionPlans } from "./plans";
@@ -196,6 +197,8 @@ export function createBillingPlugin({
   createCustomerOnSignUp = true,
   automaticTax = false,
   onSubscriptionChange,
+  onAuditEvent,
+  resolveOrganizationByCustomerId,
 }: {
   stripeClient: Stripe;
   webhookSecret: string;
@@ -206,6 +209,12 @@ export function createBillingPlugin({
   automaticTax?: boolean;
   /** Called after a webhook reports a changed or deleted subscription. */
   onSubscriptionChange?: (stripeSubscriptionId: string) => Promise<void>;
+  /** Records organization-scoped billing events in the audit log. */
+  onAuditEvent?: AuditWriter;
+  /** Maps a Stripe customer ID to an organization ID (for invoice webhooks). */
+  resolveOrganizationByCustomerId?: (
+    stripeCustomerId: string,
+  ) => Promise<string | null>;
 }) {
   return stripe({
     stripeClient,
@@ -218,11 +227,153 @@ export function createBillingPlugin({
         event.type === "customer.subscription.deleted"
       )
         await onSubscriptionChange?.(event.data.object.id);
+      if (event.type === "invoice.payment_failed" && onAuditEvent) {
+        const invoice = event.data.object;
+        const customerId =
+          typeof invoice.customer === "string"
+            ? invoice.customer
+            : (invoice.customer?.id ?? null);
+        if (customerId && resolveOrganizationByCustomerId) {
+          const organizationId =
+            await resolveOrganizationByCustomerId(customerId);
+          if (organizationId) {
+            await onAuditEvent({
+              organizationId,
+              actorUserId: null,
+              action: "billing.payment_failed",
+              targetType: "invoice",
+              targetId: invoice.id,
+              metadata: {
+                stripeInvoiceId: invoice.id,
+                stripeCustomerId: customerId,
+                amountDue: invoice.amount_due,
+                currency: invoice.currency,
+                attemptCount: invoice.attempt_count,
+                stripeEventId: event.id,
+              },
+            });
+          }
+        }
+      }
     },
     subscription: {
       enabled: true,
       authorizeReference: authorizeOrganizationBilling,
       plans: subscriptionPlans({ proPriceId, teamPriceId }),
+      async onSubscriptionComplete({
+        event,
+        stripeSubscription,
+        subscription,
+      }) {
+        if (!onAuditEvent || subscription.plan !== "team") return;
+        await onAuditEvent({
+          organizationId: subscription.referenceId,
+          actorUserId: null,
+          action: "billing.subscription_started",
+          targetType: "subscription",
+          targetId: stripeSubscription.id,
+          metadata: {
+            plan: subscription.plan,
+            status: stripeSubscription.status,
+            seats: subscription.seats,
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeCustomerId: subscription.stripeCustomerId,
+            stripeEventId: event.id,
+          },
+        });
+      },
+      async onSubscriptionCreated({ event, stripeSubscription, subscription }) {
+        if (!onAuditEvent || subscription.plan !== "team") return;
+        await onAuditEvent({
+          organizationId: subscription.referenceId,
+          actorUserId: null,
+          action: "billing.subscription_started",
+          targetType: "subscription",
+          targetId: stripeSubscription.id,
+          metadata: {
+            plan: subscription.plan,
+            status: stripeSubscription.status,
+            seats: subscription.seats,
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeCustomerId: subscription.stripeCustomerId,
+            stripeEventId: event.id,
+          },
+        });
+      },
+      async onSubscriptionCancel({
+        event,
+        stripeSubscription,
+        subscription,
+        cancellationDetails,
+      }) {
+        if (!onAuditEvent || subscription.plan !== "team") return;
+        await onAuditEvent({
+          organizationId: subscription.referenceId,
+          actorUserId: null,
+          action: "billing.subscription_cancel_scheduled",
+          targetType: "subscription",
+          targetId: stripeSubscription.id,
+          metadata: {
+            plan: subscription.plan,
+            status: stripeSubscription.status,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            reason: cancellationDetails?.reason ?? null,
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeEventId: event.id,
+          },
+        });
+      },
+      async onSubscriptionUpdate({ event, stripeSubscription, subscription }) {
+        if (!onAuditEvent || subscription.plan !== "team") return;
+        const previous =
+          event.data && "previous_attributes" in event.data
+            ? (event.data.previous_attributes as
+                | Record<string, unknown>
+                | undefined)
+            : undefined;
+        const seatsChanged = Boolean(
+          previous && ("items" in previous || "quantity" in previous),
+        );
+        const becamePendingCancel = Boolean(
+          previous &&
+          (("cancel_at_period_end" in previous &&
+            stripeSubscription.cancel_at_period_end) ||
+            ("cancel_at" in previous && stripeSubscription.cancel_at)),
+        );
+        if (becamePendingCancel && !seatsChanged) return;
+        await onAuditEvent({
+          organizationId: subscription.referenceId,
+          actorUserId: null,
+          action: seatsChanged
+            ? "billing.seats_updated"
+            : "billing.subscription_updated",
+          targetType: "subscription",
+          targetId: stripeSubscription.id,
+          metadata: {
+            plan: subscription.plan,
+            status: stripeSubscription.status,
+            seats: subscription.seats,
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeEventId: event.id,
+          },
+        });
+      },
+      async onSubscriptionDeleted({ event, stripeSubscription, subscription }) {
+        if (!onAuditEvent || subscription.plan !== "team") return;
+        await onAuditEvent({
+          organizationId: subscription.referenceId,
+          actorUserId: null,
+          action: "billing.subscription_canceled",
+          targetType: "subscription",
+          targetId: stripeSubscription.id,
+          metadata: {
+            plan: subscription.plan,
+            status: "canceled",
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeEventId: event.id,
+          },
+        });
+      },
       ...(automaticTax
         ? {
             getCheckoutSessionParams: ({ subscription }) => ({

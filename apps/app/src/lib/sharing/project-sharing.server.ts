@@ -10,6 +10,7 @@ import {
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { recordOrganizationAuditEvent } from "#/lib/audit/audit.server";
 import { isOrgAdmin } from "#/lib/auth/roles";
 import { projectCollaboratorEmail, type EmailDelivery } from "#/lib/email";
 import {
@@ -225,6 +226,24 @@ export async function grantProjectAccess({
         target: [projectCollaborator.projectId, projectCollaborator.userId],
         set: { role: data.role, updatedAt: new Date() },
       });
+    if (found.organizationId) {
+      await recordOrganizationAuditEvent(tx, {
+        organizationId: found.organizationId,
+        actorUserId: userId,
+        action: existing
+          ? "project.collaborator_updated"
+          : "project.collaborator_granted",
+        targetType: "project",
+        targetId: data.projectId,
+        metadata: {
+          projectName: found.name,
+          targetUserId: person.id,
+          targetEmail: person.email,
+          previousRole: existing?.role ?? null,
+          role: data.role,
+        },
+      });
+    }
     if (existing) return { personId: person.id };
     const [inviter] = await tx
       .select({ name: user.name })
@@ -275,15 +294,30 @@ export async function revokeProjectAccess({
   live?: LiveProjects;
 }) {
   await db.transaction(async (tx) => {
-    await lockManagedProject(tx, data.projectId, userId);
-    await tx
+    const found = await lockManagedProject(tx, data.projectId, userId);
+    const [deleted] = await tx
       .delete(projectCollaborator)
       .where(
         and(
           eq(projectCollaborator.projectId, data.projectId),
           eq(projectCollaborator.userId, data.userId),
         ),
-      );
+      )
+      .returning({ role: projectCollaborator.role });
+    if (found.organizationId && deleted) {
+      await recordOrganizationAuditEvent(tx, {
+        organizationId: found.organizationId,
+        actorUserId: userId,
+        action: "project.collaborator_revoked",
+        targetType: "project",
+        targetId: data.projectId,
+        metadata: {
+          projectName: found.name,
+          targetUserId: data.userId,
+          previousRole: deleted.role,
+        },
+      });
+    }
   });
   await invalidateProjectAccess(live, data.projectId, [data.userId]);
 }
@@ -301,11 +335,25 @@ export async function setOrganizationRole({
 }) {
   await db.transaction(async (tx) => {
     const found = await lockManagedProject(tx, data.projectId, userId);
-    requireOrganizationProject(found);
+    const organizationId = requireOrganizationProject(found);
     await tx
       .update(project)
       .set({ organizationRole: data.role })
       .where(eq(project.id, data.projectId));
+    if (found.organizationRole !== data.role) {
+      await recordOrganizationAuditEvent(tx, {
+        organizationId,
+        actorUserId: userId,
+        action: "project.organization_role_updated",
+        targetType: "project",
+        targetId: data.projectId,
+        metadata: {
+          projectName: found.name,
+          previousRole: found.organizationRole,
+          role: data.role,
+        },
+      });
+    }
   });
   // Every member may have gained or lost access.
   await invalidateProjectAccess(live, data.projectId);
@@ -326,13 +374,23 @@ export async function grantTeamAccess({
     const found = await lockManagedProject(tx, data.projectId, userId);
     const organizationId = requireOrganizationProject(found);
     const [granted] = await tx
-      .select({ id: team.id })
+      .select({ id: team.id, name: team.name })
       .from(team)
       .where(
         and(eq(team.id, data.teamId), eq(team.organizationId, organizationId)),
       )
       .for("share");
     if (!granted) throw new Error("Team not found");
+    const [existing] = await tx
+      .select({ role: projectTeam.role })
+      .from(projectTeam)
+      .where(
+        and(
+          eq(projectTeam.projectId, data.projectId),
+          eq(projectTeam.teamId, data.teamId),
+        ),
+      )
+      .limit(1);
     await tx
       .insert(projectTeam)
       .values({
@@ -344,6 +402,22 @@ export async function grantTeamAccess({
         target: [projectTeam.projectId, projectTeam.teamId],
         set: { role: data.role },
       });
+    await recordOrganizationAuditEvent(tx, {
+      organizationId,
+      actorUserId: userId,
+      action: existing
+        ? "project.team_access_updated"
+        : "project.team_access_granted",
+      targetType: "project",
+      targetId: data.projectId,
+      metadata: {
+        projectName: found.name,
+        teamId: data.teamId,
+        teamName: granted.name,
+        previousRole: existing?.role ?? null,
+        role: data.role,
+      },
+    });
   });
   await invalidateProjectAccess(live, data.projectId);
 }
@@ -360,15 +434,30 @@ export async function revokeTeamAccess({
   live?: LiveProjects;
 }) {
   await db.transaction(async (tx) => {
-    await lockManagedProject(tx, data.projectId, userId);
-    await tx
+    const found = await lockManagedProject(tx, data.projectId, userId);
+    const [deleted] = await tx
       .delete(projectTeam)
       .where(
         and(
           eq(projectTeam.projectId, data.projectId),
           eq(projectTeam.teamId, data.teamId),
         ),
-      );
+      )
+      .returning({ role: projectTeam.role });
+    if (found.organizationId && deleted) {
+      await recordOrganizationAuditEvent(tx, {
+        organizationId: found.organizationId,
+        actorUserId: userId,
+        action: "project.team_access_revoked",
+        targetType: "project",
+        targetId: data.projectId,
+        metadata: {
+          projectName: found.name,
+          teamId: data.teamId,
+          previousRole: deleted.role,
+        },
+      });
+    }
   });
   await invalidateProjectAccess(live, data.projectId);
 }

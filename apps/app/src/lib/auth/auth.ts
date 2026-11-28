@@ -3,7 +3,7 @@ import { passkey } from "@better-auth/passkey";
 import { type Db } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import {
   captcha,
   emailOTP,
@@ -13,6 +13,10 @@ import {
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { z } from "zod";
 
+import {
+  createDbAuditWriter,
+  type AuditWriter,
+} from "#/lib/audit/audit.server";
 import { forgetAiSubscription } from "#/lib/billing/metering";
 import {
   assertBillingScope,
@@ -85,11 +89,13 @@ export function createOrganizationPlugin({
   sendInvitationEmail,
   deleting,
   teams,
+  audit,
 }: {
   baseURL: string;
   sendInvitationEmail: DeliverEmail;
   deleting?: ReturnType<typeof deletionNotice>;
   teams?: ReturnType<typeof teamAccessNotice>;
+  audit?: AuditWriter;
 }) {
   return organization({
     roles: organizationRoles,
@@ -101,6 +107,112 @@ export function createOrganizationPlugin({
       maximumTeams: maxTeamsPerOrganization,
     },
     organizationHooks: {
+      async afterUpdateOrganization({ organization, user }) {
+        if (!organization) return;
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: user.id,
+          action: "organization.updated",
+          targetType: "organization",
+          targetId: organization.id,
+          metadata: {
+            name: organization.name,
+            slug: organization.slug,
+          },
+        });
+      },
+      async afterCreateInvitation({ invitation, inviter, organization }) {
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: inviter.id,
+          action: "invitation.created",
+          targetType: "invitation",
+          targetId: invitation.id,
+          metadata: {
+            email: invitation.email,
+            role: invitation.role,
+          },
+        });
+      },
+      async afterAcceptInvitation({ invitation, member, user, organization }) {
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: user.id,
+          action: "invitation.accepted",
+          targetType: "invitation",
+          targetId: invitation.id,
+          metadata: {
+            email: invitation.email,
+            role: member.role,
+            memberId: member.id,
+          },
+        });
+      },
+      async afterRejectInvitation({ invitation, user, organization }) {
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: user.id,
+          action: "invitation.rejected",
+          targetType: "invitation",
+          targetId: invitation.id,
+          metadata: {
+            email: invitation.email,
+            role: invitation.role,
+          },
+        });
+      },
+      async afterCancelInvitation({ invitation, cancelledBy, organization }) {
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: cancelledBy.id,
+          action: "invitation.canceled",
+          targetType: "invitation",
+          targetId: invitation.id,
+          metadata: {
+            email: invitation.email,
+            role: invitation.role,
+          },
+        });
+      },
+      async afterAddMember({ member, user, organization }) {
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: null,
+          action: "member.added",
+          targetType: "member",
+          targetId: member.id,
+          metadata: {
+            targetUserId: member.userId,
+            targetEmail: user.email,
+            role: member.role,
+          },
+        });
+      },
+      async afterCreateTeam({ team, user, organization }) {
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: user?.id ?? null,
+          action: "team.created",
+          targetType: "team",
+          targetId: team.id,
+          metadata: {
+            teamName: team.name,
+          },
+        });
+      },
+      async afterUpdateTeam({ team, user, organization }) {
+        if (!team) return;
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: user.id,
+          action: "team.updated",
+          targetType: "team",
+          targetId: team.id,
+          metadata: {
+            teamName: team.name,
+          },
+        });
+      },
       // Teams can be granted project access, so changes reach live channels.
       async afterAddTeamMember({ team, teamMember }) {
         await teams?.after(team.id, [teamMember.userId]);
@@ -111,8 +223,18 @@ export function createOrganizationPlugin({
       async beforeDeleteTeam({ team }) {
         await teams?.before(team.id);
       },
-      async afterDeleteTeam({ team }) {
+      async afterDeleteTeam({ team, user, organization }) {
         await teams?.after(team.id);
+        await audit?.({
+          organizationId: organization.id,
+          actorUserId: user?.id ?? null,
+          action: "team.deleted",
+          targetType: "team",
+          targetId: team.id,
+          metadata: {
+            teamName: team.name,
+          },
+        });
       },
       async beforeDeleteOrganization({ organization }) {
         await deleting?.before({ organizationId: organization.id });
@@ -161,10 +283,27 @@ const authoritativePaths = [
   "/revoke-sessions",
 ];
 
+const previousMemberRole = new WeakMap<object, string>();
+const updateRoleBodySchema = z.object({ memberId: z.string() });
+
 export const beforeAuth = createAuthMiddleware(async (ctx) => {
   assertBillingScope(ctx);
   await assertOrganizationPolicy(ctx);
   await assertAccountDeletable(ctx);
+  if (
+    ctx.path === "/organization/update-member-role" &&
+    ctx.body &&
+    typeof ctx.body === "object"
+  ) {
+    const parsed = updateRoleBodySchema.safeParse(ctx.body);
+    if (parsed.success) {
+      const existing = await ctx.context.adapter.findOne<{ role: string }>({
+        model: "member",
+        where: [{ field: "id", value: parsed.data.memberId }],
+      });
+      if (existing) previousMemberRole.set(ctx.body, existing.role);
+    }
+  }
   const cookie = ctx.headers?.get("cookie");
   if (
     !cookie ||
@@ -191,22 +330,179 @@ export const beforeAuth = createAuthMiddleware(async (ctx) => {
   };
 });
 
-const removedMemberSchema = z.object({
+const memberSchema = z.object({
+  id: z.string(),
   organizationId: z.string(),
   userId: z.string(),
+  role: z.string().optional(),
 });
 // Both endpoints return the removed member; failures return an APIError.
-const removedMemberResponseSchema = z.union([
-  z.object({ member: removedMemberSchema }).transform(({ member }) => member),
-  removedMemberSchema,
+const memberResponseSchema = z.union([
+  z.object({ member: memberSchema }).transform(({ member }) => member),
+  memberSchema,
 ]);
+const teamMemberSchema = z.object({
+  id: z.string(),
+  teamId: z.string(),
+  userId: z.string(),
+});
+const teamMemberBodySchema = z.object({
+  teamId: z.string(),
+  userId: z.coerce.string(),
+  organizationId: z.string().optional(),
+});
+
+async function recordAfterOrganizationAudit(
+  ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0],
+  audit: AuditWriter | undefined,
+) {
+  if (!audit) return;
+  if (ctx.context.returned instanceof Error) return;
+
+  if (ctx.path === "/organization/update-member-role") {
+    const updated = memberResponseSchema.safeParse(ctx.context.returned);
+    if (!updated.success) return;
+    const session =
+      ctx.context.session ??
+      (await getSessionFromCtx(ctx, { disableCookieCache: true }));
+    const targetUser = await ctx.context.internalAdapter.findUserById(
+      updated.data.userId,
+    );
+    const previousRole =
+      ctx.body && typeof ctx.body === "object"
+        ? previousMemberRole.get(ctx.body)
+        : undefined;
+    await audit({
+      organizationId: updated.data.organizationId,
+      actorUserId: session?.user.id ?? null,
+      action: "member.role_updated",
+      targetType: "member",
+      targetId: updated.data.id,
+      metadata: {
+        targetUserId: updated.data.userId,
+        targetEmail: targetUser?.email ?? null,
+        previousRole: previousRole ?? null,
+        role: updated.data.role ?? null,
+      },
+    });
+    return;
+  }
+
+  if (
+    ctx.path === "/organization/remove-member" ||
+    ctx.path === "/organization/leave"
+  ) {
+    const removed = memberResponseSchema.safeParse(ctx.context.returned);
+    if (!removed.success) return;
+    const leaving = ctx.path === "/organization/leave";
+    const session = leaving
+      ? null
+      : (ctx.context.session ??
+        (await getSessionFromCtx(ctx, { disableCookieCache: true })));
+    const targetUser = await ctx.context.internalAdapter.findUserById(
+      removed.data.userId,
+    );
+    await audit({
+      organizationId: removed.data.organizationId,
+      actorUserId: leaving ? removed.data.userId : (session?.user.id ?? null),
+      action: leaving ? "member.left" : "member.removed",
+      targetType: "member",
+      targetId: removed.data.id,
+      metadata: {
+        targetUserId: removed.data.userId,
+        targetEmail: targetUser?.email ?? null,
+        role: removed.data.role ?? null,
+      },
+    });
+    return;
+  }
+
+  if (ctx.path === "/organization/add-team-member") {
+    const added = teamMemberSchema.safeParse(ctx.context.returned);
+    if (!added.success) return;
+    const session =
+      ctx.context.session ??
+      (await getSessionFromCtx(ctx, { disableCookieCache: true }));
+    const body = teamMemberBodySchema.safeParse(ctx.body);
+    const teamRecord = await ctx.context.adapter.findOne<{
+      id: string;
+      name: string;
+      organizationId: string;
+    }>({
+      model: "team",
+      where: [{ field: "id", value: added.data.teamId }],
+    });
+    const organizationId =
+      teamRecord?.organizationId ??
+      (body.success ? body.data.organizationId : undefined) ??
+      session?.session.activeOrganizationId;
+    if (!organizationId) return;
+    const targetUser = await ctx.context.internalAdapter.findUserById(
+      added.data.userId,
+    );
+    await audit({
+      organizationId,
+      actorUserId: session?.user.id ?? null,
+      action: "team.member_added",
+      targetType: "team",
+      targetId: added.data.teamId,
+      metadata: {
+        teamName: teamRecord?.name ?? null,
+        targetUserId: added.data.userId,
+        targetEmail: targetUser?.email ?? null,
+      },
+    });
+    return;
+  }
+
+  if (ctx.path === "/organization/remove-team-member") {
+    const returned = ctx.context.returned;
+    if (!returned || typeof returned !== "object" || !("message" in returned))
+      return;
+    const body = teamMemberBodySchema.safeParse(ctx.body);
+    if (!body.success) return;
+    const session =
+      ctx.context.session ??
+      (await getSessionFromCtx(ctx, { disableCookieCache: true }));
+    const teamRecord = await ctx.context.adapter.findOne<{
+      id: string;
+      name: string;
+      organizationId: string;
+    }>({
+      model: "team",
+      where: [{ field: "id", value: body.data.teamId }],
+    });
+    const organizationId =
+      teamRecord?.organizationId ??
+      body.data.organizationId ??
+      session?.session.activeOrganizationId;
+    if (!organizationId) return;
+    const targetUser = await ctx.context.internalAdapter.findUserById(
+      body.data.userId,
+    );
+    await audit({
+      organizationId,
+      actorUserId: session?.user.id ?? null,
+      action: "team.member_removed",
+      targetType: "team",
+      targetId: body.data.teamId,
+      metadata: {
+        teamName: teamRecord?.name ?? null,
+        targetUserId: body.data.userId,
+        targetEmail: targetUser?.email ?? null,
+      },
+    });
+  }
+}
 
 export function createAfterAuth({
   db,
   live,
+  audit,
 }: {
   db: Db;
   live: LiveProjects | undefined;
+  audit?: AuditWriter;
 }) {
   return createAuthMiddleware(async (ctx) => {
     const twoFactorResponse = await enforceTwoFactorOnSignIn(ctx);
@@ -214,9 +510,10 @@ export function createAfterAuth({
     // Browsers keep build files, which the next user must not find.
     if (ctx.path === "/sign-out" || ctx.path === "/delete-user")
       ctx.setHeader("Clear-Site-Data", '"cache"');
+    await recordAfterOrganizationAudit(ctx, audit);
     const leaving = ctx.path === "/organization/leave";
     if (!leaving && ctx.path !== "/organization/remove-member") return;
-    const removed = removedMemberResponseSchema.safeParse(ctx.context.returned);
+    const removed = memberResponseSchema.safeParse(ctx.context.returned);
     if (!removed.success) return;
     await invalidateOrganizationAccess({ db, live, ...removed.data });
     if (leaving)
@@ -244,6 +541,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
   const stripeClient = lazy(() => getStripeClient(stripeKey));
 
   const deleting = deletionNotice({ db, live });
+  const audit = createDbAuditWriter(db);
   // The organizations of an account being deleted. An instance serves one request.
   let leaving: string[] = [];
 
@@ -284,7 +582,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
     },
     hooks: {
       before: beforeAuth,
-      after: createAfterAuth({ db, live }),
+      after: createAfterAuth({ db, live, audit }),
     },
     account: {
       encryptOAuthTokens: true,
@@ -341,6 +639,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
         sendInvitationEmail: deliver,
         deleting,
         teams: teamAccessNotice({ db, live }),
+        audit,
       }),
       captcha({
         provider: "cloudflare-turnstile",
@@ -365,6 +664,14 @@ export function createAuth(db: Db, live?: LiveProjects) {
         teamPriceId: process.env.STRIPE_TEAM_PRICE_ID!,
         automaticTax: isStripeAutomaticTaxEnabled(),
         onSubscriptionChange: (id) => forgetAiSubscription(db, id),
+        onAuditEvent: audit,
+        resolveOrganizationByCustomerId: async (stripeCustomerId) => {
+          const found = await db.query.organization.findFirst({
+            where: { stripeCustomerId },
+            columns: { id: true },
+          });
+          return found?.id ?? null;
+        },
       }),
       tanstackStartCookies(),
     ],

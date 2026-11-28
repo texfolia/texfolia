@@ -9,6 +9,7 @@ import {
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { recordOrganizationAuditEvent } from "#/lib/audit/audit.server";
 import {
   projectShareLinkEmail,
   type EmailDelivery,
@@ -155,6 +156,21 @@ export async function createShareLink({
         createdAt: projectShareLink.createdAt,
       });
     if (!link) throw new Error("Share link could not be created.");
+    if (found.organizationId) {
+      await recordOrganizationAuditEvent(tx, {
+        organizationId: found.organizationId,
+        actorUserId: userId,
+        action: "project.share_link_created",
+        targetType: "share_link",
+        targetId: link.id,
+        metadata: {
+          projectId: data.projectId,
+          projectName: found.name,
+          role: link.role,
+          emailedRecipient: Boolean(recipientEmail),
+        },
+      });
+    }
     // The token is returned only here; the database keeps its hash.
     return { link, token, projectName: found.name, senderName };
   });
@@ -192,20 +208,36 @@ export async function revokeShareLink({
   live?: LiveProjects;
 }) {
   const userIds = await db.transaction(async (tx) => {
-    await lockManagedProject(tx, data.projectId, userId);
+    const found = await lockManagedProject(tx, data.projectId, userId);
     // Accounts that redeemed the link lose its grant with it.
     const redeemed = await tx
       .select({ userId: projectShareGrant.userId })
       .from(projectShareGrant)
       .where(eq(projectShareGrant.linkId, data.linkId));
-    await tx
+    const [deleted] = await tx
       .delete(projectShareLink)
       .where(
         and(
           eq(projectShareLink.projectId, data.projectId),
           eq(projectShareLink.id, data.linkId),
         ),
-      );
+      )
+      .returning({ id: projectShareLink.id, role: projectShareLink.role });
+    if (found.organizationId && deleted) {
+      await recordOrganizationAuditEvent(tx, {
+        organizationId: found.organizationId,
+        actorUserId: userId,
+        action: "project.share_link_revoked",
+        targetType: "share_link",
+        targetId: deleted.id,
+        metadata: {
+          projectId: data.projectId,
+          projectName: found.name,
+          role: deleted.role,
+          revokedGrants: redeemed.length,
+        },
+      });
+    }
     return [
       sharePrincipal(data.linkId),
       ...redeemed.map((grant) => grant.userId),

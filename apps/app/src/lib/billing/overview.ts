@@ -1,6 +1,7 @@
 import type { Db } from "@texfolia/db";
 import { aiOrganizationSettings } from "@texfolia/db/schema";
 
+import { recordOrganizationAuditEvent } from "#/lib/audit/audit.server";
 import { isOrgAdmin } from "#/lib/auth/roles";
 
 import { getOrganizationAiSettings, payerAiSpend } from "./metering";
@@ -125,5 +126,13 @@ export async function saveOrganizationAiCap(
       target: aiOrganizationSettings.organizationId,
       set: { monthlyCapNanos },
     });
+  await recordOrganizationAuditEvent(db, {
+    organizationId,
+    actorUserId: userId,
+    action: "billing.ai_cap_updated",
+    targetType: "organization",
+    targetId: organizationId,
+    metadata: { monthlyCapDollars: dollars },
+  });
 }
 export type BillingOverview = Awaited<ReturnType<typeof billingOverview>>;
