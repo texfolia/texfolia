@@ -158,7 +158,22 @@ annotations in builds and in dev prebundling. Check it when you upgrade the pack
 ## Account pages
 
 Account saves profile name and image through Better Auth. Changing email uses
-Better Auth's email OTP flow. It lists active sessions, which can be signed out,
+Better Auth's email OTP flow.
+
+Two-factor authentication uses authenticator-app TOTP codes and single-use
+recovery backup codes. Users without a password (email OTP or OAuth) can enroll,
+regenerate backup codes, and disable 2FA directly; users with a password must
+confirm their current password. After enrollment, email OTP, OAuth, and password
+sign-ins challenge for a TOTP or backup code unless the browser holds a valid
+30-day trusted-device cookie.
+
+Passkeys let signed-in users register, list, rename, and remove WebAuthn
+credentials (Touch ID, Face ID, Windows Hello, or hardware security keys) scoped
+to the app origin. Signing in with a passkey on `/login` (via Conditional UI
+autofill or the passkey button) satisfies MFA directly without a second TOTP
+prompt.
+
+Account also lists active sessions, which can be signed out,
 and **Download my data** exports it; see [Account export](#account-export).
 Account deletion requires a confirmation email. It is refused while the account is
 the only owner of an organization, or while its Pro subscription would renew. The

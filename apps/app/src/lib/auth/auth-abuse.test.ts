@@ -55,6 +55,8 @@ function createTestAuth(hostnames?: string | null) {
     account: [],
     verification: [],
     rateLimit: [],
+    twoFactor: [],
+    passkey: [],
   };
   const stripePlugin = options.plugins.find((plugin) => plugin.id === "stripe");
   assert(stripePlugin && "options" in stripePlugin);
@@ -594,4 +596,100 @@ test("hostname configuration accepts whitespace and normalizes case", async () =
     ).status,
   ).toBe(200);
   expect(emails).toHaveLength(1);
+});
+
+test("unused 2FA email OTP endpoints are disabled", async () => {
+  const { post } = createTestAuth();
+  for (const path of ["/two-factor/send-otp", "/two-factor/verify-otp"]) {
+    expect((await post(path, { code: "123456" })).status).toBe(404);
+  }
+});
+
+for (const path of [
+  "/two-factor/verify-totp",
+  "/two-factor/verify-backup-code",
+]) {
+  test(`2FA verification endpoints are rate limited: ${path}`, async () => {
+    const { post } = createTestAuth();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const response = await post(path, { code: "000000" });
+      expect(response.status).toBe(401);
+    }
+    const limited = await post(path, { code: "000000" });
+    expect(limited.status).toBe(429);
+  });
+}
+
+test("public passkey authentication routes are rate limited", async () => {
+  const { auth, post } = createTestAuth();
+  const ip = `192.0.2.${++clientId}`;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const response = await auth.handler(
+      new Request(
+        "http://localhost:3000/api/auth/passkey/generate-authenticate-options",
+        {
+          method: "GET",
+          headers: {
+            origin: "http://localhost:3000",
+            "cf-connecting-ip": ip,
+          },
+        },
+      ),
+    );
+    expect(response.status).toBe(200);
+  }
+  const limitedOptions = await auth.handler(
+    new Request(
+      "http://localhost:3000/api/auth/passkey/generate-authenticate-options",
+      {
+        method: "GET",
+        headers: {
+          origin: "http://localhost:3000",
+          "cf-connecting-ip": ip,
+        },
+      },
+    ),
+  );
+  expect(limitedOptions.status).toBe(429);
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const response = await post("/passkey/verify-authentication", {
+      response: {},
+    });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBeLessThan(429);
+  }
+  const limitedVerify = await post("/passkey/verify-authentication", {
+    response: {},
+  });
+  expect(limitedVerify.status).toBe(429);
+});
+
+test("2FA and passkey management endpoints require an authenticated session", async () => {
+  const { auth, post } = createTestAuth();
+  for (const path of [
+    "/two-factor/enable",
+    "/two-factor/disable",
+    "/two-factor/generate-backup-codes",
+    "/passkey/update-passkey",
+    "/passkey/delete-passkey",
+  ]) {
+    const response = await post(path, { id: "pk-1", name: "Key" });
+    expect(response.status).toBe(401);
+  }
+  for (const path of [
+    "/passkey/generate-register-options",
+    "/passkey/list-user-passkeys",
+  ]) {
+    const response = await auth.handler(
+      new Request(`http://localhost:3000/api/auth${path}`, {
+        method: "GET",
+        headers: {
+          origin: "http://localhost:3000",
+          "cf-connecting-ip": `192.0.2.${++clientId}`,
+        },
+      }),
+    );
+    expect(response.status).toBe(401);
+  }
 });

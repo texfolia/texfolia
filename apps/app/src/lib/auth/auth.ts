@@ -1,9 +1,15 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import { passkey } from "@better-auth/passkey";
 import { type Db } from "@texfolia/db";
 import * as schema from "@texfolia/db/schema";
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
-import { captcha, emailOTP, organization } from "better-auth/plugins";
+import {
+  captcha,
+  emailOTP,
+  organization,
+  twoFactor,
+} from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { z } from "zod";
 
@@ -39,11 +45,28 @@ import {
   organizationRoles,
   syncSeats,
 } from "./organization-policy";
+import { enforceTwoFactorOnSignIn } from "./two-factor";
 
 // Loaded on first use because only Workers provide the binding module.
 async function deliver(message: EmailMessage) {
   const { env } = await import("cloudflare:workers");
   await sendEmail(env, message);
+}
+
+export function createTwoFactorPlugin() {
+  return twoFactor({
+    issuer: "Texfolia",
+    allowPasswordless: true,
+  });
+}
+
+export function createPasskeyPlugin(baseURL: string) {
+  const url = new URL(baseURL);
+  return passkey({
+    rpID: url.hostname,
+    rpName: "Texfolia",
+    origin: url.origin,
+  });
 }
 
 export function createEmailOTPPlugin(sendOTPEmail: DeliverEmail) {
@@ -128,7 +151,15 @@ export const sessionOptions = {
 };
 
 // Better Auth reads the database itself before changing an account.
-const authoritativePaths = ["/organization/", "/subscription/"];
+const authoritativePaths = [
+  "/organization/",
+  "/subscription/",
+  "/two-factor/",
+  "/passkey/",
+  "/revoke-session",
+  "/revoke-other-sessions",
+  "/revoke-sessions",
+];
 
 export const beforeAuth = createAuthMiddleware(async (ctx) => {
   assertBillingScope(ctx);
@@ -178,6 +209,8 @@ export function createAfterAuth({
   live: LiveProjects | undefined;
 }) {
   return createAuthMiddleware(async (ctx) => {
+    const twoFactorResponse = await enforceTwoFactorOnSignIn(ctx);
+    if (twoFactorResponse) return twoFactorResponse;
     // Browsers keep build files, which the next user must not find.
     if (ctx.path === "/sign-out" || ctx.path === "/delete-user")
       ctx.setHeader("Clear-Site-Data", '"cache"');
@@ -215,6 +248,7 @@ export function createAuth(db: Db, live?: LiveProjects) {
   let leaving: string[] = [];
 
   return betterAuth({
+    appName: "Texfolia",
     baseURL,
     database: drizzleAdapter(db, {
       provider: "pg",
@@ -230,6 +264,8 @@ export function createAuth(db: Db, live?: LiveProjects) {
       "/send-verification-email",
       "/get-access-token",
       "/refresh-token",
+      "/two-factor/send-otp",
+      "/two-factor/verify-otp",
     ],
     // Counters live in Postgres: each Worker isolate has its own memory, so
     // in-memory limits would reset per isolate.
@@ -241,6 +277,9 @@ export function createAuth(db: Db, live?: LiveProjects) {
         "/get-session": false,
         // Verified by signature, and all Stripe deliveries share a few IPs.
         "/stripe/webhook": false,
+        // Public passkey auth routes: no email/signup, but bound challenge/verify floods.
+        "/passkey/generate-authenticate-options": { window: 60, max: 10 },
+        "/passkey/verify-authentication": { window: 60, max: 10 },
       },
     },
     hooks: {
@@ -317,6 +356,8 @@ export function createAuth(db: Db, live?: LiveProjects) {
         ],
       }),
       createEmailOTPPlugin(deliver),
+      createTwoFactorPlugin(),
+      createPasskeyPlugin(baseURL),
       createBillingPlugin({
         stripeClient,
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,

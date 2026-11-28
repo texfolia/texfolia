@@ -5,15 +5,21 @@ import { webPath } from "#/lib/origins";
 import { CodeStep } from "./-components/code-step";
 import { EmailStep } from "./-components/email-step";
 import { ResendCode, SecurityCheck } from "./-components/security-check";
+import { TwoFactorStep } from "./-components/two-factor-step";
 import { useLogin } from "./-components/use-login";
 
 // oxlint-disable-next-line no-control-regex -- Redirect targets must reject control characters.
 const redirectTarget = /^\/(?!\/)[^\u0000-\u0020\\]*$/;
 
 // Always return the keys: the router keeps raw search values a validator omits.
-export function loginSearch({ redirectTo, error }: Record<string, unknown>): {
+export function loginSearch({
+  redirectTo,
+  error,
+  twoFactor,
+}: Record<string, unknown>): {
   redirectTo?: string;
   error?: string;
+  twoFactor?: boolean;
 } {
   return {
     redirectTo:
@@ -22,6 +28,10 @@ export function loginSearch({ redirectTo, error }: Record<string, unknown>): {
         ? redirectTo
         : "/projects",
     error: typeof error === "string" ? error : undefined,
+    twoFactor:
+      twoFactor === true || twoFactor === "1" || twoFactor === "true"
+        ? true
+        : undefined,
   };
 }
 
@@ -32,9 +42,25 @@ export const Route = createFileRoute("/login")({
 });
 
 function RouteComponent() {
-  const { redirectTo = "/projects", error: callbackError } = Route.useSearch();
-  const login = useLogin({ redirectTo, failed: !!callbackError });
-  const { form, step, error, status, retryWait } = login;
+  const {
+    redirectTo = "/projects",
+    error: callbackError,
+    twoFactor,
+  } = Route.useSearch();
+  const login = useLogin({
+    redirectTo,
+    failed: !!callbackError,
+    twoFactor: !!twoFactor,
+  });
+  const { form, step, twoFactorMode, error, status, retryWait } = login;
+
+  const heading =
+    step === "email"
+      ? "Sign in to Texfolia"
+      : step === "otp"
+        ? "Check your email"
+        : "Two-factor authentication";
+
   return (
     <div className="bg-background text-foreground min-h-svh">
       <a
@@ -68,7 +94,7 @@ function RouteComponent() {
             className="motion-safe:animate-in motion-safe:fade-in space-y-3 text-center motion-safe:duration-200"
           >
             <h1 className="font-heading text-xl font-medium tracking-tight">
-              {step === "email" ? "Sign in to Texfolia" : "Check your email"}
+              {heading}
             </h1>
             {step === "otp" && (
               <p
@@ -78,6 +104,16 @@ function RouteComponent() {
                 Enter the six-digit code sent to{" "}
                 {form.state.values.emailStep.email}. Codes expire after 5
                 minutes.
+              </p>
+            )}
+            {step === "twoFactor" && (
+              <p
+                id="two-factor-help"
+                className="text-muted-foreground text-sm break-words"
+              >
+                {twoFactorMode === "totp"
+                  ? "Enter the six-digit code from your authenticator app."
+                  : "Enter one of your single-use recovery backup codes."}
               </p>
             )}
           </div>
@@ -103,13 +139,17 @@ function RouteComponent() {
           )}
           {step === "email" ? (
             <EmailStep login={login} />
-          ) : (
+          ) : step === "otp" ? (
             <CodeStep login={login} />
+          ) : (
+            <TwoFactorStep login={login} />
           )}
-          <div className="space-y-3">
-            {step === "otp" && <ResendCode login={login} />}
-            <SecurityCheck login={login} />
-          </div>
+          {step !== "twoFactor" && (
+            <div className="space-y-3">
+              {step === "otp" && <ResendCode login={login} />}
+              <SecurityCheck login={login} />
+            </div>
+          )}
         </form>
         <nav
           aria-label="Legal information"
