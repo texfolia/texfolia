@@ -6,6 +6,7 @@ export async function listComments() {
   if (!response.ok)
     return {
       threads: [],
+      mentions: {},
       canComment: true,
       canModerate: false,
       userId: "runtime-test",
@@ -23,15 +24,31 @@ export async function getCommentThread({
     userId: string;
     canComment: boolean;
     canModerate: boolean;
+    mentions?: Record<string, unknown>;
     threads: Array<{ id: string }>;
   };
   return {
     userId: all.userId,
     canComment: all.canComment,
     canModerate: all.canModerate,
+    mentions: all.mentions ?? {},
     thread: all.threads.find((item) => item.id === data.threadId) ?? null,
   };
 }
+export async function listMentionCandidates() {
+  return { people: [] };
+}
+export async function syncScratchpadMentions() {
+  return { mentionedUserIds: [], notifiedUserIds: [] };
+}
+export async function resolveScratchpadMentions() {
+  return { mentions: {} };
+}
+export async function listNotifications() {
+  return { items: [], unreadCount: 0 };
+}
+export async function markNotificationRead() {}
+export async function markAllNotificationsRead() {}
 export async function deleteCommentThread({
   data,
 }: {
