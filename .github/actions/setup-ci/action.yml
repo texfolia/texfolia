@@ -35,7 +35,7 @@ runs:
       if: inputs.playwright == 'true'
       id: playwright
       shell: bash
-      run: echo "version=$(bun -p 'require("./apps/app/node_modules/playwright/package.json").version')" >> "$GITHUB_OUTPUT"
+      run: echo "version=$(bun -p 'require("./apps/web/node_modules/playwright/package.json").version')" >> "$GITHUB_OUTPUT"
     - name: Cache Chromium
       if: inputs.playwright == 'true'
       uses: actions/cache@v5
@@ -46,4 +46,4 @@ runs:
     - name: Install Chromium and system dependencies
       if: inputs.playwright == 'true'
       shell: bash
-      run: bun run --cwd apps/app playwright install --with-deps chromium
+      run: bun run --cwd apps/web playwright install --with-deps chromium

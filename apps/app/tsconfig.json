@@ -1,9 +1,0 @@
-{
-  "extends": "@texfolia/tsconfig/tanstack-start.json",
-  "include": ["**/*.ts", "**/*.tsx"],
-  "compilerOptions": {
-    "paths": {
-      "#/*": ["./src/*"]
-    }
-  }
-}

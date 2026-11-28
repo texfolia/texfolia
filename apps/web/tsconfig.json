@@ -1,11 +1,9 @@
 {
   "extends": "@texfolia/tsconfig/tanstack-start.json",
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["dist"],
   "compilerOptions": {
     "paths": {
       "#/*": ["./src/*"]
-    },
-    "types": ["vite/client", "bun"]
+    }
   }
 }

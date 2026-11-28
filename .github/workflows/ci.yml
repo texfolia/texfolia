@@ -51,48 +51,48 @@ jobs:
           playwright: ${{ steps.select.outputs.postgres-browser }}
       - name: Build app once for browser suites
         if: steps.select.outputs.postgres-build == 'true'
-        run: bunx turbo run build --filter=app
+        run: bunx turbo run build --filter=web
       - name: Apply database schema
         if: steps.select.outputs.postgres == 'true'
         run: bun run db:push
       - name: Exercise app database operations
         if: steps.select.outputs.database == 'true'
-        run: bun run apps/app/test/postgres.ts
+        run: bun run apps/web/test/postgres.ts
       - name: Exercise project settings and account usage
         if: steps.select.outputs.settings == 'true'
-        run: bun run --cwd apps/app test:settings
+        run: bun run --cwd apps/web test:settings
       - name: Exercise billing pages with Postgres
         if: steps.select.outputs.pricing == 'true'
-        run: bun run --cwd apps/app test:pricing:prebuilt
+        run: bun run --cwd apps/web test:pricing:prebuilt
       - name: Exercise authenticated compile retries with Postgres
         if: steps.select.outputs.compile-route == 'true'
-        run: bun run --cwd apps/app test:compile-route
+        run: bun run --cwd apps/web test:compile-route
       - name: Exercise AI billing with Postgres
         if: steps.select.outputs.ai-billing == 'true'
-        run: bun run --cwd apps/app test:ai-billing
+        run: bun run --cwd apps/web test:ai-billing
       - name: Exercise the managed assistant
         if: steps.select.outputs.assistant == 'true'
-        run: bun run --cwd apps/app test:ai-assistant
+        run: bun run --cwd apps/web test:ai-assistant
       - name: Exercise real-time collaboration locally
         if: steps.select.outputs.collaboration == 'true'
         run: |
-          bun run --cwd apps/app test:collaboration
-          bun run --cwd apps/app test:collaboration-cache
+          bun run --cwd apps/web test:collaboration
+          bun run --cwd apps/web test:collaboration-cache
       - name: Exercise metadata synchronization in two authenticated workspaces
         if: steps.select.outputs.workspace-metadata == 'true'
-        run: bun run --cwd apps/app test:workspace-metadata:prebuilt
+        run: bun run --cwd apps/web test:workspace-metadata:prebuilt
       - name: Exercise project controls, sharing, and keyboard access
         if: steps.select.outputs.ui-overhaul == 'true'
-        run: bun run --cwd apps/app test/ui-overhaul.ts
+        run: bun run --cwd apps/web test/ui-overhaul.ts
       - name: Exercise GitHub and GitLab integration with Postgres and local R2
         if: steps.select.outputs.git == 'true'
-        run: bun run --cwd apps/app test:git
+        run: bun run --cwd apps/web test:git
       - name: Exercise project source storage with local R2
         if: steps.select.outputs.source-storage == 'true'
-        run: bun run apps/app/test/source-storage.ts
+        run: bun run apps/web/test/source-storage.ts
       - name: Test project tags and imports
         if: steps.select.outputs.projects == 'true'
-        run: bun run --cwd apps/app test:projects
+        run: bun run --cwd apps/web test:projects
   browser:
     name: Browser suites
     runs-on: ubuntu-latest
@@ -112,31 +112,31 @@ jobs:
           playwright: "true"
       - name: Copy browser assets
         if: steps.select.outputs.browser == 'true'
-        run: bun run --cwd apps/app spelling:assets
+        run: bun run --cwd apps/web spelling:assets
       - name: Exercise sign-in on the development server
         if: steps.select.outputs.login == 'true'
-        run: bun run --cwd apps/app test:login
+        run: bun run --cwd apps/web test:login
       - name: Exercise Vim and Emacs keymaps
         if: steps.select.outputs.editor-keymaps == 'true'
-        run: bun run --cwd apps/app test:editor-keymaps
+        run: bun run --cwd apps/web test:editor-keymaps
       - name: Exercise spell check
         if: steps.select.outputs.spelling == 'true'
-        run: bun run --cwd apps/app test:spelling
+        run: bun run --cwd apps/web test:spelling
       - name: Exercise SyncTeX navigation
         if: steps.select.outputs.synctex == 'true'
-        run: bun run --cwd apps/app test:synctex
+        run: bun run --cwd apps/web test:synctex
       - name: Exercise themes and the settings dialog
         if: steps.select.outputs.themes == 'true'
-        run: bun run --cwd apps/app test:themes
+        run: bun run --cwd apps/web test:themes
       - name: Exercise editing, undo, and workspace rendering
         if: steps.select.outputs.editor-runtime == 'true'
-        run: bun run --cwd apps/app test:editor-runtime
+        run: bun run --cwd apps/web test:editor-runtime
       - name: Exercise previews, quick open, and AI change review
         if: steps.select.outputs.editor-features == 'true'
-        run: bun run --cwd apps/app test:editor-features
+        run: bun run --cwd apps/web test:editor-features
       - name: Exercise keyboard access, focus, and reduced motion
         if: steps.select.outputs.workspace-accessibility == 'true'
-        run: bun run --cwd apps/app test:workspace-accessibility
+        run: bun run --cwd apps/web test:workspace-accessibility
   engine:
     name: LaTeX engine
     runs-on: ubuntu-latest
@@ -183,10 +183,10 @@ jobs:
           bun run apps/compiler/scripts/verify-biber.ts
       - name: Exercise builds with the real compiler
         if: steps.select.outputs.compile-engine == 'true'
-        run: bun run --cwd apps/app test:compile-engine
+        run: bun run --cwd apps/web test:compile-engine
       - name: Exercise uploads, compile retries, and the PDF in a browser
         if: steps.select.outputs.workspace-upload == 'true'
-        run: bun run --cwd apps/app test:workspace-upload
+        run: bun run --cwd apps/web test:workspace-upload
       - name: Print engine logs
         if: failure() && steps.select.outputs.engine == 'true'
         run: docker logs engine
@@ -219,10 +219,10 @@ jobs:
         run: echo "CI_GO_VERSION=$(go env GOVERSION)" >> "$GITHUB_ENV"
       - name: Build app for production
         if: steps.select.outputs.production-assets == 'true'
-        run: bunx turbo run build --filter=app
+        run: bunx turbo run build --filter=web
       - name: Check production CSS and worker assets
         if: steps.select.outputs.production-assets == 'true'
-        run: bun run --cwd apps/app test:production-assets
+        run: bun run --cwd apps/web test:production-assets
       - name: Install PDF preview renderer
         if: steps.select.outputs.compiler == 'true'
         run: sudo apt-get update && sudo apt-get install -y poppler-utils

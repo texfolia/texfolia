@@ -10,13 +10,49 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BillingRouteRouteImport } from './routes/billing/route'
+import { Route as LoginRouteRouteImport } from './routes/login/route'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ProjectsRouteRouteImport } from './routes/projects/route'
+import { Route as SettingsRouteRouteImport } from './routes/settings/route'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as AcceptInvitationInvitationIdRouteRouteImport } from './routes/accept-invitation/$invitationId/route'
+import { Route as ProjectProjectIdRouteRouteImport } from './routes/project/$projectId/route'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as SettingsAccountRouteRouteImport } from './routes/settings/account/route'
+import { Route as SettingsAiRouteRouteImport } from './routes/settings/ai/route'
+import { Route as SettingsBillingRouteRouteImport } from './routes/settings/billing/route'
+import { Route as SettingsConnectionsRouteRouteImport } from './routes/settings/connections/route'
+import { Route as SettingsOrganizationsRouteRouteImport } from './routes/settings/organizations/route'
+import { Route as SettingsPreferencesRouteRouteImport } from './routes/settings/preferences/route'
+import { Route as SettingsUsageRouteRouteImport } from './routes/settings/usage/route'
+import { Route as ShareTokenRouteImport } from './routes/share/$token'
+import { Route as ApiAccountExportRouteImport } from './routes/api/account/export'
+import { Route as ApiAiProjectIdRouteImport } from './routes/api/ai/$projectId'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiCompileProjectIdRouteImport } from './routes/api/compile/$projectId'
+import { Route as ApiHealthIndexRouteImport } from './routes/api/health/index'
+import { Route as ApiReferencesIndexRouteImport } from './routes/api/references/index'
+import { Route as ApiUsageExportRouteImport } from './routes/api/usage/export'
+import { Route as ApiCollaborationProjectIdIndexRouteImport } from './routes/api/collaboration/$projectId/index'
+import { Route as ApiCollaborationProjectIdNodeIdRouteImport } from './routes/api/collaboration/$projectId/$nodeId'
+import { Route as ApiProjectsProjectIdMetadataRouteImport } from './routes/api/projects/$projectId/metadata'
+import { Route as ApiSourcesProjectIdNodeIdRouteImport } from './routes/api/sources/$projectId/$nodeId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BillingRouteRoute = BillingRouteRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRouteRoute = LoginRouteRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PricingRoute = PricingRouteImport.update({
@@ -29,44 +65,357 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsRouteRoute = ProjectsRouteRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRouteRoute = SettingsRouteRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AcceptInvitationInvitationIdRouteRoute =
+  AcceptInvitationInvitationIdRouteRouteImport.update({
+    id: '/accept-invitation/$invitationId',
+    path: '/accept-invitation/$invitationId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ProjectProjectIdRouteRoute = ProjectProjectIdRouteRouteImport.update({
+  id: '/project/$projectId',
+  path: '/project/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsAccountRouteRoute = SettingsAccountRouteRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsAiRouteRoute = SettingsAiRouteRouteImport.update({
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsBillingRouteRoute = SettingsBillingRouteRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const SettingsConnectionsRouteRoute =
+  SettingsConnectionsRouteRouteImport.update({
+    id: '/connections',
+    path: '/connections',
+    getParentRoute: () => SettingsRouteRoute,
+  } as any)
+const SettingsOrganizationsRouteRoute =
+  SettingsOrganizationsRouteRouteImport.update({
+    id: '/organizations',
+    path: '/organizations',
+    getParentRoute: () => SettingsRouteRoute,
+  } as any)
+const SettingsPreferencesRouteRoute =
+  SettingsPreferencesRouteRouteImport.update({
+    id: '/preferences',
+    path: '/preferences',
+    getParentRoute: () => SettingsRouteRoute,
+  } as any)
+const SettingsUsageRouteRoute = SettingsUsageRouteRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => SettingsRouteRoute,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAccountExportRoute = ApiAccountExportRouteImport.update({
+  id: '/api/account/export',
+  path: '/api/account/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAiProjectIdRoute = ApiAiProjectIdRouteImport.update({
+  id: '/api/ai/$projectId',
+  path: '/api/ai/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCompileProjectIdRoute = ApiCompileProjectIdRouteImport.update({
+  id: '/api/compile/$projectId',
+  path: '/api/compile/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthIndexRoute = ApiHealthIndexRouteImport.update({
+  id: '/api/health/',
+  path: '/api/health/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReferencesIndexRoute = ApiReferencesIndexRouteImport.update({
+  id: '/api/references/',
+  path: '/api/references/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageExportRoute = ApiUsageExportRouteImport.update({
+  id: '/api/usage/export',
+  path: '/api/usage/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCollaborationProjectIdIndexRoute =
+  ApiCollaborationProjectIdIndexRouteImport.update({
+    id: '/api/collaboration/$projectId/',
+    path: '/api/collaboration/$projectId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCollaborationProjectIdNodeIdRoute =
+  ApiCollaborationProjectIdNodeIdRouteImport.update({
+    id: '/api/collaboration/$projectId/$nodeId',
+    path: '/api/collaboration/$projectId/$nodeId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiProjectsProjectIdMetadataRoute =
+  ApiProjectsProjectIdMetadataRouteImport.update({
+    id: '/api/projects/$projectId/metadata',
+    path: '/api/projects/$projectId/metadata',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiSourcesProjectIdNodeIdRoute =
+  ApiSourcesProjectIdNodeIdRouteImport.update({
+    id: '/api/sources/$projectId/$nodeId',
+    path: '/api/sources/$projectId/$nodeId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/billing': typeof BillingRouteRoute
+  '/login': typeof LoginRouteRoute
+  '/projects': typeof ProjectsRouteRoute
+  '/settings': typeof SettingsRouteRouteWithChildren
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
+  '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/settings/account': typeof SettingsAccountRouteRoute
+  '/settings/ai': typeof SettingsAiRouteRoute
+  '/settings/billing': typeof SettingsBillingRouteRoute
+  '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/organizations': typeof SettingsOrganizationsRouteRoute
+  '/settings/preferences': typeof SettingsPreferencesRouteRoute
+  '/settings/usage': typeof SettingsUsageRouteRoute
+  '/share/$token': typeof ShareTokenRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
+  '/api/ai/$projectId': typeof ApiAiProjectIdRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/usage/export': typeof ApiUsageExportRoute
+  '/api/health/': typeof ApiHealthIndexRoute
+  '/api/references/': typeof ApiReferencesIndexRoute
+  '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
+  '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
+  '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/collaboration/$projectId/': typeof ApiCollaborationProjectIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/billing': typeof BillingRouteRoute
+  '/login': typeof LoginRouteRoute
+  '/projects': typeof ProjectsRouteRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
+  '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/settings/account': typeof SettingsAccountRouteRoute
+  '/settings/ai': typeof SettingsAiRouteRoute
+  '/settings/billing': typeof SettingsBillingRouteRoute
+  '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/organizations': typeof SettingsOrganizationsRouteRoute
+  '/settings/preferences': typeof SettingsPreferencesRouteRoute
+  '/settings/usage': typeof SettingsUsageRouteRoute
+  '/share/$token': typeof ShareTokenRoute
+  '/settings': typeof SettingsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
+  '/api/ai/$projectId': typeof ApiAiProjectIdRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/usage/export': typeof ApiUsageExportRoute
+  '/api/health': typeof ApiHealthIndexRoute
+  '/api/references': typeof ApiReferencesIndexRoute
+  '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
+  '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
+  '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/collaboration/$projectId': typeof ApiCollaborationProjectIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/billing': typeof BillingRouteRoute
+  '/login': typeof LoginRouteRoute
+  '/projects': typeof ProjectsRouteRoute
+  '/settings': typeof SettingsRouteRouteWithChildren
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
   '/terms': typeof TermsRoute
+  '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRouteRoute
+  '/project/$projectId': typeof ProjectProjectIdRouteRoute
+  '/settings/account': typeof SettingsAccountRouteRoute
+  '/settings/ai': typeof SettingsAiRouteRoute
+  '/settings/billing': typeof SettingsBillingRouteRoute
+  '/settings/connections': typeof SettingsConnectionsRouteRoute
+  '/settings/organizations': typeof SettingsOrganizationsRouteRoute
+  '/settings/preferences': typeof SettingsPreferencesRouteRoute
+  '/settings/usage': typeof SettingsUsageRouteRoute
+  '/share/$token': typeof ShareTokenRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/api/account/export': typeof ApiAccountExportRoute
+  '/api/ai/$projectId': typeof ApiAiProjectIdRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/compile/$projectId': typeof ApiCompileProjectIdRoute
+  '/api/usage/export': typeof ApiUsageExportRoute
+  '/api/health/': typeof ApiHealthIndexRoute
+  '/api/references/': typeof ApiReferencesIndexRoute
+  '/api/collaboration/$projectId/$nodeId': typeof ApiCollaborationProjectIdNodeIdRoute
+  '/api/projects/$projectId/metadata': typeof ApiProjectsProjectIdMetadataRoute
+  '/api/sources/$projectId/$nodeId': typeof ApiSourcesProjectIdNodeIdRoute
+  '/api/collaboration/$projectId/': typeof ApiCollaborationProjectIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/pricing' | '/privacy' | '/terms'
+  fullPaths:
+    | '/'
+    | '/billing'
+    | '/login'
+    | '/projects'
+    | '/settings'
+    | '/pricing'
+    | '/privacy'
+    | '/terms'
+    | '/accept-invitation/$invitationId'
+    | '/project/$projectId'
+    | '/settings/account'
+    | '/settings/ai'
+    | '/settings/billing'
+    | '/settings/connections'
+    | '/settings/organizations'
+    | '/settings/preferences'
+    | '/settings/usage'
+    | '/share/$token'
+    | '/settings/'
+    | '/api/account/export'
+    | '/api/ai/$projectId'
+    | '/api/auth/$'
+    | '/api/compile/$projectId'
+    | '/api/usage/export'
+    | '/api/health/'
+    | '/api/references/'
+    | '/api/collaboration/$projectId/$nodeId'
+    | '/api/projects/$projectId/metadata'
+    | '/api/sources/$projectId/$nodeId'
+    | '/api/collaboration/$projectId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/pricing' | '/privacy' | '/terms'
-  id: '__root__' | '/' | '/pricing' | '/privacy' | '/terms'
+  to:
+    | '/'
+    | '/billing'
+    | '/login'
+    | '/projects'
+    | '/pricing'
+    | '/privacy'
+    | '/terms'
+    | '/accept-invitation/$invitationId'
+    | '/project/$projectId'
+    | '/settings/account'
+    | '/settings/ai'
+    | '/settings/billing'
+    | '/settings/connections'
+    | '/settings/organizations'
+    | '/settings/preferences'
+    | '/settings/usage'
+    | '/share/$token'
+    | '/settings'
+    | '/api/account/export'
+    | '/api/ai/$projectId'
+    | '/api/auth/$'
+    | '/api/compile/$projectId'
+    | '/api/usage/export'
+    | '/api/health'
+    | '/api/references'
+    | '/api/collaboration/$projectId/$nodeId'
+    | '/api/projects/$projectId/metadata'
+    | '/api/sources/$projectId/$nodeId'
+    | '/api/collaboration/$projectId'
+  id:
+    | '__root__'
+    | '/'
+    | '/billing'
+    | '/login'
+    | '/projects'
+    | '/settings'
+    | '/pricing'
+    | '/privacy'
+    | '/terms'
+    | '/accept-invitation/$invitationId'
+    | '/project/$projectId'
+    | '/settings/account'
+    | '/settings/ai'
+    | '/settings/billing'
+    | '/settings/connections'
+    | '/settings/organizations'
+    | '/settings/preferences'
+    | '/settings/usage'
+    | '/share/$token'
+    | '/settings/'
+    | '/api/account/export'
+    | '/api/ai/$projectId'
+    | '/api/auth/$'
+    | '/api/compile/$projectId'
+    | '/api/usage/export'
+    | '/api/health/'
+    | '/api/references/'
+    | '/api/collaboration/$projectId/$nodeId'
+    | '/api/projects/$projectId/metadata'
+    | '/api/sources/$projectId/$nodeId'
+    | '/api/collaboration/$projectId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BillingRouteRoute: typeof BillingRouteRoute
+  LoginRouteRoute: typeof LoginRouteRoute
+  ProjectsRouteRoute: typeof ProjectsRouteRoute
+  SettingsRouteRoute: typeof SettingsRouteRouteWithChildren
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
   TermsRoute: typeof TermsRoute
+  AcceptInvitationInvitationIdRouteRoute: typeof AcceptInvitationInvitationIdRouteRoute
+  ProjectProjectIdRouteRoute: typeof ProjectProjectIdRouteRoute
+  ShareTokenRoute: typeof ShareTokenRoute
+  ApiAccountExportRoute: typeof ApiAccountExportRoute
+  ApiAiProjectIdRoute: typeof ApiAiProjectIdRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiCompileProjectIdRoute: typeof ApiCompileProjectIdRoute
+  ApiUsageExportRoute: typeof ApiUsageExportRoute
+  ApiHealthIndexRoute: typeof ApiHealthIndexRoute
+  ApiReferencesIndexRoute: typeof ApiReferencesIndexRoute
+  ApiCollaborationProjectIdNodeIdRoute: typeof ApiCollaborationProjectIdNodeIdRoute
+  ApiProjectsProjectIdMetadataRoute: typeof ApiProjectsProjectIdMetadataRoute
+  ApiSourcesProjectIdNodeIdRoute: typeof ApiSourcesProjectIdNodeIdRoute
+  ApiCollaborationProjectIdIndexRoute: typeof ApiCollaborationProjectIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -76,6 +425,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/billing': {
+      id: '/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof BillingRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
@@ -92,6 +455,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -99,24 +476,224 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/accept-invitation/$invitationId': {
+      id: '/accept-invitation/$invitationId'
+      path: '/accept-invitation/$invitationId'
+      fullPath: '/accept-invitation/$invitationId'
+      preLoaderRoute: typeof AcceptInvitationInvitationIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/project/$projectId': {
+      id: '/project/$projectId'
+      path: '/project/$projectId'
+      fullPath: '/project/$projectId'
+      preLoaderRoute: typeof ProjectProjectIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/account': {
+      id: '/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof SettingsAccountRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/ai': {
+      id: '/settings/ai'
+      path: '/ai'
+      fullPath: '/settings/ai'
+      preLoaderRoute: typeof SettingsAiRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/billing': {
+      id: '/settings/billing'
+      path: '/billing'
+      fullPath: '/settings/billing'
+      preLoaderRoute: typeof SettingsBillingRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/connections': {
+      id: '/settings/connections'
+      path: '/connections'
+      fullPath: '/settings/connections'
+      preLoaderRoute: typeof SettingsConnectionsRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/organizations': {
+      id: '/settings/organizations'
+      path: '/organizations'
+      fullPath: '/settings/organizations'
+      preLoaderRoute: typeof SettingsOrganizationsRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/preferences': {
+      id: '/settings/preferences'
+      path: '/preferences'
+      fullPath: '/settings/preferences'
+      preLoaderRoute: typeof SettingsPreferencesRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/settings/usage': {
+      id: '/settings/usage'
+      path: '/usage'
+      fullPath: '/settings/usage'
+      preLoaderRoute: typeof SettingsUsageRouteRouteImport
+      parentRoute: typeof SettingsRouteRoute
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/account/export': {
+      id: '/api/account/export'
+      path: '/api/account/export'
+      fullPath: '/api/account/export'
+      preLoaderRoute: typeof ApiAccountExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ai/$projectId': {
+      id: '/api/ai/$projectId'
+      path: '/api/ai/$projectId'
+      fullPath: '/api/ai/$projectId'
+      preLoaderRoute: typeof ApiAiProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/compile/$projectId': {
+      id: '/api/compile/$projectId'
+      path: '/api/compile/$projectId'
+      fullPath: '/api/compile/$projectId'
+      preLoaderRoute: typeof ApiCompileProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health/': {
+      id: '/api/health/'
+      path: '/api/health'
+      fullPath: '/api/health/'
+      preLoaderRoute: typeof ApiHealthIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/references/': {
+      id: '/api/references/'
+      path: '/api/references'
+      fullPath: '/api/references/'
+      preLoaderRoute: typeof ApiReferencesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/export': {
+      id: '/api/usage/export'
+      path: '/api/usage/export'
+      fullPath: '/api/usage/export'
+      preLoaderRoute: typeof ApiUsageExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/collaboration/$projectId/': {
+      id: '/api/collaboration/$projectId/'
+      path: '/api/collaboration/$projectId'
+      fullPath: '/api/collaboration/$projectId/'
+      preLoaderRoute: typeof ApiCollaborationProjectIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/collaboration/$projectId/$nodeId': {
+      id: '/api/collaboration/$projectId/$nodeId'
+      path: '/api/collaboration/$projectId/$nodeId'
+      fullPath: '/api/collaboration/$projectId/$nodeId'
+      preLoaderRoute: typeof ApiCollaborationProjectIdNodeIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/projects/$projectId/metadata': {
+      id: '/api/projects/$projectId/metadata'
+      path: '/api/projects/$projectId/metadata'
+      fullPath: '/api/projects/$projectId/metadata'
+      preLoaderRoute: typeof ApiProjectsProjectIdMetadataRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sources/$projectId/$nodeId': {
+      id: '/api/sources/$projectId/$nodeId'
+      path: '/api/sources/$projectId/$nodeId'
+      fullPath: '/api/sources/$projectId/$nodeId'
+      preLoaderRoute: typeof ApiSourcesProjectIdNodeIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface SettingsRouteRouteChildren {
+  SettingsAccountRouteRoute: typeof SettingsAccountRouteRoute
+  SettingsAiRouteRoute: typeof SettingsAiRouteRoute
+  SettingsBillingRouteRoute: typeof SettingsBillingRouteRoute
+  SettingsConnectionsRouteRoute: typeof SettingsConnectionsRouteRoute
+  SettingsOrganizationsRouteRoute: typeof SettingsOrganizationsRouteRoute
+  SettingsPreferencesRouteRoute: typeof SettingsPreferencesRouteRoute
+  SettingsUsageRouteRoute: typeof SettingsUsageRouteRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+}
+
+const SettingsRouteRouteChildren: SettingsRouteRouteChildren = {
+  SettingsAccountRouteRoute: SettingsAccountRouteRoute,
+  SettingsAiRouteRoute: SettingsAiRouteRoute,
+  SettingsBillingRouteRoute: SettingsBillingRouteRoute,
+  SettingsConnectionsRouteRoute: SettingsConnectionsRouteRoute,
+  SettingsOrganizationsRouteRoute: SettingsOrganizationsRouteRoute,
+  SettingsPreferencesRouteRoute: SettingsPreferencesRouteRoute,
+  SettingsUsageRouteRoute: SettingsUsageRouteRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+}
+
+const SettingsRouteRouteWithChildren = SettingsRouteRoute._addFileChildren(
+  SettingsRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BillingRouteRoute: BillingRouteRoute,
+  LoginRouteRoute: LoginRouteRoute,
+  ProjectsRouteRoute: ProjectsRouteRoute,
+  SettingsRouteRoute: SettingsRouteRouteWithChildren,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
   TermsRoute: TermsRoute,
+  AcceptInvitationInvitationIdRouteRoute:
+    AcceptInvitationInvitationIdRouteRoute,
+  ProjectProjectIdRouteRoute: ProjectProjectIdRouteRoute,
+  ShareTokenRoute: ShareTokenRoute,
+  ApiAccountExportRoute: ApiAccountExportRoute,
+  ApiAiProjectIdRoute: ApiAiProjectIdRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiCompileProjectIdRoute: ApiCompileProjectIdRoute,
+  ApiUsageExportRoute: ApiUsageExportRoute,
+  ApiHealthIndexRoute: ApiHealthIndexRoute,
+  ApiReferencesIndexRoute: ApiReferencesIndexRoute,
+  ApiCollaborationProjectIdNodeIdRoute: ApiCollaborationProjectIdNodeIdRoute,
+  ApiProjectsProjectIdMetadataRoute: ApiProjectsProjectIdMetadataRoute,
+  ApiSourcesProjectIdNodeIdRoute: ApiSourcesProjectIdNodeIdRoute,
+  ApiCollaborationProjectIdIndexRoute: ApiCollaborationProjectIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

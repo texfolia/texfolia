@@ -6,7 +6,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./compiler": "./src/compiler.ts",
-    "./hosts": "./src/hosts.ts",
     "./path-policy.json": "./fixtures/path-policy.json",
     "./plans": "./src/plans.ts"
   },

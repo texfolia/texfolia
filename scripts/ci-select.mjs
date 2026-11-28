@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const web = "apps/app/";
+const web = "apps/web/";
 const test = `${web}test/`;
 
 // Browser suites load the entire app. Keep runtime inputs broad. Suites run in
@@ -230,9 +230,9 @@ if (
     plan = selectChecks(changedPaths(base));
     if (!plan.full) {
       filter = `--filter=...[${base}]`;
-      if (plan["cross-package"]) filter += " --filter=app";
+      if (plan["cross-package"]) filter += " --filter=web";
       if (!plan.compiler) filter += " --filter=!compiler";
-      if (!plan["web-checks"]) filter += " --filter=!app";
+      if (!plan["web-checks"]) filter += " --filter=!web";
     }
   } catch (error) {
     console.warn(`Running all checks: ${error.message}`);

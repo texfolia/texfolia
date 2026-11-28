@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 import {
   PolicyLayout,
@@ -6,9 +6,6 @@ import {
   ToBeCompleted,
 } from "#/components/policy-layout";
 import { pageHead } from "#/lib/head";
-import { appPath } from "#/lib/urls";
-
-const accountSettings = appPath("/settings/account");
 
 const sections: PolicySection[] = [
   {
@@ -182,7 +179,7 @@ const sections: PolicySection[] = [
           deletion.
         </p>
         <p>
-          <a href={accountSettings}>Account settings</a> includes an
+          <Link to="/settings/account">Account settings</Link> includes an
           email-confirmed account deletion flow. Published templates,
           independent project copies, browser caches, and files already
           downloaded or pushed to a repository host have separate lifecycles.

@@ -6,7 +6,7 @@
 | --------------------- | -------------------------------------------------------------- |
 | `base.json`           | The other configs, and `apps/docs` together with Astro's       |
 | `bun.json`            | `apps/compiler`, `packages/contracts`, `packages/db`, the root |
-| `react-library.json`  | `packages/ui`                                                  |
+| `react-library.json`  | React workspace libraries                                      |
 | `tanstack-start.json` | `apps/app`, `apps/web`                                         |
 
 Add the package to `devDependencies` and extend a config:

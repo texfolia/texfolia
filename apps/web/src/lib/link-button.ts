@@ -1,5 +1,6 @@
-import { buttonVariants } from "@texfolia/ui/button";
 import { cn } from "cn";
+
+import { buttonVariants } from "#/components/ui/button";
 
 // Larger than the product's buttons. Heights include the variants' 1px border.
 const sizes = {

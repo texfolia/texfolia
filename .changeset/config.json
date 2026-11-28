@@ -8,13 +8,11 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "app",
     "compiler",
     "docs",
     "web",
     "@texfolia/contracts",
     "@texfolia/db",
-    "@texfolia/tsconfig",
-    "@texfolia/ui"
+    "@texfolia/tsconfig"
   ]
 }

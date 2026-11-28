@@ -20,7 +20,7 @@
       "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
       "outputs": ["dist/**"]
     },
-    "app#build": {
+    "web#build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "env": ["CLOUDFLARE_ENV", "VITE_*", "PUBLIC_*"],
@@ -38,7 +38,7 @@
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"]
     },
-    "app#typecheck": {
+    "web#typecheck": {
       "dependsOn": ["^build", "^typecheck"],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -58,7 +58,7 @@
       "dependsOn": ["build"],
       "cache": false
     },
-    "app#deploy": {
+    "web#deploy": {
       "dependsOn": ["build", "compiler#deploy"],
       "cache": false
     }

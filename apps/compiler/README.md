@@ -50,4 +50,4 @@ test/       Unit tests and engine integration checks
 ```
 
 The wire format is in [`@texfolia/contracts/compiler`](../../packages/contracts/README.md).
-The app's side of a build is in [`apps/app/src/lib/builds`](../app/src/lib/builds/README.md).
+The app's side of a build is in [`apps/web/src/lib/builds`](../web/src/lib/builds/README.md).

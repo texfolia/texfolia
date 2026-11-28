@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { paidPlans } from "@texfolia/contracts/plans";
+
+import { Page } from "#/components/page";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@texfolia/ui/card";
+} from "#/components/ui/card";
 import {
   Table,
   TableBody,
@@ -15,12 +17,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@texfolia/ui/table";
-
-import { Page } from "#/components/page";
+} from "#/components/ui/table";
 import { pageHead } from "#/lib/head";
 import { linkButton } from "#/lib/link-button";
-import { appPath } from "#/lib/urls";
 
 export const Route = createFileRoute("/pricing")({
   head: () => pageHead({ title: "Pricing | Texfolia" }),
@@ -37,7 +36,7 @@ const plans = [
     priceUnit: "",
     primary: false,
     buttonText: "Get started for free",
-    href: appPath("/projects"),
+    link: { to: "/projects" as const },
     features: [
       "No project or editor count limit",
       storagePolicy,
@@ -53,7 +52,10 @@ const plans = [
     priceUnit: "/month",
     primary: true,
     buttonText: "Upgrade to Pro",
-    href: appPath("/settings/billing?plan=pro"),
+    link: {
+      to: "/settings/billing" as const,
+      search: { plan: "pro" as const },
+    },
     features: [
       "No project or editor count limit",
       storagePolicy,
@@ -70,7 +72,10 @@ const plans = [
     priceUnit: "/user/month",
     primary: false,
     buttonText: "Upgrade to Team",
-    href: appPath("/settings/billing?plan=team"),
+    link: {
+      to: "/settings/billing" as const,
+      search: { plan: "team" as const },
+    },
     features: [
       "Pro compiles for every member, in any project",
       "No project or editor count limit",
@@ -155,8 +160,8 @@ function Pricing() {
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <a
-                    href={plan.href}
+                  <Link
+                    {...plan.link}
                     className={linkButton({
                       variant: plan.primary ? "default" : "outline",
                       size: "lg",
@@ -164,7 +169,7 @@ function Pricing() {
                     })}
                   >
                     {plan.buttonText}
-                  </a>
+                  </Link>
                 </CardContent>
                 <CardContent className="mt-auto">
                   <ul className="space-y-4">

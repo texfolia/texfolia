@@ -8,12 +8,12 @@ Pro compile access everywhere, and AI access in the organization's projects. A
 personal Pro subscription and an organization Team subscription remain separate
 subscriptions.
 
-The billing code lives in [`#/lib/billing`](../../../../app/src/lib/billing/README.md).
+The billing code lives in [`#/lib/billing`](../../../../web/src/lib/billing/README.md).
 
 ## Set up Stripe
 
-1. Set `STRIPE_SECRET_KEY` in `apps/app/.env` to your Stripe sandbox key.
-2. Run `bun run --cwd apps/app billing:setup`. The script creates Pro
+1. Set `STRIPE_SECRET_KEY` in `apps/web/.env` to your Stripe sandbox key.
+2. Run `bun run --cwd apps/web billing:setup`. The script creates Pro
    (`txcd_10103000`, SaaS – personal use) and Team (`txcd_10103001`, SaaS –
    business use) products with `tax_behavior: "exclusive"`, or reuses prices by
    lookup key and validates their currency, amount, interval, and billing
@@ -21,7 +21,7 @@ The billing code lives in [`#/lib/billing`](../../../../app/src/lib/billing/READ
    and (if set) `STRIPE_AI_PRICE_ID` use `tax_behavior: "exclusive"` and the
    expected SaaS `tax_code`. It prints `STRIPE_PRO_PRICE_ID` and
    `STRIPE_TEAM_PRICE_ID` for your environment.
-3. Copy those two values into `apps/app/.env`. Team uses the same price for
+3. Copy those two values into `apps/web/.env`. Team uses the same price for
    `priceId` and `seatPriceId`, so checkout charges only for members.
 4. Enable Stripe's customer portal for invoices, payment methods, billing
    address updates, tax IDs, and subscription cancellation. Disable customer
@@ -53,7 +53,7 @@ Before setting `STRIPE_AUTOMATIC_TAX=true` in a test or live environment:
    Tax calculates zero tax where you are not registered).
 3. Ensure the Customer Portal allows customers to update their billing address
    and tax IDs while keeping plan and quantity changes disabled.
-4. Re-run `STRIPE_AUTOMATIC_TAX=true bun run --cwd apps/app billing:setup`
+4. Re-run `STRIPE_AUTOMATIC_TAX=true bun run --cwd apps/web billing:setup`
    (with `STRIPE_AI_PRICE_ID` set if AI billing is configured) to confirm that
    Pro, Team, and AI prices use `tax_behavior: "exclusive"` and explicit SaaS
    `tax_code` values (`txcd_10103000` for Pro, `txcd_10103001` for Team, and
@@ -138,8 +138,8 @@ Use an isolated database whose name contains `test`. Apply the current schema wi
 `DATABASE_URL=<test connection> bun run --cwd packages/db db:push`, then run:
 
 ```sh
-INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/app test:billing
-INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/app test:pricing
+INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/web test:billing
+INTEGRATION_DATABASE_URL=<test connection> bun run --cwd apps/web test:pricing
 ```
 
 `test:billing` requires configured sandbox prices and rejects live Stripe keys. It

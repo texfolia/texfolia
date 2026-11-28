@@ -34,22 +34,22 @@ NAT-316's multiple-engine acceptance criteria.
 
 ## Current compile path
 
-The authenticated [web compile route](../../../../app/src/lib/compile/compile-route.server.ts)
+The authenticated [web compile route](../../../../web/src/lib/compile/compile-route.server.ts)
 checks project access, reserves a job using `compileRequestDigest`, reconciles
 sources, and forwards the request to the private compiler. Its digest includes
 the submitted source delta and clean-build flag, but no engine choice.
 
-The [coordinator API](../../../../app/src/lib/builds/coordinator-api.ts) accepts
+The [coordinator API](../../../../web/src/lib/builds/coordinator-api.ts) accepts
 either a snapshot or a source delta.
-[ProjectCoordinatorCore](../../../../app/src/lib/builds/coordinator.ts)
+[ProjectCoordinatorCore](../../../../web/src/lib/builds/coordinator.ts)
 persists the build, serializes revisions, cancels superseded work, and recovers
 pending attempts after a restart. Neither the saved build nor the `Engine`
-context in [types.ts](../../../../app/src/lib/builds/types.ts) identifies a selected
-engine. The schemas in [source-sync.ts](../../../../app/src/lib/builds/source-sync.ts)
+context in [types.ts](../../../../web/src/lib/builds/types.ts) identifies a selected
+engine. The schemas in [source-sync.ts](../../../../web/src/lib/builds/source-sync.ts)
 also have no engine field. Adding an unchecked field to a source body would not
 carry a selection through these parsers.
 
-Each attempt uses the [compiler client](../../../../app/src/lib/builds/compiler.ts) to
+Each attempt uses the [compiler client](../../../../web/src/lib/builds/compiler.ts) to
 send one archive to the compiler Worker. The Worker leases a container, streams the
 archive to it, and returns the response archive as it arrives. A container keeps
 one caller's sources and cache between compiles and wipes them before it serves
@@ -73,7 +73,7 @@ Cache reuse spans several owners:
 - The Go engine keeps one cache map and a `cacheReady` boolean per slot.
   Neither identifies an engine. [cache.go](../../../../compiler/engine/cache.go)
   validates archive paths, entry types, and size limits, but no engine identity.
-- The [artifact manifest](../../../../app/src/lib/builds/artifacts.ts) records the engine
+- The [artifact manifest](../../../../web/src/lib/builds/artifacts.ts) records the engine
   family from output timing. It describes downloadable build files, rather than
   independently tracking caches for several engines.
 
@@ -144,7 +144,7 @@ Real-image checks must exercise these behaviors, including any approved Lua mode
 
 Keep existing source, output, PDF, log, and timeout limits. Preserve PDF-first
 streaming, optional Poppler previews, failure logs, and generation-bound SyncTeX
-artifacts. The recently added [SyncTeX reader](../../../../app/src/lib/editor/latex/synctex.ts)
+artifacts. The recently added [SyncTeX reader](../../../../web/src/lib/editor/latex/synctex.ts)
 needs fixtures from every supported mode, including nested main files.
 
 ### Freeze selection for each build
@@ -213,7 +213,7 @@ deployment has moved to the new protocol.
 ## Proposed telemetry
 
 Telemetry currently records `engine: "tectonic" | "unknown"` in
-[build telemetry](../../../../app/src/lib/builds/telemetry.ts) and the web timing parser.
+[build telemetry](../../../../web/src/lib/builds/telemetry.ts) and the web timing parser.
 Only `tectonic` and `unknown` are accepted by `engineSchema`. Restore a
 `texlive` value only when a TeX Live mode actually ships. Add `engineId` and
 `cacheVersion` to distinguish actual compile modes and toolchains. Old timing
@@ -295,12 +295,12 @@ unavailable to callers until their images and verification are ready.
 
 Extend the existing suites rather than testing only registry lookups:
 
-- [builds.test.ts](../../../../app/src/lib/builds/builds.test.ts) and
-  [coordinator.test.ts](../../../../app/src/lib/builds/coordinator.test.ts) need A-to-B-to-A
+- [builds.test.ts](../../../../web/src/lib/builds/builds.test.ts) and
+  [coordinator.test.ts](../../../../web/src/lib/builds/coordinator.test.ts) need A-to-B-to-A
   cache reuse, engine-only freshness changes, restart and queue recovery, and
   same-ID engine conflicts. A failed B build must retain A's successful PDF and
   cache while reporting B's failure log and actual engine.
-- [compiler.test.ts](../../../../app/src/lib/builds/compiler.test.ts),
+- [compiler.test.ts](../../../../web/src/lib/builds/compiler.test.ts),
   [compile.test.ts](../../../../compiler/test/compile.test.ts), and the pool suites need
   tagged restore, wrong-image rejection, actual-identity mismatch, clean retry,
   fallback routing, and handoff between projects and modes.

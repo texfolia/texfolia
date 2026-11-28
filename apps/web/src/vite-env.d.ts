@@ -1,8 +1,5 @@
-/// <reference types="vite/client" />
-
 interface ImportMetaEnv {
-  /** Product app origin; defaults to the local or production app host. */
-  readonly PUBLIC_APP_URL?: string;
+  readonly VITE_TURNSTILE_SITE_KEY: string;
 }
 
 interface ImportMeta {
