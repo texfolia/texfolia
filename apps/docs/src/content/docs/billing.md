@@ -108,23 +108,23 @@ retains its original payer. See the
 **Settings → Usage** (`/settings/usage`) provides time-series charts, breakdowns,
 invoice history, and CSV export for both personal accounts and Team organizations:
 
-* **Personal view**: available to every signed-in user. Shows daily and cumulative AI
+- **Personal view**: available to every signed-in user. Shows daily and cumulative AI
   spend (charged vs reserved, pre-tax) plotted against the personal monthly cap,
   breakdowns by model and project, compile job counts (succeeded vs failed) and
   compile minutes, current source storage by project, and personal Stripe invoices
   (with subtotal, tax, and total).
-* **Team organization view**: available only to organization **owners and admins**
+- **Team organization view**: available only to organization **owners and admins**
   via the account switcher on **Settings → Usage** (or linked from **Settings →
   Billing**). Shows shared AI spend versus the organization cap, breakdowns by
   member, model, and project, compile counts and minutes across organization
   projects, source storage, paid seat history, Stripe meter reconciliation, and
   organization invoices with tax. Regular members cannot read organization billing
   or other members' usage.
-* **Pre-tax vs invoiced totals**: all AI usage charts, cap progress bars, and
+- **Pre-tax vs invoiced totals**: all AI usage charts, cap progress bars, and
   breakdowns report **pre-tax** usage (model cost plus 20% markup). Official
   Stripe invoices — and the current-period estimated invoice once enabled — show
   subtotal, applicable tax (when `STRIPE_AUTOMATIC_TAX=true`), and total.
-* **CSV export**: **Export CSV** (`/api/usage/export`) downloads the visible series
+- **CSV export**: **Export CSV** (`/api/usage/export`) downloads the visible series
   for the selected scope and period (daily usage, model/project/member breakdowns,
   compiles, storage, seat history, and invoices) using the same authorization rules.
 

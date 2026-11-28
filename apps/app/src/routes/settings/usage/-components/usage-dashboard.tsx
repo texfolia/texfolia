@@ -122,7 +122,7 @@ export function UsageDashboardView({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Usage &amp; costs</h2>
+          <h2 className="text-xl font-semibold">Usage</h2>
           <p className="text-muted-foreground mt-1 text-sm">
             {dashboard.period.label} · Usage spend is shown pre-tax; applicable
             tax is added on invoices.
