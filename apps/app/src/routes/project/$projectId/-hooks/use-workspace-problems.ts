@@ -12,7 +12,8 @@ function sameProblem(a: LatexProblem, b: LatexProblem) {
     a.range?.from === b.range?.from &&
     a.range?.to === b.range?.to &&
     a.citation?.key === b.citation?.key &&
-    a.citation?.suggestions.join("\n") === b.citation?.suggestions.join("\n")
+    a.citation?.suggestions.join("\n") === b.citation?.suggestions.join("\n") &&
+    a.unusedAsset?.path === b.unusedAsset?.path
   );
 }
 

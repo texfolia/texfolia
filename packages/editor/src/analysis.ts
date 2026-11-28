@@ -9,6 +9,8 @@ export type LatexProblem = {
   range?: { from: number; to: number };
   /** An undefined \\cite key, with defined keys it may be a typo of. */
   citation?: { key: string; suggestions: string[] };
+  /** An image file in the project that no \\includegraphics references. */
+  unusedAsset?: { path: string };
 };
 
 type SymbolAt = { key: string; from: number; to: number };
@@ -19,6 +21,7 @@ type FileSymbols = {
   references: SymbolAt[];
   bibliography: SymbolAt[];
   includes: Array<SymbolAt & { command: string }>;
+  graphicsPaths: string[];
   packages: string[];
 };
 
@@ -78,6 +81,7 @@ export function scanFile(path: string, text: string): FileSymbols {
     references: [],
     bibliography: [],
     includes: [],
+    graphicsPaths: [],
     packages: [],
   };
   if (!texFile.test(path) && !/\.bib$/i.test(path)) return symbols;
@@ -87,6 +91,20 @@ export function scanFile(path: string, text: string): FileSymbols {
   if (/\.bib$/i.test(path)) {
     symbols.bibliography = bibEntryKeys(source);
     return symbols;
+  }
+
+  for (const match of source.matchAll(
+    /\\graphicspath\s*\{((?:\s*\{[^{}\r\n]*\}\s*)+)\}/g,
+  )) {
+    const body = match[1];
+    if (!body) continue;
+    for (const dirMatch of body.matchAll(/\{([^{}\r\n]*)\}/g)) {
+      const raw = dirMatch[1]?.trim();
+      if (raw === undefined) continue;
+      const cleaned = raw.replace(/^(?:\.\/)+/, "");
+      const dir = cleaned && !cleaned.endsWith("/") ? `${cleaned}/` : cleaned;
+      symbols.graphicsPaths.push(dir);
+    }
   }
 
   for (const match of source.matchAll(
@@ -124,11 +142,28 @@ export function scanFile(path: string, text: string): FileSymbols {
 }
 
 const imageExtension = /\.(?:pdf|png|jpe?g|eps|svg|webp|bmp|tiff?)$/i;
+const unusedImageAssetExtension =
+  /\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|eps|avif)$/i;
+
 export function isIncludePath(command: string, path: string) {
   if (command === "includegraphics") return imageExtension.test(path);
   if (command === "bibliography" || command === "addbibresource")
     return /\.bib$/i.test(path);
   return texFile.test(path);
+}
+
+function normalizeRelativePath(path: string) {
+  const parts: string[] = [];
+  for (const segment of path.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
+      else parts.push("..");
+    } else {
+      parts.push(segment);
+    }
+  }
+  return parts.join("/");
 }
 
 export function analyzeProject(
@@ -142,9 +177,15 @@ export function analyzeProject(
   const commands = new Set<string>();
   const problems: LatexProblem[] = [];
   const available = new Set(paths);
-  const extensionless = new Set(
-    paths.map((path) => path.replace(/\.[^/.]+$/, "")),
-  );
+  const byExtensionless = new Map<string, string[]>();
+  for (const projectPath of paths) {
+    const stem = projectPath.replace(/\.[^/.]+$/, "");
+    const list = byExtensionless.get(stem);
+    if (list) list.push(projectPath);
+    else byExtensionless.set(stem, [projectPath]);
+  }
+  const graphicsPaths = new Set<string>();
+  const referencedAssets = new Set<string>();
   // The first definition of each key, without case as BibTeX compares them.
   const defined = new Map<string, { path: string; from: number }>();
   const duplicates = new Map<SymbolAt, { path: string; from: number }>();
@@ -157,6 +198,7 @@ export function analyzeProject(
       else defined.set(entry.key.toLowerCase(), { path, from: entry.from });
     }
     for (const citation of file.citations) cited.add(citation.key);
+    for (const gp of file.graphicsPaths) graphicsPaths.add(gp);
     for (const pkg of file.packages)
       if (Object.hasOwn(catalog, pkg))
         for (const command of catalog[pkg] ?? []) commands.add(command);
@@ -216,15 +258,50 @@ export function analyzeProject(
     }
     for (const symbol of file.includes) {
       if (/[#\\{}]/.test(symbol.key)) continue; // TeX can expand dynamic paths.
-      const target = symbol.key.replace(/^\.\//, "");
       const directory = path.slice(0, path.lastIndexOf("/") + 1);
-      const candidates = [target, directory + target];
+      const candidates = new Set<string>([
+        normalizeRelativePath(symbol.key),
+        normalizeRelativePath(directory + symbol.key),
+      ]);
+      if (symbol.command === "includegraphics") {
+        for (const gp of graphicsPaths) {
+          candidates.add(normalizeRelativePath(gp + symbol.key));
+          if (directory)
+            candidates.add(normalizeRelativePath(directory + gp + symbol.key));
+        }
+      }
+      let found = false;
+      for (const candidate of candidates) {
+        if (available.has(candidate)) {
+          found = true;
+          if (symbol.command === "includegraphics")
+            referencedAssets.add(candidate);
+        }
+        const matches = byExtensionless.get(candidate);
+        if (matches) {
+          found = true;
+          if (symbol.command === "includegraphics")
+            for (const matched of matches) referencedAssets.add(matched);
+        }
+      }
+      if (!found) report(symbol, `Project file “${symbol.key}” was not found`);
+    }
+  }
+
+  if (paths.some((projectPath) => texFile.test(projectPath))) {
+    for (const assetPath of [...paths].sort()) {
       if (
-        !candidates.some(
-          (name) => available.has(name) || extensionless.has(name),
-        )
-      )
-        report(symbol, `Project file “${symbol.key}” was not found`);
+        unusedImageAssetExtension.test(assetPath) &&
+        !referencedAssets.has(assetPath)
+      ) {
+        problems.push({
+          path: assetPath,
+          line: 1,
+          message: `Unused image “${assetPath}”`,
+          severity: "info",
+          unusedAsset: { path: assetPath },
+        });
+      }
     }
   }
 

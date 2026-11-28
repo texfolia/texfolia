@@ -1,5 +1,6 @@
-import { IconSparkles } from "@tabler/icons-react";
+import { IconSparkles, IconTrash } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
+import { useState } from "react";
 
 import { problemPrompt } from "#/lib/ai/editor";
 import {
@@ -9,14 +10,21 @@ import {
 } from "#/providers/workspace-provider";
 
 export function WorkspaceProblems() {
-  const { reveal, addReference, askAi } = useWorkspaceActions();
+  const { reveal, addReference, askAi, deleteNode } = useWorkspaceActions();
   const { canWrite } = useWorkspace();
   const { allProblems } = useWorkspaceDiagnostics();
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   return (
     <section
       aria-label="LaTeX problems"
       className="h-full overflow-auto p-3 text-sm"
     >
+      {deleteError && (
+        <p role="alert" className="text-destructive pb-2 text-xs">
+          {deleteError}
+        </p>
+      )}
       {allProblems.length ? (
         <ul className="space-y-1">
           {allProblems.map((problem, index) => (
@@ -36,7 +44,9 @@ export function WorkspaceProblems() {
                       : "text-muted-foreground"
                   }
                 >
-                  {problem.path}:{problem.line}
+                  {problem.unusedAsset
+                    ? problem.path
+                    : `${problem.path}:${problem.line}`}
                 </span>
                 {problem.message}
               </Button>
@@ -60,6 +70,39 @@ export function WorkspaceProblems() {
                   onClick={() => addReference(problem.citation?.key)}
                 >
                   Add reference
+                </Button>
+              )}
+              {problem.unusedAsset && canWrite && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive shrink-0"
+                  disabled={deletingPath === problem.unusedAsset.path}
+                  aria-label={`Delete unused image ${problem.unusedAsset.path}`}
+                  onClick={() => {
+                    const assetPath = problem.unusedAsset?.path;
+                    if (!assetPath) return;
+                    setDeleteError("");
+                    setDeletingPath(assetPath);
+                    deleteNode(assetPath)
+                      .catch((error: unknown) =>
+                        setDeleteError(
+                          error instanceof Error
+                            ? error.message
+                            : `Could not delete ${assetPath}. Try again.`,
+                        ),
+                      )
+                      .finally(() =>
+                        setDeletingPath((current) =>
+                          current === assetPath ? null : current,
+                        ),
+                      );
+                  }}
+                >
+                  <IconTrash />
+                  {deletingPath === problem.unusedAsset.path
+                    ? "Deleting…"
+                    : "Delete"}
                 </Button>
               )}
             </li>

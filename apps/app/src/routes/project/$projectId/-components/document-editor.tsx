@@ -36,6 +36,7 @@ export function DocumentEditor({
   jump: requestedJump,
   onAddReference,
   onFixWithAi,
+  onUploadImages,
   ...props
 }: Omit<
   EditorProps,
@@ -151,6 +152,7 @@ export function DocumentEditor({
         readOnly={readOnly}
         onAddReference={readOnly ? undefined : onAddReference}
         onFixWithAi={readOnly ? undefined : onFixWithAi}
+        onUploadImages={readOnly ? undefined : onUploadImages}
         onCreateEditor={(view) => {
           editor.current = view;
           registerEditor(id, view);

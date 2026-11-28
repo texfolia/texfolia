@@ -97,3 +97,65 @@ test("offers quick fixes for undefined citations in editable files", () => {
   });
   assert.equal(projectDiagnostics(readOnly, problems)[0]?.actions, undefined);
 });
+
+test("reports unused image assets as info problems", () => {
+  const { problems } = analyze({
+    "main.tex": "\\includegraphics{figures/used.png}",
+    "figures/used.png": "",
+    "figures/orphan.png": "",
+    "notes.txt": "plain text",
+  });
+  assert.deepEqual(problems, [
+    {
+      path: "figures/orphan.png",
+      line: 1,
+      message: "Unused image “figures/orphan.png”",
+      severity: "info",
+      unusedAsset: { path: "figures/orphan.png" },
+    },
+  ]);
+});
+
+test("honors \\graphicspath and extensionless \\includegraphics targets", () => {
+  const { problems } = analyze({
+    "main.tex": [
+      "\\graphicspath{{figures/}{./images/}}",
+      "\\includegraphics{plot}",
+      "\\includegraphics{photo.jpg}",
+      "\\input{chapters/intro}",
+    ].join("\n"),
+    "chapters/intro.tex": "\\includegraphics{../assets/diagram}",
+    "figures/plot.png": "",
+    "images/photo.jpg": "",
+    "assets/diagram.svg": "",
+    "figures/unused.webp": "",
+  });
+  assert.deepEqual(problems, [
+    {
+      path: "figures/unused.webp",
+      line: 1,
+      message: "Unused image “figures/unused.webp”",
+      severity: "info",
+      unusedAsset: { path: "figures/unused.webp" },
+    },
+  ]);
+});
+
+test("ignores commented-out \\graphicspath and \\includegraphics", () => {
+  const { problems } = analyze({
+    "main.tex": [
+      "% \\graphicspath{{figures/}}",
+      "% \\includegraphics{figures/a.png}",
+    ].join("\n"),
+    "figures/a.png": "",
+  });
+  assert.deepEqual(problems, [
+    {
+      path: "figures/a.png",
+      line: 1,
+      message: "Unused image “figures/a.png”",
+      severity: "info",
+      unusedAsset: { path: "figures/a.png" },
+    },
+  ]);
+});
