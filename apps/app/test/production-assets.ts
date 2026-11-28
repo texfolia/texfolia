@@ -215,7 +215,8 @@ try {
   assert.equal(health.status, 503, "No database answers here");
   assert.deepEqual(await health.json(), { status: "unavailable" });
   browser = await chromium.launch({ headless: true });
-  // `/` redirects to /login, whose Turnstile widget rejects the empty test site key.
+  // `/` redirects to /login, whose Turnstile widget rejects the empty test site key
+  // and whose WebAuthn Conditional UI requests a passkey challenge from the database.
   const context = await browser.newContext();
   await context.route("https://challenges.cloudflare.com/**", (route) =>
     route.fulfill({
@@ -223,6 +224,10 @@ try {
       body: `window.turnstile = { render() { return "widget"; }, reset() {}, remove() {}, execute() {}, getResponse() { return ""; }, isExpired() { return false; } };
 window[new URL(document.currentScript.src).searchParams.get("onload")]?.();`,
     }),
+  );
+  await context.route(
+    "**/api/auth/passkey/generate-authenticate-options",
+    (route) => route.fulfill({ contentType: "application/json", body: "null" }),
   );
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
