@@ -116,7 +116,7 @@ function matches(path, input) {
 function documentation(path) {
   return (
     /(^|\/)README\.md$/.test(path) ||
-    ["apps/docs/src/content/docs/", ".agents/", ".zed/"].some((input) =>
+    ["apps/docs/content/docs/", ".agents/", ".zed/"].some((input) =>
       path.startsWith(input),
     ) ||
     path === "LICENSE"
@@ -134,7 +134,11 @@ function requiresFullRun(path) {
   )
     return true;
   if (documentation(path)) return false;
-  return !path.startsWith(web) && !path.startsWith("apps/compiler/");
+  return (
+    !path.startsWith(web) &&
+    !path.startsWith("apps/compiler/") &&
+    !path.startsWith("apps/docs/")
+  );
 }
 
 export function selectChecks(paths, { fallback = false } = {}) {
@@ -146,6 +150,9 @@ export function selectChecks(paths, { fallback = false } = {}) {
     paths.some(
       (path) => path.startsWith("apps/compiler/") && !documentation(path),
     );
+  const docs =
+    full ||
+    paths.some((path) => path.startsWith("apps/docs/") && !documentation(path));
   const crossPackage = paths.some(
     (path) =>
       path.startsWith("apps/compiler/src/") ||
@@ -190,8 +197,9 @@ export function selectChecks(paths, { fallback = false } = {}) {
   return {
     full,
     compiler,
+    docs,
     "web-checks": webChanged || crossPackage,
-    "package-checks": webChanged || compiler,
+    "package-checks": webChanged || compiler || docs,
     "cross-package": crossPackage,
     "production-assets": productionAssets,
     postgres: inJob("postgres"),
@@ -232,6 +240,7 @@ if (
       filter = `--filter=...[${base}]`;
       if (plan["cross-package"]) filter += " --filter=web";
       if (!plan.compiler) filter += " --filter=!compiler";
+      if (!plan.docs) filter += " --filter=!docs";
       if (!plan["web-checks"]) filter += " --filter=!web";
     }
   } catch (error) {

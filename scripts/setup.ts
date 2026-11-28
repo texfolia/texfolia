@@ -32,7 +32,7 @@ for (const script of ["db:start", "db:push"]) {
 
 console.log(`
 Setup complete. Fill in the Stripe and Turnstile values in apps/web/.env
-(see apps/docs/src/content/docs/local-development.md), then run:
+(see apps/docs/content/docs/local-development.md), then run:
 
   bun run dev
 `);

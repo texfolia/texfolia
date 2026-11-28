@@ -3,7 +3,7 @@
   "name": "texfolia-docs-local",
   "compatibility_date": "2026-10-31",
   "assets": {
-    "directory": "./dist",
+    "directory": "./out",
   },
   "observability": {
     "enabled": true,

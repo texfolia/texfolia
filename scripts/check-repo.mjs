@@ -8,7 +8,7 @@ import postcss from "postcss";
 import { headingIds, withoutFences } from "./markdown-headings.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const docsContentRoot = resolve(root, "apps/docs/src/content/docs");
+const docsContentRoot = resolve(root, "apps/docs/content/docs");
 const files = execFileSync(
   "git",
   ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
@@ -22,7 +22,7 @@ const files = execFileSync(
 const errors = [];
 
 /** The page that a site path such as `/projects/` shows, if there is one. */
-function starlightPage(target) {
+function docsPage(target) {
   const slug = target.replace(/^\/+|\/+$/g, "");
   const candidates = slug
     ? [
@@ -49,7 +49,7 @@ function hasFragment(path, fragment) {
 }
 
 for (const file of files) {
-  const isDocsContent = file.startsWith("apps/docs/src/content/docs/");
+  const isDocsContent = file.startsWith("apps/docs/content/docs/");
   if (
     !(file.endsWith(".md") || (isDocsContent && file.endsWith(".mdx"))) ||
     file.startsWith(".agents/") ||
@@ -66,7 +66,7 @@ for (const file of files) {
     const path = !target
       ? resolve(root, file)
       : isDocsContent && target.startsWith("/")
-        ? starlightPage(target)
+        ? docsPage(target)
         : target.startsWith("/")
           ? resolve(root, `.${target}`)
           : resolve(root, dirname(file), decodeURIComponent(target));

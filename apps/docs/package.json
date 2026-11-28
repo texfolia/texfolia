@@ -3,25 +3,37 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "astro": "astro",
-    "build": "astro build",
+    "build": "next build",
     "deploy": "wrangler deploy --env production",
-    "dev": "astro dev --port 4322",
+    "dev": "next dev --port 4322",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "preview": "astro preview --port 4322",
-    "typecheck": "astro sync && astro check"
+    "postinstall": "fumadocs-mdx",
+    "preview": "wrangler dev --port 4322",
+    "test": "bun run scripts/smoke.ts",
+    "typecheck": "fumadocs-mdx && next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.43.1",
-    "astro": "^7.4.13",
-    "sharp": "^0.35.3"
+    "@fontsource-variable/geist": "^5.3.0",
+    "fumadocs-core": "^16.19.7",
+    "fumadocs-mdx": "^15.6.4",
+    "fumadocs-ui": "^16.19.7",
+    "lucide-react": "^1.83.0",
+    "next": "^16.4.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.12",
+    "@tailwindcss/postcss": "^4.3.5",
     "@texfolia/tsconfig": "workspace:*",
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "postcss": "8.5.33",
+    "tailwindcss": "^4.3.5",
     "typescript": "^6.0.2",
     "wrangler": "^4.156.1"
   }

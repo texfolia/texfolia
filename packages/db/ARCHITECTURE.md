@@ -77,7 +77,7 @@ This check runs the app's database operations against Postgres. It verifies proj
 The Drizzle schema includes per-user settings, run records, and the durable
 request ledger. Billing records retain their original payer after account or
 project deletion. See
-[Configure the managed assistant](../../apps/docs/src/content/docs/ai-assistant.md) for reconciliation
+[Configure the managed assistant](../../apps/docs/content/docs/ai-assistant.md) for reconciliation
 and verification.
 
 ## Collaboration persistence

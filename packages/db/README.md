@@ -31,7 +31,7 @@ connection string. Run these from the repository root:
 `db:push` after every schema change. Local development and CI use `db:push`; no
 migrations are tracked until the v1 schema settles. Production must use
 committed migrations: see the
-[Neon and Hyperdrive deployment guide](../../apps/docs/src/content/docs/database-deployment.md).
+[Neon and Hyperdrive deployment guide](../../apps/docs/content/docs/database-deployment.md).
 
 ## Layout
 
