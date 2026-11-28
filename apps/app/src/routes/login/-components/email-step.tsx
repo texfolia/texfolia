@@ -1,3 +1,4 @@
+import { IconKey } from "@tabler/icons-react";
 import { Button } from "@texfolia/ui/button";
 import {
   Field,
@@ -12,7 +13,8 @@ import { z } from "zod";
 import { type Login, socialProviders } from "./use-login";
 
 export function EmailStep({ login }: { login: Login }) {
-  const { form, pending, sendWait, retryWait, signInWith } = login;
+  const { form, pending, sendWait, retryWait, signInWith, signInWithPasskey } =
+    login;
   return (
     <form.FormGroup name="emailStep">
       {() => (
@@ -41,6 +43,22 @@ export function EmailStep({ login }: { login: Login }) {
               </Button>
             </Field>
           ))}
+          <Field>
+            <Button
+              onClick={() => void signInWithPasskey()}
+              disabled={pending !== null || retryWait > 0}
+              size="lg"
+              type="button"
+              variant="outline"
+              className="relative h-11 px-10 motion-reduce:transition-none"
+              aria-busy={pending === "passkey"}
+            >
+              <IconKey aria-hidden="true" className="absolute left-3 size-5" />
+              {pending === "passkey"
+                ? "Waiting for passkey…"
+                : "Sign in with a passkey"}
+            </Button>
+          </Field>
           <FieldSeparator className="my-4">or</FieldSeparator>
           <form.Field
             name="emailStep.email"
@@ -61,7 +79,7 @@ export function EmailStep({ login }: { login: Login }) {
                     aria-describedby={isInvalid ? "email-error" : undefined}
                     disabled={pending !== null}
                     autoCapitalize="off"
-                    autoComplete="email"
+                    autoComplete="email webauthn"
                     id={field.name}
                     name={field.name}
                     onBlur={field.handleBlur}

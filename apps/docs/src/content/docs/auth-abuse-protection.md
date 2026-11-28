@@ -4,7 +4,9 @@ title: Public auth abuse protection
 
 Auth is configured in `apps/app/src/lib/auth/auth.ts`; only the product app
 uses it. The login page supports
-email OTP and GitHub, Google, GitLab, and Microsoft OAuth. Password sign-in and
+passkeys (WebAuthn, including Conditional UI), email OTP, and GitHub, Google,
+GitLab, and Microsoft OAuth, with optional TOTP two-factor authentication and
+single-use recovery backup codes. Password sign-in and
 OTP password reset remain available for existing credentials. Password signup
 is disabled because the product does not use it, and creating an unverified
 account would also trigger Stripe customer creation.
@@ -20,8 +22,10 @@ unauthenticated HTTP routes in Better Auth 1.7.15 and the configured plugins.
 | POST `/sign-in/email-otp`                                                                        | Requires a valid, expiring OTP, stored hashed, before creating a verified account or session. Three requests per IP and path in 60 seconds; each OTP also has an attempt limit. New verified accounts trigger the Stripe customer hook.         |
 | POST `/email-otp/check-verification-otp`, `/email-otp/verify-email`, `/email-otp/reset-password` | Require an OTP; do not send email. Three requests per IP and path in 60 seconds, plus the OTP attempt limit.                                                                                                                                    |
 | POST `/sign-in/email`                                                                            | Password verification and session creation for existing credentials. Requires Turnstile. Three requests per IP and path in 10 seconds. No signup or outbound email.                                                                             |
-| POST `/sign-in/social`                                                                           | Starts OAuth or verifies a provider ID token. Three requests per IP and path in 10 seconds.                                                                                                                                                     |
-| GET/POST `/callback/:id`                                                                         | Completes OAuth using provider proof and the OAuth state flow. Creating a user triggers the Stripe customer hook. Uses the default rate limit.                                                                                                  |
+| POST `/sign-in/social`                                                                           | Starts OAuth or verifies a provider ID token. Three requests per IP and path in 10 seconds. Enforces 2FA challenge if the account has 2FA enabled and no valid trusted-device cookie.                                                           |
+| GET/POST `/callback/:id`                                                                         | Completes OAuth using provider proof and the OAuth state flow. Creating a user triggers the Stripe customer hook. Discards the pending session and redirects to `/login?twoFactor=1` when 2FA is required. Uses the default rate limit.         |
+| POST `/two-factor/verify-totp`, `/two-factor/verify-backup-code`                                 | Completes a pending 2FA challenge using a signed `two_factor` cookie and stored verification token. Three requests per IP and path in 10 seconds, 5 attempts per challenge, and temporary account lockout after 10 consecutive failures.        |
+| GET `/passkey/generate-authenticate-options`, POST `/passkey/verify-authentication`              | Issues a single-use WebAuthn challenge and verifies a cryptographic passkey assertion scoped to the app origin (`rpID` / `origin` from `BETTER_AUTH_URL`). No email or account creation. Ten requests per IP and path in 60 seconds.            |
 | GET `/get-session`, POST `/sign-out`, GET `/error`                                               | Session lookup/refresh, session removal, or error redirect. No email or customer creation. Uses the default rate limit, except that `/get-session` has none.                                                                                    |
 | GET `/verify-email`, GET `/reset-password/:token`, POST `/reset-password`                        | Legacy token completion routes. Require signed or stored tokens before changing account state. No link email senders are configured for them. Uses the default rate limit.                                                                      |
 | GET `/delete-user/callback`                                                                      | Completes an account deletion from its confirmation email. Requires a session and that user's stored token. Redirects to Account settings without deleting while the account is the only owner of an organization. Uses the default rate limit. |
@@ -58,8 +62,9 @@ where only the cookie is checked. These always read the database:
 - WebSocket upgrades, through `requestPrincipal`. Reading the database there also
   sets no cookie, which would make TanStack Start rebuild the 101 response and fail
   the upgrade.
-- `/organization/*` and `/subscription/*`, whose requests lose the cached cookie
-  in `beforeAuth`.
+- `/organization/*`, `/subscription/*`, `/two-factor/*`, `/passkey/*`, and session
+  revocation routes (`/revoke-session`, `/revoke-other-sessions`, `/revoke-sessions`),
+  whose requests lose the cached cookie in `beforeAuth`.
 - Better Auth's own account, email, and deletion endpoints.
 
 ## Unused routes
@@ -69,8 +74,11 @@ These unused routes cannot send email or create accounts:
 - POST `/sign-up/email` returns the same signup-disabled error for every address.
 - POST `/request-password-reset` and `/send-verification-email` return 404 through
   `disabledPaths`; Texfolia uses the OTP senders instead. The same list keeps
-  OAuth tokens on the server by disabling `/get-access-token` and `/refresh-token`.
-- OTP creation and retrieval helpers are server-only and have no HTTP routes.
+  OAuth tokens on the server by disabling `/get-access-token` and `/refresh-token`,
+  and disables `/two-factor/send-otp` and `/two-factor/verify-otp` because 2FA uses
+  TOTP and backup codes rather than same-channel email OTP.
+- OTP creation and retrieval helpers, and `viewBackupCodes`, are server-only and
+  have no HTTP routes.
 
 ## Turnstile configuration
 

@@ -21,6 +21,9 @@ import { Turnstile, type BoundTurnstileObject } from "react-turnstile";
 import { authClient } from "#/lib/auth/auth-client";
 import { AUTH_EMAIL_CAPTCHA_ACTION } from "#/lib/auth/captcha";
 
+import { PasskeysSection } from "./-components/passkeys-section";
+import { TwoFactorSection } from "./-components/two-factor-section";
+
 type ActiveSession = {
   id: string;
   token: string;
@@ -163,7 +166,8 @@ function AccountPage() {
       <div>
         <h2 className="text-xl font-semibold">Account</h2>
         <p className="text-muted-foreground mt-2 text-sm">
-          Manage your profile, sign-in email, active sessions, and account data.
+          Manage your profile, sign-in email, two-factor authentication,
+          passkeys, active sessions, and account data.
         </p>
       </div>
       {deletion === "blocked" && (
@@ -396,6 +400,8 @@ function AccountPage() {
           )}
         </ItemContent>
       </Item>
+      <TwoFactorSection onMessage={setMessage} onError={setError} />
+      <PasskeysSection onMessage={setMessage} onError={setError} />
       <Item variant="outline">
         <ItemContent className="gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">

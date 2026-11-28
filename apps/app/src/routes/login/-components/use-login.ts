@@ -2,7 +2,7 @@ import { revalidateLogic, useForm } from "@tanstack/react-form-start";
 import { useEffect, useRef, useState } from "react";
 import type { BoundTurnstileObject } from "react-turnstile";
 
-import { authClient } from "#/lib/auth/auth-client";
+import { authClient, TWO_FACTOR_REQUIRED_EVENT } from "#/lib/auth/auth-client";
 
 export const socialProviders = [
   { id: "github", label: "GitHub" },
@@ -15,14 +15,19 @@ export const socialProviders = [
 }[];
 
 export type SocialProvider = (typeof socialProviders)[number]["id"];
-type LoginError = NonNullable<
-  Awaited<ReturnType<typeof authClient.signIn.emailOtp>>["error"]
->;
+type LoginError = {
+  code?: string;
+  message?: string;
+  status?: number;
+};
 
 function loginErrorMessage(
   error: LoginError,
-  action: "send" | "verify" | "social",
+  action: "send" | "verify" | "social" | "passkey" | "twoFactor",
 ) {
+  if (error.code === "ACCOUNT_TEMPORARILY_LOCKED") {
+    return "Too many failed attempts. Your account is temporarily locked. Try again later.";
+  }
   if (error.status === 429) {
     return "Too many attempts. Wait for the countdown, then try again.";
   }
@@ -36,30 +41,53 @@ function loginErrorMessage(
     case "VERIFICATION_FAILED":
     case "MISSING_RESPONSE":
       return "The security check could not be verified. Complete it again, then retry.";
+    case "INVALID_CODE":
+      return "That authenticator code is incorrect. Check your app and try again.";
+    case "INVALID_BACKUP_CODE":
+      return "That backup code is invalid or has already been used.";
+    case "INVALID_TWO_FACTOR_COOKIE":
+    case "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE":
+      return "Your verification session expired. Start sign-in again.";
+    case "AUTH_CANCELLED":
+    case "ERROR_CEREMONY_ABORTED":
+      return "Passkey sign-in was cancelled.";
   }
   if (action === "social") {
     return "This sign-in provider is unavailable. Try again or sign in with email.";
+  }
+  if (action === "passkey") {
+    return "We couldn't verify your passkey. Try again or use another sign-in method.";
+  }
+  if (action === "twoFactor") {
+    return "We couldn't verify your two-factor code right now. Please try again.";
   }
   return action === "send"
     ? "We couldn't send a code right now. Please try again shortly."
     : "We couldn't verify your code right now. Please try again shortly.";
 }
 
-/** Signing in with a code sent by email, or with another account. */
+/** Signing in with a passkey, an emailed code, or another account. */
 export function useLogin({
   redirectTo,
   failed,
+  twoFactor = false,
 }: {
   redirectTo: string;
   /** A provider sent the user back without signing in. */
   failed: boolean;
+  /** An OAuth callback redirected here to finish a pending 2FA challenge. */
+  twoFactor?: boolean;
 }) {
   const turnstile = useRef<BoundTurnstileObject | null>(null);
   const requestInFlight = useRef(false);
 
-  const [step, setStep] = useState<"email" | "otp">("email");
+  const [step, setStep] = useState<"email" | "otp" | "twoFactor">(
+    twoFactor ? "twoFactor" : "email",
+  );
+  const [twoFactorMode, setTwoFactorMode] = useState<"totp" | "backup">("totp");
+  const [trustDevice, setTrustDevice] = useState(false);
   const [pending, setPending] = useState<
-    "send" | "verify" | SocialProvider | null
+    "send" | "verify" | "passkey" | "twoFactor" | SocialProvider | null
   >(null);
   const [error, setError] = useState<string | null>(
     failed
@@ -85,9 +113,60 @@ export function useLogin({
   }, [waiting]);
 
   useEffect(() => {
-    if (step === "otp" && pending === null)
+    const onTwoFactorRequired = () => {
+      setError(null);
+      setStatus("");
+      setTwoFactorMode("totp");
+      setStep("twoFactor");
+    };
+    window.addEventListener(TWO_FACTOR_REQUIRED_EVENT, onTwoFactorRequired);
+    return () =>
+      window.removeEventListener(
+        TWO_FACTOR_REQUIRED_EVENT,
+        onTwoFactorRequired,
+      );
+  }, []);
+
+  // Conditional UI: let browsers offer saved passkeys in the email field autofill.
+  useEffect(() => {
+    if (step !== "email") return;
+    if (
+      typeof window === "undefined" ||
+      typeof PublicKeyCredential === "undefined" ||
+      typeof PublicKeyCredential.isConditionalMediationAvailable !== "function"
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const available =
+          await PublicKeyCredential.isConditionalMediationAvailable();
+        if (!available || cancelled) return;
+        const result = await authClient.signIn.passkey({ autoFill: true });
+        if (!cancelled && result?.data && !result.error) {
+          window.location.assign(redirectTo);
+        }
+      } catch {
+        // Conditional mediation is optional; ignore aborts or browser denials.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, redirectTo]);
+
+  useEffect(() => {
+    if (step === "otp" && pending === null) {
       document.getElementById("otpStep.otp")?.focus();
-  }, [step, pending]);
+    } else if (step === "twoFactor" && pending === null) {
+      const targetId =
+        twoFactorMode === "totp"
+          ? "twoFactorStep.totp"
+          : "twoFactorStep.backupCode";
+      document.getElementById(targetId)?.focus();
+    }
+  }, [step, twoFactorMode, pending]);
 
   function handleResponse({ response }: { response: Response }) {
     if (response.status !== 429) return;
@@ -136,6 +215,10 @@ export function useLogin({
       otpStep: {
         otp: "",
       },
+      twoFactorStep: {
+        totp: "",
+        backupCode: "",
+      },
     },
     validationLogic: revalidateLogic({
       mode: "submit",
@@ -144,6 +227,33 @@ export function useLogin({
     onSubmit: async ({ value }) => {
       if (step === "email") {
         await sendCode();
+        return;
+      }
+
+      if (step === "twoFactor") {
+        await runRequest("twoFactor", async () => {
+          const result =
+            twoFactorMode === "totp"
+              ? await authClient.twoFactor.verifyTotp({
+                  code: value.twoFactorStep.totp,
+                  trustDevice,
+                  fetchOptions: { onResponse: handleResponse, timeout: 15_000 },
+                })
+              : await authClient.twoFactor.verifyBackupCode({
+                  code: value.twoFactorStep.backupCode.trim(),
+                  trustDevice,
+                  fetchOptions: { onResponse: handleResponse, timeout: 15_000 },
+                });
+          if (result.error || !result.data) {
+            setError(
+              result.error
+                ? loginErrorMessage(result.error, "twoFactor")
+                : "We couldn't verify your two-factor code. Please try again.",
+            );
+            return;
+          }
+          window.location.assign(redirectTo);
+        });
         return;
       }
 
@@ -159,6 +269,13 @@ export function useLogin({
               ? loginErrorMessage(error, "verify")
               : "We couldn't verify your code. Please try again.",
           );
+          return;
+        }
+        if ("twoFactorRedirect" in data && data.twoFactorRedirect) {
+          form.resetField("twoFactorStep.totp");
+          form.resetField("twoFactorStep.backupCode");
+          setTwoFactorMode("totp");
+          setStep("twoFactor");
           return;
         }
         window.location.assign(redirectTo);
@@ -223,6 +340,30 @@ export function useLogin({
     });
   }
 
+  async function signInWithPasskey() {
+    if (
+      typeof PublicKeyCredential === "undefined" ||
+      typeof navigator.credentials?.get !== "function"
+    ) {
+      setError("Passkeys are not supported in this browser.");
+      return;
+    }
+    await runRequest("passkey", async () => {
+      const result = await authClient.signIn.passkey({
+        fetchOptions: { onResponse: handleResponse, timeout: 30_000 },
+      });
+      if (result?.error || !result?.data) {
+        setError(
+          result?.error
+            ? loginErrorMessage(result.error, "passkey")
+            : "We couldn't verify your passkey. Try again or use another sign-in method.",
+        );
+        return;
+      }
+      window.location.assign(redirectTo);
+    });
+  }
+
   function changeEmail() {
     setStep("email");
     setError(null);
@@ -231,6 +372,25 @@ export function useLogin({
     requestAnimationFrame(() =>
       document.getElementById("emailStep.email")?.focus(),
     );
+  }
+
+  function cancelTwoFactor() {
+    setStep("email");
+    setError(null);
+    setStatus("");
+    setTwoFactorMode("totp");
+    form.resetField("twoFactorStep.totp");
+    form.resetField("twoFactorStep.backupCode");
+    requestAnimationFrame(() =>
+      document.getElementById("emailStep.email")?.focus(),
+    );
+  }
+
+  function switchTwoFactorMode(mode: "totp" | "backup") {
+    setError(null);
+    setTwoFactorMode(mode);
+    form.resetField("twoFactorStep.totp");
+    form.resetField("twoFactorStep.backupCode");
   }
 
   /** The security check's token, or why there is none. */
@@ -248,6 +408,11 @@ export function useLogin({
   return {
     form,
     step,
+    twoFactorMode,
+    trustDevice,
+    setTrustDevice,
+    switchTwoFactorMode,
+    cancelTwoFactor,
     pending,
     error,
     status,
@@ -255,6 +420,7 @@ export function useLogin({
     retryWait,
     sendCode,
     signInWith,
+    signInWithPasskey,
     changeEmail,
     captcha: {
       error: captchaError,
