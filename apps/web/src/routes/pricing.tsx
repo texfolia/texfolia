@@ -110,8 +110,8 @@ const comparison = [
   [
     "AI spend cap",
     "Not available",
-    "Per user; default $20/month",
-    "Per user, default $20/month; organization, default $100/month",
+    "Per user; default $20/month (pre-tax)",
+    "Per user, default $20/month; organization, default $100/month (pre-tax)",
   ],
   [
     "Subscription billing",
@@ -186,10 +186,11 @@ function Pricing() {
           ))}
         </div>
         <p className="text-muted-foreground mt-5 text-sm">
-          Prices are in USD. AI usage is extra, reported to Stripe after each
-          run and invoiced monthly. The launch markup is 20%; each user can
-          adjust their monthly AI spend cap, including setting it to $0 to pause
-          AI.
+          Prices are in USD, excluding applicable tax. AI usage is extra,
+          reported to Stripe after each run and invoiced monthly. The launch
+          markup is 20%; each user can adjust their monthly AI spend cap
+          (pre-tax), including setting it to $0 to pause AI. Applicable tax is
+          calculated at checkout and on invoices.
         </p>
         <section className="mt-12">
           <Card className="[--card-spacing:--spacing(6)]">

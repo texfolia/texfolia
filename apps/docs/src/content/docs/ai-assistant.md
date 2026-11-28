@@ -53,14 +53,17 @@ user’s default model for new chats and the existing monthly spending cap.
 3. In Stripe, create a meter with event name `texfolia_ai_nanos`, **sum**
    aggregation, customer field `stripe_customer_id` mapped **by ID**, and value
    field `value`. Use raw events without an hourly or daily aggregation window.
-4. Create a recurring **monthly USD** metered price linked to that meter. Set
-   `unit_amount_decimal` to `0.0000001` cents: each usage unit is one nano-dollar
-   ($0.000000001). Keep the base Pro price unchanged. The server validates the
-   price and meter and attaches the usage price to the existing payer's
-   subscription on the first AI run, using an idempotency key. It records that in
-   `ai_meter_attachment` and asks Stripe again after a day, after a webhook reports
-   that the subscription changed, or when the price or meter setting changes.
-   Webhooks must include `customer.subscription.updated` and
+4. Create a recurring **monthly USD** metered price linked to that meter, with
+   `tax_behavior` set to `exclusive` and a SaaS product `tax_code`
+   (`txcd_10103001`, or `txcd_10103000`). Set `unit_amount_decimal` to
+   `0.0000001` cents: each usage unit is one nano-dollar ($0.000000001). Keep
+   the base Pro price unchanged. The server validates the price and meter and
+   attaches the usage price to the existing payer's subscription on the first AI
+   run, using an idempotency key (`proration_behavior: "none"`; the metered
+   item inherits `automatic_tax` from the parent subscription). It records that
+   in `ai_meter_attachment` and asks Stripe again after a day, after a webhook
+   reports that the subscription changed, or when the price or meter setting
+   changes. Webhooks must include `customer.subscription.updated` and
    `customer.subscription.deleted`, which billing already needs.
 5. Set the following server variables in `apps/app/.env` locally, and as Worker
    secrets or variables in each deployed environment:
@@ -178,10 +181,12 @@ Each model request first creates an `ai_request` row. Its reservation includes
 20% markup and conservatively bounds input tokens by UTF-8 request bytes plus
 framing overhead, with 2,048 output tokens. Concurrent requests lock the user's
 settings row and count both actual spend and outstanding reservations. The
-cap defaults to $20 per user per UTC calendar month; setting it to $0 pauses AI.
+cap defaults to $20 per user per UTC calendar month (pre-tax); setting it to $0 pauses AI.
 When an organization pays, the request also locks the organization's settings row
 and counts all spend and reservations on its Stripe customer against the shared
-cap, $100 by default. A member cannot raise that cap with their own.
+cap, $100 by default (pre-tax). A member cannot raise that cap with their own.
+Applicable tax calculated by Stripe Tax is added on the invoice and does not
+count toward these caps.
 A request can be refused before the displayed cap is exhausted because its
 maximum estimated cost does not fit the remaining budget. Provider prices and
 token accounting determine the eventual cost; reservations are not charges.

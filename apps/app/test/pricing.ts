@@ -226,8 +226,9 @@ try {
   await owner.getByRole("heading", { name: "Research group · Team" }).waitFor();
   assert.match(
     await owner.locator("main").first().innerText(),
-    /2 members × \$20 USD\/month = \$40 USD\/month/,
+    /2 members × \$20 USD\/month = \$40 USD\/month, excluding applicable tax/,
   );
+  assert.match(await owner.locator("main").first().innerText(), /pre-tax/);
   await owner
     .getByRole("button", { name: "Continue to Team checkout" })
     .click();

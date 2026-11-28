@@ -101,10 +101,22 @@ const sections: PolicySection[] = [
           displayed limit is reached when its estimated maximum cost does not
           fit the remaining budget.
         </p>
+        <p>
+          All plan prices, seat charges, and AI usage rates are stated in US
+          dollars (USD) and exclude applicable taxes. Where required, Stripe Tax
+          calculates and adds applicable sales tax, VAT, or GST/HST at checkout
+          and on recurring subscription, seat-change, and metered AI invoices
+          based on your billing address and tax status. AI monthly spend caps
+          apply to pre-tax usage only, so invoiced totals may exceed the
+          configured cap once applicable taxes are added. Business customers can
+          provide a valid tax identification number at checkout or in the Stripe
+          billing portal to apply reverse-charge or exemption rules where
+          supported; you are responsible for keeping your billing address and
+          tax information accurate.
+        </p>
         <ToBeCompleted>
-          Approve price and currency wording, renewal, cancellation, refunds,
-          taxes, failed payments, plan changes, and the process for billing
-          errors and disputes.
+          Approve renewal, cancellation, refunds, failed payments, plan changes,
+          and the process for billing errors and disputes.
         </ToBeCompleted>
       </>
     ),
